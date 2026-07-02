@@ -5,6 +5,13 @@ import { TicketFilter, describeTicketFilter, hasTicketFilter, ticketMatchesFilte
 
 const NEW_REVIEW_SPIN_MS = 6000;
 
+export interface NewReviewItemSummary {
+  ticketKey: string;
+  summary: string;
+  projectNames: string[];
+  mrIid?: number;
+}
+
 export class ReviewTreeProvider implements vscode.TreeDataProvider<ReviewItem> {
   private _onDidChangeTreeData = new vscode.EventEmitter<ReviewItem | undefined>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
@@ -37,6 +44,16 @@ export class ReviewTreeProvider implements vscode.TreeDataProvider<ReviewItem> {
   getFilter(): TicketFilter { return { ...this.filter }; }
   getFilterDescription(): string { return describeTicketFilter(this.filter); }
   getNewReviewCount(): number { return this.newReviewKeys.size; }
+  getNewReviewItems(): NewReviewItemSummary[] {
+    return this.reviewEntries()
+      .filter(([key]) => this.newReviewKeys.has(key))
+      .map(([ticketKey, ticket]) => ({
+        ticketKey,
+        summary: ticket.summary,
+        projectNames: ticket.projects || [],
+        mrIid: ticket.mr?.iid,
+      }));
+  }
 
   markVisibleReviewItemsSeen(): void {
     if (this.currentReviewKeys.size === 0 && this.newReviewKeys.size === 0) { return; }

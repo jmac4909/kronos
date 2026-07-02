@@ -136,6 +136,34 @@ function runNotificationCommandAction(
   });
 }
 
+function notifyNewReviewItems(reviewTree: ReviewTreeProvider, notifiedReviewKeys: Set<string>): void {
+  const items = reviewTree.getNewReviewItems();
+  const currentKeys = new Set(items.map(item => item.ticketKey));
+  for (const ticketKey of notifiedReviewKeys) {
+    if (!currentKeys.has(ticketKey)) {
+      notifiedReviewKeys.delete(ticketKey);
+    }
+  }
+  const freshItems = items.filter(item => !notifiedReviewKeys.has(item.ticketKey));
+  for (const item of freshItems) {
+    notifiedReviewKeys.add(item.ticketKey);
+  }
+  if (freshItems.length === 0) { return; }
+
+  const primary = freshItems[0];
+  const mr = primary.mrIid !== undefined ? `MR !${primary.mrIid}` : 'MR';
+  const suffix = freshItems.length > 1 ? ` (+${freshItems.length - 1} more)` : '';
+  runNotificationCommandAction(
+    vscode.window.showInformationMessage(
+      `${primary.ticketKey}: ${mr} ready for review${suffix}`,
+      'Open Review'
+    ),
+    'Open Review',
+    'kronosReview.focus',
+    'Failed to open Kronos Review.'
+  );
+}
+
 async function runCommandProgress(
   options: vscode.ProgressOptions,
   task: (
@@ -932,6 +960,7 @@ export function activate(context: vscode.ExtensionContext) {
   const sessionTree = new SessionTreeProvider(state);
   const taskTree = new TaskTreeProvider(state);
   const reviewTree = new ReviewTreeProvider(state);
+  const notifiedReviewKeys = new Set<string>();
   const ticketTree = new TicketTreeProvider(state);
 
   vscode.window.registerTreeDataProvider('kronosSessions', sessionTree);
@@ -988,6 +1017,7 @@ export function activate(context: vscode.ExtensionContext) {
     if (id === 'kronosReview') {
       updateReviewBadge();
       context.subscriptions.push(reviewTree.onDidChangeNewReviewCount(updateReviewBadge));
+      context.subscriptions.push(reviewTree.onDidChangeNewReviewCount(() => notifyNewReviewItems(reviewTree, notifiedReviewKeys)));
       if (view.visible) {
         reviewTree.markVisibleReviewItemsSeen();
       }
