@@ -723,6 +723,20 @@ function runQuickPickDetail(run: KronosRun): string {
   return `${formatWebviewDateTime(run.startedAt)} - ${detail || run.cwd || ''}`;
 }
 
+function runQuickPickDescription(run: KronosRun): string {
+  const status = String(run.status || 'unknown');
+  if (status !== 'failed' && status !== 'needs_human' && status !== 'cancelled') {
+    return status;
+  }
+  const detail = singleLineRunSummary(runAttentionDetail(run));
+  return detail ? `${status} - ${detail}` : status;
+}
+
+function singleLineRunSummary(value: string, maxLength = 140): string {
+  const text = value.replace(/\s+/g, ' ').trim();
+  return text.length > maxLength ? `${text.substring(0, maxLength - 3)}...` : text;
+}
+
 function runProcessPid(run: KronosRun): number | undefined {
   const pid = Number(run.processPid ?? Reflect.get(run, 'pid'));
   return Number.isFinite(pid) && pid > 0 ? pid : undefined;
@@ -3091,7 +3105,7 @@ export function activate(context: vscode.ExtensionContext) {
 
       const picked = await vscode.window.showQuickPick(runs.map(run => ({
         label: `${run.project} - ${run.skill}${run.ticket ? ` ${run.ticket}` : ''}`,
-        description: run.status,
+        description: runQuickPickDescription(run),
         detail: runQuickPickDetail(run),
         run,
       })), { placeHolder: 'Select a Kronos run' });
@@ -3145,7 +3159,7 @@ export function activate(context: vscode.ExtensionContext) {
 
       const picked = await vscode.window.showQuickPick(runs.map(run => ({
         label: `${run.project} - ${run.skill}${run.ticket ? ` ${run.ticket}` : ''}`,
-        description: run.status,
+        description: runQuickPickDescription(run),
         detail: `${formatWebviewDateTime(run.startedAt)} - ${String(run.promptHash || '').substring(0, 12)}`,
         run,
       })), { placeHolder: 'Retry which saved Kronos prompt?' });
@@ -3162,7 +3176,7 @@ export function activate(context: vscode.ExtensionContext) {
 
       const picked = await vscode.window.showQuickPick(runs.map(run => ({
         label: `${run.project} - ${run.skill}${run.ticket ? ` ${run.ticket}` : ''}`,
-        description: run.status,
+        description: runQuickPickDescription(run),
         detail: runQuickPickDetail(run),
         run,
       })), { placeHolder: 'Resume which Kronos run?' });
@@ -3179,7 +3193,7 @@ export function activate(context: vscode.ExtensionContext) {
 
       const picked = await vscode.window.showQuickPick(runs.map(run => ({
         label: `${run.project} - ${run.skill}${run.ticket ? ` ${run.ticket}` : ''}`,
-        description: run.status,
+        description: runQuickPickDescription(run),
         detail: runQuickPickDetail(run),
         run,
       })), { placeHolder: 'Pause which Kronos run?' });
@@ -3196,7 +3210,7 @@ export function activate(context: vscode.ExtensionContext) {
 
       const picked = await vscode.window.showQuickPick(runs.map(run => ({
         label: `${run.project} - ${run.skill}${run.ticket ? ` ${run.ticket}` : ''}`,
-        description: run.status,
+        description: runQuickPickDescription(run),
         detail: runQuickPickDetail(run),
         run,
       })), { placeHolder: 'Continue which Kronos run?' });
@@ -3213,7 +3227,7 @@ export function activate(context: vscode.ExtensionContext) {
 
       const picked = await vscode.window.showQuickPick(runs.map(run => ({
         label: `${run.project} - ${run.skill}${run.ticket ? ` ${run.ticket}` : ''}`,
-        description: run.status,
+        description: runQuickPickDescription(run),
         detail: runQuickPickDetail(run),
         run,
       })), { placeHolder: 'Archive which Kronos run?' });
@@ -3230,7 +3244,7 @@ export function activate(context: vscode.ExtensionContext) {
 
       const picked = await vscode.window.showQuickPick(runs.map(run => ({
         label: `${run.project} - ${run.skill}${run.ticket ? ` ${run.ticket}` : ''}`,
-        description: run.status,
+        description: runQuickPickDescription(run),
         detail: runQuickPickDetail(run),
         run,
       })), { placeHolder: 'Cancel which Kronos run?' });

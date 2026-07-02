@@ -248,6 +248,9 @@ for (const marker of [
   'function refreshAfterDispatch(state: KronosState, projectName?: string, ticketKey?: string): (code: number, run: KronosRun) => Promise<void>',
   'return async (_code: number, run: KronosRun)',
   'await refreshAfterDispatch(state, projectName)(code, run)',
+  'function runQuickPickDescription(run: KronosRun)',
+  'function singleLineRunSummary(value: string, maxLength = 140): string',
+  'description: runQuickPickDescription(run)',
   'const refreshWarning = await reloadStateAfterDispatch(state, projectName);',
   'run.warnings = [...(run.warnings || []), refreshWarning];',
   'async function reloadStateAfterDispatch(state: KronosState, projectName?: string): Promise<string | undefined>',
@@ -1215,6 +1218,9 @@ if (dispatcher.includes("target.closest('[data-action][data-run-id]')")) {
 }
 if (dispatcher.includes('} catch {}')) {
   fail('Dispatcher must not silently swallow run stream failures.');
+}
+if (extension.includes('description: run.status')) {
+  fail('Run quick-pick descriptions must include attention reasons instead of raw status only.');
 }
 
 for (const marker of [

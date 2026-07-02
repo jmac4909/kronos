@@ -5293,6 +5293,9 @@ test('extension run recovery helpers use typed run records', () => {
     'async function markSelectedRunNeedsHuman(run: KronosRun)',
     'function runLastEventLabel(run: KronosRun)',
     'function runQuickPickDetail(run: KronosRun)',
+    'function runQuickPickDescription(run: KronosRun)',
+    'function singleLineRunSummary(value: string, maxLength = 140): string',
+    'description: runQuickPickDescription(run)',
     'function runProcessPid(run: KronosRun)',
     "Reflect.get(run, 'pid')",
     'function findRunById(runId: string): KronosRun | undefined',
@@ -5326,6 +5329,7 @@ test('extension run recovery helpers use typed run records', () => {
     'function resolveTicketKey(item: any)',
     'return async (_code: number, run?: any)',
     'await refreshAfterDispatch(state, projectName)(code);',
+    'description: run.status',
   ]) {
     assert.equal(source.includes(marker), false, marker);
   }
