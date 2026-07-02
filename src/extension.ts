@@ -6042,8 +6042,9 @@ function updateStatusBar(state: KronosState): void {
   const sessions = state.sessions.length;
   const activeRuns = listRuns().filter(isActiveRun);
   if (activeRuns.length > 0) {
-    statusBarItem.text = `$(sync~spin) Kronos: ${activeRuns.length} running`;
-    statusBarItem.tooltip = `Kronos active runs: ${activeRunSummary(activeRuns) || `${activeRuns.length} running`}`;
+    const activeSummary = activeRunSummary(activeRuns) || `${activeRuns.length} active`;
+    statusBarItem.text = `$(sync~spin) Kronos: ${activeSummary}`;
+    statusBarItem.tooltip = `Kronos active runs: ${activeSummary}`;
     statusBarItem.command = 'kronos.runCenter';
     return;
   }

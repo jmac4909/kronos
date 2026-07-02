@@ -126,7 +126,7 @@ function sortRuns(runs: DashboardRunRecord[], timestampField: 'startedAt' | 'end
 }
 
 function isDashboardActiveRun(run: DashboardRunRecord): boolean {
-  return runString(run, 'status') === 'queued' || isActiveRun(run);
+  return isActiveRun(run);
 }
 
 function timestampValue(value: unknown): number {

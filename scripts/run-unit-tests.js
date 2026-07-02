@@ -3379,8 +3379,10 @@ test('ticket timeline combines queue, runs, evidence, MR, build, and ticket even
 test('run status helper centralizes active persisted run semantics', () => {
   assert.equal(runStatus.isActiveRunStatus('running'), true);
   assert.equal(runStatus.isActiveRunStatus('preflight'), true);
+  assert.equal(runStatus.isActiveRunStatus('queued'), true);
   assert.equal(runStatus.isActiveRunStatus('paused'), true);
   assert.equal(runStatus.isActiveRunStatus('completed'), false);
+  assert.equal(runStatus.isActiveRun({ status: 'queued' }), true);
   assert.equal(runStatus.isActiveRun({ status: 'running' }), true);
   assert.equal(runStatus.isActiveRun({ status: 'running', endedAt: '2026-07-01T10:00:00.000Z' }), false);
   assert.equal(runStatus.isActiveRun({ status: 'running', exitCode: 0 }), false);
@@ -3393,20 +3395,21 @@ test('run status helper centralizes active persisted run semantics', () => {
     { status: 'running', endedAt: '2026-07-01T10:00:00.000Z' },
     { status: 'preflight', exitCode: 1 },
     { status: 'preflight' },
+    { status: 'queued' },
     { status: 'paused' },
     { status: 'completed' },
-  ]), '2 running, 1 preflight, 1 paused');
+  ]), '2 running, 1 preflight, 1 queued, 1 paused');
 
   const source = readSourceFixture('src', 'services', 'runStatus.ts');
   for (const marker of [
-    "ACTIVE_RUN_STATUSES = new Set(['preflight', 'running', 'paused'])",
+    "ACTIVE_RUN_STATUSES = new Set(['queued', 'preflight', 'running', 'paused'])",
     'export function isActiveRunStatus',
     'export function isActiveRun',
     'export function hasTerminalRunSignal',
     'hasDateLikeValue(run.endedAt)',
     'label.startsWith(\'Session exited with code\')',
     'export function activeRunSummary',
-    "['running', 'preflight', 'paused']",
+    "['running', 'preflight', 'queued', 'paused']",
   ]) {
     assert.ok(source.includes(marker), marker);
   }
@@ -5082,7 +5085,8 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'const activeRuns = listRuns().filter(isActiveRun)',
     "statusBarItem.command = 'kronos.runCenter'",
     "statusBarItem.command = 'kronos.openDashboard'",
-    '$(sync~spin) Kronos: ${activeRuns.length} running',
+    'const activeSummary = activeRunSummary(activeRuns)',
+    '$(sync~spin) Kronos: ${activeSummary}',
     'queueTree.startPolling(sessionPollMs)',
     'queueTree.dispose()',
     'shouldRecordRunCompletionEvidence({ run, ticket })',
@@ -5854,7 +5858,7 @@ test('dashboard worklist builds command-center lanes from review, run, gate, and
   const source = readSourceFixture('src', 'services', 'dashboardWorklist.ts');
   assert.ok(source.includes("import { isActiveRun } from './runStatus'"));
   assert.ok(source.includes('function isDashboardActiveRun'));
-  assert.ok(source.includes("runString(run, 'status') === 'queued' || isActiveRun(run)"));
+  assert.ok(source.includes('return isActiveRun(run);'));
   assert.ok(source.includes('type DashboardRunRecord = RunRecord & Record<string, unknown>'));
   assert.equal(source.includes('type DashboardRunRecord = RunRecord & Record<string, any>'), false);
 });

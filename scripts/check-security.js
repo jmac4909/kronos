@@ -1210,7 +1210,6 @@ if (dispatcher.includes('} catch {}')) {
 
 for (const marker of [
   "import { isActiveRun } from './runStatus'",
-  'const RUN_CENTER_ACTIVE_LIKE_STATUSES = new Set([\'queued\'])',
   'export function sortedRunCenterRuns',
   'export function compareRunCenterRuns',
   'export function runCenterStatusPriority',
@@ -2027,14 +2026,14 @@ for (const marker of [
 }
 
 for (const marker of [
-  "ACTIVE_RUN_STATUSES = new Set(['preflight', 'running', 'paused'])",
+  "ACTIVE_RUN_STATUSES = new Set(['queued', 'preflight', 'running', 'paused'])",
   'export function isActiveRunStatus',
   'export function isActiveRun',
   'export function hasTerminalRunSignal',
   'hasDateLikeValue(run.endedAt)',
   "label.startsWith('Session exited with code')",
   'export function activeRunSummary',
-  "['running', 'preflight', 'paused']",
+  "['running', 'preflight', 'queued', 'paused']",
 ]) {
   if (!runStatus.includes(marker)) {
     fail(`Missing run status marker: ${marker}`);
@@ -2343,7 +2342,7 @@ for (const marker of [
   'evidenceStatusForRun',
   "import { isActiveRun } from './runStatus'",
   'function isDashboardActiveRun',
-  "runString(run, 'status') === 'queued' || isActiveRun(run)",
+  'return isActiveRun(run);',
   'type DashboardRunRecord = RunRecord & Record<string, unknown>',
   'const runs = (Array.isArray(input.runs) ? input.runs : []).filter(isRunRecord)',
   "runString(run, 'status')",

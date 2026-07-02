@@ -1,7 +1,5 @@
 import { isActiveRun } from './runStatus';
 
-const RUN_CENTER_ACTIVE_LIKE_STATUSES = new Set(['queued']);
-
 export interface RunCenterSortableRun {
   id?: unknown;
   status?: unknown;
@@ -23,7 +21,7 @@ export function compareRunCenterRuns(a: RunCenterSortableRun, b: RunCenterSortab
 }
 
 export function runCenterStatusPriority(run: RunCenterSortableRun): number {
-  if (isRunCenterActiveLike(run)) { return 0; }
+  if (isActiveRun(run)) { return 0; }
   const status = stringOrDefault(run.status, 'unknown');
   if (status === 'waiting_for_review') { return 1; }
   if (status === 'needs_human') { return 2; }
@@ -34,13 +32,9 @@ export function runCenterStatusPriority(run: RunCenterSortableRun): number {
 
 export function runCenterSortTimestamp(run: RunCenterSortableRun): number {
   const status = stringOrDefault(run.status, 'unknown');
-  const preferred = isRunCenterActiveLike(run) ? run.startedAt : run.endedAt || run.startedAt;
+  const preferred = isActiveRun(run) ? run.startedAt : run.endedAt || run.startedAt;
   const fallback = status === 'completed' || status === 'failed' || status === 'cancelled' ? run.startedAt : run.endedAt;
   return toValidDate(preferred)?.getTime() || toValidDate(fallback)?.getTime() || 0;
-}
-
-function isRunCenterActiveLike(run: RunCenterSortableRun): boolean {
-  return isActiveRun(run) || RUN_CENTER_ACTIVE_LIKE_STATUSES.has(stringOrDefault(run.status, ''));
 }
 
 function stringOrDefault(value: unknown, fallback: string): string {

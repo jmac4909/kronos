@@ -1,4 +1,4 @@
-export const ACTIVE_RUN_STATUSES = new Set(['preflight', 'running', 'paused']);
+export const ACTIVE_RUN_STATUSES = new Set(['queued', 'preflight', 'running', 'paused']);
 
 export interface RunStatusLike {
   status?: unknown;
@@ -28,7 +28,7 @@ export function activeRunSummary(runs: Array<RunStatusLike | unknown>): string {
     if (!isActiveRun(run)) { continue; }
     counts.set(status, (counts.get(status) || 0) + 1);
   }
-  return ['running', 'preflight', 'paused']
+  return ['running', 'preflight', 'queued', 'paused']
     .filter(status => counts.has(status))
     .map(status => `${counts.get(status)} ${status}`)
     .join(', ');
