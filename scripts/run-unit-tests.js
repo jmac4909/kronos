@@ -1629,6 +1629,16 @@ test('webview security injects CSP and preserves existing nonce policies', () =>
   assert.match(apiScript, /Kronos webview unhandled rejection/);
   assert.doesNotMatch(apiScript, /window\.__kronosVscodeApi/);
   assert.doesNotMatch(apiScript, /var vscode =/);
+  const actionScript = webviewSecurity.webviewActionPostScript('Kronos Actions', [
+    { messageKey: 'ticket', dataAttribute: 'data-ticket' },
+    { messageKey: 'runId', dataAttribute: 'data-run-id' },
+  ]);
+  assert.match(actionScript, /Kronos Actions/);
+  assert.match(actionScript, /function postKronosAction/);
+  assert.match(actionScript, /document\.addEventListener\('click', postKronosAction, true\)/);
+  assert.match(actionScript, /DOMContentLoaded/);
+  assert.match(actionScript, /data-kronos-actions-ready/);
+  assert.match(actionScript, /message\[field\.messageKey\]/);
 
   const existing = '<html><head><meta http-equiv="Content-Security-Policy" content="default-src test"></head><body></body></html>';
   assert.equal(webviewSecurity.withWebviewCsp(existing), existing);
@@ -2731,10 +2741,11 @@ test('dispatcher records branch and permission metadata for persisted runs', () 
     "import { runProgressSummary } from '../services/runProgress'",
     'createWebviewNonce',
     'webviewScriptCspOptions',
-    'webviewVsCodeApiScript',
+    'webviewActionPostScript',
     'webviewScriptCspOptions(panel.webview.cspSource, nonce)',
     "const nonce = interactive ? createWebviewNonce() : ''",
-    "${webviewVsCodeApiScript('Kronos Run Center')}",
+    "${webviewActionPostScript('Kronos Run Center', [",
+    "{ messageKey: 'runId', dataAttribute: 'data-run-id' }",
     "'refreshPanel'",
     "'archiveFinishedRuns'",
     'pollIntervalMs?: number',
@@ -2768,7 +2779,7 @@ test('dispatcher records branch and permission metadata for persisted runs', () 
     'function runCenterActionButtons',
     "runCenterActionButton('refreshPanel', 'Refresh')",
     "runCenterActionButton('archiveFinishedRuns', 'Archive Finished')",
-    "target.closest('[data-action]')",
+    'webviewActionPostScript',
     'function sortedRunCenterRuns',
     'function compareRunCenterRuns',
     'function runCenterStatusPriority',
@@ -4690,7 +4701,7 @@ test('extension webviews use shared UI shell and board filtering affordances', (
   assert.ok(boardHandlerStart >= 0 && boardHandlerEnd > boardHandlerStart, 'Jira board message handler should be present');
   const boardHandlerSource = source.slice(boardHandlerStart, boardHandlerEnd);
   for (const marker of [
-    "import { createWebviewNonce, webviewScriptCspOptions, webviewVsCodeApiScript, withWebviewCsp } from './services/webviewSecurity'",
+    "import { createWebviewNonce, webviewActionPostScript, webviewScriptCspOptions, webviewVsCodeApiScript, withWebviewCsp } from './services/webviewSecurity'",
     'const nonce = createWebviewNonce()',
     'webviewScriptCspOptions(panel.webview.cspSource, nonce)',
     'kronosWebviewBaseCss',
@@ -4759,7 +4770,11 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'function evidenceGatePanelGatesForState(state: KronosState): EvidenceGateResult[]',
     'function isProofSensitiveAction',
     'function kronosActionPanelScript',
-    "${webviewVsCodeApiScript('Kronos action panel')}",
+    "${webviewActionPostScript('Kronos action panel', [",
+    "{ messageKey: 'ticket', dataAttribute: 'data-ticket' }",
+    "{ messageKey: 'runId', dataAttribute: 'data-run-id' }",
+    "{ messageKey: 'planId', dataAttribute: 'data-plan-id' }",
+    "{ messageKey: 'itemId', dataAttribute: 'data-item-id' }",
     'script nonce="${escapeAttr(nonce)}"',
     "data-action=\"${escapeAttr(action)}\"",
     "data-plan-id=\"${escapeAttr(options.planId)}\"",

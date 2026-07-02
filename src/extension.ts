@@ -52,7 +52,7 @@ import { computeAttentionBadge } from './services/attentionBadge';
 import { buildNextActionContext, buildNextActionStartDecision, skillForAction } from './services/nextActionContext';
 import { createWorkspaceDiffArtifact, firstRemoteBranchMatching, originProjectPath } from './services/gitWorkspace';
 import { signalProcessTree, stopProcessTree } from './services/processTree';
-import { createWebviewNonce, webviewScriptCspOptions, webviewVsCodeApiScript, withWebviewCsp } from './services/webviewSecurity';
+import { createWebviewNonce, webviewActionPostScript, webviewScriptCspOptions, webviewVsCodeApiScript, withWebviewCsp } from './services/webviewSecurity';
 import { escapeAttr, escapeClass, escapeHtml, kronosWebviewBaseCss, safeHttpHref } from './services/webviewHtml';
 import { kronosTerminalOptions } from './services/terminalProfiles';
 import { unknownErrorMessage } from './services/errorUtils';
@@ -4492,19 +4492,12 @@ function attachOperatorCommandHandler(panel: vscode.WebviewPanel): void {
 
 function kronosActionPanelScript(nonce: string): string {
   return `<script nonce="${escapeAttr(nonce)}">
-${webviewVsCodeApiScript('Kronos action panel')}
-document.addEventListener('click', function(event) {
-  const target = event.target instanceof Element ? event.target.closest('[data-action]') : null;
-  if (!target) { return; }
-  event.preventDefault();
-  vscode.postMessage({
-    command: target.getAttribute('data-action') || '',
-    ticket: target.getAttribute('data-ticket') || '',
-    runId: target.getAttribute('data-run-id') || '',
-    planId: target.getAttribute('data-plan-id') || '',
-    itemId: target.getAttribute('data-item-id') || ''
-  });
-});
+${webviewActionPostScript('Kronos action panel', [
+  { messageKey: 'ticket', dataAttribute: 'data-ticket' },
+  { messageKey: 'runId', dataAttribute: 'data-run-id' },
+  { messageKey: 'planId', dataAttribute: 'data-plan-id' },
+  { messageKey: 'itemId', dataAttribute: 'data-item-id' },
+])}
 </script>`;
 }
 

@@ -8,7 +8,7 @@ import { RUNS_DIR, appendRunLog as appendRunLogFile, markRunCancelled, readRunRe
 import { readStateFile } from '../services/stateStore';
 import { RunFailureKind, classifyRunFailure, type PostRunReadiness } from '../services/postRunReadiness';
 import { stopProcessTree } from '../services/processTree';
-import { createWebviewNonce, webviewScriptCspOptions, webviewVsCodeApiScript, withWebviewCsp } from '../services/webviewSecurity';
+import { createWebviewNonce, webviewActionPostScript, webviewScriptCspOptions, withWebviewCsp } from '../services/webviewSecurity';
 import { currentGitCommit, currentGitRef, inspectTrackedWorktree, prepareManagedWorktree, removeWorktreeSafely } from '../services/gitWorkspace';
 import { checkGcloudApplicationDefaultAuth } from '../services/cliProbes';
 import { escapeAttr, escapeClass, escapeHtml, kronosWebviewBaseCss } from '../services/webviewHtml';
@@ -1212,16 +1212,9 @@ function runCenterActionButtons(run: KronosRun): string {
 
 function runCenterScript(nonce: string): string {
   return `<script nonce="${escapeAttr(nonce)}">
-${webviewVsCodeApiScript('Kronos Run Center')}
-document.addEventListener('click', function(event) {
-  const target = event.target instanceof Element ? event.target.closest('[data-action]') : null;
-  if (!target) { return; }
-  event.preventDefault();
-  vscode.postMessage({
-    command: target.getAttribute('data-action') || '',
-    runId: target.getAttribute('data-run-id') || ''
-  });
-});
+${webviewActionPostScript('Kronos Run Center', [
+  { messageKey: 'runId', dataAttribute: 'data-run-id' },
+])}
 </script>`;
 }
 

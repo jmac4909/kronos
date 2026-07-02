@@ -7,6 +7,11 @@ export interface WebviewCspOptions {
   imgSrc?: string[];
 }
 
+export interface WebviewActionPostField {
+  messageKey: string;
+  dataAttribute: string;
+}
+
 export function createWebviewNonce(): string {
   return randomBytes(16).toString('hex');
 }
@@ -51,6 +56,35 @@ export function webviewVsCodeApiScript(webviewName = 'Kronos webview'): string {
     "  window.addEventListener('unhandledrejection', function(event) {",
     "    console.error('Kronos webview unhandled rejection', webviewName, kronosErrorText(event.reason));",
     '  });',
+    '}());',
+  ].join('\n');
+}
+
+export function webviewActionPostScript(webviewName: string, fields: WebviewActionPostField[]): string {
+  const fieldsLiteral = JSON.stringify(fields);
+  return [
+    webviewVsCodeApiScript(webviewName),
+    '(function() {',
+    `  const fields = ${fieldsLiteral};`,
+    '  function postKronosAction(event) {',
+    "    const target = event.target instanceof Element ? event.target.closest('[data-action]') : null;",
+    '    if (!target) { return; }',
+    '    event.preventDefault();',
+    "    const message = { command: target.getAttribute('data-action') || '' };",
+    '    for (const field of fields) {',
+    "      message[field.messageKey] = target.getAttribute(field.dataAttribute) || '';",
+    '    }',
+    '    vscode.postMessage(message);',
+    '  }',
+    '  function attachKronosActionHandler() {',
+    "    document.addEventListener('click', postKronosAction, true);",
+    "    document.documentElement.setAttribute('data-kronos-actions-ready', 'true');",
+    '  }',
+    "  if (document.readyState === 'loading') {",
+    "    document.addEventListener('DOMContentLoaded', attachKronosActionHandler, { once: true });",
+    '  } else {',
+    '    attachKronosActionHandler();',
+    '  }',
     '}());',
   ].join('\n');
 }
