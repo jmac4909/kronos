@@ -1297,8 +1297,35 @@ test('CLI probes normalize failures and invalid Claude agent output', () => {
   assert.equal(failed.ok, false);
   assert.match(failed.error, /expired application default credentials/);
 
+  const stringFailure = cliProbes.runCliProbe('claude', ['agents', '--json'], {
+    commandRunner: () => { throw 'claude unavailable'; },
+  });
+  assert.equal(stringFailure.ok, false);
+  assert.equal(stringFailure.error, 'claude unavailable');
+
+  const fallbackFailure = cliProbes.runCliProbe('claude', ['agents', '--json'], {
+    commandRunner: () => { throw { message: '   ' }; },
+  });
+  assert.equal(fallbackFailure.ok, false);
+  assert.equal(fallbackFailure.error, 'CLI probe failed');
+
   assert.deepEqual(cliProbes.readClaudeAgents({ commandRunner: () => '{bad json' }), []);
   assert.deepEqual(cliProbes.readClaudeAgents({ commandRunner: () => JSON.stringify({ id: 'not-an-array' }) }), []);
+
+  const source = readSourceFixture('src', 'services', 'cliProbes.ts');
+  for (const marker of [
+    'catch (e: unknown)',
+    'function unknownErrorMessage(error: unknown, fallback: string): string',
+    "Reflect.get(error, 'message')",
+  ]) {
+    assert.ok(source.includes(marker), marker);
+  }
+  for (const marker of [
+    'catch (e: any)',
+    'e?.message',
+  ]) {
+    assert.equal(source.includes(marker), false, marker);
+  }
 });
 
 test('CLI probes resolve gcloud.cmd on Windows', () => {

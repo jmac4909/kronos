@@ -147,13 +147,21 @@ export function runCliProbe(command: string, args: string[], options: CliProbeOp
         maxBuffer: options.maxBuffer,
       }),
     };
-  } catch (e: any) {
+  } catch (e: unknown) {
     return {
       ok: false,
       output: '',
-      error: e?.message || String(e),
+      error: unknownErrorMessage(e, 'CLI probe failed'),
     };
   }
+}
+
+function unknownErrorMessage(error: unknown, fallback: string): string {
+  if (typeof error === 'string' && error.trim()) {
+    return error;
+  }
+  const message = error && typeof error === 'object' ? Reflect.get(error, 'message') : undefined;
+  return typeof message === 'string' && message.trim() ? message : fallback;
 }
 
 export function readClaudeAgents<T = unknown>(options: CliProbeOptions = {}): T[] {
