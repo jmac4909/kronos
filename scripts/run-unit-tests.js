@@ -601,6 +601,35 @@ test('state store migrations keep raw JSON payloads unknown until normalized', (
   }
 });
 
+test('state store validators keep raw JSON payloads unknown while checking shape', () => {
+  const source = readSourceFixture('src', 'services', 'stateStore.ts');
+  for (const marker of [
+    'interface StateWriteLock',
+    'export function validateStateFileShape(raw: unknown): void',
+    'function validateProjectConfig(config: unknown, label: string): void',
+    'function readCurrentWriteLock(): StateWriteLock | null',
+    'const evidenceValue = t.evidence',
+    'const environmentResults = evidence.environment_results',
+  ]) {
+    assert.ok(source.includes(marker), marker);
+  }
+  for (const marker of [
+    'const d = decision as any',
+    'export function validateStateFileShape(raw: any)',
+    'const t = ticket as any',
+    'const evidence = t.evidence as any',
+    'const r = result as any',
+    'const p = project as any',
+    'function validateProjectConfig(config: any',
+    'const value = mr as any',
+    'const value = build as any',
+    'const value = note as any',
+    'function readCurrentWriteLock(): any',
+  ]) {
+    assert.equal(source.includes(marker), false, marker);
+  }
+});
+
 test('KronosState load issues normalize unknown errors', () => {
   const source = readSourceFixture('src', 'state', 'KronosState.ts');
   for (const marker of [

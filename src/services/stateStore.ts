@@ -40,6 +40,11 @@ export interface StateAuditEvent {
   [key: string]: unknown;
 }
 
+interface StateWriteLock {
+  pid?: string | number;
+  action?: string;
+}
+
 const DEFAULT_OVERNIGHT = {
   enabled: false,
   max_concurrent: 1,
@@ -267,22 +272,21 @@ export function validateQueueState(queue: QueueState): void {
       throw new Error('queue.decisions must be an object');
     }
     for (const [key, decision] of Object.entries(queue.decisions)) {
-      const d = decision as any;
-      if (!isPlainObject(d)) {
+      if (!isPlainObject(decision)) {
         throw new Error(`queue decision ${key} must be an object`);
       }
-      requireString(d.plan_id, `queue decision ${key} plan_id`);
-      if (d.ticket !== null && d.ticket !== undefined) {
-        requireString(d.ticket, `queue decision ${key} ticket`);
+      requireString(decision.plan_id, `queue decision ${key} plan_id`);
+      if (decision.ticket !== null && decision.ticket !== undefined) {
+        requireString(decision.ticket, `queue decision ${key} ticket`);
       }
-      if (d.decision !== 'rejected' && d.decision !== 'snoozed') {
+      if (decision.decision !== 'rejected' && decision.decision !== 'snoozed') {
         throw new Error(`queue decision ${key} has invalid decision`);
       }
-      if (typeof d.action !== 'string' || typeof d.decided_at !== 'string') {
+      if (typeof decision.action !== 'string' || typeof decision.decided_at !== 'string') {
         throw new Error(`queue decision ${key} must contain action and decided_at`);
       }
-      validateActionValue(d.action, VALID_QUEUE_ACTION_SET, `queue decision ${key} action`);
-      if (d.snoozed_until !== undefined && typeof d.snoozed_until !== 'string') {
+      validateActionValue(decision.action, VALID_QUEUE_ACTION_SET, `queue decision ${key} action`);
+      if (decision.snoozed_until !== undefined && typeof decision.snoozed_until !== 'string') {
         throw new Error(`queue decision ${key} snoozed_until must be a string`);
       }
     }
@@ -490,36 +494,39 @@ function addStateIssue(issues: StateFileLoadIssue[], detail: string): void {
   issues.push({ target: 'state.json', filePath: STATE_FILE, detail });
 }
 
-export function validateStateFileShape(raw: any): void {
+export function validateStateFileShape(raw: unknown): void {
   if (!isPlainObject(raw)) {
     throw new Error('state.json must be an object');
   }
-  if (!isPlainObject(raw.settings)) {
+  const settings = raw.settings;
+  if (!isPlainObject(settings)) {
     throw new Error('state.json must contain settings');
   }
-  if (!Array.isArray(raw.settings.scan_dirs)) {
+  if (!Array.isArray(settings.scan_dirs)) {
     throw new Error('state.settings.scan_dirs must be an array');
   }
-  validateStringArray(raw.settings.scan_dirs, 'state.settings.scan_dirs');
-  if (!isPlainObject(raw.projects)) {
+  validateStringArray(settings.scan_dirs, 'state.settings.scan_dirs');
+  const projects = raw.projects;
+  if (!isPlainObject(projects)) {
     throw new Error('state.json must contain projects');
   }
-  for (const [name, project] of Object.entries(raw.projects)) {
+  for (const [name, project] of Object.entries(projects)) {
     validateProjectRecord(name, project);
   }
-  if (!isPlainObject(raw.tickets)) {
+  const tickets = raw.tickets;
+  if (!isPlainObject(tickets)) {
     throw new Error('state.json must contain tickets');
   }
-  for (const [key, ticket] of Object.entries(raw.tickets)) {
+  for (const [key, ticket] of Object.entries(tickets)) {
     validateTicketRecord(key, ticket);
   }
 }
 
 function validateTicketRecord(key: string, ticket: unknown): void {
-  const t = ticket as any;
-  if (!isPlainObject(t)) {
+  if (!isPlainObject(ticket)) {
     throw new Error(`ticket ${key} must be an object`);
   }
+  const t = ticket;
   requireString(t.summary, `ticket ${key} summary`);
   requireString(t.type, `ticket ${key} type`);
   requireString(t.priority, `ticket ${key} priority`);
@@ -534,22 +541,27 @@ function validateTicketRecord(key: string, ticket: unknown): void {
   validateActionValue(t.next_action, VALID_TICKET_ACTION_SET, `ticket ${key} next_action`);
   validateMergeRequest(t.mr, `ticket ${key} mr`);
   validateBuildStatus(t.build, `ticket ${key} build`);
-  const evidence = t.evidence as any;
-  if (evidence !== null && evidence !== undefined && !isPlainObject(evidence)) {
+  const evidenceValue = t.evidence;
+  if (evidenceValue !== null && evidenceValue !== undefined && !isPlainObject(evidenceValue)) {
     throw new Error(`ticket ${key} evidence must be an object`);
   }
-  if (evidence && evidence.notes !== undefined && !Array.isArray(evidence.notes)) {
+  const evidence = isPlainObject(evidenceValue) ? evidenceValue : undefined;
+  if (!evidence) { return; }
+
+  const notes = evidence.notes;
+  if (notes !== undefined && !Array.isArray(notes)) {
     throw new Error(`ticket ${key} evidence.notes must be an array`);
   }
-  for (const [idx, note] of (evidence?.notes || []).entries()) {
+  for (const [idx, note] of (Array.isArray(notes) ? notes : []).entries()) {
     validateEvidenceNote(note, `ticket ${key} evidence note ${idx}`);
   }
-  if (evidence && evidence.acceptance_criteria !== undefined) {
-    if (!Array.isArray(evidence.acceptance_criteria)) {
+  const acceptanceCriteria = evidence.acceptance_criteria;
+  if (acceptanceCriteria !== undefined) {
+    if (!Array.isArray(acceptanceCriteria)) {
       throw new Error(`ticket ${key} evidence.acceptance_criteria must be an array`);
     }
-    for (const [idx, criterion] of evidence.acceptance_criteria.entries()) {
-      if (!criterion || typeof criterion !== 'object' || typeof criterion.text !== 'string') {
+    for (const [idx, criterion] of acceptanceCriteria.entries()) {
+      if (!isPlainObject(criterion) || typeof criterion.text !== 'string') {
         throw new Error(`ticket ${key} acceptance criterion ${idx} must contain text`);
       }
       if (criterion.checked !== undefined && typeof criterion.checked !== 'boolean') {
@@ -557,47 +569,49 @@ function validateTicketRecord(key: string, ticket: unknown): void {
       }
     }
   }
-  if (evidence && evidence.checks !== undefined) {
-    if (!Array.isArray(evidence.checks)) {
+  const checks = evidence.checks;
+  if (checks !== undefined) {
+    if (!Array.isArray(checks)) {
       throw new Error(`ticket ${key} evidence.checks must be an array`);
     }
-    for (const [idx, check] of evidence.checks.entries()) {
-      if (!check || typeof check !== 'object' || typeof check.name !== 'string') {
+    for (const [idx, check] of checks.entries()) {
+      if (!isPlainObject(check) || typeof check.name !== 'string') {
         throw new Error(`ticket ${key} evidence check ${idx} must contain name`);
       }
-      if (!['pass', 'fail', 'warn', 'unknown'].includes(check.result)) {
+      if (typeof check.result !== 'string' || !['pass', 'fail', 'warn', 'unknown'].includes(check.result)) {
         throw new Error(`ticket ${key} evidence check ${idx} has invalid result`);
       }
-      if (check.confidence !== undefined && !['low', 'medium', 'high'].includes(check.confidence)) {
+      if (check.confidence !== undefined && (typeof check.confidence !== 'string' || !['low', 'medium', 'high'].includes(check.confidence))) {
         throw new Error(`ticket ${key} evidence check ${idx} has invalid confidence`);
       }
     }
   }
-  if (evidence && evidence.environment_results !== undefined) {
-    if (!evidence.environment_results || typeof evidence.environment_results !== 'object' || Array.isArray(evidence.environment_results)) {
+  const environmentResults = evidence.environment_results;
+  if (environmentResults !== undefined) {
+    if (!isPlainObject(environmentResults)) {
       throw new Error(`ticket ${key} evidence.environment_results must be an object`);
     }
-    for (const [env, result] of Object.entries(evidence.environment_results)) {
-      const r = result as any;
-      if (!r || typeof r !== 'object' || typeof r.detail !== 'string') {
+    for (const [env, result] of Object.entries(environmentResults)) {
+      if (!isPlainObject(result) || typeof result.detail !== 'string') {
         throw new Error(`ticket ${key} environment result ${env} must contain detail`);
       }
-      if (!['pass', 'fail', 'warn', 'unknown'].includes(r.status)) {
+      if (typeof result.status !== 'string' || !['pass', 'fail', 'warn', 'unknown'].includes(result.status)) {
         throw new Error(`ticket ${key} environment result ${env} has invalid status`);
       }
-      requireString(r.environment, `ticket ${key} environment result ${env} environment`);
-      requireString(r.checked_at, `ticket ${key} environment result ${env} checked_at`);
+      requireString(result.environment, `ticket ${key} environment result ${env} environment`);
+      requireString(result.checked_at, `ticket ${key} environment result ${env} checked_at`);
     }
   }
-  if (evidence && evidence.risk_notes !== undefined) {
-    if (!Array.isArray(evidence.risk_notes)) {
+  const riskNotes = evidence.risk_notes;
+  if (riskNotes !== undefined) {
+    if (!Array.isArray(riskNotes)) {
       throw new Error(`ticket ${key} evidence.risk_notes must be an array`);
     }
-    for (const [idx, risk] of evidence.risk_notes.entries()) {
-      if (!risk || typeof risk !== 'object' || typeof risk.text !== 'string') {
+    for (const [idx, risk] of riskNotes.entries()) {
+      if (!isPlainObject(risk) || typeof risk.text !== 'string') {
         throw new Error(`ticket ${key} risk note ${idx} must contain text`);
       }
-      if (risk.severity !== undefined && !['low', 'medium', 'high'].includes(risk.severity)) {
+      if (risk.severity !== undefined && (typeof risk.severity !== 'string' || !['low', 'medium', 'high'].includes(risk.severity))) {
         throw new Error(`ticket ${key} risk note ${idx} has invalid severity`);
       }
     }
@@ -605,10 +619,10 @@ function validateTicketRecord(key: string, ticket: unknown): void {
 }
 
 function validateProjectRecord(name: string, project: unknown): void {
-  const p = project as any;
-  if (!isPlainObject(p)) {
+  if (!isPlainObject(project)) {
     throw new Error(`project ${name} must be an object`);
   }
+  const p = project;
   requireString(p.path, `project ${name} path`);
   requireFiniteNumber(p.priority, `project ${name} priority`);
   if (!isPlainObject(p.config)) {
@@ -625,7 +639,10 @@ function validateProjectRecord(name: string, project: unknown): void {
   requireFiniteNumber(p.open_mr_count, `project ${name} open_mr_count`);
 }
 
-function validateProjectConfig(config: any, label: string): void {
+function validateProjectConfig(config: unknown, label: string): void {
+  if (!isPlainObject(config)) {
+    throw new Error(`${label} must be an object`);
+  }
   for (const key of ['repo_name', 'jira_project_key', 'jira_ticket_filter', 'jenkins_url', 'sonar_project_key', 'github_repository', 'github_repo', 'github_api_url', 'base_branch', 'default_branch']) {
     if (config[key] !== undefined && typeof config[key] !== 'string') {
       throw new Error(`${label}.${key} must be a string`);
@@ -657,10 +674,10 @@ function validateProjectConfig(config: any, label: string): void {
 
 function validateMergeRequest(mr: unknown, label: string): void {
   if (mr === null || mr === undefined) { return; }
-  const value = mr as any;
-  if (!isPlainObject(value)) {
+  if (!isPlainObject(mr)) {
     throw new Error(`${label} must be an object or null`);
   }
+  const value = mr;
   requireFiniteNumber(value.iid, `${label}.iid`);
   if (typeof value.state !== 'string' || !['opened', 'merged', 'closed'].includes(value.state)) {
     throw new Error(`${label}.state is invalid`);
@@ -673,20 +690,20 @@ function validateMergeRequest(mr: unknown, label: string): void {
 
 function validateBuildStatus(build: unknown, label: string): void {
   if (build === null || build === undefined) { return; }
-  const value = build as any;
-  if (!isPlainObject(value)) {
+  if (!isPlainObject(build)) {
     throw new Error(`${label} must be an object or null`);
   }
+  const value = build;
   requireFiniteNumber(value.number, `${label}.number`);
   requireString(value.status, `${label}.status`);
   requireString(value.url, `${label}.url`);
 }
 
 function validateEvidenceNote(note: unknown, label: string): void {
-  const value = note as any;
-  if (!isPlainObject(value)) {
+  if (!isPlainObject(note)) {
     throw new Error(`${label} must be an object`);
   }
+  const value = note;
   requireString(value.at, `${label}.at`);
   if (typeof value.kind !== 'string' || !['note', 'test', 'risk', 'decision'].includes(value.kind)) {
     throw new Error(`${label}.kind is invalid`);
@@ -831,7 +848,8 @@ function acquireStateWriteLock(action: string, target: string): () => void {
       try { fs.closeSync(fd); } catch {}
     }
     const current = readCurrentWriteLock();
-    throw new Error(`Kronos state write lock is held${current ? ` by pid ${current.pid || 'unknown'} for ${current.action || 'unknown action'}` : ''}. Retry after the current write finishes.`);
+    const lockDetail = current ? ` by pid ${current.pid || 'unknown'} for ${current.action || 'unknown action'}` : '';
+    throw new Error(`Kronos state write lock is held${lockDetail}. Retry after the current write finishes.`);
   }
   fs.closeSync(fd);
   let released = false;
@@ -855,9 +873,14 @@ function clearStaleWriteLock(): void {
   } catch {}
 }
 
-function readCurrentWriteLock(): any {
+function readCurrentWriteLock(): StateWriteLock | null {
   try {
-    return JSON.parse(fs.readFileSync(STATE_WRITE_LOCK_FILE, 'utf-8'));
+    const lock = JSON.parse(fs.readFileSync(STATE_WRITE_LOCK_FILE, 'utf-8'));
+    if (!isPlainObject(lock)) { return null; }
+    return {
+      pid: typeof lock.pid === 'string' || typeof lock.pid === 'number' ? lock.pid : undefined,
+      action: typeof lock.action === 'string' ? lock.action : undefined,
+    };
   } catch {
     return null;
   }
