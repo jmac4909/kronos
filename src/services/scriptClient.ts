@@ -43,7 +43,7 @@ export function runPythonScriptSync(scriptName: RequiredScriptName, args: string
       windowsHide: true,
       maxBuffer: options.maxBuffer ?? DEFAULT_BUFFER,
     });
-  } catch (e: any) {
+  } catch (e: unknown) {
     throw scriptError(scriptName, args, e);
   }
 }
@@ -66,7 +66,7 @@ export function runPythonScript(scriptName: RequiredScriptName, args: string[], 
   });
 }
 
-export async function runJsonScript<T = any>(scriptName: RequiredScriptName, args: string[], options: ScriptRunOptions = {}): Promise<T> {
+export async function runJsonScript<T = unknown>(scriptName: RequiredScriptName, args: string[], options: ScriptRunOptions = {}): Promise<T> {
   const raw = await runPythonScript(scriptName, args, options);
   return parseScriptJson<T>(scriptName, args, raw);
 }
@@ -75,11 +75,11 @@ export function runKronosStateScript(args: string[], options: ScriptRunOptions =
   return runPythonScriptSync('kronos_state.py', args, options);
 }
 
-export function runGitlabJson<T = any>(args: string[], options: ScriptRunOptions = {}): Promise<T> {
+export function runGitlabJson<T = unknown>(args: string[], options: ScriptRunOptions = {}): Promise<T> {
   return runJsonScript<T>('gitlab_api.py', args, options);
 }
 
-export function runPipelineJson<T = any>(args: string[], options: ScriptRunOptions = {}): Promise<T> {
+export function runPipelineJson<T = unknown>(args: string[], options: ScriptRunOptions = {}): Promise<T> {
   return runJsonScript<T>('pipeline_monitor.py', args, options);
 }
 
@@ -102,17 +102,27 @@ function findPython(): string {
   return process.env.PYTHON || 'python';
 }
 
-function parseScriptJson<T>(scriptName: RequiredScriptName, args: string[], raw: string): T {
+function parseScriptJson<T = unknown>(scriptName: RequiredScriptName, args: string[], raw: string): T {
   try {
     return JSON.parse(raw) as T;
-  } catch (e: any) {
+  } catch (e: unknown) {
     const preview = raw.trim().substring(0, 300);
-    throw new Error(`Invalid JSON from ${scriptName} ${args.join(' ')}: ${e?.message || 'parse failed'}${preview ? `; output: ${preview}` : ''}`);
+    throw new Error(`Invalid JSON from ${scriptName} ${args.join(' ')}: ${unknownErrorMessage(e, 'parse failed')}${preview ? `; output: ${preview}` : ''}`);
   }
 }
 
-function scriptError(scriptName: RequiredScriptName, args: string[], error: any): Error {
-  const stderr = error?.stderr ? String(error.stderr).trim() : '';
-  const message = stderr || error?.message || 'script failed';
+function scriptError(scriptName: RequiredScriptName, args: string[], error: unknown): Error {
+  const stderrValue = errorField(error, 'stderr');
+  const stderr = stderrValue ? String(stderrValue).trim() : '';
+  const message = stderr || unknownErrorMessage(error, 'script failed');
   return new Error(`${scriptName} ${args.join(' ')} failed: ${message}`);
+}
+
+function unknownErrorMessage(error: unknown, fallback: string): string {
+  const message = errorField(error, 'message');
+  return typeof message === 'string' && message.trim() ? message : fallback;
+}
+
+function errorField(error: unknown, key: string): unknown {
+  return error && typeof error === 'object' ? Reflect.get(error, key) : undefined;
 }

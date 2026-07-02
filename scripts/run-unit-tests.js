@@ -2766,6 +2766,30 @@ test('script client reports required scripts and wraps Python JSON contracts', a
   );
 });
 
+test('script client keeps raw JSON and process errors unknown by default', () => {
+  const source = readSourceFixture('src', 'services', 'scriptClient.ts');
+  for (const marker of [
+    'export async function runJsonScript<T = unknown>',
+    'export function runGitlabJson<T = unknown>',
+    'export function runPipelineJson<T = unknown>',
+    'function parseScriptJson<T = unknown>',
+    'function scriptError(scriptName: RequiredScriptName, args: string[], error: unknown)',
+    'function unknownErrorMessage(error: unknown, fallback: string): string',
+    'function errorField(error: unknown, key: string): unknown',
+  ]) {
+    assert.ok(source.includes(marker), marker);
+  }
+  for (const marker of [
+    '<T = any>',
+    'catch (e: any)',
+    'error: any',
+    'e?.message',
+    'error?.stderr',
+  ]) {
+    assert.equal(source.includes(marker), false, marker);
+  }
+});
+
 test('state script adapter owns typed kronos_state operations', () => {
   const calls = [];
   const runner = (args, options) => {
