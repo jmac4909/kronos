@@ -1127,7 +1127,7 @@ function runCenterActionButtons(run: KronosRun): string {
 
 function runCenterScript(nonce: string): string {
   return `<script nonce="${escapeAttr(nonce)}">
-${webviewVsCodeApiScript()}
+${webviewVsCodeApiScript('Kronos Run Center')}
 document.addEventListener('click', function(event) {
   const target = event.target instanceof Element ? event.target.closest('[data-action][data-run-id]') : null;
   if (!target) { return; }

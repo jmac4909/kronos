@@ -11,26 +11,43 @@ export function createWebviewNonce(): string {
   return randomBytes(16).toString('hex');
 }
 
-export function webviewVsCodeApiScript(): string {
+export function webviewVsCodeApiScript(webviewName = 'Kronos webview'): string {
+  const nameLiteral = JSON.stringify(webviewName) || '"Kronos webview"';
   return [
-    'function kronosFallbackVsCodeApi() {',
-    "  return { postMessage: function(message) { console.warn('VS Code API unavailable for Kronos webview action', message); } };",
-    '}',
-    'function kronosAcquireVsCodeApi() {',
-    '  if (window.__kronosVscodeApi) { return window.__kronosVscodeApi; }',
+    'const vscode = (function() {',
+    '  function kronosFallbackVsCodeApi() {',
+    "    return { postMessage: function(message) { console.warn('VS Code API unavailable for Kronos webview action', message); } };",
+    '  }',
     "  if (typeof acquireVsCodeApi !== 'function') {",
-    '    window.__kronosVscodeApi = kronosFallbackVsCodeApi();',
-    '    return window.__kronosVscodeApi;',
+    '    return kronosFallbackVsCodeApi();',
     '  }',
     '  try {',
-    '    window.__kronosVscodeApi = acquireVsCodeApi();',
+    '    return acquireVsCodeApi();',
     '  } catch (error) {',
     "    console.error('Failed to acquire VS Code API for Kronos webview action', error);",
-    '    window.__kronosVscodeApi = kronosFallbackVsCodeApi();',
+    '    return kronosFallbackVsCodeApi();',
     '  }',
-    '  return window.__kronosVscodeApi;',
-    '}',
-    'var vscode = kronosAcquireVsCodeApi();',
+    '}());',
+    '(function() {',
+    `  const webviewName = ${nameLiteral};`,
+    '  function kronosErrorText(value) {',
+    '    if (value && typeof value === \'object\' && \'message\' in value) { return String(value.message || value); }',
+    '    return String(value || \'unknown error\');',
+    '  }',
+    '  try {',
+    "    document.documentElement.setAttribute('data-kronos-script-ready', 'true');",
+    "    document.documentElement.setAttribute('data-kronos-webview', webviewName);",
+    '  } catch (error) {',
+    "    console.warn('Kronos webview could not mark script readiness', error);",
+    '  }',
+    "  console.info('Kronos webview script ready', webviewName, navigator.userAgent);",
+    "  window.addEventListener('error', function(event) {",
+    "    console.error('Kronos webview script error', webviewName, event.message, event.filename, event.lineno, event.colno);",
+    '  });',
+    "  window.addEventListener('unhandledrejection', function(event) {",
+    "    console.error('Kronos webview unhandled rejection', webviewName, kronosErrorText(event.reason));",
+    '  });',
+    '}());',
   ].join('\n');
 }
 

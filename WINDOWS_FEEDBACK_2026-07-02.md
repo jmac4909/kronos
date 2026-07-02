@@ -25,5 +25,5 @@ Context: Windows 11 manual testing on VS Code 1.127.0.
 
 - Bug 1 is fixed in the unit-test command mocks for Windows `gcloud.cmd`.
 - Bug 2 is fixed by failing and completing the persisted run when managed worktree setup fails before launch.
-- Bug 3 has an initial script-acquisition hardening in `webviewSecurity`; it still needs confirmation in VS Code 1.127.0 extension host DevTools on Windows 11.
+- Bug 3 has script-acquisition hardening plus webview boot/error diagnostics in `webviewSecurity`; it still needs confirmation in VS Code 1.127.0 extension host DevTools on Windows 11.
 - Remaining bugs and feature suggestions are part of the cleanup goal backlog.

@@ -4272,7 +4272,7 @@ function attachOperatorCommandHandler(panel: vscode.WebviewPanel): void {
 
 function kronosActionPanelScript(nonce: string): string {
   return `<script nonce="${escapeAttr(nonce)}">
-${webviewVsCodeApiScript()}
+${webviewVsCodeApiScript('Kronos action panel')}
 document.addEventListener('click', function(event) {
   const target = event.target instanceof Element ? event.target.closest('[data-action]') : null;
   if (!target) { return; }
@@ -6014,7 +6014,7 @@ function buildJiraBoardHtml(state: KronosState, nonce: string): string {
 </style>
 <script nonce="${escapeAttr(nonce)}">
 function initKronosJiraBoard() {
-${webviewVsCodeApiScript()}
+${webviewVsCodeApiScript('Kronos Jira Board')}
 const ticketData = ${ticketJsonRaw};
 let currentModalKey = '';
 let lastFocusedEl = null;

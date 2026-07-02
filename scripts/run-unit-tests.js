@@ -1448,12 +1448,16 @@ test('webview security injects CSP and preserves existing nonce policies', () =>
   const nonceSource = webviewSecurity.webviewCspMeta({ allowScripts: true, nonce });
   assert.match(nonceSource, new RegExp(`script-src 'nonce-${nonce}'`));
   const apiScript = webviewSecurity.webviewVsCodeApiScript();
-  assert.match(apiScript, /window\.__kronosVscodeApi/);
-  assert.match(apiScript, /function kronosAcquireVsCodeApi/);
+  assert.match(apiScript, /const vscode = \(function\(\) \{/);
   assert.match(apiScript, /typeof acquireVsCodeApi !== 'function'/);
   assert.match(apiScript, /Failed to acquire VS Code API for Kronos webview action/);
-  assert.match(apiScript, /var vscode = kronosAcquireVsCodeApi\(\)/);
   assert.match(apiScript, /VS Code API unavailable for Kronos webview action/);
+  assert.match(apiScript, /data-kronos-script-ready/);
+  assert.match(apiScript, /Kronos webview script ready/);
+  assert.match(apiScript, /Kronos webview script error/);
+  assert.match(apiScript, /Kronos webview unhandled rejection/);
+  assert.doesNotMatch(apiScript, /window\.__kronosVscodeApi/);
+  assert.doesNotMatch(apiScript, /var vscode =/);
 
   const existing = '<html><head><meta http-equiv="Content-Security-Policy" content="default-src test"></head><body></body></html>';
   assert.equal(webviewSecurity.withWebviewCsp(existing), existing);
@@ -2553,7 +2557,7 @@ test('dispatcher records branch and permission metadata for persisted runs', () 
     'createWebviewNonce',
     'webviewVsCodeApiScript',
     "const nonce = interactive ? createWebviewNonce() : ''",
-    '${webviewVsCodeApiScript()}',
+    "${webviewVsCodeApiScript('Kronos Run Center')}",
     'function toValidDate',
     'function progressDateOr',
     'function progressEventTimeLabel',
@@ -4277,6 +4281,7 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     "unknownErrorMessage(e, 'Failed to link ticket.')",
     "unknownErrorMessage(e, 'Failed to unlink ticket.')",
     "unknownErrorMessage(e, 'Failed to add ticket to queue.')",
+    "${webviewVsCodeApiScript('Kronos Jira Board')}",
     'function kronosOperatorPanelCss',
     'const EVIDENCE_GATE_MESSAGE_COMMANDS = new Set',
     'const HUMAN_REVIEW_MESSAGE_COMMANDS = new Set',
@@ -4296,7 +4301,7 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     "actionButton('addEvidence', 'Add Evidence'",
     "actionButton(isMissingExtraction ? 'extractAcceptanceCriteria' : 'updateAcceptanceCriteria'",
     'function kronosActionPanelScript',
-    '${webviewVsCodeApiScript()}',
+    "${webviewVsCodeApiScript('Kronos action panel')}",
     'script nonce="${escapeAttr(nonce)}"',
     "data-action=\"${escapeAttr(action)}\"",
     "data-plan-id=\"${escapeAttr(options.planId)}\"",
