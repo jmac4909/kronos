@@ -1045,6 +1045,9 @@ for (const marker of [
   'function normalizeTerminalActiveRun',
   'const effectiveStatus = effectiveRunStatus(run)',
   'Run record had terminal metadata while persisted status was ${status}',
+  'function normalizeRunFile',
+  "scope === 'active' && normalized !== run",
+  'writeJsonAtomic(filePath, normalized)',
 ]) {
   if (!runStore.includes(marker)) {
     fail(`Missing run store marker: ${marker}`);

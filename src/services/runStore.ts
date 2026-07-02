@@ -180,12 +180,12 @@ function readRequiredRunRecord(runId: string): RunRecord {
   if (result.issue) {
     throw new Error(`Invalid run record ${currentPath}: ${result.issue.detail}`);
   }
-  return normalizeTerminalActiveRun(result.run!);
+  return normalizeRunFile(result.run!, currentPath, 'active');
 }
 
 function readRunFile(filePath: string, scope: RunStoreIssue['scope']): RunRecord | null {
   const run = readRunFileResult(filePath, scope).run;
-  return run ? normalizeTerminalActiveRun(run) : null;
+  return run ? normalizeRunFile(run, filePath, scope) : null;
 }
 
 function readRunFileIssue(filePath: string, scope: RunStoreIssue['scope']): RunStoreIssue | null {
@@ -219,6 +219,14 @@ function normalizeTerminalActiveRun(run: RunRecord): RunRecord {
   }
   if ((effectiveStatus === 'failed' || effectiveStatus === 'cancelled') && !normalized.failureKind) {
     normalized.failureKind = effectiveStatus === 'cancelled' ? 'cancelled' : 'unknown';
+  }
+  return normalized;
+}
+
+function normalizeRunFile(run: RunRecord, filePath: string, scope: RunStoreIssue['scope']): RunRecord {
+  const normalized = normalizeTerminalActiveRun(run);
+  if (scope === 'active' && normalized !== run) {
+    writeJsonAtomic(filePath, normalized);
   }
   return normalized;
 }

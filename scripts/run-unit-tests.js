@@ -2597,11 +2597,17 @@ test('run store normalizes terminal active records on read and archive', () => {
   runStore.writeRunRecord(timestampOnly);
 
   assert.equal(JSON.parse(fs.readFileSync(runStore.runRecordPath(completed.id), 'utf8')).status, 'running');
-  assert.equal(runStore.readRunRecord(completed.id).status, 'completed');
-  assert.equal(runStore.readRunRecord(failed.id).status, 'failed');
-  assert.equal(runStore.readRunRecord(failed.id).failureKind, 'unknown');
-  assert.equal(runStore.readRunRecord(timestampOnly.id).status, 'needs_human');
-  assert.match(runStore.readRunRecord(timestampOnly.id).failureReason, /terminal metadata/);
+  const completedRead = runStore.readRunRecord(completed.id);
+  const failedRead = runStore.readRunRecord(failed.id);
+  const timestampOnlyRead = runStore.readRunRecord(timestampOnly.id);
+  assert.equal(completedRead.status, 'completed');
+  assert.equal(failedRead.status, 'failed');
+  assert.equal(failedRead.failureKind, 'unknown');
+  assert.equal(timestampOnlyRead.status, 'needs_human');
+  assert.match(timestampOnlyRead.failureReason, /terminal metadata/);
+  assert.equal(JSON.parse(fs.readFileSync(runStore.runRecordPath(completed.id), 'utf8')).status, 'completed');
+  assert.equal(JSON.parse(fs.readFileSync(runStore.runRecordPath(failed.id), 'utf8')).status, 'failed');
+  assert.equal(JSON.parse(fs.readFileSync(runStore.runRecordPath(timestampOnly.id), 'utf8')).status, 'needs_human');
 
   const archived = runStore.archiveRun(failed.id);
   const archivedRun = JSON.parse(fs.readFileSync(archived.runPath, 'utf8'));
@@ -2807,6 +2813,9 @@ test('run store surfaces invalid records and blocks strict mutations', () => {
     '[key: string]: unknown',
     'catch (e: unknown)',
     "unknownErrorMessage(e, 'Unable to parse JSON.')",
+    'function normalizeRunFile',
+    "scope === 'active' && normalized !== run",
+    'writeJsonAtomic(filePath, normalized)',
   ]) {
     assert.ok(source.includes(marker), marker);
   }
