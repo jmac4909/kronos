@@ -3732,7 +3732,7 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'const linkedProjects = ticketStringArray(t.projects)',
     'const attachments = ticketAttachments(t.attachments)',
     'const projectList = ticketStringArray(ticket.projects)',
-    'const mr = ticketRecord(ticket.mr) ? ticket.mr : null',
+    'const mr = ticket.mr',
     'class="kronos-shell operator-shell"',
     'operator-summary',
     'summary-card',
@@ -3784,6 +3784,37 @@ test('extension run recovery helpers use typed run records', () => {
     'findRunById(runId: string): any',
   ]) {
     assert.equal(source.includes(marker), false, marker);
+  }
+});
+
+test('ticket detail rendering uses typed tickets and evidence records', () => {
+  const extensionSource = readSourceFixture('src', 'extension.ts');
+  const evidenceData = readSourceFixture('src', 'services', 'evidenceData.ts');
+  for (const marker of [
+    'import type { DiscoveredProject, MergeRequestChangedFile, Ticket }',
+    'function ticketEvidenceItemCount(ticket: Ticket)',
+    'function buildTicketHtml(key: string, ticket: Ticket',
+    'const mr = ticket.mr',
+    'const build = ticket.build',
+    'function existingAcceptanceCriterion(record: object)',
+    'export type EvidenceRecord = object',
+    'Reflect.get(record, key)',
+    "Reflect.get(record, 'checked')",
+  ]) {
+    assert.ok((marker.startsWith('export type') || marker.startsWith('Reflect.'))
+      ? evidenceData.includes(marker)
+      : extensionSource.includes(marker), marker);
+  }
+  for (const marker of [
+    'function ticketEvidenceItemCount(ticket: any)',
+    'function buildTicketHtml(key: string, ticket: any',
+    'criteria.map((criterion: any)',
+    'notes.slice().reverse().map((note: any)',
+    'checks.slice().reverse().map((check: any)',
+    'environmentResults.map((result: any)',
+    'export type EvidenceRecord = Record<string, any>',
+  ]) {
+    assert.equal(extensionSource.includes(marker) || evidenceData.includes(marker), false, marker);
   }
 });
 

@@ -10,7 +10,7 @@ import * as path from 'path';
 import * as os from 'os';
 import * as fs from 'fs';
 import { randomBytes } from 'crypto';
-import { DiscoveredProject, MergeRequestChangedFile } from './state/types';
+import type { DiscoveredProject, MergeRequestChangedFile, Ticket } from './state/types';
 import { dispatchClaudeSession, openInClaude, ensureAuth, cleanupStaleWorktrees, listSavedSessions, listSessionStoreIssues, openSavedSession, getAggregateStats, openRunCenter, listRuns, type KronosRun, type PromptRunMetadata, type RunCenterActionRequest } from './runners/sessionDispatcher';
 import { PromptHistoryDiff, PromptHistorySnapshot, PromptSmokeResult, PromptSmokeTest, PromptTemplateInfo, buildDefaultPromptSmokeTests, createPromptHistorySnapshot, diffPromptHistorySnapshots, latestPromptHistorySnapshot, listPromptHistorySnapshots, listPromptTemplates, repairRequiredPromptTemplates, runPromptSmokeTests } from './services/promptManager';
 import { KRONOS_DIR, STATE_AUDIT_FILE, StateAuditEvent, listBackups, listStateAuditEvents, restoreBackup } from './services/stateStore';
@@ -5259,7 +5259,7 @@ function evidenceCountForTicket(state: KronosState, ticketKey: string): number {
   return ticket ? ticketEvidenceItemCount(ticket) : 0;
 }
 
-function ticketEvidenceItemCount(ticket: any): number {
+function ticketEvidenceItemCount(ticket: Ticket): number {
   return evidenceNotes(ticket).length + evidenceChecks(ticket).length + evidenceEnvironmentResults(ticket).length;
 }
 
@@ -5278,7 +5278,7 @@ function ticketRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
-function existingAcceptanceCriterion(record: Record<string, unknown>): ExistingAcceptanceCriterion | undefined {
+function existingAcceptanceCriterion(record: object): ExistingAcceptanceCriterion | undefined {
   const text = evidenceString(record, 'text');
   if (!text) { return undefined; }
   const source = evidenceString(record, 'source');
@@ -6261,7 +6261,7 @@ if (document.readyState === 'loading') {
 </div></body></html>`;
 }
 
-function buildTicketHtml(key: string, ticket: any, state: KronosState, nonce?: string): string {
+function buildTicketHtml(key: string, ticket: Ticket, state: KronosState, nonce?: string): string {
   const esc = escapeHtml;
   const projectList = ticketStringArray(ticket.projects);
   const labelList = ticketStringArray(ticket.labels);
@@ -6271,8 +6271,8 @@ function buildTicketHtml(key: string, ticket: any, state: KronosState, nonce?: s
   const jiraStatus = ticketStringField(ticket, 'jira_status');
   const nextAction = ticketStringField(ticket, 'next_action');
   const description = ticketStringField(ticket, 'description');
-  const mr = ticketRecord(ticket.mr) ? ticket.mr : null;
-  const build = ticketRecord(ticket.build) ? ticket.build : null;
+  const mr = ticket.mr;
+  const build = ticket.build;
   const projs = projectList.map((p: string) =>
     `<span class="tag project">${esc(p)}</span>`
   ).join(' ');
@@ -6283,7 +6283,7 @@ function buildTicketHtml(key: string, ticket: any, state: KronosState, nonce?: s
   const timelineHtml = buildTicketTimelineHtml(timeline);
   const criteria = evidenceAcceptanceCriteria(ticket);
   const criteriaHtml = criteria.length > 0
-    ? `<div class="section"><h3>Acceptance Criteria</h3><div class="criteria-list">${criteria.map((criterion: any) => `
+    ? `<div class="section"><h3>Acceptance Criteria</h3><div class="criteria-list">${criteria.map(criterion => `
       <div class="criterion ${evidenceChecked(criterion) ? 'checked' : ''}">
         <span class="criterion-box">${evidenceChecked(criterion) ? '&#x2611;' : '&#x2610;'}</span>
         <span>${esc(evidenceString(criterion, 'text', 'Untitled criterion'))}</span>
@@ -6291,7 +6291,7 @@ function buildTicketHtml(key: string, ticket: any, state: KronosState, nonce?: s
     : '';
   const notes = evidenceNotes(ticket);
   const evidenceHtml = notes.length > 0
-    ? `<div class="section"><h3>Evidence Ledger</h3><div class="evidence-list">${notes.slice().reverse().map((note: any) => {
+    ? `<div class="section"><h3>Evidence Ledger</h3><div class="evidence-list">${notes.slice().reverse().map(note => {
       const at = formatWebviewDateTime(evidenceString(note, 'at'), 'Unknown time');
       return `<div class="evidence-note">
         <span class="evidence-kind">${esc(evidenceString(note, 'kind', 'note'))}</span>
@@ -6302,7 +6302,7 @@ function buildTicketHtml(key: string, ticket: any, state: KronosState, nonce?: s
     : '';
   const checks = evidenceChecks(ticket);
   const checkHtml = checks.length > 0
-    ? `<div class="section"><h3>Evidence Checks</h3><div class="evidence-list">${checks.slice().reverse().map((check: any) => {
+    ? `<div class="section"><h3>Evidence Checks</h3><div class="evidence-list">${checks.slice().reverse().map(check => {
       const at = formatWebviewDateTime(evidenceString(check, 'at'), 'Unknown time');
       const result = evidenceString(check, 'result', 'unknown');
       const environment = evidenceString(check, 'environment');
@@ -6322,7 +6322,7 @@ function buildTicketHtml(key: string, ticket: any, state: KronosState, nonce?: s
     : '';
   const environmentResults = evidenceEnvironmentResults(ticket);
   const environmentHtml = environmentResults.length > 0
-    ? `<div class="section"><h3>Environment Results</h3><div class="evidence-list">${environmentResults.map((result: any) => {
+    ? `<div class="section"><h3>Environment Results</h3><div class="evidence-list">${environmentResults.map(result => {
       const at = formatWebviewDateTime(evidenceString(result, 'checked_at'), 'Unknown time');
       const status = evidenceString(result, 'status', 'unknown');
       const artifactPath = evidenceString(result, 'artifact_path');

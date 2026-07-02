@@ -1,6 +1,6 @@
 import { Ticket } from '../state/types';
 
-export type EvidenceRecord = Record<string, any>;
+export type EvidenceRecord = object;
 
 export function evidenceNotes(ticket: Ticket): EvidenceRecord[] {
   return arrayRecords(ticket.evidence?.notes);
@@ -25,12 +25,12 @@ export function evidenceEnvironmentResults(ticket: Ticket): EvidenceRecord[] {
 }
 
 export function evidenceString(record: EvidenceRecord | null | undefined, key: string, fallback = ''): string {
-  const value = record?.[key];
+  const value = record ? Reflect.get(record, key) : undefined;
   return typeof value === 'string' ? value.trim() : fallback;
 }
 
 export function evidenceChecked(record: EvidenceRecord): boolean {
-  return record.checked === true;
+  return Reflect.get(record, 'checked') === true;
 }
 
 function arrayRecords(value: unknown): EvidenceRecord[] {

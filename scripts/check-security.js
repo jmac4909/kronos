@@ -233,7 +233,7 @@ for (const marker of [
   'const linkedProjects = ticketStringArray(t.projects)',
   'const attachments = ticketAttachments(t.attachments)',
   'const projectList = ticketStringArray(ticket.projects)',
-  'const mr = ticketRecord(ticket.mr) ? ticket.mr : null',
+  'const mr = ticket.mr',
   'kronos.addEvidenceCheck',
   'kronos.recordEnvironmentResult',
   'addTicketEvidenceNote',
