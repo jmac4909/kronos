@@ -4367,6 +4367,11 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'function executeRunCenterAction',
     'function executeTicketDetailAction',
     'function openTicketExternalUrl',
+    'const updateReviewBadge = () =>',
+    'reviewTree.getNewReviewCount()',
+    'view.badge = count > 0',
+    'reviewTree.onDidChangeNewReviewCount(updateReviewBadge)',
+    'reviewTree.markVisibleReviewItemsSeen()',
     "import { activeRunSummary, isActiveRun } from './services/runStatus'",
     'const activeRuns = listRuns().filter(isActiveRun)',
     "statusBarItem.command = 'kronos.runCenter'",
@@ -4669,6 +4674,7 @@ test('tree providers share action labels and icons', () => {
   const ticketTree = readSourceFixture('src', 'views', 'TicketTreeProvider.ts');
   const queueTree = readSourceFixture('src', 'views', 'QueueTreeProvider.ts');
   const sessionTree = readSourceFixture('src', 'views', 'SessionTreeProvider.ts');
+  const reviewTree = readSourceFixture('src', 'views', 'ReviewTreeProvider.ts');
   const actionIcons = readSourceFixture('src', 'views', 'actionIcons.ts');
   const actionLabels = readSourceFixture('src', 'services', 'actionLabels.ts');
   const queuePlanner = readSourceFixture('src', 'services', 'queuePlanner.ts');
@@ -4699,6 +4705,19 @@ test('tree providers share action labels and icons', () => {
     "this.command = { command: 'kronos.runCenter'",
   ]) {
     assert.ok(sessionTree.includes(marker), marker);
+  }
+  for (const marker of [
+    'readonly onDidChangeNewReviewCount',
+    'private currentReviewKeys = new Set<string>()',
+    'private seenReviewKeys = new Set<string>()',
+    'private newReviewKeys = new Set<string>()',
+    'getNewReviewCount(): number',
+    'markVisibleReviewItemsSeen(): void',
+    "this.description = `${isNew ? 'NEW · ' : ''}",
+    "new vscode.ThemeIcon('circle-filled'",
+    'function isReviewTicket(ticket: Ticket): boolean',
+  ]) {
+    assert.ok(reviewTree.includes(marker), marker);
   }
   assert.ok(actionLabels.includes('export function actionToLabel'), 'action labels should live outside queue planning');
   assert.ok(queuePlanner.includes("export { actionToLabel } from './actionLabels'"), 'queuePlanner should keep a compatibility re-export');

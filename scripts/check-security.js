@@ -26,6 +26,7 @@ const fileNames = readSource('src/services/fileNames.ts');
 const sessionStore = readSource('src/services/sessionStore.ts');
 const worktreeRegistry = readSource('src/services/worktreeRegistry.ts');
 const sessionTreeProvider = readSource('src/views/SessionTreeProvider.ts');
+const reviewTreeProvider = readSource('src/views/ReviewTreeProvider.ts');
 const dispatcher = sources['src/runners/sessionDispatcher.ts'];
 const scriptClient = sources['src/services/scriptClient.ts'];
 const acceptanceCriteria = readSource('src/services/acceptanceCriteria.ts');
@@ -332,6 +333,11 @@ for (const marker of [
   'kronos.clearTicketFilters',
   'kronos.filterReviews',
   'kronos.clearReviewFilters',
+  'const updateReviewBadge = () =>',
+  'reviewTree.getNewReviewCount()',
+  'view.badge = count > 0',
+  'reviewTree.onDidChangeNewReviewCount(updateReviewBadge)',
+  'reviewTree.markVisibleReviewItemsSeen()',
   'kronos.collisionReport',
   'openCollisionReportPanel',
   'loadMrFileHints',
@@ -1068,6 +1074,22 @@ for (const marker of [
 ]) {
   if (!sessionTreeProvider.includes(marker)) {
     fail(`Missing session tree active-run marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  'readonly onDidChangeNewReviewCount',
+  'private currentReviewKeys = new Set<string>()',
+  'private seenReviewKeys = new Set<string>()',
+  'private newReviewKeys = new Set<string>()',
+  'getNewReviewCount(): number',
+  'markVisibleReviewItemsSeen(): void',
+  "this.description = `${isNew ? 'NEW · ' : ''}",
+  "new vscode.ThemeIcon('circle-filled'",
+  'function isReviewTicket(ticket: Ticket): boolean',
+]) {
+  if (!reviewTreeProvider.includes(marker)) {
+    fail(`Missing review tree new-item marker: ${marker}`);
   }
 }
 

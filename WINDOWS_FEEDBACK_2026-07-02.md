@@ -30,5 +30,6 @@ Context: Windows 11 manual testing on VS Code 1.127.0.
 - Feature 5 is implemented with active persisted runs in the Sessions tree using a `sync~spin` icon.
 - Feature 6 is implemented with a status bar `Kronos: N running` indicator that opens Run Center.
 - Feature 8 is implemented with a review-ready completion toast that can open the review/MR diff or Run Center.
+- Features 9 and 11 are implemented with an in-memory Review tree badge count plus `NEW` highlighting for review items that appeared since the Review view was last opened.
 - Feature 12 is implemented with Run Center polling while active persisted runs exist plus refresh buttons on Run Center, Evidence Gate, Human Review Inbox, Dashboard, and Aging Report.
 - Remaining feature suggestions are part of the cleanup goal backlog.

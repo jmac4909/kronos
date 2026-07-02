@@ -6,10 +6,16 @@ import { TicketFilter, describeTicketFilter, hasTicketFilter, ticketMatchesFilte
 export class ReviewTreeProvider implements vscode.TreeDataProvider<ReviewItem> {
   private _onDidChangeTreeData = new vscode.EventEmitter<ReviewItem | undefined>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
+  private _onDidChangeNewReviewCount = new vscode.EventEmitter<number>();
+  readonly onDidChangeNewReviewCount = this._onDidChangeNewReviewCount.event;
   private filter: TicketFilter = {};
+  private currentReviewKeys = new Set<string>();
+  private seenReviewKeys = new Set<string>();
+  private newReviewKeys = new Set<string>();
 
   constructor(private kronosState: KronosState) {
-    kronosState.onDidChange(() => this._onDidChangeTreeData.fire(undefined));
+    this.refreshReviewKeys();
+    kronosState.onDidChange(() => this.refresh());
   }
 
   getTreeItem(element: ReviewItem): vscode.TreeItem { return element; }
@@ -26,17 +32,29 @@ export class ReviewTreeProvider implements vscode.TreeDataProvider<ReviewItem> {
 
   getFilter(): TicketFilter { return { ...this.filter }; }
   getFilterDescription(): string { return describeTicketFilter(this.filter); }
+  getNewReviewCount(): number { return this.newReviewKeys.size; }
+
+  markVisibleReviewItemsSeen(): void {
+    if (this.currentReviewKeys.size === 0 && this.newReviewKeys.size === 0) { return; }
+    const previousCount = this.newReviewKeys.size;
+    for (const key of this.currentReviewKeys) {
+      this.seenReviewKeys.add(key);
+    }
+    this.newReviewKeys.clear();
+    if (previousCount > 0) {
+      this._onDidChangeNewReviewCount.fire(0);
+      this._onDidChangeTreeData.fire(undefined);
+    }
+  }
 
   getChildren(): ReviewItem[] {
     const state = this.kronosState.state;
     if (!state) { return []; }
 
     const items: ReviewItem[] = [];
-    for (const [key, ticket] of Object.entries(state.tickets || {})) {
-      if (ticket.mr && ticket.next_action !== 'done' && ticketMatchesFilter(key, ticket, this.filter)) {
-        if (ticket.next_action === 'await_review' || ticket.mr.state === 'merged') {
-          items.push(new ReviewItem(key, ticket));
-        }
+    for (const [key, ticket] of this.reviewEntries()) {
+      if (ticketMatchesFilter(key, ticket, this.filter)) {
+        items.push(new ReviewItem(key, ticket, this.newReviewKeys.has(key)));
       }
     }
 
@@ -49,6 +67,42 @@ export class ReviewTreeProvider implements vscode.TreeDataProvider<ReviewItem> {
     }
     return items;
   }
+
+  private refresh(): void {
+    this.refreshReviewKeys();
+    this._onDidChangeTreeData.fire(undefined);
+  }
+
+  private refreshReviewKeys(): void {
+    const previousCount = this.newReviewKeys.size;
+    const nextKeys = new Set(this.reviewEntries().map(([key]) => key));
+    for (const key of this.seenReviewKeys) {
+      if (!nextKeys.has(key)) {
+        this.seenReviewKeys.delete(key);
+      }
+    }
+    for (const key of nextKeys) {
+      if (!this.currentReviewKeys.has(key) && !this.seenReviewKeys.has(key)) {
+        this.newReviewKeys.add(key);
+      }
+    }
+    for (const key of this.newReviewKeys) {
+      if (!nextKeys.has(key)) {
+        this.newReviewKeys.delete(key);
+      }
+    }
+    this.currentReviewKeys = nextKeys;
+    if (previousCount !== this.newReviewKeys.size) {
+      this._onDidChangeNewReviewCount.fire(this.newReviewKeys.size);
+    }
+  }
+
+  private reviewEntries(): Array<[string, Ticket]> {
+    const state = this.kronosState.state;
+    if (!state) { return []; }
+    return Object.entries(state.tickets || {})
+      .filter((entry): entry is [string, Ticket] => isReviewTicket(entry[1]));
+  }
 }
 
 class ReviewItem extends vscode.TreeItem {
@@ -56,7 +110,7 @@ class ReviewItem extends vscode.TreeItem {
   public readonly ticket: Ticket;
   public readonly projectName: string;
 
-  constructor(ticketKey: string, ticket: Ticket) {
+  constructor(ticketKey: string, ticket: Ticket, isNew = false) {
     super(ticketKey || '', vscode.TreeItemCollapsibleState.None);
     this.ticketKey = ticketKey;
     this.ticket = ticket;
@@ -71,10 +125,11 @@ class ReviewItem extends vscode.TreeItem {
 
     const isMerged = mr.state === 'merged';
     const statusLabel = isMerged ? 'merged' : reviewStatus;
-    this.description = `${projs} · MR !${mr.iid} · ${statusLabel}`;
+    this.description = `${isNew ? 'NEW · ' : ''}${projs} · MR !${mr.iid} · ${statusLabel}`;
     this.label = `${ticketKey} — ${ticket.summary}`;
     this.tooltip = new vscode.MarkdownString(
       `**${ticketKey}**: ${ticket.summary}\n\n` +
+      (isNew ? `New since you last opened the Review view.\n\n` : '') +
       `Projects: ${projs}\n\nMR: !${mr.iid} — ${statusLabel}\n\n` +
       (isMerged ? `_Merged to develop_` : `_Click to view diff_`)
     );
@@ -84,6 +139,12 @@ class ReviewItem extends vscode.TreeItem {
       : mr.review_status === 'approved' ? new vscode.ThemeColor('testing.iconPassed')
       : mr.review_status === 'changes_requested' ? new vscode.ThemeColor('testing.iconFailed')
       : new vscode.ThemeColor('charts.yellow');
-    this.iconPath = new vscode.ThemeIcon(isMerged ? 'git-merge' : 'git-pull-request', color);
+    this.iconPath = isNew
+      ? new vscode.ThemeIcon('circle-filled', new vscode.ThemeColor('charts.yellow'))
+      : new vscode.ThemeIcon(isMerged ? 'git-merge' : 'git-pull-request', color);
   }
+}
+
+function isReviewTicket(ticket: Ticket): boolean {
+  return Boolean(ticket.mr && ticket.next_action !== 'done' && (ticket.next_action === 'await_review' || ticket.mr.state === 'merged'));
 }

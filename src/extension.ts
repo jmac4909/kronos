@@ -868,7 +868,28 @@ export function activate(context: vscode.ExtensionContext) {
     ['kronosReview', reviewTree],
   ] as const) {
     const view = vscode.window.createTreeView(id, { treeDataProvider: provider });
-    view.onDidChangeVisibility(e => { if (e.visible) { throttledRefresh(); } });
+    const updateReviewBadge = () => {
+      if (id !== 'kronosReview') { return; }
+      const count = reviewTree.getNewReviewCount();
+      view.badge = count > 0
+        ? { value: count, tooltip: `${count} new review item${count === 1 ? '' : 's'}` }
+        : undefined;
+    };
+    if (id === 'kronosReview') {
+      updateReviewBadge();
+      context.subscriptions.push(reviewTree.onDidChangeNewReviewCount(updateReviewBadge));
+      if (view.visible) {
+        reviewTree.markVisibleReviewItemsSeen();
+      }
+    }
+    view.onDidChangeVisibility(e => {
+      if (!e.visible) { return; }
+      void throttledRefresh().finally(() => {
+        if (id === 'kronosReview') {
+          reviewTree.markVisibleReviewItemsSeen();
+        }
+      });
+    });
     context.subscriptions.push(view);
   }
 
