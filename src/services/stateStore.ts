@@ -45,6 +45,8 @@ interface StateWriteLock {
   action?: string;
 }
 
+type MutableStateRecord = Record<string, unknown>;
+
 const DEFAULT_OVERNIGHT = {
   enabled: false,
   max_concurrent: 1,
@@ -326,52 +328,51 @@ function repairStateForUi(state: KronosState): StateFileLoadIssue[] {
   return issues;
 }
 
-function repairProjectRecord(name: string, project: any, issues: StateFileLoadIssue[]): void {
-  if (!isPlainObject(project)) {
-    throw new Error(`project ${name} must be an object`);
-  }
-  if (project.last_polled !== null && project.last_polled !== undefined && typeof project.last_polled !== 'string') {
-    project.last_polled = String(project.last_polled);
+function repairProjectRecord(name: string, project: unknown, issues: StateFileLoadIssue[]): void {
+  const record = requirePlainRecord(project, `project ${name} must be an object`);
+  if (record.last_polled !== null && record.last_polled !== undefined && typeof record.last_polled !== 'string') {
+    record.last_polled = String(record.last_polled);
     addStateIssue(issues, `project ${name} last_polled was coerced to a string.`);
   }
-  if (!isPlainObject(project.config)) {
-    project.config = {};
+  if (!isPlainObject(record.config)) {
+    record.config = {};
     addStateIssue(issues, `project ${name} config was invalid; using an empty config.`);
   }
-  repairProjectConfig(project.config, `project ${name} config`, issues);
+  repairProjectConfig(record.config, `project ${name} config`, issues);
 }
 
-function repairProjectConfig(config: any, label: string, issues: StateFileLoadIssue[]): void {
+function repairProjectConfig(config: unknown, label: string, issues: StateFileLoadIssue[]): void {
+  const record = requirePlainRecord(config, `${label} must be an object`);
   for (const key of ['repo_name', 'jira_project_key', 'jira_ticket_filter', 'jenkins_url', 'sonar_project_key', 'github_repository', 'github_repo', 'github_api_url', 'base_branch', 'default_branch']) {
-    if (config[key] !== undefined && typeof config[key] !== 'string') {
-      config[key] = String(config[key]);
+    if (record[key] !== undefined && typeof record[key] !== 'string') {
+      record[key] = String(record[key]);
       addStateIssue(issues, `${label}.${key} was coerced to a string.`);
     }
   }
-  if (config.gitlab_project_id !== undefined && typeof config.gitlab_project_id !== 'number') {
-    const numeric = Number(config.gitlab_project_id);
+  if (record.gitlab_project_id !== undefined && typeof record.gitlab_project_id !== 'number') {
+    const numeric = Number(record.gitlab_project_id);
     if (Number.isFinite(numeric)) {
-      config.gitlab_project_id = numeric;
+      record.gitlab_project_id = numeric;
       addStateIssue(issues, `${label}.gitlab_project_id was coerced to a number.`);
     } else {
-      delete config.gitlab_project_id;
+      delete record.gitlab_project_id;
       addStateIssue(issues, `${label}.gitlab_project_id was invalid and was ignored.`);
     }
   }
-  if (config.extra_dirs !== undefined) {
-    if (!Array.isArray(config.extra_dirs)) {
-      delete config.extra_dirs;
+  if (record.extra_dirs !== undefined) {
+    if (!Array.isArray(record.extra_dirs)) {
+      delete record.extra_dirs;
       addStateIssue(issues, `${label}.extra_dirs was invalid and was ignored.`);
     } else {
-      filterStringArrayInPlace(config.extra_dirs, `${label}.extra_dirs`, issues);
+      filterStringArrayInPlace(record.extra_dirs, `${label}.extra_dirs`, issues);
     }
   }
-  if (config.deploy_approvers !== undefined) {
-    if (!Array.isArray(config.deploy_approvers)) {
-      delete config.deploy_approvers;
+  if (record.deploy_approvers !== undefined) {
+    if (!Array.isArray(record.deploy_approvers)) {
+      delete record.deploy_approvers;
       addStateIssue(issues, `${label}.deploy_approvers was invalid and was ignored.`);
     } else {
-      config.deploy_approvers = config.deploy_approvers.filter((approver: any, idx: number) => {
+      record.deploy_approvers = record.deploy_approvers.filter((approver, idx) => {
         if (!isPlainObject(approver)) {
           addStateIssue(issues, `${label}.deploy_approvers ${idx} was invalid and was ignored.`);
           return false;
@@ -388,33 +389,31 @@ function repairProjectConfig(config: any, label: string, issues: StateFileLoadIs
   }
 }
 
-function repairTicketRecord(key: string, ticket: any, issues: StateFileLoadIssue[]): void {
-  if (!isPlainObject(ticket)) {
-    throw new Error(`ticket ${key} must be an object`);
-  }
-  if (!Array.isArray(ticket.projects)) {
-    ticket.projects = [];
+function repairTicketRecord(key: string, ticket: unknown, issues: StateFileLoadIssue[]): void {
+  const record = requirePlainRecord(ticket, `ticket ${key} must be an object`);
+  if (!Array.isArray(record.projects)) {
+    record.projects = [];
     addStateIssue(issues, `ticket ${key} projects was invalid; using an empty project list.`);
   } else {
-    filterStringArrayInPlace(ticket.projects, `ticket ${key} projects`, issues);
+    filterStringArrayInPlace(record.projects, `ticket ${key} projects`, issues);
   }
-  if (typeof ticket.next_action !== 'string' || !VALID_TICKET_ACTION_SET.has(ticket.next_action)) {
-    ticket.next_action = 'implement';
+  if (typeof record.next_action !== 'string' || !VALID_TICKET_ACTION_SET.has(record.next_action)) {
+    record.next_action = 'implement';
     addStateIssue(issues, `ticket ${key} next_action was invalid; using implement.`);
   }
-  repairMergeRequest(ticket, key, issues);
-  repairBuildStatus(ticket, key, issues);
-  repairTicketEvidence(ticket, key, issues);
+  repairMergeRequest(record, key, issues);
+  repairBuildStatus(record, key, issues);
+  repairTicketEvidence(record, key, issues);
 }
 
-function repairMergeRequest(ticket: any, key: string, issues: StateFileLoadIssue[]): void {
+function repairMergeRequest(ticket: MutableStateRecord, key: string, issues: StateFileLoadIssue[]): void {
   if (ticket.mr === null || ticket.mr === undefined) { return; }
   if (!isPlainObject(ticket.mr)) {
     ticket.mr = null;
     addStateIssue(issues, `ticket ${key} mr was invalid and was ignored.`);
     return;
   }
-  const mr = ticket.mr as any;
+  const mr = ticket.mr;
   if (typeof mr.iid !== 'number') {
     const numeric = Number(mr.iid);
     if (Number.isFinite(numeric)) {
@@ -422,11 +421,11 @@ function repairMergeRequest(ticket: any, key: string, issues: StateFileLoadIssue
       addStateIssue(issues, `ticket ${key} mr.iid was coerced to a number.`);
     }
   }
-  if (!['opened', 'merged', 'closed'].includes(mr.state)) {
+  if (typeof mr.state !== 'string' || !['opened', 'merged', 'closed'].includes(mr.state)) {
     mr.state = 'opened';
     addStateIssue(issues, `ticket ${key} mr.state was invalid; using opened.`);
   }
-  if (!['pending_review', 'approved', 'changes_requested'].includes(mr.review_status)) {
+  if (typeof mr.review_status !== 'string' || !['pending_review', 'approved', 'changes_requested'].includes(mr.review_status)) {
     mr.review_status = 'pending_review';
     addStateIssue(issues, `ticket ${key} mr.review_status was invalid; using pending_review.`);
   }
@@ -436,14 +435,14 @@ function repairMergeRequest(ticket: any, key: string, issues: StateFileLoadIssue
   }
 }
 
-function repairBuildStatus(ticket: any, key: string, issues: StateFileLoadIssue[]): void {
+function repairBuildStatus(ticket: MutableStateRecord, key: string, issues: StateFileLoadIssue[]): void {
   if (ticket.build === null || ticket.build === undefined) { return; }
   if (!isPlainObject(ticket.build)) {
     ticket.build = null;
     addStateIssue(issues, `ticket ${key} build was invalid and was ignored.`);
     return;
   }
-  const build = ticket.build as any;
+  const build = ticket.build;
   if (typeof build.number !== 'number') {
     const numeric = Number(build.number);
     if (Number.isFinite(numeric)) {
@@ -461,7 +460,7 @@ function repairBuildStatus(ticket: any, key: string, issues: StateFileLoadIssue[
   }
 }
 
-function repairTicketEvidence(ticket: any, key: string, issues: StateFileLoadIssue[]): void {
+function repairTicketEvidence(ticket: MutableStateRecord, key: string, issues: StateFileLoadIssue[]): void {
   const evidence = ticket.evidence;
   if (evidence === null || evidence === undefined) { return; }
   if (!isPlainObject(evidence)) {
@@ -492,6 +491,13 @@ function filterStringArrayInPlace(value: unknown[], label: string, issues: State
 
 function addStateIssue(issues: StateFileLoadIssue[], detail: string): void {
   issues.push({ target: 'state.json', filePath: STATE_FILE, detail });
+}
+
+function requirePlainRecord(value: unknown, message: string): MutableStateRecord {
+  if (!isPlainObject(value)) {
+    throw new Error(message);
+  }
+  return value;
 }
 
 export function validateStateFileShape(raw: unknown): void {

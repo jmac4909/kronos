@@ -1538,7 +1538,15 @@ for (const marker of [
   'function requireFiniteNumber',
   'validateActionValue(t.next_action',
   'validateActionValue(item.action',
+  'type MutableStateRecord = Record<string, unknown>',
   'interface StateWriteLock',
+  'function requirePlainRecord(value: unknown, message: string): MutableStateRecord',
+  'function repairProjectRecord(name: string, project: unknown, issues: StateFileLoadIssue[]): void',
+  'function repairProjectConfig(config: unknown, label: string, issues: StateFileLoadIssue[]): void',
+  'function repairTicketRecord(key: string, ticket: unknown, issues: StateFileLoadIssue[]): void',
+  'function repairMergeRequest(ticket: MutableStateRecord, key: string, issues: StateFileLoadIssue[]): void',
+  'function repairBuildStatus(ticket: MutableStateRecord, key: string, issues: StateFileLoadIssue[]): void',
+  'function repairTicketEvidence(ticket: MutableStateRecord, key: string, issues: StateFileLoadIssue[]): void',
   'export function migrateStateFileShape',
   'export function migrateStateFileShape(raw: unknown): KronosState',
   'export function readStateFileWithIssues',
@@ -1587,10 +1595,22 @@ for (const forbidden of [
   'const value = build as any',
   'const value = note as any',
   'function readCurrentWriteLock(): any',
+  'function repairProjectRecord(name: string, project: any',
+  'function repairProjectConfig(config: any',
+  'filter((approver: any',
+  'function repairTicketRecord(key: string, ticket: any',
+  'function repairMergeRequest(ticket: any',
+  'const mr = ticket.mr as any',
+  'function repairBuildStatus(ticket: any',
+  'const build = ticket.build as any',
+  'function repairTicketEvidence(ticket: any',
 ]) {
   if (stateStore.includes(forbidden)) {
     fail(`State store must normalize unknown errors instead of using ${forbidden}.`);
   }
+}
+if (/\bany\b/.test(stateStore)) {
+  fail('State store must keep untrusted JSON typed as unknown, not any.');
 }
 
 if (!sources['src/state/KronosState.ts'].includes('const result = readStateFileWithIssues()')) {

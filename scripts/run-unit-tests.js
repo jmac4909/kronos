@@ -604,7 +604,15 @@ test('state store migrations keep raw JSON payloads unknown until normalized', (
 test('state store validators keep raw JSON payloads unknown while checking shape', () => {
   const source = readSourceFixture('src', 'services', 'stateStore.ts');
   for (const marker of [
+    'type MutableStateRecord = Record<string, unknown>',
     'interface StateWriteLock',
+    'function requirePlainRecord(value: unknown, message: string): MutableStateRecord',
+    'function repairProjectRecord(name: string, project: unknown, issues: StateFileLoadIssue[]): void',
+    'function repairProjectConfig(config: unknown, label: string, issues: StateFileLoadIssue[]): void',
+    'function repairTicketRecord(key: string, ticket: unknown, issues: StateFileLoadIssue[]): void',
+    'function repairMergeRequest(ticket: MutableStateRecord, key: string, issues: StateFileLoadIssue[]): void',
+    'function repairBuildStatus(ticket: MutableStateRecord, key: string, issues: StateFileLoadIssue[]): void',
+    'function repairTicketEvidence(ticket: MutableStateRecord, key: string, issues: StateFileLoadIssue[]): void',
     'export function validateStateFileShape(raw: unknown): void',
     'function validateProjectConfig(config: unknown, label: string): void',
     'function readCurrentWriteLock(): StateWriteLock | null',
@@ -625,9 +633,19 @@ test('state store validators keep raw JSON payloads unknown while checking shape
     'const value = build as any',
     'const value = note as any',
     'function readCurrentWriteLock(): any',
+    'function repairProjectRecord(name: string, project: any',
+    'function repairProjectConfig(config: any',
+    'filter((approver: any',
+    'function repairTicketRecord(key: string, ticket: any',
+    'function repairMergeRequest(ticket: any',
+    'const mr = ticket.mr as any',
+    'function repairBuildStatus(ticket: any',
+    'const build = ticket.build as any',
+    'function repairTicketEvidence(ticket: any',
   ]) {
     assert.equal(source.includes(marker), false, marker);
   }
+  assert.equal(/\bany\b/.test(source), false, 'stateStore should use unknown plus guards instead of any');
 });
 
 test('KronosState load issues normalize unknown errors', () => {
