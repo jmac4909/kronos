@@ -837,7 +837,7 @@ test('ticket mutation helpers centralize evidence, acceptance, and MR state writ
   const blockedDecision = evidenceGatePolicy.decideEvidenceHandoff('K-2', failingPreview.ticket);
   assert.equal(blockedDecision.allowed, false);
   assert.equal(blockedDecision.requiresConfirmation, false);
-  assert.ok(blockedDecision.blockingChecks.some(check => check.title === 'No evidence notes'));
+  assert.ok(blockedDecision.blockingChecks.some(check => check.title === 'No evidence records'));
   assert.match(blockedDecision.message, /not ready for review handoff/);
   fs.writeFileSync(stateStore.STATE_FILE, JSON.stringify(baseState({
     'K-2': ticket({ projects: ['app'] }),
@@ -1139,7 +1139,7 @@ test('queue planner ranks queued items first and avoids duplicate queued tickets
   assert.ok(plans[0].scoreBreakdown.some(part => part.label === 'Queue position'));
   assert.equal(plans.filter(p => p.ticketKey === 'K-1').length, 1);
   const plannedTicket = plans.find(p => p.ticketKey === 'K-2');
-  assert.ok(plannedTicket && plannedTicket.reason.includes('no evidence notes yet'));
+  assert.ok(plannedTicket && plannedTicket.reason.includes('no evidence records yet'));
   assert.ok(plannedTicket.scoreBreakdown.some(part => part.label === 'Evidence' && part.value === 5));
 });
 
@@ -4496,7 +4496,7 @@ test('human review inbox aggregates runs, tickets, evidence gaps, integrations, 
   assert.ok(inbox.items.some(item => item.id === 'run:run-1' && item.detail === 'Jenkins build failed'));
   assert.ok(inbox.items.some(item => item.id === 'run:run-3' && item.detail === 'operator cancelled'));
   assert.ok(inbox.items.some(item => item.id === 'queue:duplicate:K-3'));
-  assert.ok(inbox.items.some(item => item.title.includes('No evidence notes')));
+  assert.ok(inbox.items.some(item => item.title.includes('No evidence records')));
   assert.ok(inbox.items.some(item => item.title.includes('Acceptance criteria not extracted')));
 
   const source = readSourceFixture('src', 'services', 'humanReviewInbox.ts');
@@ -4521,7 +4521,7 @@ test('evidence gate fails objective blockers and warns on incomplete proof', () 
   assert.equal(failing.status, 'fail');
   assert.equal(failing.ready, false);
   assert.ok(failing.checks.some(check => check.kind === 'project' && check.status === 'fail'));
-  assert.ok(failing.checks.some(check => check.kind === 'notes' && check.status === 'fail'));
+  assert.ok(failing.checks.some(check => check.kind === 'notes' && check.status === 'warn' && check.title === 'No narrative evidence note'));
   assert.ok(failing.checks.some(check => check.kind === 'build' && check.status === 'fail'));
   assert.ok(failing.checks.some(check => check.kind === 'mr' && check.status === 'fail'));
   assert.ok(failing.checks.some(check => check.kind === 'test' && check.status === 'fail' && check.title.includes('evidence check')));
@@ -4544,6 +4544,20 @@ test('evidence gate fails objective blockers and warns on incomplete proof', () 
   assert.equal(warning.ready, true);
   assert.ok(warning.checks.some(check => check.kind === 'test' && check.status === 'warn'));
   assert.ok(warning.checks.some(check => check.kind === 'acceptance' && check.status === 'warn'));
+
+  const structuredOnly = evidenceGate.evaluateEvidenceGate('K-STRUCTURED', ticket({
+    projects: ['app'],
+    next_action: 'await_review',
+    mr: { iid: 3, state: 'opened', review_status: 'approved', url: 'https://gitlab.example/3' },
+    build: { number: 12, status: 'SUCCESS', url: 'https://jenkins.example/12' },
+    evidence: {
+      checks: [{ id: 'check-2', at: 'now', name: 'unit suite', result: 'pass', summary: 'passed' }],
+    },
+  }));
+  assert.equal(structuredOnly.status, 'warn');
+  assert.equal(structuredOnly.ready, true);
+  assert.ok(structuredOnly.checks.some(check => check.kind === 'notes' && check.status === 'warn' && check.title === 'No narrative evidence note'));
+  assert.equal(structuredOnly.checks.some(check => check.kind === 'notes' && check.status === 'fail'), false);
 });
 
 test('evidence gate tolerates malformed direct evidence entries', () => {

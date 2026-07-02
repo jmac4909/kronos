@@ -28,6 +28,7 @@ export function evaluateEvidenceGate(ticketKey: string, ticket: Ticket): Evidenc
   const notes = evidenceNotes(ticket);
   const structuredChecks = evidenceChecks(ticket);
   const environmentResults = evidenceEnvironmentResults(ticket);
+  const evidenceRecordCount = notes.length + structuredChecks.length + environmentResults.length;
   const criteria = evidenceAcceptanceCriteria(ticket);
   const apparentCriteria = extractCriterionTexts(ticket.description || '');
 
@@ -37,10 +38,12 @@ export function evaluateEvidenceGate(ticketKey: string, ticket: Ticket): Evidenc
     checks.push(pass('project', 'Project link present', ticket.projects.join(', ')));
   }
 
-  if (notes.length === 0 && reviewReady) {
-    checks.push(fail('notes', 'No evidence notes', `Ticket action is ${ticket.next_action}; add verification or implementation evidence.`));
+  if (evidenceRecordCount === 0 && reviewReady) {
+    checks.push(fail('notes', 'No evidence records', `Ticket action is ${ticket.next_action}; add verification or implementation evidence.`));
+  } else if (evidenceRecordCount === 0) {
+    checks.push(warn('notes', 'No evidence records yet', 'Add notes as soon as implementation or verification starts.'));
   } else if (notes.length === 0) {
-    checks.push(warn('notes', 'No evidence notes yet', 'Add notes as soon as implementation or verification starts.'));
+    checks.push(warn('notes', 'No narrative evidence note', `${structuredChecks.length + environmentResults.length} structured evidence record${structuredChecks.length + environmentResults.length === 1 ? '' : 's'} present.`));
   } else {
     checks.push(pass('notes', `${notes.length} evidence note${notes.length === 1 ? '' : 's'}`, 'Evidence ledger is populated.'));
   }

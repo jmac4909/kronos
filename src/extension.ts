@@ -5658,11 +5658,11 @@ async function removeTicketFromQueue(state: KronosState, ticketKey: string, inte
   }
   if (ticket && evidenceCountForTicket(state, ticketKey) === 0) {
     if (!interactive) {
-      vscode.window.showWarningMessage(`${ticketKey} stayed in queue because it has no evidence notes.`);
+      vscode.window.showWarningMessage(`${ticketKey} stayed in queue because it has no evidence records.`);
       return false;
     }
     const action = await vscode.window.showWarningMessage(
-      `${ticketKey} has no evidence notes. Removing it from the queue will make the work harder to audit.`,
+      `${ticketKey} has no evidence records. Removing it from the queue will make the work harder to audit.`,
       'Add Evidence',
       'Remove Anyway',
       'Cancel'

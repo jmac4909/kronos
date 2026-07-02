@@ -124,7 +124,7 @@ export function planNextActions(input: PlannerInput): PlannedAction[] {
       { label: 'Build', value: buildScore, detail: ticket.build?.status || 'no build' },
       { label: 'MR', value: mrScore, detail: ticket.mr?.review_status?.replace(/_/g, ' ') || 'no MR' },
       { label: 'Project link', value: linkScore, detail: (ticket.projects || []).length > 0 ? ticket.projects.join(', ') : 'not linked' },
-      { label: 'Evidence', value: evidenceScore, detail: evidenceCount === 0 ? 'no evidence notes yet' : `${evidenceCount} evidence note${evidenceCount === 1 ? '' : 's'}` },
+      { label: 'Evidence', value: evidenceScore, detail: evidenceCount === 0 ? 'no evidence records yet' : `${evidenceCount} evidence record${evidenceCount === 1 ? '' : 's'}` },
     ];
     const score = sumBreakdown(scoreBreakdown);
     if (score <= 0) { continue; }
@@ -136,7 +136,7 @@ export function planNextActions(input: PlannerInput): PlannedAction[] {
     if (ticket.build?.status) { reasons.push(`build ${ticket.build.status}`); }
     if (ticket.mr?.review_status) { reasons.push(`MR ${ticket.mr.review_status.replace(/_/g, ' ')}`); }
     if ((ticket.projects || []).length === 0) { reasons.push('not linked to a project'); }
-    if (evidenceCount === 0) { reasons.push('no evidence notes yet'); }
+    if (evidenceCount === 0) { reasons.push('no evidence records yet'); }
 
     plans.push({
       planId,
