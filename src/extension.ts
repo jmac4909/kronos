@@ -5617,6 +5617,7 @@ function refreshAfterDispatch(state: KronosState, projectName?: string, ticketKe
         run.status = 'waiting_for_review';
       } else if (run.status === 'completed' && run.readiness.status === 'needs_human') {
         run.status = 'needs_human';
+        run.failureReason = run.failureReason || run.readiness.summary;
       }
       writeRunRecord(run);
       if (ticket && ['await_review', 'done', 'deploy_monitor'].includes(ticket.next_action)) {

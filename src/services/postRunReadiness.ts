@@ -76,6 +76,7 @@ export function evaluatePostRunReadiness(input: {
   const inputRun = runRecord(input.run);
   const runStatus = runString(inputRun.status);
   const failureKind = classifyRunFailure(input.run);
+  const failureReason = runFailureReason(inputRun);
   if (!input.ticketKey || !input.ticket) {
     return {
       evaluatedAt: now.toISOString(),
@@ -83,7 +84,7 @@ export function evaluatePostRunReadiness(input: {
       status: SUCCESS_RUN_STATUSES.has(runStatus) ? 'unknown' : 'blocked',
       summary: SUCCESS_RUN_STATUSES.has(runStatus)
         ? 'Run completed, but no ticket state was available for readiness evaluation.'
-        : `Run did not complete cleanly (${failureKind}).`,
+        : `Run did not complete cleanly (${failureSummaryDetail(failureKind, failureReason)}).`,
       failureKind,
     };
   }
@@ -103,7 +104,7 @@ export function evaluatePostRunReadiness(input: {
       evaluatedAt: now.toISOString(),
       ticketKey: input.ticketKey,
       status: 'blocked',
-      summary: `Run ended as ${runStatus || 'unknown'} (${failureKind}); ticket gate is ${gate.status}.`,
+      summary: `Run ended as ${runStatus || 'unknown'} (${failureSummaryDetail(failureKind, failureReason)}); ticket gate is ${gate.status}.`,
       nextAction: input.ticket.next_action,
       evidenceGate: gateSummary,
       failureKind,
@@ -196,8 +197,20 @@ function runString(value: unknown): string {
 
 function runText(value: unknown): string | undefined {
   if (value === undefined || value === null) { return undefined; }
-  const text = String(value);
+  const text = String(value).trim();
   return text ? text : undefined;
+}
+
+function runFailureReason(record: Record<string, unknown>): string {
+  return [
+    record.failureReason,
+    record.error,
+    ...runEventDetails(record.events),
+  ].map(runText).find((line): line is string => Boolean(line)) || '';
+}
+
+function failureSummaryDetail(kind: RunFailureKind, reason: string): string {
+  return reason ? `${kind}: ${reason}` : kind;
 }
 
 function runEventDetails(value: unknown): unknown[] {

@@ -4448,6 +4448,7 @@ test('post-run readiness distinguishes process completion from handoff readiness
   });
   assert.equal(blocked.status, 'blocked');
   assert.equal(blocked.failureKind, 'build');
+  assert.match(blocked.summary, /build: Jenkins build failed/);
 
   assert.equal(postRunReadiness.classifyRunFailure({ status: 'failed', failureReason: 'Sonar quality gate failed' }), 'sonar');
   assert.equal(postRunReadiness.classifyRunFailure({ status: 'cancelled', failureReason: 'Progress panel disposed by user' }), 'cancelled');
@@ -4477,6 +4478,8 @@ test('post-run readiness distinguishes process completion from handoff readiness
     'function runRecord(value: unknown): Record<string, unknown>',
     'function runString(value: unknown): string',
     'function runText(value: unknown): string | undefined',
+    'function runFailureReason(record: Record<string, unknown>): string',
+    'function failureSummaryDetail(kind: RunFailureKind, reason: string): string',
     'function runEventDetails(value: unknown): unknown[]',
     'function mergeRequestChangedFileCount(ticket?: Ticket): number | undefined',
     'function firstStringField(record: Record<string, unknown>, keys: string[]): string | undefined',
@@ -4749,6 +4752,7 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     "kind: 'note'",
     'buildRunCompletionEvidenceText(run, ticket)',
     "unknownErrorMessage(e, 'Failed to add run completion evidence.')",
+    'run.failureReason = run.failureReason || run.readiness.summary',
     'let resolvedTicketKey = resolveDispatchTicketKey(ticketKey, run)',
     'await reloadStateAfterDispatch(state, projectName)',
     'function resolveDispatchTicketKey(ticketKey: string | undefined, run: KronosRun): string | undefined',
