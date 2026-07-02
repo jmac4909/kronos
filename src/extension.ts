@@ -5699,7 +5699,10 @@ function planToQueueItem(state: KronosState, plan: PlannedAction): QueueItem {
 function refreshAfterDispatch(state: KronosState, projectName?: string, ticketKey?: string): (code: number, run: KronosRun) => Promise<void> {
   return async (_code: number, run: KronosRun) => {
     let resolvedTicketKey = resolveDispatchTicketKey(ticketKey, run);
-    await reloadStateAfterDispatch(state, projectName);
+    const refreshWarning = await reloadStateAfterDispatch(state, projectName);
+    if (refreshWarning) {
+      run.warnings = [...(run.warnings || []), refreshWarning];
+    }
     const resolvedTicket = resolvePostRunTicket({
       tickets: state.state?.tickets,
       ticketKey: resolvedTicketKey,
@@ -5743,11 +5746,18 @@ function refreshAfterDispatch(state: KronosState, projectName?: string, ticketKe
   };
 }
 
-async function reloadStateAfterDispatch(state: KronosState, projectName?: string): Promise<void> {
+async function reloadStateAfterDispatch(state: KronosState, projectName?: string): Promise<string | undefined> {
+  let refreshWarning: string | undefined;
   if (projectName) {
-    await state.refresh(projectName);
+    try {
+      await state.refresh(projectName);
+    } catch (e: unknown) {
+      refreshWarning = unknownErrorMessage(e, `Failed to refresh Kronos state after dispatch for ${projectName}.`);
+      vscode.window.showWarningMessage(refreshWarning);
+    }
   }
   state.reloadAndNotify();
+  return refreshWarning;
 }
 
 function resolveDispatchTicketKey(ticketKey: string | undefined, run: KronosRun): string | undefined {
