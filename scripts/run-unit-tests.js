@@ -581,6 +581,26 @@ test('state store load issues normalize unknown errors', () => {
   }
 });
 
+test('state store migrations keep raw JSON payloads unknown until normalized', () => {
+  const source = readSourceFixture('src', 'services', 'stateStore.ts');
+  for (const marker of [
+    'export function migrateStateFileShape(raw: unknown): KronosState',
+    'function migrateTicketEvidence(evidence: unknown): TicketEvidence | undefined',
+    'export function migrateQueueFileShape(raw: unknown): QueueState',
+    'function migrateQueueItemShape(item: unknown, idx: number): QueueItem',
+  ]) {
+    assert.ok(source.includes(marker), marker);
+  }
+  for (const marker of [
+    'export function migrateStateFileShape(raw: any)',
+    'function migrateTicketEvidence(evidence: any): any',
+    'export function migrateQueueFileShape(raw: any)',
+    'function migrateQueueItemShape(item: any',
+  ]) {
+    assert.equal(source.includes(marker), false, marker);
+  }
+});
+
 test('KronosState load issues normalize unknown errors', () => {
   const source = readSourceFixture('src', 'state', 'KronosState.ts');
   for (const marker of [

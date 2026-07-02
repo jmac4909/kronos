@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { KronosState, QueueState } from '../state/types';
+import { KronosState, QueueDecision, QueueItem, QueueState, Ticket, TicketEvidence } from '../state/types';
 import { unknownErrorMessage } from './errorUtils';
 
 export const KRONOS_DIR = process.env.KRONOS_DIR || path.join(os.homedir(), '.claude', 'kronos');
@@ -110,64 +110,67 @@ export function readQueueFile(): QueueState | null {
   return migrated;
 }
 
-export function migrateStateFileShape(raw: any): KronosState {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+export function migrateStateFileShape(raw: unknown): KronosState {
+  if (!isPlainObject(raw)) {
     throw new Error('state.json must be an object');
   }
-  const settings = raw.settings && typeof raw.settings === 'object' ? raw.settings : {};
+  const settings = isPlainObject(raw.settings) ? raw.settings : {};
+  const overnight = isPlainObject(raw.overnight) ? raw.overnight : undefined;
   const migrated: KronosState = {
     version: Number.isFinite(Number(raw.version)) ? Number(raw.version) : 1,
-    last_updated: raw.last_updated || null,
+    last_updated: (raw.last_updated || null) as KronosState['last_updated'],
     settings: {
       ...settings,
-      scan_dirs: Array.isArray(settings.scan_dirs) ? settings.scan_dirs : [],
-      overnight: { ...DEFAULT_OVERNIGHT, ...(settings.overnight && typeof settings.overnight === 'object' ? settings.overnight : {}) },
+      scan_dirs: Array.isArray(settings.scan_dirs) ? (settings.scan_dirs as string[]) : [],
+      overnight: { ...DEFAULT_OVERNIGHT, ...(isPlainObject(settings.overnight) ? settings.overnight : {}) },
     },
     projects: {},
     tickets: {},
-    adhoc_tasks: raw.adhoc_tasks && typeof raw.adhoc_tasks === 'object' ? raw.adhoc_tasks : {},
-    overnight: raw.overnight && typeof raw.overnight === 'object' ? { enabled: Boolean(raw.overnight.enabled), last_run: raw.overnight.last_run || null } : { enabled: false, last_run: null },
-    discovered_projects: Array.isArray(raw.discovered_projects) ? raw.discovered_projects : [],
+    adhoc_tasks: isPlainObject(raw.adhoc_tasks) ? (raw.adhoc_tasks as KronosState['adhoc_tasks']) : {},
+    overnight: overnight ? { enabled: Boolean(overnight.enabled), last_run: (overnight.last_run || null) as KronosState['overnight']['last_run'] } : { enabled: false, last_run: null },
+    discovered_projects: Array.isArray(raw.discovered_projects) ? (raw.discovered_projects as KronosState['discovered_projects']) : [],
   };
 
-  for (const [name, project] of Object.entries(raw.projects || {})) {
-    const p = project as any;
+  const rawProjects = isPlainObject(raw.projects) ? raw.projects : {};
+  for (const [name, project] of Object.entries(rawProjects)) {
+    const p = isPlainObject(project) ? project : {};
     migrated.projects[name] = {
-      path: String(p?.path || ''),
-      priority: Number.isFinite(Number(p?.priority)) ? Number(p.priority) : 0,
-      config: p?.config && typeof p.config === 'object' ? p.config : {},
-      health: ['green', 'yellow', 'red', 'gray'].includes(p?.health) ? p.health : 'gray',
-      summary: String(p?.summary || ''),
-      last_polled: p?.last_polled || null,
-      open_mr_count: Number.isFinite(Number(p?.open_mr_count)) ? Number(p.open_mr_count) : 0,
+      path: String(p.path || ''),
+      priority: Number.isFinite(Number(p.priority)) ? Number(p.priority) : 0,
+      config: isPlainObject(p.config) ? (p.config as KronosState['projects'][string]['config']) : {},
+      health: typeof p.health === 'string' && ['green', 'yellow', 'red', 'gray'].includes(p.health) ? (p.health as KronosState['projects'][string]['health']) : 'gray',
+      summary: String(p.summary || ''),
+      last_polled: (p.last_polled || null) as KronosState['projects'][string]['last_polled'],
+      open_mr_count: Number.isFinite(Number(p.open_mr_count)) ? Number(p.open_mr_count) : 0,
     };
   }
 
-  for (const [key, ticket] of Object.entries(raw.tickets || {})) {
-    const t = ticket as any;
+  const rawTickets = isPlainObject(raw.tickets) ? raw.tickets : {};
+  for (const [key, ticket] of Object.entries(rawTickets)) {
+    const t = isPlainObject(ticket) ? ticket : {};
     migrated.tickets[key] = {
-      ...t,
-      summary: String(t?.summary || ''),
-      type: String(t?.type || 'Story'),
-      priority: String(t?.priority || 'Medium'),
-      jira_status: String(t?.jira_status || 'Open'),
-      source: t?.source === 'adhoc' ? 'adhoc' : 'jira',
-      projects: Array.isArray(t?.projects) ? t.projects : [],
-      mr: t?.mr || null,
-      build: t?.build || null,
-      next_action: String(t?.next_action || 'implement'),
-      last_action: t?.last_action || null,
-      last_action_at: t?.last_action_at || null,
-      evidence: migrateTicketEvidence(t?.evidence),
+      ...(t as Partial<Ticket>),
+      summary: String(t.summary || ''),
+      type: String(t.type || 'Story'),
+      priority: String(t.priority || 'Medium'),
+      jira_status: String(t.jira_status || 'Open'),
+      source: t.source === 'adhoc' ? 'adhoc' : 'jira',
+      projects: Array.isArray(t.projects) ? (t.projects as string[]) : [],
+      mr: (t.mr || null) as Ticket['mr'],
+      build: (t.build || null) as Ticket['build'],
+      next_action: String(t.next_action || 'implement'),
+      last_action: (t.last_action || null) as Ticket['last_action'],
+      last_action_at: (t.last_action_at || null) as Ticket['last_action_at'],
+      evidence: migrateTicketEvidence(t.evidence),
     };
   }
 
   return migrated;
 }
 
-function migrateTicketEvidence(evidence: any): any {
+function migrateTicketEvidence(evidence: unknown): TicketEvidence | undefined {
   if (evidence === undefined || evidence === null) { return undefined; }
-  if (typeof evidence !== 'object' || Array.isArray(evidence)) { return evidence; }
+  if (!isPlainObject(evidence)) { return evidence as TicketEvidence; }
   return {
     ...evidence,
     notes: evidence.notes === undefined ? undefined : evidence.notes,
@@ -175,11 +178,11 @@ function migrateTicketEvidence(evidence: any): any {
     checks: evidence.checks === undefined ? undefined : evidence.checks,
     environment_results: evidence.environment_results === undefined ? undefined : evidence.environment_results,
     risk_notes: evidence.risk_notes === undefined ? undefined : evidence.risk_notes,
-  };
+  } as TicketEvidence;
 }
 
-export function migrateQueueFileShape(raw: any): QueueState {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+export function migrateQueueFileShape(raw: unknown): QueueState {
+  if (!isPlainObject(raw)) {
     throw new Error('queue.json must be an object');
   }
   const items = Array.isArray(raw.items) ? raw.items.map(migrateQueueItemShape) : [];
@@ -195,20 +198,19 @@ export function migrateQueueFileShape(raw: any): QueueState {
       if (!isPlainObject(decision)) {
         throw new Error(`queue decision ${key} must be an object`);
       }
-      const d = decision as any;
       return [key, {
-        ...d,
-        plan_id: String(d.plan_id || key),
-        ticket: typeof d.ticket === 'string' ? d.ticket : null,
-        action: String(d.action || 'implement'),
-        decided_at: typeof d.decided_at === 'string' ? d.decided_at : new Date(0).toISOString(),
-      }];
+        ...decision,
+        plan_id: String(decision.plan_id || key),
+        ticket: typeof decision.ticket === 'string' ? decision.ticket : null,
+        action: String(decision.action || 'implement'),
+        decided_at: typeof decision.decided_at === 'string' ? decision.decided_at : new Date(0).toISOString(),
+      } as QueueDecision];
     }));
   }
   return queue;
 }
 
-function migrateQueueItemShape(item: any, idx: number): QueueState['items'][number] {
+function migrateQueueItemShape(item: unknown, idx: number): QueueItem {
   if (!isPlainObject(item)) {
     throw new Error(`queue item ${idx} must be an object`);
   }
@@ -236,7 +238,7 @@ function migrateQueueItemShape(item: any, idx: number): QueueState['items'][numb
     action,
     priority_score: Number.isFinite(Number(item.priority_score)) ? Number(item.priority_score) : 0,
     reason: String(item.reason || `Migrated queue item for ${ticket || action}`),
-  };
+  } as QueueItem;
 }
 
 export function validateQueueState(queue: QueueState): void {

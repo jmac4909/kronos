@@ -1539,9 +1539,13 @@ for (const marker of [
   'validateActionValue(t.next_action',
   'validateActionValue(item.action',
   'export function migrateStateFileShape',
+  'export function migrateStateFileShape(raw: unknown): KronosState',
   'export function readStateFileWithIssues',
   'export function migrateQueueFileShape',
+  'export function migrateQueueFileShape(raw: unknown): QueueState',
   'function migrateQueueItemShape',
+  'function migrateQueueItemShape(item: unknown, idx: number): QueueItem',
+  'function migrateTicketEvidence(evidence: unknown): TicketEvidence | undefined',
   'export function readStateFile',
   'export function readQueueFile',
   'STATE_WRITE_LOCK_FILE',
@@ -1564,6 +1568,10 @@ for (const marker of [
 for (const forbidden of [
   'catch (e: any)',
   'e?.message',
+  'export function migrateStateFileShape(raw: any)',
+  'function migrateTicketEvidence(evidence: any): any',
+  'export function migrateQueueFileShape(raw: any)',
+  'function migrateQueueItemShape(item: any',
 ]) {
   if (stateStore.includes(forbidden)) {
     fail(`State store must normalize unknown errors instead of using ${forbidden}.`);
