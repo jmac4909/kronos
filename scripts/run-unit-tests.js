@@ -1696,6 +1696,12 @@ test('webview security injects CSP and preserves existing nonce policies', () =>
   assert.match(apiScript, /Kronos webview unhandled rejection/);
   assert.doesNotMatch(apiScript, /window\.__kronosVscodeApi/);
   assert.doesNotMatch(apiScript, /var vscode =/);
+  assert.equal(webviewSecurity.WEBVIEW_READY_COMMAND, '__kronosWebviewReady');
+  const readyScript = webviewSecurity.webviewReadyPostScript('Kronos Ready');
+  assert.match(readyScript, /__kronosWebviewReady/);
+  assert.match(readyScript, /vscode\.postMessage/);
+  assert.match(readyScript, /Kronos webview could not post script readiness/);
+  assert.match(readyScript, /DOMContentLoaded/);
   const diagnosticBanner = webviewSecurity.webviewScriptDiagnosticBanner();
   assert.match(diagnosticBanner, /data-kronos-script-required/);
   assert.match(diagnosticBanner, /Webview Developer Tools/);
@@ -1722,6 +1728,12 @@ test('webview security injects CSP and preserves existing nonce policies', () =>
   assert.match(actionScript, /DOMContentLoaded/);
   assert.match(actionScript, /data-kronos-actions-ready/);
   assert.match(actionScript, /message\[field\.messageKey\]/);
+  assert.doesNotMatch(actionScript, /__kronosWebviewReady/);
+  const diagnosticActionScript = webviewSecurity.webviewActionPostScript('Kronos Actions', [
+    { messageKey: 'ticket', dataAttribute: 'data-ticket' },
+  ], { readyCommand: webviewSecurity.WEBVIEW_READY_COMMAND });
+  assert.match(diagnosticActionScript, /__kronosWebviewReady/);
+  assert.match(diagnosticActionScript, /Kronos webview could not post script readiness/);
 
   const existing = '<html><head><meta http-equiv="Content-Security-Policy" content="default-src test"></head><body></body></html>';
   assert.equal(webviewSecurity.withWebviewCsp(existing), existing);
@@ -2921,11 +2933,17 @@ test('dispatcher records branch and permission metadata for persisted runs', () 
     'export interface RunCenterActionRequest',
     'const RUN_CENTER_MESSAGE_COMMANDS = new Set',
     'function normalizeRunCenterMessage',
+    'function logRunCenterWebviewReadyMessage',
+    'function createRunCenterReadyMonitor',
+    'const logReady = createRunCenterReadyMonitor(panel)',
+    'if (logReady(msg)) { return; }',
+    'Kronos webview script did not report ready: Kronos Run Center',
     "message.command === 'refreshPanel' || message.command === 'archiveFinishedRuns'",
     'function runCenterActionButtons',
     "runCenterActionButton('refreshPanel', 'Refresh')",
     "runCenterActionButton('archiveFinishedRuns', 'Archive Finished')",
     'webviewActionPostScript',
+    '{ readyCommand: WEBVIEW_READY_COMMAND }',
     "import { sortedRunCenterRuns } from '../services/runCenterSort'",
     'const sortedRuns = sortedRunCenterRuns(runs)',
     'sorted by status and time',
@@ -5047,12 +5065,12 @@ test('webview html helpers centralize escaping and safe HTTP links', () => {
 
 test('extension webviews use shared UI shell and board filtering affordances', () => {
   const source = readSourceFixture('src', 'extension.ts');
-  const boardHandlerStart = source.indexOf('panel.webview.onDidReceiveMessage(async (msg) => {\n        const request = normalizeBoardMessage(msg);');
+  const boardHandlerStart = source.indexOf('panel.webview.onDidReceiveMessage(async (msg) => {\n        if (logReady(msg)) { return; }\n        const request = normalizeBoardMessage(msg);');
   const boardHandlerEnd = source.indexOf("    vscode.commands.registerCommand('kronos.viewTicket'", boardHandlerStart);
   assert.ok(boardHandlerStart >= 0 && boardHandlerEnd > boardHandlerStart, 'Jira board message handler should be present');
   const boardHandlerSource = source.slice(boardHandlerStart, boardHandlerEnd);
   for (const marker of [
-    "import { createWebviewNonce, webviewActionPostScript, webviewScriptCspOptions, webviewVsCodeApiScript, withWebviewCsp } from './services/webviewSecurity'",
+    "import { WEBVIEW_READY_COMMAND, createWebviewNonce, webviewActionPostScript, webviewReadyPostScript, webviewScriptCspOptions, webviewVsCodeApiScript, withWebviewCsp } from './services/webviewSecurity'",
     'const nonce = createWebviewNonce()',
     'webviewScriptCspOptions(panel.webview.cspSource, nonce)',
     'kronosWebviewBaseCss',
@@ -5086,6 +5104,11 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     "unknownErrorMessage(e, 'Failed to unlink ticket.')",
     "unknownErrorMessage(e, 'Failed to add ticket to queue.')",
     "${webviewVsCodeApiScript('Kronos Jira Board')}",
+    "${webviewReadyPostScript('Kronos Jira Board')}",
+    'function logWebviewReadyMessage',
+    'function createWebviewReadyMonitor',
+    "const logReady = createWebviewReadyMonitor(panel, 'Kronos Jira Board')",
+    'if (logReady(msg)) { return; }',
     'function kronosOperatorPanelCss',
     'const EVIDENCE_GATE_MESSAGE_COMMANDS = new Set',
     'const HUMAN_REVIEW_MESSAGE_COMMANDS = new Set',
@@ -5122,7 +5145,8 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'function evidenceGatePanelGatesForState(state: KronosState): EvidenceGateResult[]',
     'function isProofSensitiveAction',
     'function kronosActionPanelScript',
-    "${webviewActionPostScript('Kronos action panel', [",
+    'webviewActionPostScript(webviewName, [',
+    'readyDiagnostic ? { readyCommand: WEBVIEW_READY_COMMAND } : {}',
     "{ messageKey: 'ticket', dataAttribute: 'data-ticket' }",
     "{ messageKey: 'runId', dataAttribute: 'data-run-id' }",
     "{ messageKey: 'planId', dataAttribute: 'data-plan-id' }",

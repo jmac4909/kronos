@@ -12,6 +12,12 @@ export interface WebviewActionPostField {
   dataAttribute: string;
 }
 
+export interface WebviewActionPostOptions {
+  readyCommand?: string;
+}
+
+export const WEBVIEW_READY_COMMAND = '__kronosWebviewReady';
+
 export function createWebviewNonce(): string {
   return randomBytes(16).toString('hex');
 }
@@ -60,10 +66,37 @@ export function webviewVsCodeApiScript(webviewName = 'Kronos webview'): string {
   ].join('\n');
 }
 
-export function webviewActionPostScript(webviewName: string, fields: WebviewActionPostField[]): string {
+export function webviewReadyPostScript(webviewName = 'Kronos webview', command = WEBVIEW_READY_COMMAND): string {
+  const nameLiteral = JSON.stringify(webviewName) || '"Kronos webview"';
+  const commandLiteral = JSON.stringify(command) || JSON.stringify(WEBVIEW_READY_COMMAND);
+  return [
+    '(function() {',
+    `  const webviewName = ${nameLiteral};`,
+    `  const readyCommand = ${commandLiteral};`,
+    '  let posted = false;',
+    '  function postReady() {',
+    '    if (posted) { return; }',
+    '    posted = true;',
+    '    try {',
+    "      vscode.postMessage({ command: readyCommand, webviewName: webviewName, userAgent: navigator.userAgent, readyState: document.readyState });",
+    '    } catch (error) {',
+    "      console.warn('Kronos webview could not post script readiness', error);",
+    '    }',
+    '  }',
+    "  if (document.readyState === 'loading') {",
+    "    document.addEventListener('DOMContentLoaded', function() { setTimeout(postReady, 0); }, { once: true });",
+    '  } else {',
+    '    setTimeout(postReady, 0);',
+    '  }',
+    '}());',
+  ].join('\n');
+}
+
+export function webviewActionPostScript(webviewName: string, fields: WebviewActionPostField[], options: WebviewActionPostOptions = {}): string {
   const fieldsLiteral = JSON.stringify(fields);
   return [
     webviewVsCodeApiScript(webviewName),
+    options.readyCommand ? webviewReadyPostScript(webviewName, options.readyCommand) : '',
     '(function() {',
     `  const fields = ${fieldsLiteral};`,
     '  function postKronosAction(event) {',
@@ -86,7 +119,7 @@ export function webviewActionPostScript(webviewName: string, fields: WebviewActi
     '    attachKronosActionHandler();',
     '  }',
     '}());',
-  ].join('\n');
+  ].filter(Boolean).join('\n');
 }
 
 export function webviewCspMeta(options: WebviewCspOptions = {}): string {

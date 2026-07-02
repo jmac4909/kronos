@@ -232,6 +232,11 @@ for (const marker of [
   'webviewScriptCspOptions(panel.webview.cspSource, nonce)',
   'script nonce="${escapeAttr(nonce)}"',
   "${webviewVsCodeApiScript('Kronos Jira Board')}",
+  "${webviewReadyPostScript('Kronos Jira Board')}",
+  'function logWebviewReadyMessage',
+  'function createWebviewReadyMonitor',
+  "const logReady = createWebviewReadyMonitor(panel, 'Kronos Jira Board')",
+  'if (logReady(msg)) { return; }',
   'BOARD_MESSAGE_COMMANDS',
   'function normalizeWebviewCommand',
   'function normalizeBoardMessage',
@@ -356,7 +361,8 @@ for (const marker of [
   'function evidenceGatePanelGatesForState(state: KronosState): EvidenceGateResult[]',
   'function isProofSensitiveAction',
   'function kronosActionPanelScript',
-  "${webviewActionPostScript('Kronos action panel', [",
+  'webviewActionPostScript(webviewName, [',
+  'readyDiagnostic ? { readyCommand: WEBVIEW_READY_COMMAND } : {}',
   "{ messageKey: 'ticket', dataAttribute: 'data-ticket' }",
   "{ messageKey: 'runId', dataAttribute: 'data-run-id' }",
   "{ messageKey: 'planId', dataAttribute: 'data-plan-id' }",
@@ -614,7 +620,7 @@ if (extension.includes('function webviewScriptCsp(') || dispatcher.includes('fun
   fail('Webview CSP option construction must stay centralized in webviewSecurity.');
 }
 
-const boardHandlerStart = extension.indexOf('panel.webview.onDidReceiveMessage(async (msg) => {\n        const request = normalizeBoardMessage(msg);');
+const boardHandlerStart = extension.indexOf('panel.webview.onDidReceiveMessage(async (msg) => {\n        if (logReady(msg)) { return; }\n        const request = normalizeBoardMessage(msg);');
 const boardHandlerEnd = extension.indexOf("    vscode.commands.registerCommand('kronos.viewTicket'", boardHandlerStart);
 if (boardHandlerStart < 0 || boardHandlerEnd <= boardHandlerStart) {
   fail('Missing Jira board message handler block.');
@@ -1195,11 +1201,17 @@ for (const marker of [
   'pollIntervalMs?: number',
   'const pollTimer = setInterval',
   'panel.onDidDispose(() => clearInterval(pollTimer))',
+  'function logRunCenterWebviewReadyMessage',
+  'function createRunCenterReadyMonitor',
+  'const logReady = createRunCenterReadyMonitor(panel)',
+  'if (logReady(msg)) { return; }',
+  'Kronos webview script did not report ready: Kronos Run Center',
   "message.command === 'refreshPanel' || message.command === 'archiveFinishedRuns'",
   "runCenterActionButton('refreshPanel', 'Refresh')",
   "runCenterActionButton('archiveFinishedRuns', 'Archive Finished')",
   'webviewActionPostScript',
   "${webviewActionPostScript('Kronos Run Center', [",
+  '{ readyCommand: WEBVIEW_READY_COMMAND }',
   "import { sortedRunCenterRuns } from '../services/runCenterSort'",
   'const sortedRuns = sortedRunCenterRuns(runs)',
   'sorted by status and time',
@@ -1654,6 +1666,10 @@ for (const marker of [
   "console.info('Kronos webview script ready', webviewName, navigator.userAgent)",
   "console.error('Kronos webview script error', webviewName",
   "console.error('Kronos webview unhandled rejection', webviewName",
+  'export const WEBVIEW_READY_COMMAND',
+  'export function webviewReadyPostScript',
+  "vscode.postMessage({ command: readyCommand",
+  "console.warn('Kronos webview could not post script readiness', error)",
   'export function webviewScriptDiagnosticBanner',
   'data-kronos-script-required',
   'Webview Developer Tools',
@@ -1666,6 +1682,7 @@ for (const marker of [
   "document.addEventListener('DOMContentLoaded', attachKronosActionHandler, { once: true })",
   "document.documentElement.setAttribute('data-kronos-actions-ready', 'true')",
   'message[field.messageKey]',
+  'options.readyCommand ? webviewReadyPostScript(webviewName, options.readyCommand) :',
   'cspSource?: string',
   'options.cspSource?.trim()',
   'scriptSources.join',

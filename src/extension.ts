@@ -52,7 +52,7 @@ import { computeAttentionBadge } from './services/attentionBadge';
 import { buildNextActionContext, buildNextActionStartDecision, skillForAction } from './services/nextActionContext';
 import { createWorkspaceDiffArtifact, firstRemoteBranchMatching, originProjectPath } from './services/gitWorkspace';
 import { signalProcessTree, stopProcessTree } from './services/processTree';
-import { createWebviewNonce, webviewActionPostScript, webviewScriptCspOptions, webviewVsCodeApiScript, withWebviewCsp } from './services/webviewSecurity';
+import { WEBVIEW_READY_COMMAND, createWebviewNonce, webviewActionPostScript, webviewReadyPostScript, webviewScriptCspOptions, webviewVsCodeApiScript, withWebviewCsp } from './services/webviewSecurity';
 import { escapeAttr, escapeClass, escapeHtml, kronosWebviewBaseCss, safeHttpHref } from './services/webviewHtml';
 import { kronosTerminalOptions } from './services/terminalProfiles';
 import { unknownErrorCode, unknownErrorMessage } from './services/errorUtils';
@@ -363,6 +363,35 @@ function normalizeWebviewCommand(raw: unknown, allowed: Set<string>): string | n
   const command = recordFromUnknown(raw).command;
   if (typeof command !== 'string' || !allowed.has(command)) { return null; }
   return command;
+}
+
+function logWebviewReadyMessage(raw: unknown): boolean {
+  const message = recordFromUnknown(raw);
+  if (message.command !== WEBVIEW_READY_COMMAND) { return false; }
+  const webviewName = typeof message.webviewName === 'string' && message.webviewName.trim()
+    ? message.webviewName.trim()
+    : 'Kronos webview';
+  const readyState = typeof message.readyState === 'string' ? message.readyState : 'unknown';
+  const userAgent = typeof message.userAgent === 'string' && message.userAgent.trim()
+    ? `; ${message.userAgent.trim()}`
+    : '';
+  console.info(`Kronos webview script ready: ${webviewName} (${readyState}${userAgent})`);
+  return true;
+}
+
+function createWebviewReadyMonitor(panel: vscode.WebviewPanel, webviewName: string, timeoutMs = 5000): (raw: unknown) => boolean {
+  let reportedReady = false;
+  const timer = setTimeout(() => {
+    if (reportedReady) { return; }
+    console.warn(`Kronos webview script did not report ready: ${webviewName}. Check VS Code Webview Developer Tools and the Extension Host DevTools console for CSP or sandbox errors.`);
+  }, timeoutMs);
+  panel.onDidDispose(() => clearTimeout(timer));
+  return (raw: unknown): boolean => {
+    if (!logWebviewReadyMessage(raw)) { return false; }
+    reportedReady = true;
+    clearTimeout(timer);
+    return true;
+  };
 }
 
 function normalizeBoardMessage(raw: unknown): { command: string; ticket: string; project: string } | null {
@@ -1527,6 +1556,7 @@ export function activate(context: vscode.ExtensionContext) {
       const renderBoard = () => {
         panel.webview.html = withWebviewCsp(buildJiraBoardHtml(state, nonce), webviewScriptCspOptions(panel.webview.cspSource, nonce));
       };
+      const logReady = createWebviewReadyMonitor(panel, 'Kronos Jira Board');
       const hasTicket = (ticketKey: string) => Boolean(state.state?.tickets?.[ticketKey]);
       const hasProject = (projectName: string) => Boolean(state.state?.projects?.[projectName]);
       const openKnownTicketUrl = (ticketKey: string, kind: 'jira' | 'mr') => {
@@ -1536,8 +1566,8 @@ export function activate(context: vscode.ExtensionContext) {
           openExternalHttpUrl(url);
         }
       };
-      renderBoard();
       panel.webview.onDidReceiveMessage(async (msg) => {
+        if (logReady(msg)) { return; }
         const request = normalizeBoardMessage(msg);
         if (!request) {
           vscode.window.showWarningMessage('Ignored invalid Kronos board request.');
@@ -1631,6 +1661,7 @@ export function activate(context: vscode.ExtensionContext) {
         }
         renderBoard();
       });
+      renderBoard();
     }),
 
     vscode.commands.registerCommand('kronos.viewTicket', async (treeItem: unknown) => {
@@ -4132,9 +4163,9 @@ function openHumanReviewInbox(state: KronosState): void {
     });
     panel.webview.html = withWebviewCsp(buildHumanReviewInboxHtml(inbox, state, nonce), webviewScriptCspOptions(panel.webview.cspSource, nonce));
   };
-  render();
-  startActiveRunPanelRefresh(panel, state, render);
+  const logReady = createWebviewReadyMonitor(panel, 'Kronos Human Review Inbox');
   panel.webview.onDidReceiveMessage(async msg => {
+    if (logReady(msg)) { return; }
     const request = normalizeActionPanelMessage(msg, HUMAN_REVIEW_MESSAGE_COMMANDS);
     if (!request) {
       vscode.window.showWarningMessage('Ignored invalid Kronos human review request.');
@@ -4148,6 +4179,8 @@ function openHumanReviewInbox(state: KronosState): void {
     await executeHumanReviewAction(state, request.command, request.ticket);
     render();
   });
+  render();
+  startActiveRunPanelRefresh(panel, state, render);
 }
 
 function buildHumanReviewInboxHtml(inbox: HumanReviewInbox, state: KronosState, nonce: string): string {
@@ -4177,7 +4210,7 @@ function buildHumanReviewInboxHtml(inbox: HumanReviewInbox, state: KronosState, 
     <div class="summary-card"><div class="num">${inbox.summary.total}</div><div class="lbl">Total</div></div>
   </div>
   ${empty || `<div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Severity</th><th>Kind</th><th>Item</th><th>Detail</th><th>Ref</th><th>Actions</th></tr>${rows}</table></div>`}
-</div>${kronosActionPanelScript(nonce)}</body></html>`;
+</div>${kronosActionPanelScript(nonce, 'Kronos Human Review Inbox', true)}</body></html>`;
 }
 
 function humanReviewActionButtons(item: HumanReviewInbox['items'][number], state: KronosState): string {
@@ -4307,9 +4340,9 @@ function openEvidenceGatePanel(
         .filter((gate): gate is EvidenceGateResult => Boolean(gate));
     panel.webview.html = withWebviewCsp(buildEvidenceGateHtml(freshGates, title, nonce), webviewScriptCspOptions(panel.webview.cspSource, nonce));
   };
-  render();
-  startActiveRunPanelRefresh(panel, state, render);
+  const logReady = createWebviewReadyMonitor(panel, title);
   panel.webview.onDidReceiveMessage(async msg => {
+    if (logReady(msg)) { return; }
     const request = normalizeActionPanelMessage(msg, EVIDENCE_GATE_MESSAGE_COMMANDS);
     if (!request) {
       vscode.window.showWarningMessage('Ignored invalid Kronos evidence gate request.');
@@ -4327,6 +4360,8 @@ function openEvidenceGatePanel(
     await executeEvidenceGateAction(request.command, request.ticket);
     render();
   });
+  render();
+  startActiveRunPanelRefresh(panel, state, render);
 }
 
 function evidenceGatePanelGatesForState(state: KronosState): EvidenceGateResult[] {
@@ -4468,7 +4503,7 @@ function buildEvidenceGateHtml(gates: EvidenceGateResult[], title: string, nonce
     <div class="summary-card"><div class="num">${summary.pass}</div><div class="lbl">Passing</div></div>
   </div>
   ${empty || `<div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Status</th><th>Ticket</th><th>Check</th><th>Item</th><th>Detail</th><th>Actions</th></tr>${rows}</table></div>`}
-</div>${kronosActionPanelScript(nonce)}</body></html>`;
+</div>${kronosActionPanelScript(nonce, 'Kronos Evidence Gate', true)}</body></html>`;
 }
 
 function evidenceGateActionButtons(gate: EvidenceGateResult, check: EvidenceGateResult['checks'][number]): string {
@@ -4569,14 +4604,14 @@ function attachOperatorCommandHandler(panel: vscode.WebviewPanel): void {
   });
 }
 
-function kronosActionPanelScript(nonce: string): string {
+function kronosActionPanelScript(nonce: string, webviewName = 'Kronos action panel', readyDiagnostic = false): string {
   return `<script nonce="${escapeAttr(nonce)}">
-${webviewActionPostScript('Kronos action panel', [
+${webviewActionPostScript(webviewName, [
   { messageKey: 'ticket', dataAttribute: 'data-ticket' },
   { messageKey: 'runId', dataAttribute: 'data-run-id' },
   { messageKey: 'planId', dataAttribute: 'data-plan-id' },
   { messageKey: 'itemId', dataAttribute: 'data-item-id' },
-])}
+], readyDiagnostic ? { readyCommand: WEBVIEW_READY_COMMAND } : {})}
 </script>`;
 }
 
@@ -6585,6 +6620,7 @@ function buildJiraBoardHtml(state: KronosState, nonce: string): string {
 <script nonce="${escapeAttr(nonce)}">
 function initKronosJiraBoard() {
 ${webviewVsCodeApiScript('Kronos Jira Board')}
+${webviewReadyPostScript('Kronos Jira Board')}
 const ticketData = ${ticketJsonRaw};
 let currentModalKey = '';
 let lastFocusedEl = null;
