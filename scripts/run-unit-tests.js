@@ -5147,6 +5147,53 @@ test('extension evidence command handlers normalize payloads and unknown errors'
   }
 });
 
+test('extension queue command handlers normalize payloads before use', () => {
+  const source = readSourceFixture('src', 'extension.ts');
+  const queueCommandStart = source.indexOf("vscode.commands.registerCommand('kronos.addToQueue'");
+  const queueCommandEnd = source.indexOf("    vscode.commands.registerCommand('kronos.sonarScan'", queueCommandStart);
+  assert.ok(queueCommandStart >= 0 && queueCommandEnd > queueCommandStart, 'queue command handler block should be present');
+  const queueCommandSource = source.slice(queueCommandStart, queueCommandEnd);
+  for (const marker of [
+    "vscode.commands.registerCommand('kronos.addToQueue', async (treeItem: unknown)",
+    "vscode.commands.registerCommand('kronos.removeFromQueue', async (treeItem: unknown)",
+    "vscode.commands.registerCommand('kronos.startQueueItem', async (treeItemOrData: unknown)",
+    "vscode.commands.registerCommand('kronos.queueMoveUp', async (treeItem: unknown)",
+    "vscode.commands.registerCommand('kronos.queueMoveDown', async (treeItem: unknown)",
+    "vscode.commands.registerCommand('kronos.queuePinTop', async (treeItem: unknown)",
+    "vscode.commands.registerCommand('kronos.openMrDiff', async (treeItem: unknown)",
+    "vscode.commands.registerCommand('kronos.verifyLocal', async (treeItem: unknown)",
+    'const ticketKey = resolveTicketKey(treeItem);',
+    'const queueData = resolveQueueCommandItem(treeItemOrData);',
+    'const idx = resolveQueueIndex(treeItem);',
+    'await startClaudeDispatch(projectPath, skill, queueData.ticket || undefined,',
+    'interface QueueCommandPayload',
+    'function resolveQueueCommandItem(item: unknown): QueueCommandPayload | undefined',
+    'function queueCommandPayloadFromRecord(record: Record<string, unknown>): QueueCommandPayload | undefined',
+    'function resolveQueueIndex(item: unknown): number | undefined',
+    "typeof index === 'number' && Number.isInteger(index) && index >= 0",
+  ]) {
+    assert.ok(source.includes(marker), marker);
+  }
+  for (const marker of [
+    "vscode.commands.registerCommand('kronos.addToQueue', async (treeItem: any)",
+    "vscode.commands.registerCommand('kronos.removeFromQueue', async (treeItem: any)",
+    "vscode.commands.registerCommand('kronos.startQueueItem', async (treeItemOrData: any)",
+    "vscode.commands.registerCommand('kronos.queueMoveUp', async (treeItem: any)",
+    "vscode.commands.registerCommand('kronos.queueMoveDown', async (treeItem: any)",
+    "vscode.commands.registerCommand('kronos.queuePinTop', async (treeItem: any)",
+    "vscode.commands.registerCommand('kronos.openMrDiff', async (treeItem: any)",
+    "vscode.commands.registerCommand('kronos.verifyLocal', async (treeItem: any)",
+    'const ticketKey = treeItem?.ticketKey;',
+    'const ticketKey = (treeItem?.item || treeItem)?.ticket;',
+    'const queueData = treeItemOrData?.item || treeItemOrData;',
+    'const idx = treeItem?.index;',
+    'const mr = treeItem?.ticket?.mr;',
+    'await startClaudeDispatch(projectPath, skill, queueData.ticket,',
+  ]) {
+    assert.equal(queueCommandSource.includes(marker), false, marker);
+  }
+});
+
 test('extension publish and project command handlers normalize unknown errors', () => {
   const source = readSourceFixture('src', 'extension.ts');
   const commandStart = source.indexOf("vscode.commands.registerCommand('kronos.publishEvidence'");

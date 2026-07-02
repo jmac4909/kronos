@@ -1953,8 +1953,8 @@ export function activate(context: vscode.ExtensionContext) {
       }
     }),
 
-    vscode.commands.registerCommand('kronos.addToQueue', async (treeItem: any) => {
-      const ticketKey = treeItem?.ticketKey;
+    vscode.commands.registerCommand('kronos.addToQueue', async (treeItem: unknown) => {
+      const ticketKey = resolveTicketKey(treeItem);
       if (!ticketKey) { return; }
       try {
         const data = addTicketToQueue(ticketKey);
@@ -1969,8 +1969,8 @@ export function activate(context: vscode.ExtensionContext) {
       }
     }),
 
-    vscode.commands.registerCommand('kronos.removeFromQueue', async (treeItem: any) => {
-      const ticketKey = (treeItem?.item || treeItem)?.ticket;
+    vscode.commands.registerCommand('kronos.removeFromQueue', async (treeItem: unknown) => {
+      const ticketKey = resolveTicketKey(treeItem);
       if (!ticketKey) { return; }
       await removeTicketFromQueue(state, ticketKey, true);
     }),
@@ -2072,11 +2072,11 @@ export function activate(context: vscode.ExtensionContext) {
       }
     }),
 
-    vscode.commands.registerCommand('kronos.startQueueItem', async (treeItemOrData: any) => {
-      const queueData = treeItemOrData?.item || treeItemOrData;
-      if (!queueData || !queueData.action) { return; }
+    vscode.commands.registerCommand('kronos.startQueueItem', async (treeItemOrData: unknown) => {
+      const queueData = resolveQueueCommandItem(treeItemOrData);
+      if (!queueData) { return; }
 
-      const projs: string[] = queueData.projects || [];
+      const projs = queueData.projects;
       const projLabel = projs.join(', ') || 'unlinked';
 
       if (queueData.action === 'refresh') {
@@ -2114,7 +2114,7 @@ export function activate(context: vscode.ExtensionContext) {
         if (!projectPath) { continue; }
         const otherProjects = projs.filter(p => p !== projName);
         const scopeHint = otherProjects.length > 0 ? `\nYou are working in ${projName}. Focus ONLY on this codebase. Other projects: ${otherProjects.join(', ')}.` : '';
-        await startClaudeDispatch(projectPath, skill, queueData.ticket, {
+        await startClaudeDispatch(projectPath, skill, queueData.ticket || undefined, {
           onComplete: refreshAfterDispatch(state, projName, queueData.ticket),
           parallel: isCodeAction,
           appendSystemPrompt: isCodeAction ? getImplementPrompt(state) + scopeHint + extraPrompt : extraPrompt || undefined,
@@ -2155,35 +2155,37 @@ export function activate(context: vscode.ExtensionContext) {
       }
     }),
 
-    vscode.commands.registerCommand('kronos.queueMoveUp', async (treeItem: any) => {
-      const idx = treeItem?.index;
+    vscode.commands.registerCommand('kronos.queueMoveUp', async (treeItem: unknown) => {
+      const idx = resolveQueueIndex(treeItem);
       if (idx === undefined) { return; }
       const result = reorderQueueItem(idx, 'up');
       if (!result.changed) { return; }
       state.reloadAndNotify();
     }),
 
-    vscode.commands.registerCommand('kronos.queueMoveDown', async (treeItem: any) => {
-      const idx = treeItem?.index;
+    vscode.commands.registerCommand('kronos.queueMoveDown', async (treeItem: unknown) => {
+      const idx = resolveQueueIndex(treeItem);
       if (idx === undefined) { return; }
       const result = reorderQueueItem(idx, 'down');
       if (!result.changed) { return; }
       state.reloadAndNotify();
     }),
 
-    vscode.commands.registerCommand('kronos.queuePinTop', async (treeItem: any) => {
-      const idx = treeItem?.index;
+    vscode.commands.registerCommand('kronos.queuePinTop', async (treeItem: unknown) => {
+      const idx = resolveQueueIndex(treeItem);
       if (idx === undefined) { return; }
       const result = reorderQueueItem(idx, 'top');
       if (!result.changed) { return; }
       state.reloadAndNotify();
     }),
 
-    vscode.commands.registerCommand('kronos.openMrDiff', async (treeItem: any) => {
-      const ticketKey = treeItem?.ticketKey;
+    vscode.commands.registerCommand('kronos.openMrDiff', async (treeItem: unknown) => {
+      const ticketKey = resolveTicketKey(treeItem);
       if (!ticketKey) {
-        const mr = treeItem?.ticket?.mr;
-        if (mr?.url) { openExternalHttpUrl(mr.url); }
+        const ticket = recordFromUnknown(recordFromUnknown(treeItem).ticket);
+        const mr = recordFromUnknown(ticket.mr);
+        const url = mr.url;
+        if (typeof url === 'string') { openExternalHttpUrl(url); }
         return;
       }
       await runCommandProgress(
@@ -2204,8 +2206,8 @@ export function activate(context: vscode.ExtensionContext) {
       );
     }),
 
-    vscode.commands.registerCommand('kronos.verifyLocal', async (treeItem: any) => {
-      const ticketKey = treeItem?.ticketKey;
+    vscode.commands.registerCommand('kronos.verifyLocal', async (treeItem: unknown) => {
+      const ticketKey = resolveTicketKey(treeItem);
       if (!ticketKey || !state.state) {
         vscode.window.showErrorMessage('No ticket selected.');
         return;
@@ -5817,6 +5819,36 @@ function resolveTicketKey(item: unknown): string | undefined {
   if (typeof nestedItem.ticket === 'string') { return nestedItem.ticket; }
   if (typeof record.ticket === 'string') { return record.ticket; }
   return undefined;
+}
+
+interface QueueCommandPayload {
+  id?: string;
+  ticket?: string;
+  projects: string[];
+  action: string;
+}
+
+function resolveQueueCommandItem(item: unknown): QueueCommandPayload | undefined {
+  return queueCommandPayloadFromRecord(recordFromUnknown(item))
+    || queueCommandPayloadFromRecord(recordFromUnknown(recordFromUnknown(item).item));
+}
+
+function queueCommandPayloadFromRecord(record: Record<string, unknown>): QueueCommandPayload | undefined {
+  const action = record.action;
+  if (typeof action !== 'string' || !action.trim()) { return undefined; }
+  const projects = Array.isArray(record.projects)
+    ? record.projects
+      .filter((project): project is string => typeof project === 'string' && project.trim().length > 0)
+      .map(project => project.trim())
+    : [];
+  const ticket = typeof record.ticket === 'string' && record.ticket.trim() ? record.ticket.trim() : undefined;
+  const id = typeof record.id === 'string' && record.id.trim() ? record.id.trim() : undefined;
+  return { id, ticket, projects, action: action.trim() };
+}
+
+function resolveQueueIndex(item: unknown): number | undefined {
+  const index = recordFromUnknown(item).index;
+  return typeof index === 'number' && Number.isInteger(index) && index >= 0 ? index : undefined;
 }
 
 function resolveTaskId(item: unknown): string | undefined {

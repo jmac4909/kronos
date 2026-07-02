@@ -715,6 +715,14 @@ for (const forbidden of [
   "vscode.commands.registerCommand('kronos.exportEvidence', async (treeItem: any)",
   "vscode.commands.registerCommand('kronos.evidenceHandoff', async (treeItem: any)",
   "vscode.commands.registerCommand('kronos.publishEvidence', async (treeItem: any)",
+  "vscode.commands.registerCommand('kronos.addToQueue', async (treeItem: any)",
+  "vscode.commands.registerCommand('kronos.removeFromQueue', async (treeItem: any)",
+  "vscode.commands.registerCommand('kronos.startQueueItem', async (treeItemOrData: any)",
+  "vscode.commands.registerCommand('kronos.queueMoveUp', async (treeItem: any)",
+  "vscode.commands.registerCommand('kronos.queueMoveDown', async (treeItem: any)",
+  "vscode.commands.registerCommand('kronos.queuePinTop', async (treeItem: any)",
+  "vscode.commands.registerCommand('kronos.openMrDiff', async (treeItem: any)",
+  "vscode.commands.registerCommand('kronos.verifyLocal', async (treeItem: any)",
   "await startClaudeDispatch(projectPath, 'verify-fix', item?.ticketKey,",
   'if (item?.taskId)',
   'const projectPath = getProjectPath(state, item?.projectName);',
@@ -750,10 +758,44 @@ for (const marker of [
   "vscode.commands.registerCommand('kronos.exportEvidence', async (treeItem: unknown)",
   "vscode.commands.registerCommand('kronos.evidenceHandoff', async (treeItem: unknown)",
   "vscode.commands.registerCommand('kronos.publishEvidence', async (treeItem: unknown)",
+  "vscode.commands.registerCommand('kronos.addToQueue', async (treeItem: unknown)",
+  "vscode.commands.registerCommand('kronos.removeFromQueue', async (treeItem: unknown)",
+  "vscode.commands.registerCommand('kronos.startQueueItem', async (treeItemOrData: unknown)",
+  "vscode.commands.registerCommand('kronos.queueMoveUp', async (treeItem: unknown)",
+  "vscode.commands.registerCommand('kronos.queueMoveDown', async (treeItem: unknown)",
+  "vscode.commands.registerCommand('kronos.queuePinTop', async (treeItem: unknown)",
+  "vscode.commands.registerCommand('kronos.openMrDiff', async (treeItem: unknown)",
+  "vscode.commands.registerCommand('kronos.verifyLocal', async (treeItem: unknown)",
+  'const queueData = resolveQueueCommandItem(treeItemOrData);',
+  'const idx = resolveQueueIndex(treeItem);',
+  'await startClaudeDispatch(projectPath, skill, queueData.ticket || undefined,',
+  'interface QueueCommandPayload',
+  'function resolveQueueCommandItem(item: unknown): QueueCommandPayload | undefined',
+  'function queueCommandPayloadFromRecord(record: Record<string, unknown>): QueueCommandPayload | undefined',
+  'function resolveQueueIndex(item: unknown): number | undefined',
   'function resolveTaskId(item: unknown): string | undefined',
 ]) {
   if (!extension.includes(marker)) {
     fail(`Extension dispatch command must keep tree payloads unknown: ${marker}`);
+  }
+}
+
+const queueCommandStart = extension.indexOf("vscode.commands.registerCommand('kronos.addToQueue'");
+const queueCommandEnd = extension.indexOf("    vscode.commands.registerCommand('kronos.sonarScan'", queueCommandStart);
+if (queueCommandStart < 0 || queueCommandEnd <= queueCommandStart) {
+  fail('Missing queue command handler block.');
+}
+const queueCommandSource = extension.slice(queueCommandStart, queueCommandEnd);
+for (const forbidden of [
+  'const ticketKey = treeItem?.ticketKey;',
+  'const ticketKey = (treeItem?.item || treeItem)?.ticket;',
+  'const queueData = treeItemOrData?.item || treeItemOrData;',
+  'const idx = treeItem?.index;',
+  'const mr = treeItem?.ticket?.mr;',
+  'await startClaudeDispatch(projectPath, skill, queueData.ticket,',
+]) {
+  if (queueCommandSource.includes(forbidden)) {
+    fail(`Queue command handlers must normalize payloads before use: ${forbidden}`);
   }
 }
 
