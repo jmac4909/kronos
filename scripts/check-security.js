@@ -1601,18 +1601,31 @@ for (const marker of [
 
 for (const marker of [
   'export function evaluatePostRunReadiness',
-  'export function classifyRunFailure',
+  'run: unknown',
+  'export function classifyRunFailure(run: unknown): RunFailureKind',
   'HANDOFF_ACTIONS',
   'SUCCESS_RUN_STATUSES',
   'claude cli',
   'exitCode === 124',
   "skill.includes('sonar')",
   "skill.includes('verify')",
+  'function runRecord(value: unknown): Record<string, unknown>',
+  'function runString(value: unknown): string',
+  'function runText(value: unknown): string | undefined',
+  'function runEventDetails(value: unknown): unknown[]',
   'evidence gate is failing',
   'Run completed, but ticket next action',
 ]) {
   if (!postRunReadiness.includes(marker)) {
     fail(`Missing post-run readiness marker: ${marker}`);
+  }
+}
+for (const forbidden of [
+  'run: any',
+  'event: any',
+]) {
+  if (postRunReadiness.includes(forbidden)) {
+    fail(`Post-run readiness must normalize raw run payloads instead of using ${forbidden}.`);
   }
 }
 

@@ -23,19 +23,21 @@ const HANDOFF_ACTIONS = new Set(['await_review', 'verify', 'deploy_monitor', 'do
 const SUCCESS_RUN_STATUSES = new Set(['completed', 'waiting_for_review']);
 
 export function evaluatePostRunReadiness(input: {
-  run: any;
+  run: unknown;
   ticketKey?: string;
   ticket?: Ticket;
   now?: Date;
 }): PostRunReadiness {
   const now = input.now || new Date();
+  const inputRun = runRecord(input.run);
+  const runStatus = runString(inputRun.status);
   const failureKind = classifyRunFailure(input.run);
   if (!input.ticketKey || !input.ticket) {
     return {
       evaluatedAt: now.toISOString(),
       ticketKey: input.ticketKey,
-      status: SUCCESS_RUN_STATUSES.has(input.run?.status) ? 'unknown' : 'blocked',
-      summary: SUCCESS_RUN_STATUSES.has(input.run?.status)
+      status: SUCCESS_RUN_STATUSES.has(runStatus) ? 'unknown' : 'blocked',
+      summary: SUCCESS_RUN_STATUSES.has(runStatus)
         ? 'Run completed, but no ticket state was available for readiness evaluation.'
         : `Run did not complete cleanly (${failureKind}).`,
       failureKind,
@@ -52,12 +54,12 @@ export function evaluatePostRunReadiness(input: {
     warnings,
   };
 
-  if (!SUCCESS_RUN_STATUSES.has(input.run?.status)) {
+  if (!SUCCESS_RUN_STATUSES.has(runStatus)) {
     return {
       evaluatedAt: now.toISOString(),
       ticketKey: input.ticketKey,
       status: 'blocked',
-      summary: `Run ended as ${input.run?.status || 'unknown'} (${failureKind}); ticket gate is ${gate.status}.`,
+      summary: `Run ended as ${runStatus || 'unknown'} (${failureKind}); ticket gate is ${gate.status}.`,
       nextAction: input.ticket.next_action,
       evidenceGate: gateSummary,
       failureKind,
@@ -111,17 +113,19 @@ export function evaluatePostRunReadiness(input: {
   };
 }
 
-export function classifyRunFailure(run: any): RunFailureKind {
-  if (!run) { return 'unknown'; }
-  if (SUCCESS_RUN_STATUSES.has(run.status)) { return 'none'; }
-  if (run.status === 'cancelled') { return 'cancelled'; }
-  const skill = String(run.skill || '').toLowerCase();
-  const exitCode = Number(run.exitCode);
+export function classifyRunFailure(run: unknown): RunFailureKind {
+  const record = runRecord(run);
+  const status = runString(record.status);
+  if (!status && Object.keys(record).length === 0) { return 'unknown'; }
+  if (SUCCESS_RUN_STATUSES.has(status)) { return 'none'; }
+  if (status === 'cancelled') { return 'cancelled'; }
+  const skill = runString(record.skill).toLowerCase();
+  const exitCode = Number(record.exitCode);
   const text = [
-    run.failureReason,
-    run.error,
-    ...(Array.isArray(run.events) ? run.events.flatMap((event: any) => [event.label, event.detail]) : []),
-  ].filter(Boolean).join('\n').toLowerCase();
+    record.failureReason,
+    record.error,
+    ...runEventDetails(record.events),
+  ].map(runText).filter((line): line is string => Boolean(line)).join('\n').toLowerCase();
 
   if (/cancelled|canceled|operator stopped|progress panel disposed/.test(text)) { return 'cancelled'; }
   if (/auth|credential|permission denied|unauthorized|forbidden|gcloud/.test(text)) { return 'auth'; }
@@ -135,5 +139,27 @@ export function classifyRunFailure(run: any): RunFailureKind {
   if (skill.includes('sonar')) { return 'sonar'; }
   if (skill.includes('build') || skill === 'fix_build') { return 'build'; }
   if (skill.includes('verify') || skill.includes('test')) { return 'test'; }
-  return run.status === 'failed' || run.status === 'needs_human' ? 'unknown' : 'none';
+  return status === 'failed' || status === 'needs_human' ? 'unknown' : 'none';
+}
+
+function runRecord(value: unknown): Record<string, unknown> {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value)) ? value as Record<string, unknown> : {};
+}
+
+function runString(value: unknown): string {
+  return typeof value === 'string' ? value : '';
+}
+
+function runText(value: unknown): string | undefined {
+  if (value === undefined || value === null) { return undefined; }
+  const text = String(value);
+  return text ? text : undefined;
+}
+
+function runEventDetails(value: unknown): unknown[] {
+  if (!Array.isArray(value)) { return []; }
+  return value.flatMap(event => {
+    const record = runRecord(event);
+    return [record.label, record.detail];
+  });
 }

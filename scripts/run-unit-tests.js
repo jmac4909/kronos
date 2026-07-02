@@ -4000,6 +4000,30 @@ test('post-run readiness distinguishes process completion from handoff readiness
   assert.equal(postRunReadiness.classifyRunFailure({ status: 'failed', skill: 'verify-local', exitCode: 1, failureReason: 'Process exited with code 1' }), 'test');
   assert.equal(postRunReadiness.classifyRunFailure({ status: 'failed', skill: 'fix_build', exitCode: 1, failureReason: 'Process exited with code 1' }), 'build');
   assert.equal(postRunReadiness.classifyRunFailure({ status: 'failed', skill: 'verify-local', exitCode: 124, failureReason: 'Process exited with code 124' }), 'timeout');
+  assert.equal(postRunReadiness.classifyRunFailure({ status: 'failed', events: [{ label: 'Jenkins', detail: 'compile failed' }] }), 'build');
+  assert.equal(postRunReadiness.classifyRunFailure('not a run'), 'unknown');
+  assert.equal(postRunReadiness.evaluatePostRunReadiness({
+    run: 'not a run',
+    now: new Date('2026-07-01T00:00:00.000Z'),
+  }).status, 'blocked');
+
+  const source = readSourceFixture('src', 'services', 'postRunReadiness.ts');
+  for (const marker of [
+    'run: unknown',
+    'export function classifyRunFailure(run: unknown): RunFailureKind',
+    'function runRecord(value: unknown): Record<string, unknown>',
+    'function runString(value: unknown): string',
+    'function runText(value: unknown): string | undefined',
+    'function runEventDetails(value: unknown): unknown[]',
+  ]) {
+    assert.ok(source.includes(marker), marker);
+  }
+  for (const marker of [
+    'run: any',
+    'event: any',
+  ]) {
+    assert.equal(source.includes(marker), false, marker);
+  }
 });
 
 test('aging analyzer flags stale reviews, builds, blockers, verification, and tickets', () => {
