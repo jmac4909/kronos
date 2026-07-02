@@ -2068,8 +2068,8 @@ export function activate(context: vscode.ExtensionContext) {
           await executeDashboardAction(request.command);
           await render();
         });
-      } catch {
-        vscode.window.showErrorMessage('Failed to generate dashboard.');
+      } catch (e: unknown) {
+        vscode.window.showErrorMessage(unknownErrorMessage(e, 'Failed to generate dashboard.'));
       }
     }),
 
