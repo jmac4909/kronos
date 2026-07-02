@@ -243,6 +243,11 @@ for (const marker of [
   'recordTicketEnvironmentResult',
   'replaceTicketAcceptanceCriteria',
   'updateTicketAcceptanceCriteria',
+  "unknownErrorMessage(e, 'Failed to add ticket evidence.')",
+  "unknownErrorMessage(e, 'Failed to add evidence check.')",
+  "unknownErrorMessage(e, 'Failed to record environment result.')",
+  "unknownErrorMessage(e, 'Failed to extract acceptance criteria.')",
+  "unknownErrorMessage(e, 'Failed to update acceptance criteria.')",
   'kronos.humanReviewInbox',
   'openHumanReviewInbox',
   'const HUMAN_REVIEW_MESSAGE_COMMANDS = new Set',
@@ -385,6 +390,21 @@ for (const forbidden of [
 ]) {
   if (boardHandlerSource.includes(forbidden)) {
     fail(`Jira board handler must normalize unknown errors instead of using ${forbidden}.`);
+  }
+}
+
+const evidenceCommandStart = extension.indexOf("vscode.commands.registerCommand('kronos.addEvidence'");
+const evidenceCommandEnd = extension.indexOf("    vscode.commands.registerCommand('kronos.evidenceGate'", evidenceCommandStart);
+if (evidenceCommandStart < 0 || evidenceCommandEnd <= evidenceCommandStart) {
+  fail('Missing evidence command handler block.');
+}
+const evidenceCommandSource = extension.slice(evidenceCommandStart, evidenceCommandEnd);
+for (const forbidden of [
+  'catch (e: any)',
+  'e?.message',
+]) {
+  if (evidenceCommandSource.includes(forbidden)) {
+    fail(`Evidence command handlers must normalize unknown errors instead of using ${forbidden}.`);
   }
 }
 

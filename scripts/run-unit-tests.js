@@ -4289,6 +4289,29 @@ test('extension run recovery helpers use typed run records', () => {
   }
 });
 
+test('extension evidence command handlers normalize unknown errors', () => {
+  const source = readSourceFixture('src', 'extension.ts');
+  const evidenceCommandStart = source.indexOf("vscode.commands.registerCommand('kronos.addEvidence'");
+  const evidenceCommandEnd = source.indexOf("    vscode.commands.registerCommand('kronos.evidenceGate'", evidenceCommandStart);
+  assert.ok(evidenceCommandStart >= 0 && evidenceCommandEnd > evidenceCommandStart, 'evidence command handler block should be present');
+  const evidenceCommandSource = source.slice(evidenceCommandStart, evidenceCommandEnd);
+  for (const marker of [
+    "unknownErrorMessage(e, 'Failed to add ticket evidence.')",
+    "unknownErrorMessage(e, 'Failed to add evidence check.')",
+    "unknownErrorMessage(e, 'Failed to record environment result.')",
+    "unknownErrorMessage(e, 'Failed to extract acceptance criteria.')",
+    "unknownErrorMessage(e, 'Failed to update acceptance criteria.')",
+  ]) {
+    assert.ok(evidenceCommandSource.includes(marker), marker);
+  }
+  for (const marker of [
+    'catch (e: any)',
+    'e?.message',
+  ]) {
+    assert.equal(evidenceCommandSource.includes(marker), false, marker);
+  }
+});
+
 test('ticket detail rendering uses typed tickets and evidence records', () => {
   const extensionSource = readSourceFixture('src', 'extension.ts');
   const evidenceData = readSourceFixture('src', 'services', 'evidenceData.ts');

@@ -1415,8 +1415,8 @@ export function activate(context: vscode.ExtensionContext) {
         addTicketEvidenceNote(ticketKey, { kind: evidenceKind, text: text.trim() });
         state.reloadAndNotify();
         vscode.window.showInformationMessage(`Added ${kind.label} evidence to ${ticketKey}.`);
-      } catch (e: any) {
-        vscode.window.showErrorMessage(e?.message || 'Failed to add ticket evidence.');
+      } catch (e: unknown) {
+        vscode.window.showErrorMessage(unknownErrorMessage(e, 'Failed to add ticket evidence.'));
       }
     }),
 
@@ -1494,8 +1494,8 @@ export function activate(context: vscode.ExtensionContext) {
         });
         state.reloadAndNotify();
         vscode.window.showInformationMessage(`Added ${result.label} evidence check to ${ticketKey}.`);
-      } catch (e: any) {
-        vscode.window.showErrorMessage(e?.message || 'Failed to add evidence check.');
+      } catch (e: unknown) {
+        vscode.window.showErrorMessage(unknownErrorMessage(e, 'Failed to add evidence check.'));
       }
     }),
 
@@ -1543,8 +1543,8 @@ export function activate(context: vscode.ExtensionContext) {
         });
         state.reloadAndNotify();
         vscode.window.showInformationMessage(`Recorded ${environment} ${status.label} result for ${ticketKey}.`);
-      } catch (e: any) {
-        vscode.window.showErrorMessage(e?.message || 'Failed to record environment result.');
+      } catch (e: unknown) {
+        vscode.window.showErrorMessage(unknownErrorMessage(e, 'Failed to record environment result.'));
       }
     }),
 
@@ -1579,8 +1579,8 @@ export function activate(context: vscode.ExtensionContext) {
         replaceTicketAcceptanceCriteria(ticketKey, extracted);
         state.reloadAndNotify();
         vscode.window.showInformationMessage(`Extracted ${extracted.length} acceptance criterion item(s) for ${ticketKey}.`);
-      } catch (e: any) {
-        vscode.window.showErrorMessage(e?.message || 'Failed to extract acceptance criteria.');
+      } catch (e: unknown) {
+        vscode.window.showErrorMessage(unknownErrorMessage(e, 'Failed to extract acceptance criteria.'));
       }
     }),
 
@@ -1621,8 +1621,8 @@ export function activate(context: vscode.ExtensionContext) {
         updateTicketAcceptanceCriteria(ticketKey, picked.map(item => item.criterionId));
         state.reloadAndNotify();
         vscode.window.showInformationMessage(`Updated ${picked.length}/${criteria.length} checked acceptance criterion item(s) for ${ticketKey}.`);
-      } catch (e: any) {
-        vscode.window.showErrorMessage(e?.message || 'Failed to update acceptance criteria.');
+      } catch (e: unknown) {
+        vscode.window.showErrorMessage(unknownErrorMessage(e, 'Failed to update acceptance criteria.'));
       }
     }),
 
