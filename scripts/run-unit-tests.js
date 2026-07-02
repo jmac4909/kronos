@@ -2533,6 +2533,10 @@ test('dispatcher records branch and permission metadata for persisted runs', () 
     'untrackActiveWorktree(worktreePath)',
     'Active worktree registry needs manual review before creating a worktree',
     'registryIssue: registry.issue',
+    "const failureDetail = unknownErrorMessage(e, 'Git worktree setup failed.')",
+    "vscode.window.showWarningMessage('Git worktree setup failed; run marked failed before launch.')",
+    "label: 'Git worktree setup failed'",
+    "failureKind: 'git'",
     "from '../services/sessionStore'",
     "type PostRunReadiness",
     'readiness?: PostRunReadiness',
@@ -2608,6 +2612,11 @@ test('dispatcher records branch and permission metadata for persisted runs', () 
     source.includes('const statusClass = escapeHtml(run.status)'),
     false,
     'run center CSS classes should use escapeClass, not escapeHtml',
+  );
+  assert.equal(
+    source.includes('Could not create worktree; running in main repo'),
+    false,
+    'worktree setup failures should fail the run instead of launching in the main repo',
   );
   assert.equal(
     source.includes('new Date(run.startedAt).toLocaleString()'),

@@ -23,6 +23,7 @@ Context: Windows 11 manual testing on VS Code 1.127.0.
 
 ## Current Handling
 
-- Bug 1 is prioritized as the first deterministic Windows validation blocker.
+- Bug 1 is fixed in the unit-test command mocks for Windows `gcloud.cmd`.
+- Bug 2 is fixed by failing and completing the persisted run when managed worktree setup fails before launch.
 - Bug 3 has an initial script-acquisition hardening in `webviewSecurity`; it still needs confirmation in VS Code 1.127.0 extension host DevTools on Windows 11.
-- Remaining bugs and feature suggestions are now part of the cleanup goal backlog.
+- Remaining bugs and feature suggestions are part of the cleanup goal backlog.

@@ -650,10 +650,25 @@ export async function dispatchClaudeSession(
         }),
       });
     } catch (e: unknown) {
-      vscode.window.showWarningMessage('Could not create worktree — running in main repo instead.');
-      const event = { type: 'error' as const, label: 'Could not create worktree; running in main repo', detail: unknownErrorMessage(e, ''), timestamp: new Date() };
+      const failureDetail = unknownErrorMessage(e, 'Git worktree setup failed.');
+      const failureReason = failureDetail === 'Git worktree setup failed.'
+        ? failureDetail
+        : `Git worktree setup failed: ${failureDetail}`;
+      vscode.window.showWarningMessage('Git worktree setup failed; run marked failed before launch.');
+      const event = { type: 'error' as const, label: 'Git worktree setup failed', detail: failureDetail, timestamp: new Date() };
       events.push(event);
       addRunEvent(run, event);
+      updateRun(run, {
+        status: 'failed',
+        endedAt: new Date().toISOString(),
+        exitCode: 1,
+        failureReason,
+        failureKind: 'git',
+      });
+      panel.webview.html = withWebviewCsp(buildProgressHtml(projectName, skill, ticket || '', events));
+      saveSession(projectName, skill, ticket || '', events);
+      if (opts.onComplete) { opts.onComplete(1, run); }
+      return;
     }
   }
 
