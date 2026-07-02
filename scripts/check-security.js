@@ -248,6 +248,11 @@ for (const marker of [
   "unknownErrorMessage(e, 'Failed to record environment result.')",
   "unknownErrorMessage(e, 'Failed to extract acceptance criteria.')",
   "unknownErrorMessage(e, 'Failed to update acceptance criteria.')",
+  "unknownErrorMessage(e, 'Failed to publish evidence.')",
+  "unknownErrorMessage(e, 'Failed to add to queue.')",
+  'unknownErrorMessage(e, `Failed to remove ${name}.`)',
+  "unknownErrorMessage(e, 'Could not resolve GitLab project ID.')",
+  "unknownErrorMessage(e, 'Could not resolve SonarQube project key.')",
   'kronos.humanReviewInbox',
   'openHumanReviewInbox',
   'const HUMAN_REVIEW_MESSAGE_COMMANDS = new Set',
@@ -405,6 +410,21 @@ for (const forbidden of [
 ]) {
   if (evidenceCommandSource.includes(forbidden)) {
     fail(`Evidence command handlers must normalize unknown errors instead of using ${forbidden}.`);
+  }
+}
+
+const publishProjectCommandStart = extension.indexOf("vscode.commands.registerCommand('kronos.publishEvidence'");
+const publishProjectCommandEnd = extension.indexOf('            const setupPrompt = `Set up project', publishProjectCommandStart);
+if (publishProjectCommandStart < 0 || publishProjectCommandEnd <= publishProjectCommandStart) {
+  fail('Missing publish/project command handler block.');
+}
+const publishProjectCommandSource = extension.slice(publishProjectCommandStart, publishProjectCommandEnd);
+for (const forbidden of [
+  'catch (e: any)',
+  'e?.message',
+]) {
+  if (publishProjectCommandSource.includes(forbidden)) {
+    fail(`Publish/project command handlers must normalize unknown errors instead of using ${forbidden}.`);
   }
 }
 

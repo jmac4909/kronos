@@ -4312,6 +4312,29 @@ test('extension evidence command handlers normalize unknown errors', () => {
   }
 });
 
+test('extension publish and project command handlers normalize unknown errors', () => {
+  const source = readSourceFixture('src', 'extension.ts');
+  const commandStart = source.indexOf("vscode.commands.registerCommand('kronos.publishEvidence'");
+  const commandEnd = source.indexOf('            const setupPrompt = `Set up project', commandStart);
+  assert.ok(commandStart >= 0 && commandEnd > commandStart, 'publish/project command handler block should be present');
+  const commandSource = source.slice(commandStart, commandEnd);
+  for (const marker of [
+    "unknownErrorMessage(e, 'Failed to publish evidence.')",
+    "unknownErrorMessage(e, 'Failed to add to queue.')",
+    'unknownErrorMessage(e, `Failed to remove ${name}.`)',
+    "unknownErrorMessage(e, 'Could not resolve GitLab project ID.')",
+    "unknownErrorMessage(e, 'Could not resolve SonarQube project key.')",
+  ]) {
+    assert.ok(commandSource.includes(marker), marker);
+  }
+  for (const marker of [
+    'catch (e: any)',
+    'e?.message',
+  ]) {
+    assert.equal(commandSource.includes(marker), false, marker);
+  }
+});
+
 test('ticket detail rendering uses typed tickets and evidence records', () => {
   const extensionSource = readSourceFixture('src', 'extension.ts');
   const evidenceData = readSourceFixture('src', 'services', 'evidenceData.ts');

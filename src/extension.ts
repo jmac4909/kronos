@@ -1737,8 +1737,8 @@ export function activate(context: vscode.ExtensionContext) {
         const posted = results.filter(result => result.status === 'posted').length;
         const failed = results.filter(result => result.status === 'failed').length;
         vscode.window.showInformationMessage(`Evidence publish complete for ${ticketKey}: ${posted} posted, ${failed} failed.`);
-      } catch (e: any) {
-        vscode.window.showErrorMessage(e?.message || 'Failed to publish evidence.');
+      } catch (e: unknown) {
+        vscode.window.showErrorMessage(unknownErrorMessage(e, 'Failed to publish evidence.'));
       }
     }),
 
@@ -1753,8 +1753,8 @@ export function activate(context: vscode.ExtensionContext) {
         } else if (data.added) {
           vscode.window.showInformationMessage(`Added ${ticketKey} to queue.`);
         }
-      } catch (e: any) {
-        vscode.window.showErrorMessage(e?.message || 'Failed to add to queue.');
+      } catch (e: unknown) {
+        vscode.window.showErrorMessage(unknownErrorMessage(e, 'Failed to add to queue.'));
       }
     }),
 
@@ -1783,8 +1783,8 @@ export function activate(context: vscode.ExtensionContext) {
         const result = removeProjectFromState(name);
         state.reloadAndNotify();
         vscode.window.showInformationMessage(`Removed ${name}. Unlinked ${result.ticketsUnlinked.length} ticket(s) and kept it in discovered repos.`);
-      } catch (e: any) {
-        vscode.window.showErrorMessage(e?.message || `Failed to remove ${name}.`);
+      } catch (e: unknown) {
+        vscode.window.showErrorMessage(unknownErrorMessage(e, `Failed to remove ${name}.`));
       }
     }),
 
@@ -1807,13 +1807,13 @@ export function activate(context: vscode.ExtensionContext) {
               const gitlabPath = originProjectPath(projectPath);
               try {
                 gitlabId = await gitlabAdapter.projectId(gitlabPath);
-              } catch (e: any) {
-                vscode.window.showWarningMessage(e?.message || 'Could not resolve GitLab project ID.');
+              } catch (e: unknown) {
+                vscode.window.showWarningMessage(unknownErrorMessage(e, 'Could not resolve GitLab project ID.'));
               }
               try {
                 sonarKey = await sonarAdapter.projectKey(projectName);
-              } catch (e: any) {
-                vscode.window.showWarningMessage(e?.message || 'Could not resolve SonarQube project key.');
+              } catch (e: unknown) {
+                vscode.window.showWarningMessage(unknownErrorMessage(e, 'Could not resolve SonarQube project key.'));
               }
             } catch {}
 
