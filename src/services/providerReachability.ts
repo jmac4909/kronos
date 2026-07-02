@@ -54,8 +54,8 @@ async function probeProvider(
       return { ...(await requestUrl(normalized.url, options.timeoutMs || DEFAULT_TIMEOUT_MS, 'GET', options)), name: target.name };
     }
     return { ...result, name: target.name };
-  } catch (e: any) {
-    return { name: target.name, status: 'fail', detail: e?.message || 'Reachability check failed.' };
+  } catch (e: unknown) {
+    return { name: target.name, status: 'fail', detail: unknownErrorMessage(e, 'Reachability check failed.') };
   }
 }
 
@@ -71,8 +71,8 @@ function normalizeReachabilityUrl(raw: string | undefined): { status: ProviderRe
       return { status: 'fail', detail: `Unsupported URL scheme: ${url.protocol.replace(':', '')}` };
     }
     return { status: 'pass', detail: '', url };
-  } catch (e: any) {
-    return { status: 'fail', detail: e?.message || 'Invalid provider URL.' };
+  } catch (e: unknown) {
+    return { status: 'fail', detail: unknownErrorMessage(e, 'Invalid provider URL.') };
   }
 }
 
@@ -115,6 +115,11 @@ function requestUrl(url: URL, timeoutMs: number, method: 'HEAD' | 'GET', options
 function safeUrlLabel(url: URL): string {
   const path = url.pathname && url.pathname !== '/' ? url.pathname : '';
   return `${url.protocol}//${url.host}${path}`;
+}
+
+function unknownErrorMessage(error: unknown, fallback: string): string {
+  const message = error && typeof error === 'object' ? Reflect.get(error, 'message') : undefined;
+  return typeof message === 'string' && message.trim() ? message : fallback;
 }
 
 export function systemCaCertificatesForHttps(): string[] | undefined {

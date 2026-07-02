@@ -3178,6 +3178,25 @@ test('provider reachability probes configured endpoints without secrets', async 
   }
 });
 
+test('provider reachability keeps request and URL errors unknown', () => {
+  const source = readSourceFixture('src', 'services', 'providerReachability.ts');
+  assert.equal((source.match(/catch \(e: unknown\)/g) || []).length, 2);
+  for (const marker of [
+    "unknownErrorMessage(e, 'Reachability check failed.')",
+    "unknownErrorMessage(e, 'Invalid provider URL.')",
+    'function unknownErrorMessage(error: unknown, fallback: string): string',
+    "Reflect.get(error, 'message')",
+  ]) {
+    assert.ok(source.includes(marker), marker);
+  }
+  for (const marker of [
+    'catch (e: any)',
+    'e?.message',
+  ]) {
+    assert.equal(source.includes(marker), false, marker);
+  }
+});
+
 test('doctor checks centralize command, credential, project config, and reachability inputs', () => {
   const state = baseState({
     'K-1': ticket({ summary: 'Doctor ticket' }),
