@@ -4936,10 +4936,13 @@ test('tree providers share action labels and icons', () => {
     'markVisibleReviewItemsSeen(): void',
     "this.description = `${isNew ? 'NEW · ' : ''}",
     "new vscode.ThemeIcon('circle-filled'",
+    "new vscode.ThemeIcon('git-pull-request', color)",
     'function isReviewTicket(ticket: Ticket): boolean',
+    "ticket.next_action === 'await_review' && ticket.mr.state === 'opened'",
   ]) {
     assert.ok(reviewTree.includes(marker), marker);
   }
+  assert.equal(reviewTree.includes("ticket.mr.state === 'merged'"), false, 'review tree should not keep merged MRs in the active review inbox');
   assert.ok(actionLabels.includes('export function actionToLabel'), 'action labels should live outside queue planning');
   assert.ok(queuePlanner.includes("export { actionToLabel } from './actionLabels'"), 'queuePlanner should keep a compatibility re-export');
   assert.equal(ticketTree.includes('function actionToLabel'), false, 'ticket tree should not duplicate action labels');

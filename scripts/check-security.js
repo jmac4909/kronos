@@ -1121,11 +1121,16 @@ for (const marker of [
   'markVisibleReviewItemsSeen(): void',
   "this.description = `${isNew ? 'NEW · ' : ''}",
   "new vscode.ThemeIcon('circle-filled'",
+  "new vscode.ThemeIcon('git-pull-request', color)",
   'function isReviewTicket(ticket: Ticket): boolean',
+  "ticket.next_action === 'await_review' && ticket.mr.state === 'opened'",
 ]) {
   if (!reviewTreeProvider.includes(marker)) {
     fail(`Missing review tree new-item marker: ${marker}`);
   }
+}
+if (reviewTreeProvider.includes("ticket.mr.state === 'merged'")) {
+  fail('Review tree should not keep merged MRs in the active review inbox');
 }
 
 for (const marker of [

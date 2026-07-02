@@ -123,28 +123,25 @@ class ReviewItem extends vscode.TreeItem {
     const reviewStatus = mr.review_status.replace(/_/g, ' ');
     const projs = ticket.projects?.join(', ') || 'unlinked';
 
-    const isMerged = mr.state === 'merged';
-    const statusLabel = isMerged ? 'merged' : reviewStatus;
-    this.description = `${isNew ? 'NEW · ' : ''}${projs} · MR !${mr.iid} · ${statusLabel}`;
+    this.description = `${isNew ? 'NEW · ' : ''}${projs} · MR !${mr.iid} · ${reviewStatus}`;
     this.label = `${ticketKey} — ${ticket.summary}`;
     this.tooltip = new vscode.MarkdownString(
       `**${ticketKey}**: ${ticket.summary}\n\n` +
       (isNew ? `New since you last opened the Review view.\n\n` : '') +
-      `Projects: ${projs}\n\nMR: !${mr.iid} — ${statusLabel}\n\n` +
-      (isMerged ? `_Merged to develop_` : `_Click to view diff_`)
+      `Projects: ${projs}\n\nMR: !${mr.iid} — ${reviewStatus}\n\n` +
+      `_Click to view diff_`
     );
     this.command = { command: 'kronos.openMrDiff', title: 'View Diff', arguments: [this] };
 
-    const color = isMerged ? new vscode.ThemeColor('testing.iconPassed')
-      : mr.review_status === 'approved' ? new vscode.ThemeColor('testing.iconPassed')
+    const color = mr.review_status === 'approved' ? new vscode.ThemeColor('testing.iconPassed')
       : mr.review_status === 'changes_requested' ? new vscode.ThemeColor('testing.iconFailed')
       : new vscode.ThemeColor('charts.yellow');
     this.iconPath = isNew
       ? new vscode.ThemeIcon('circle-filled', new vscode.ThemeColor('charts.yellow'))
-      : new vscode.ThemeIcon(isMerged ? 'git-merge' : 'git-pull-request', color);
+      : new vscode.ThemeIcon('git-pull-request', color);
   }
 }
 
 function isReviewTicket(ticket: Ticket): boolean {
-  return Boolean(ticket.mr && ticket.next_action !== 'done' && (ticket.next_action === 'await_review' || ticket.mr.state === 'merged'));
+  return Boolean(ticket.mr && ticket.next_action === 'await_review' && ticket.mr.state === 'opened');
 }
