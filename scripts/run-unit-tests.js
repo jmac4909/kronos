@@ -5260,9 +5260,24 @@ test('extension command handlers normalize remaining unknown errors', () => {
 
 test('extension Sonar commands normalize webview and issue payloads', () => {
   const source = readSourceFixture('src', 'extension.ts');
+  const sonarCommandStart = source.indexOf("vscode.commands.registerCommand('kronos.sonarScan'");
+  const sonarCommandEnd = source.indexOf("    vscode.commands.registerCommand('kronos.verifyTest'", sonarCommandStart);
+  assert.ok(sonarCommandStart >= 0 && sonarCommandEnd > sonarCommandStart, 'Sonar command handler block should be present');
+  const sonarCommandSource = source.slice(sonarCommandStart, sonarCommandEnd);
   for (const marker of [
     "import { buildSonarReport, type SonarIssue }",
     'function recordFromUnknown(value: unknown): Record<string, unknown>',
+    'function stringFromUnknown(value: unknown): string | undefined',
+    "vscode.commands.registerCommand('kronos.sonarScan', async (item: unknown)",
+    "vscode.commands.registerCommand('kronos.sonarReport', async (item: unknown)",
+    "vscode.commands.registerCommand('kronos.fixSonarIssues', async (item: unknown)",
+    "vscode.commands.registerCommand('kronos.fixFinding', async (args: unknown)",
+    "vscode.commands.registerCommand('kronos.verifyDevelop', async (item: unknown)",
+    'const branch = mode.value === \'new\' ? (stringFromUnknown(commandArg.branch) || baseBranch) : \'\';',
+    'const sourceBranch = stringFromUnknown(commandArg.sourceBranch) || \'\';',
+    'const projectName = resolveProjectName(state, args);',
+    'const projectPath = stringFromUnknown(commandArg.projectPath) || getProjectPath(state, projectName);',
+    'let projectName = resolveProjectName(state, item);',
     'panel.webview.onDidReceiveMessage(async (msg: unknown) =>',
     'function normalizeSonarIssueCommandList(value: unknown): SonarIssue[]',
     'function normalizeSonarIssueCommandValue(value: unknown): SonarIssue | null',
@@ -5277,8 +5292,17 @@ test('extension Sonar commands normalize webview and issue payloads', () => {
     'panel.webview.onDidReceiveMessage(async (msg: any)',
     'issuesData.map((iss: any)',
     'item?.sourceBranch ||',
+    "vscode.commands.registerCommand('kronos.sonarScan', async (item: any)",
+    "vscode.commands.registerCommand('kronos.sonarReport', async (item: any)",
+    "vscode.commands.registerCommand('kronos.fixSonarIssues', async (item: any)",
+    "vscode.commands.registerCommand('kronos.fixFinding', async (args: any)",
+    "vscode.commands.registerCommand('kronos.verifyDevelop', async (item: any)",
+    'item?.branch',
+    'args?.projectName',
+    'args?.projectPath',
+    'let projectName = item?.projectName;',
   ]) {
-    assert.equal(source.includes(marker), false, marker);
+    assert.equal(sonarCommandSource.includes(marker), false, marker);
   }
 });
 

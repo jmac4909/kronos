@@ -723,6 +723,11 @@ for (const forbidden of [
   "vscode.commands.registerCommand('kronos.queuePinTop', async (treeItem: any)",
   "vscode.commands.registerCommand('kronos.openMrDiff', async (treeItem: any)",
   "vscode.commands.registerCommand('kronos.verifyLocal', async (treeItem: any)",
+  "vscode.commands.registerCommand('kronos.sonarScan', async (item: any)",
+  "vscode.commands.registerCommand('kronos.sonarReport', async (item: any)",
+  "vscode.commands.registerCommand('kronos.fixSonarIssues', async (item: any)",
+  "vscode.commands.registerCommand('kronos.fixFinding', async (args: any)",
+  "vscode.commands.registerCommand('kronos.verifyDevelop', async (item: any)",
   "await startClaudeDispatch(projectPath, 'verify-fix', item?.ticketKey,",
   'if (item?.taskId)',
   'const projectPath = getProjectPath(state, item?.projectName);',
@@ -766,6 +771,11 @@ for (const marker of [
   "vscode.commands.registerCommand('kronos.queuePinTop', async (treeItem: unknown)",
   "vscode.commands.registerCommand('kronos.openMrDiff', async (treeItem: unknown)",
   "vscode.commands.registerCommand('kronos.verifyLocal', async (treeItem: unknown)",
+  "vscode.commands.registerCommand('kronos.sonarScan', async (item: unknown)",
+  "vscode.commands.registerCommand('kronos.sonarReport', async (item: unknown)",
+  "vscode.commands.registerCommand('kronos.fixSonarIssues', async (item: unknown)",
+  "vscode.commands.registerCommand('kronos.fixFinding', async (args: unknown)",
+  "vscode.commands.registerCommand('kronos.verifyDevelop', async (item: unknown)",
   'const queueData = resolveQueueCommandItem(treeItemOrData);',
   'const idx = resolveQueueIndex(treeItem);',
   'await startClaudeDispatch(projectPath, skill, queueData.ticket || undefined,',
@@ -773,6 +783,12 @@ for (const marker of [
   'function resolveQueueCommandItem(item: unknown): QueueCommandPayload | undefined',
   'function queueCommandPayloadFromRecord(record: Record<string, unknown>): QueueCommandPayload | undefined',
   'function resolveQueueIndex(item: unknown): number | undefined',
+  'function stringFromUnknown(value: unknown): string | undefined',
+  "const branch = mode.value === 'new' ? (stringFromUnknown(commandArg.branch) || baseBranch) : '';",
+  "const sourceBranch = stringFromUnknown(commandArg.sourceBranch) || '';",
+  'const projectName = resolveProjectName(state, args);',
+  'const projectPath = stringFromUnknown(commandArg.projectPath) || getProjectPath(state, projectName);',
+  'let projectName = resolveProjectName(state, item);',
   'function resolveTaskId(item: unknown): string | undefined',
 ]) {
   if (!extension.includes(marker)) {
@@ -796,6 +812,29 @@ for (const forbidden of [
 ]) {
   if (queueCommandSource.includes(forbidden)) {
     fail(`Queue command handlers must normalize payloads before use: ${forbidden}`);
+  }
+}
+
+const sonarCommandStart = extension.indexOf("vscode.commands.registerCommand('kronos.sonarScan'");
+const sonarCommandEnd = extension.indexOf("    vscode.commands.registerCommand('kronos.verifyTest'", sonarCommandStart);
+if (sonarCommandStart < 0 || sonarCommandEnd <= sonarCommandStart) {
+  fail('Missing Sonar command handler block.');
+}
+const sonarCommandSource = extension.slice(sonarCommandStart, sonarCommandEnd);
+for (const forbidden of [
+  "vscode.commands.registerCommand('kronos.sonarScan', async (item: any)",
+  "vscode.commands.registerCommand('kronos.sonarReport', async (item: any)",
+  "vscode.commands.registerCommand('kronos.fixSonarIssues', async (item: any)",
+  "vscode.commands.registerCommand('kronos.fixFinding', async (args: any)",
+  "vscode.commands.registerCommand('kronos.verifyDevelop', async (item: any)",
+  'item?.branch',
+  'args?.projectName',
+  'args?.projectPath',
+  'let projectName = item?.projectName;',
+  'item?.sourceBranch ||',
+]) {
+  if (sonarCommandSource.includes(forbidden)) {
+    fail(`Sonar command handlers must normalize payloads before use: ${forbidden}`);
   }
 }
 

@@ -95,6 +95,10 @@ function recordFromUnknown(value: unknown): Record<string, unknown> {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value)) ? value as Record<string, unknown> : {};
 }
 
+function stringFromUnknown(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
 function formatWebviewDateTime(value: unknown, fallback = 'N/A'): string {
   if (typeof value !== 'string' && typeof value !== 'number') { return fallback; }
   const date = new Date(value);
@@ -2244,7 +2248,7 @@ export function activate(context: vscode.ExtensionContext) {
       });
     }),
 
-    vscode.commands.registerCommand('kronos.sonarScan', async (item: any) => {
+    vscode.commands.registerCommand('kronos.sonarScan', async (item: unknown) => {
       const projectName = resolveProjectName(state, item);
       if (!projectName || !state.state) {
         vscode.window.showWarningMessage('No project found for scan.');
@@ -2265,7 +2269,8 @@ export function activate(context: vscode.ExtensionContext) {
       );
       if (!mode) { return; }
 
-      const branch = mode.value === 'new' ? (item?.branch || baseBranch) : '';
+      const commandArg = recordFromUnknown(item);
+      const branch = mode.value === 'new' ? (stringFromUnknown(commandArg.branch) || baseBranch) : '';
       const scanPrompt = loadPromptForDispatch(state, 'sonar-scan', { PROJECT_NAME: projectName, SONAR_KEY: sonarKey, BRANCH: branch }, projectPath);
 
       await startClaudeDispatch(projectPath, 'sonar-scan', undefined, {
@@ -2285,7 +2290,7 @@ export function activate(context: vscode.ExtensionContext) {
       });
     }),
 
-    vscode.commands.registerCommand('kronos.sonarReport', async (item: any) => {
+    vscode.commands.registerCommand('kronos.sonarReport', async (item: unknown) => {
       const projectName = resolveProjectName(state, item);
       if (!projectName || !state.state) {
         vscode.window.showWarningMessage('No project found.');
@@ -2348,7 +2353,7 @@ export function activate(context: vscode.ExtensionContext) {
       }
     }),
 
-    vscode.commands.registerCommand('kronos.fixSonarIssues', async (item: any) => {
+    vscode.commands.registerCommand('kronos.fixSonarIssues', async (item: unknown) => {
       const projectName = resolveProjectName(state, item);
       if (!projectName || !state.state) {
         vscode.window.showWarningMessage('No project found.');
@@ -2365,7 +2370,7 @@ export function activate(context: vscode.ExtensionContext) {
       if (customInstructions === undefined) { return; }
 
       const commandArg = recordFromUnknown(item);
-      const sourceBranch = typeof commandArg.sourceBranch === 'string' ? commandArg.sourceBranch : '';
+      const sourceBranch = stringFromUnknown(commandArg.sourceBranch) || '';
       const isProtected = !sourceBranch || sourceBranch === 'develop' || sourceBranch === 'main' || sourceBranch === 'master';
       const branchStrategy = isProtected
         ? `You are fixing issues from the ${sourceBranch || 'develop'} branch. Create a NEW branch: bugfix/sonar-${projectName.toLowerCase()} from ${sourceBranch || 'develop'}. After fixing and pushing, create a GitLab MR from your branch into ${sourceBranch || 'develop'} using: python ~/.claude/scripts/gitlab_api.py --create-mr`
@@ -2475,9 +2480,10 @@ export function activate(context: vscode.ExtensionContext) {
       }
     }),
 
-    vscode.commands.registerCommand('kronos.fixFinding', async (args: any) => {
-      const projectName = args?.projectName;
-      const projectPath = args?.projectPath || getProjectPath(state, projectName);
+    vscode.commands.registerCommand('kronos.fixFinding', async (args: unknown) => {
+      const projectName = resolveProjectName(state, args);
+      const commandArg = recordFromUnknown(args);
+      const projectPath = stringFromUnknown(commandArg.projectPath) || getProjectPath(state, projectName);
       if (!projectPath || !projectName) {
         vscode.window.showWarningMessage('No project specified.');
         return;
@@ -2516,8 +2522,8 @@ export function activate(context: vscode.ExtensionContext) {
       });
     }),
 
-    vscode.commands.registerCommand('kronos.verifyDevelop', async (item: any) => {
-      let projectName = item?.projectName;
+    vscode.commands.registerCommand('kronos.verifyDevelop', async (item: unknown) => {
+      let projectName = resolveProjectName(state, item);
       if (!projectName || !state.state) {
         const projects = Object.keys(state.state?.projects || {});
         if (projects.length === 1) { projectName = projects[0]; }
