@@ -1,5 +1,9 @@
 const fs = require('fs');
 
+function readSource(file) {
+  return fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n');
+}
+
 const files = [
   'src/extension.ts',
   'src/runners/sessionDispatcher.ts',
@@ -9,61 +13,61 @@ const files = [
   'src/views/TicketTreeProvider.ts',
 ];
 
-const sources = Object.fromEntries(files.map((file) => [file, fs.readFileSync(file, 'utf8')]));
+const sources = Object.fromEntries(files.map((file) => [file, readSource(file)]));
 const allSource = Object.values(sources).join('\n');
 const nonScriptClientSource = [
   sources['src/extension.ts'],
   sources['src/runners/sessionDispatcher.ts'],
   sources['src/state/KronosState.ts'],
 ].join('\n');
-const stateStore = fs.readFileSync('src/services/stateStore.ts', 'utf8');
-const runStore = fs.readFileSync('src/services/runStore.ts', 'utf8');
-const fileNames = fs.readFileSync('src/services/fileNames.ts', 'utf8');
-const sessionStore = fs.readFileSync('src/services/sessionStore.ts', 'utf8');
-const worktreeRegistry = fs.readFileSync('src/services/worktreeRegistry.ts', 'utf8');
+const stateStore = readSource('src/services/stateStore.ts');
+const runStore = readSource('src/services/runStore.ts');
+const fileNames = readSource('src/services/fileNames.ts');
+const sessionStore = readSource('src/services/sessionStore.ts');
+const worktreeRegistry = readSource('src/services/worktreeRegistry.ts');
 const dispatcher = sources['src/runners/sessionDispatcher.ts'];
 const scriptClient = sources['src/services/scriptClient.ts'];
-const acceptanceCriteria = fs.readFileSync('src/services/acceptanceCriteria.ts', 'utf8');
-const evidenceStore = fs.readFileSync('src/services/evidenceStore.ts', 'utf8');
-const evidenceData = fs.readFileSync('src/services/evidenceData.ts', 'utf8');
-const evidenceHandoff = fs.readFileSync('src/services/evidenceHandoff.ts', 'utf8');
-const evidencePublisher = fs.readFileSync('src/services/evidencePublisher.ts', 'utf8');
-const humanReviewInbox = fs.readFileSync('src/services/humanReviewInbox.ts', 'utf8');
-const recoveryCenter = fs.readFileSync('src/services/recoveryCenter.ts', 'utf8');
-const evidenceGate = fs.readFileSync('src/services/evidenceGate.ts', 'utf8');
-const evidenceGatePolicy = fs.readFileSync('src/services/evidenceGatePolicy.ts', 'utf8');
-const collisionDetector = fs.readFileSync('src/services/collisionDetector.ts', 'utf8');
-const queuePlanner = fs.readFileSync('src/services/queuePlanner.ts', 'utf8');
-const agentQualityScore = fs.readFileSync('src/services/agentQualityScore.ts', 'utf8');
-const integrationManifest = fs.readFileSync('src/services/integrationManifest.ts', 'utf8');
-const profileManager = fs.readFileSync('src/services/profileManager.ts', 'utf8');
-const agingAnalyzer = fs.readFileSync('src/services/agingAnalyzer.ts', 'utf8');
-const safetyGate = fs.readFileSync('src/services/safetyGate.ts', 'utf8');
-const trendMetrics = fs.readFileSync('src/services/trendMetrics.ts', 'utf8');
-const dashboardWorklist = fs.readFileSync('src/services/dashboardWorklist.ts', 'utf8');
-const ticketTimeline = fs.readFileSync('src/services/ticketTimeline.ts', 'utf8');
-const integrationAdapters = fs.readFileSync('src/services/integrationAdapters.ts', 'utf8');
-const postRunReadiness = fs.readFileSync('src/services/postRunReadiness.ts', 'utf8');
-const ticketFilters = fs.readFileSync('src/services/ticketFilters.ts', 'utf8');
-const promptManager = fs.readFileSync('src/services/promptManager.ts', 'utf8');
-const runRecovery = fs.readFileSync('src/services/runRecovery.ts', 'utf8');
-const providerReachability = fs.readFileSync('src/services/providerReachability.ts', 'utf8');
-const ticketMutations = fs.readFileSync('src/services/ticketMutations.ts', 'utf8');
-const queueMutations = fs.readFileSync('src/services/queueMutations.ts', 'utf8');
-const projectMutations = fs.readFileSync('src/services/projectMutations.ts', 'utf8');
-const doctorChecks = fs.readFileSync('src/services/doctorChecks.ts', 'utf8');
-const stateScriptAdapter = fs.readFileSync('src/services/stateScriptAdapter.ts', 'utf8');
-const nextActionContext = fs.readFileSync('src/services/nextActionContext.ts', 'utf8');
-const gitWorkspace = fs.readFileSync('src/services/gitWorkspace.ts', 'utf8');
-const processTree = fs.readFileSync('src/services/processTree.ts', 'utf8');
-const webviewSecurity = fs.readFileSync('src/services/webviewSecurity.ts', 'utf8');
-const cliProbes = fs.readFileSync('src/services/cliProbes.ts', 'utf8');
-const combinedVerification = fs.readFileSync('src/services/combinedVerification.ts', 'utf8');
-const changedFiles = fs.readFileSync('src/services/changedFiles.ts', 'utf8');
-const sonarReportView = fs.readFileSync('src/services/sonarReportView.ts', 'utf8');
-const agingReportView = fs.readFileSync('src/services/agingReportView.ts', 'utf8');
-const webviewHtml = fs.readFileSync('src/services/webviewHtml.ts', 'utf8');
-const vscodeIgnore = fs.readFileSync('.vscodeignore', 'utf8');
+const acceptanceCriteria = readSource('src/services/acceptanceCriteria.ts');
+const evidenceStore = readSource('src/services/evidenceStore.ts');
+const evidenceData = readSource('src/services/evidenceData.ts');
+const evidenceHandoff = readSource('src/services/evidenceHandoff.ts');
+const evidencePublisher = readSource('src/services/evidencePublisher.ts');
+const humanReviewInbox = readSource('src/services/humanReviewInbox.ts');
+const recoveryCenter = readSource('src/services/recoveryCenter.ts');
+const evidenceGate = readSource('src/services/evidenceGate.ts');
+const evidenceGatePolicy = readSource('src/services/evidenceGatePolicy.ts');
+const collisionDetector = readSource('src/services/collisionDetector.ts');
+const queuePlanner = readSource('src/services/queuePlanner.ts');
+const agentQualityScore = readSource('src/services/agentQualityScore.ts');
+const integrationManifest = readSource('src/services/integrationManifest.ts');
+const profileManager = readSource('src/services/profileManager.ts');
+const agingAnalyzer = readSource('src/services/agingAnalyzer.ts');
+const safetyGate = readSource('src/services/safetyGate.ts');
+const trendMetrics = readSource('src/services/trendMetrics.ts');
+const dashboardWorklist = readSource('src/services/dashboardWorklist.ts');
+const ticketTimeline = readSource('src/services/ticketTimeline.ts');
+const integrationAdapters = readSource('src/services/integrationAdapters.ts');
+const postRunReadiness = readSource('src/services/postRunReadiness.ts');
+const ticketFilters = readSource('src/services/ticketFilters.ts');
+const promptManager = readSource('src/services/promptManager.ts');
+const runRecovery = readSource('src/services/runRecovery.ts');
+const providerReachability = readSource('src/services/providerReachability.ts');
+const ticketMutations = readSource('src/services/ticketMutations.ts');
+const queueMutations = readSource('src/services/queueMutations.ts');
+const projectMutations = readSource('src/services/projectMutations.ts');
+const doctorChecks = readSource('src/services/doctorChecks.ts');
+const stateScriptAdapter = readSource('src/services/stateScriptAdapter.ts');
+const nextActionContext = readSource('src/services/nextActionContext.ts');
+const gitWorkspace = readSource('src/services/gitWorkspace.ts');
+const processTree = readSource('src/services/processTree.ts');
+const webviewSecurity = readSource('src/services/webviewSecurity.ts');
+const cliProbes = readSource('src/services/cliProbes.ts');
+const combinedVerification = readSource('src/services/combinedVerification.ts');
+const changedFiles = readSource('src/services/changedFiles.ts');
+const sonarReportView = readSource('src/services/sonarReportView.ts');
+const agingReportView = readSource('src/services/agingReportView.ts');
+const webviewHtml = readSource('src/services/webviewHtml.ts');
+const vscodeIgnore = readSource('.vscodeignore');
 const extension = sources['src/extension.ts'];
 
 function fail(message) {

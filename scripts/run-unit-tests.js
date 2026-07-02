@@ -9,6 +9,10 @@ const test = require('node:test');
 process.env.KRONOS_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'kronos-home-'));
 process.env.KRONOS_SCRIPTS_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'kronos-scripts-'));
 
+function readSourceFixture(...segments) {
+  return fs.readFileSync(path.join(__dirname, '..', ...segments), 'utf8').replace(/\r\n/g, '\n');
+}
+
 const promptManager = require('../out/services/promptManager.js');
 const stateStore = require('../out/services/stateStore.js');
 const queuePlanner = require('../out/services/queuePlanner.js');
@@ -2054,7 +2058,7 @@ test('run store surfaces invalid records and blocks strict mutations', () => {
 });
 
 test('dispatcher records branch and permission metadata for persisted runs', () => {
-  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'runners', 'sessionDispatcher.ts'), 'utf8');
+  const source = readSourceFixture('src', 'runners', 'sessionDispatcher.ts');
   for (const marker of [
     'branch?: RunBranchMetadata',
     'permissions?: RunPermissionMetadata',
@@ -3450,7 +3454,7 @@ test('webview html helpers centralize escaping and safe HTTP links', () => {
 });
 
 test('extension webviews use shared UI shell and board filtering affordances', () => {
-  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'extension.ts'), 'utf8');
+  const source = readSourceFixture('src', 'extension.ts');
   for (const marker of [
     'kronosWebviewBaseCss',
     'class="kronos-shell dashboard-shell"',
