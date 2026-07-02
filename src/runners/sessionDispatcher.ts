@@ -1098,6 +1098,8 @@ document.addEventListener('click', function(event) {
 }
 
 function buildRunCenterHtml(runs: KronosRun[], nonce?: string): string {
+  const interactive = Boolean(nonce);
+  const actionHeader = interactive ? '<th>Actions</th>' : '';
   const rows = runs.map(run => {
     const status = stringOrDefault(run.status, 'unknown');
     const statusClass = escapeClass(status);
@@ -1123,6 +1125,7 @@ function buildRunCenterHtml(runs: KronosRun[], nonce?: string): string {
     const branchSummary = branch?.currentRef
       ? `ref ${String(branch.currentRef)}${branch.currentCommit ? ` @ ${String(branch.currentCommit).substring(0, 12)}` : ''}`
       : '';
+    const actionCell = interactive ? `<td class="action-cell">${runCenterActionButtons(run)}</td>` : '';
     return `<tr class="${statusClass}">
       <td><span class="kronos-pill status ${statusClass}">${escapeHtml(status)}</span></td>
       <td><strong>${escapeHtml(stringOrDefault(run.project, 'unknown project'))}</strong><br><span>${escapeHtml(stringOrDefault(run.skill, 'unknown skill'))} ${escapeHtml(stringOrDefault(run.ticket, ''))}</span></td>
@@ -1131,15 +1134,21 @@ function buildRunCenterHtml(runs: KronosRun[], nonce?: string): string {
       <td><span class="kronos-pill readiness ${escapeClass(readinessStatus)}">${escapeHtml(readinessStatus)}</span><br><span>${escapeHtml(readinessSummary)}</span></td>
       <td class="workspace-cell">${escapeHtml(stringOrDefault(run.worktreePath || run.cwd, 'unknown workspace'))}${branchSummary ? `<br><span>${escapeHtml(branchSummary)}</span>` : ''}</td>
       <td>${lastEvent ? escapeHtml(stringOrDefault(lastEvent.label, '')) : ''}${run.failureReason ? `<br><span class="failure">${escapeHtml(run.failureReason)}</span>` : ''}</td>
-      <td class="action-cell">${runCenterActionButtons(run)}</td>
+      ${actionCell}
     </tr>`;
   }).join('');
+  const actionStyles = interactive ? `
+  .action-cell { min-width: 210px; }
+  .run-actions { display: flex; flex-wrap: wrap; gap: 5px; align-items: flex-start; }
+  .run-action { min-height: 24px; padding: 3px 8px; border: 1px solid var(--k-border); border-radius: var(--k-radius-sm); background: var(--k-surface); color: var(--k-fg); font: inherit; font-size: 10px; font-weight: 600; cursor: pointer; }
+  .run-action:hover { background: var(--vscode-list-hoverBackground); }
+  .run-action.primary { background: var(--vscode-button-background); color: var(--vscode-button-foreground); border-color: transparent; }` : '';
 
   return `<!DOCTYPE html>
 <html><head><style>
   ${kronosWebviewBaseCss()}
   .run-table-wrap { overflow: auto; }
-  .kronos-table { min-width: 1080px; }
+  .kronos-table { min-width: ${interactive ? '1080' : '860'}px; }
   td span:not(.kronos-pill), .muted { color: var(--k-muted); }
   .readiness.ready { background: rgba(76,175,80,0.18); color: #4caf50; }
   .readiness.needs_human, .readiness.not_ready, .readiness.unknown { background: rgba(255,152,0,0.18); color: #ff9800; }
@@ -1150,11 +1159,7 @@ function buildRunCenterHtml(runs: KronosRun[], nonce?: string): string {
   .failed, .cancelled, .needs_human { background: rgba(244,67,54,0.18); color: #f44336; }
   .failure { color: #f44336; opacity: 1; }
   .workspace-cell { overflow-wrap: anywhere; }
-  .action-cell { min-width: 210px; }
-  .run-actions { display: flex; flex-wrap: wrap; gap: 5px; align-items: flex-start; }
-  .run-action { min-height: 24px; padding: 3px 8px; border: 1px solid var(--k-border); border-radius: var(--k-radius-sm); background: var(--k-surface); color: var(--k-fg); font: inherit; font-size: 10px; font-weight: 600; cursor: pointer; }
-  .run-action:hover { background: var(--vscode-list-hoverBackground); }
-  .run-action.primary { background: var(--vscode-button-background); color: var(--vscode-button-foreground); border-color: transparent; }
+  ${actionStyles}
 </style></head><body><div class="kronos-shell">
   <div class="kronos-header">
     <div>
@@ -1163,7 +1168,7 @@ function buildRunCenterHtml(runs: KronosRun[], nonce?: string): string {
     </div>
   </div>
   ${runs.length === 0 ? '<div class="kronos-empty">No persisted runs yet.</div>' : `<div class="run-table-wrap kronos-panel"><table class="kronos-table">
-    <tr><th>Status</th><th>Run</th><th>Time</th><th>Model</th><th>Readiness</th><th>Workspace</th><th>Last event</th><th>Actions</th></tr>
+    <tr><th>Status</th><th>Run</th><th>Time</th><th>Model</th><th>Readiness</th><th>Workspace</th><th>Last event</th>${actionHeader}</tr>
     ${rows}
   </table></div>`}
 </div>${nonce ? runCenterScript(nonce) : ''}</body></html>`;

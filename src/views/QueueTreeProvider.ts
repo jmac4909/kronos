@@ -75,7 +75,7 @@ export class QueueTreeItem extends vscode.TreeItem {
 function actionIcon(action: string): { id: string; color?: vscode.ThemeColor } | undefined {
   switch (action) {
     case 'implement': return { id: 'play-circle', color: new vscode.ThemeColor('charts.green') };
-    case 'in_progress': return { id: 'wrench', color: new vscode.ThemeColor('charts.blue') };
+    case 'in_progress': return { id: 'tools', color: new vscode.ThemeColor('charts.blue') };
     case 'deploy_monitor': return { id: 'rocket', color: new vscode.ThemeColor('charts.blue') };
     case 'verify': return { id: 'beaker', color: new vscode.ThemeColor('charts.purple') };
     case 'fix_build': return { id: 'flame', color: new vscode.ThemeColor('testing.iconFailed') };

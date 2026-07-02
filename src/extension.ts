@@ -232,12 +232,11 @@ const OPERATOR_COMMAND_MESSAGE_COMMANDS = new Set([
   'recoveryCenter',
   'stateAuditLog',
 ]);
-const TICKET_OPERATOR_COMMANDS = new Set([
+const TICKET_SCOPED_OPERATOR_COMMANDS = new Set([
   'addEvidence',
   'addEvidenceCheck',
   'recordEnvironmentResult',
   'viewTicket',
-  'evidenceGate',
   'exportEvidence',
   'evidenceHandoff',
   'publishEvidence',
@@ -2756,7 +2755,7 @@ export function activate(context: vscode.ExtensionContext) {
       }
       const panel = vscode.window.createWebviewPanel('kronosStats', 'Kronos: Session Stats', vscode.ViewColumn.One, { enableScripts: true });
       const nonce = createNonce();
-      attachOperatorCommandHandler(panel, nonce);
+      attachOperatorCommandHandler(panel);
       const esc = escapeHtml;
 
       const totalSessions = sessions.length;
@@ -3221,7 +3220,7 @@ function openPromptManager(state: KronosState): void {
   );
   const nonce = createNonce();
   panel.webview.html = withWebviewCsp(buildPromptManagerHtml(globalTemplates, projectOverrides, smokeResults, nonce), { allowScripts: true, nonce });
-  attachOperatorCommandHandler(panel, nonce);
+  attachOperatorCommandHandler(panel);
 }
 
 function buildPromptManagerHtml(
@@ -3307,7 +3306,7 @@ function openPromptSmokeTestsPanel(state: KronosState): void {
   );
   const nonce = createNonce();
   panel.webview.html = withWebviewCsp(buildPromptSmokeTestsHtml(results, nonce), { allowScripts: true, nonce });
-  attachOperatorCommandHandler(panel, nonce);
+  attachOperatorCommandHandler(panel);
 }
 
 function snapshotPromptPack(state: KronosState): void {
@@ -3333,7 +3332,7 @@ function openPromptHistoryPanel(): void {
   );
   const nonce = createNonce();
   panel.webview.html = withWebviewCsp(buildPromptHistoryHtml(snapshots, diff, nonce), { allowScripts: true, nonce });
-  attachOperatorCommandHandler(panel, nonce);
+  attachOperatorCommandHandler(panel);
 }
 
 async function repairPromptPack(state: KronosState): Promise<void> {
@@ -3377,7 +3376,7 @@ function openPromptHistoryDiffPanel(diff: PromptHistoryDiff): void {
   );
   const nonce = createNonce();
   panel.webview.html = withWebviewCsp(buildPromptHistoryHtml(listPromptHistorySnapshots(25), diff, nonce), { allowScripts: true, nonce });
-  attachOperatorCommandHandler(panel, nonce);
+  attachOperatorCommandHandler(panel);
 }
 
 function buildPromptHistoryHtml(snapshots: PromptHistorySnapshot[], diff?: PromptHistoryDiff, nonce?: string): string {
@@ -3523,17 +3522,9 @@ function promptTemplateRow(template: PromptTemplateInfo): string {
 async function openRecoveryCenter(state: KronosState): Promise<void> {
   const backups = listBackups();
   const inventory = buildRecoveryInventoryForState(state, backups);
-  openRecoveryPanel(inventory, state, backups);
+  openRecoveryPanel(state, inventory, backups);
 
-  const actions = inventory.items
-    .filter(item => item.action)
-    .map(item => ({
-      label: `${recoverySeverityIcon(item.severity)} ${item.title}`,
-      description: item.actionLabel || recoveryActionLabel(item.action),
-      detail: item.detail,
-      item,
-    }));
-  if (actions.length === 0) {
+  if (!inventory.items.some(item => item.action)) {
     vscode.window.showInformationMessage('Recovery Center found no active recovery items.');
   }
 }
@@ -3549,7 +3540,7 @@ function buildRecoveryInventoryForState(state: KronosState, backups = listBackup
   });
 }
 
-function openRecoveryPanel(inventory: RecoveryInventory, state: KronosState, initialBackups = listBackups()): void {
+function openRecoveryPanel(state: KronosState, initialInventory: RecoveryInventory, initialBackups = listBackups()): void {
   const panel = vscode.window.createWebviewPanel(
     'kronosRecoveryCenter',
     'Kronos Recovery Center',
@@ -3557,11 +3548,13 @@ function openRecoveryPanel(inventory: RecoveryInventory, state: KronosState, ini
     { enableScripts: true }
   );
   const nonce = createNonce();
-  let currentInventory = inventory;
+  let currentInventory = initialInventory;
   let currentBackups = initialBackups;
-  const render = () => {
-    currentBackups = listBackups();
-    currentInventory = buildRecoveryInventoryForState(state, currentBackups);
+  const render = (refresh = false) => {
+    if (refresh) {
+      currentBackups = listBackups();
+      currentInventory = buildRecoveryInventoryForState(state, currentBackups);
+    }
     panel.webview.html = withWebviewCsp(buildRecoveryHtml(currentInventory, nonce), { allowScripts: true, nonce });
   };
   render();
@@ -3577,7 +3570,7 @@ function openRecoveryPanel(inventory: RecoveryInventory, state: KronosState, ini
       return;
     }
     await executeRecoveryAction(item, state, currentBackups);
-    render();
+    render(true);
   });
 }
 
@@ -3591,7 +3584,7 @@ function openStateAuditLogPanel(): void {
   );
   const nonce = createNonce();
   panel.webview.html = withWebviewCsp(buildStateAuditLogHtml(events, nonce), { allowScripts: true, nonce });
-  attachOperatorCommandHandler(panel, nonce);
+  attachOperatorCommandHandler(panel);
 }
 
 function buildStateAuditLogHtml(events: StateAuditEvent[], nonce?: string): string {
@@ -3757,12 +3750,6 @@ function recoveryActionLabel(action: RecoveryItem['action']): string {
   if (action === 'restoreBackup') { return 'Restore Backup'; }
   if (action === 'openDoctor') { return 'Open Doctor'; }
   return '';
-}
-
-function recoverySeverityIcon(severity: RecoveryItem['severity']): string {
-  if (severity === 'critical') { return '$(error)'; }
-  if (severity === 'warning') { return '$(warning)'; }
-  return '$(info)';
 }
 
 function kronosOperatorPanelCss(): string {
@@ -4052,7 +4039,7 @@ function openEvidenceHandoffPanel(plan: EvidenceHandoffPlan): void {
   );
   const nonce = createNonce();
   panel.webview.html = withWebviewCsp(buildEvidenceHandoffHtml(plan, nonce), { allowScripts: true, nonce });
-  attachOperatorCommandHandler(panel, nonce);
+  attachOperatorCommandHandler(panel);
 }
 
 function buildEvidenceHandoffHtml(plan: EvidenceHandoffPlan, nonce?: string): string {
@@ -4101,7 +4088,7 @@ function openEvidencePublishPanel(results: Array<EvidencePublishResult | Evidenc
   );
   const nonce = createNonce();
   panel.webview.html = withWebviewCsp(buildEvidencePublishHtml(results, ticketKey, nonce), { allowScripts: true, nonce });
-  attachOperatorCommandHandler(panel, nonce);
+  attachOperatorCommandHandler(panel);
 }
 
 function buildEvidencePublishHtml(results: Array<EvidencePublishResult | EvidencePublishDestination>, ticketKey: string, nonce?: string): string {
@@ -4242,14 +4229,22 @@ function operatorCommandRow(buttons: string[]): string {
 }
 
 async function executeOperatorCommandAction(command: string, ticketKey = ''): Promise<void> {
-  if (TICKET_OPERATOR_COMMANDS.has(command) && ticketKey) {
+  if (TICKET_SCOPED_OPERATOR_COMMANDS.has(command)) {
+    if (!ticketKey) {
+      vscode.window.showWarningMessage('This Kronos action needs a ticket context.');
+      return;
+    }
+    await vscode.commands.executeCommand(`kronos.${command}`, { ticketKey });
+    return;
+  }
+  if (command === 'evidenceGate' && ticketKey) {
     await vscode.commands.executeCommand(`kronos.${command}`, { ticketKey });
     return;
   }
   await vscode.commands.executeCommand(`kronos.${command}`);
 }
 
-function attachOperatorCommandHandler(panel: vscode.WebviewPanel, nonce: string): void {
+function attachOperatorCommandHandler(panel: vscode.WebviewPanel): void {
   panel.webview.onDidReceiveMessage(async msg => {
     const request = normalizeActionPanelMessage(msg, OPERATOR_COMMAND_MESSAGE_COMMANDS);
     if (!request) {
@@ -4838,7 +4833,7 @@ function openAgentQualityScorePanel(state: KronosState): void {
   );
   const nonce = createNonce();
   panel.webview.html = withWebviewCsp(buildAgentQualityScoreHtml(score, nonce), { allowScripts: true, nonce });
-  attachOperatorCommandHandler(panel, nonce);
+  attachOperatorCommandHandler(panel);
 }
 
 function buildAgentQualityScoreHtml(score: AgentQualityScore, nonce?: string): string {
@@ -4889,7 +4884,7 @@ function openTrendMetricsPanel(state: KronosState): void {
   );
   const nonce = createNonce();
   panel.webview.html = withWebviewCsp(buildTrendMetricsHtml(report, nonce), { allowScripts: true, nonce });
-  attachOperatorCommandHandler(panel, nonce);
+  attachOperatorCommandHandler(panel);
 }
 
 function buildTrendMetricsHtml(report: TrendMetricsReport, nonce?: string): string {
@@ -4955,7 +4950,7 @@ function openAgingReportPanel(state: KronosState): void {
     ]),
     scriptHtml: kronosActionPanelScript(nonce),
   }), { allowScripts: true, nonce });
-  attachOperatorCommandHandler(panel, nonce);
+  attachOperatorCommandHandler(panel);
 }
 
 function openIntegrationManifestPanel(): void {
@@ -4969,7 +4964,7 @@ function openIntegrationManifestPanel(): void {
   );
   const nonce = createNonce();
   panel.webview.html = withWebviewCsp(buildIntegrationManifestHtml(status, audit, nonce), { allowScripts: true, nonce });
-  attachOperatorCommandHandler(panel, nonce);
+  attachOperatorCommandHandler(panel);
 }
 
 async function snapshotIntegrationManifest(): Promise<void> {
@@ -5089,7 +5084,7 @@ function openProfilesPanel(): void {
   );
   const nonce = createNonce();
   panel.webview.html = withWebviewCsp(buildProfilesHtml(active, nonce), { allowScripts: true, nonce });
-  attachOperatorCommandHandler(panel, nonce);
+  attachOperatorCommandHandler(panel);
 }
 
 function buildProfilesHtml(active: KronosProfile, nonce?: string): string {
@@ -5137,7 +5132,7 @@ function openDoctorPanel(state: KronosState): void {
     { enableScripts: true }
   );
   const nonce = createNonce();
-  attachOperatorCommandHandler(panel, nonce);
+  attachOperatorCommandHandler(panel);
   const pendingCheck: DoctorCheck = {
     name: 'Provider network reachability',
     status: 'warn',
@@ -5430,7 +5425,7 @@ async function confirmDispatchCollisions(state: KronosState, target: {
     'Cancel'
   );
   if (action === 'Open Run Center') {
-    openRunCenter();
+    openInteractiveRunCenter(state);
     return false;
   }
   return action === 'Start Anyway';

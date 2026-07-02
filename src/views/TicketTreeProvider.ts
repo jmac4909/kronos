@@ -3,7 +3,7 @@ import { KronosState } from '../state/KronosState';
 import { Ticket } from '../state/types';
 import { TicketFilter, TicketGroupBy, describeTicketFilter, filterTickets, groupTicketEntries, hasTicketFilter } from '../services/ticketFilters';
 
-type TicketElement = TicketGroupItem | TicketItem | TicketDetailItem;
+type TicketElement = TicketGroupItem | TicketItem | TicketDetailItem | EmptyTicketItem;
 
 export class TicketTreeProvider implements vscode.TreeDataProvider<TicketElement> {
   private _onDidChangeTreeData = new vscode.EventEmitter<TicketElement | undefined>();
@@ -40,9 +40,7 @@ export class TicketTreeProvider implements vscode.TreeDataProvider<TicketElement
     if (!element) {
       const tickets = state.tickets || {};
       if (Object.keys(tickets).length === 0) {
-        const empty = new vscode.TreeItem('No tickets — run Refresh') as any;
-        empty.iconPath = new vscode.ThemeIcon('info');
-        return [empty];
+        return [new EmptyTicketItem('No tickets — run Refresh', 'info')];
       }
 
       const sorted = filterTickets(Object.entries(tickets), this.filter).sort((a, b) => {
@@ -51,9 +49,7 @@ export class TicketTreeProvider implements vscode.TreeDataProvider<TicketElement
       });
 
       if (sorted.length === 0 && hasTicketFilter(this.filter)) {
-        const empty = new vscode.TreeItem(`No tickets match ${describeTicketFilter(this.filter)}`) as any;
-        empty.iconPath = new vscode.ThemeIcon('filter');
-        return [empty];
+        return [new EmptyTicketItem(`No tickets match ${describeTicketFilter(this.filter)}`, 'filter')];
       }
 
       if (this.groupBy !== 'none') {
@@ -138,6 +134,13 @@ class TicketGroupItem extends vscode.TreeItem {
   }
 }
 
+class EmptyTicketItem extends vscode.TreeItem {
+  constructor(label: string, icon: string) {
+    super(label, vscode.TreeItemCollapsibleState.None);
+    this.iconPath = new vscode.ThemeIcon(icon);
+  }
+}
+
 class TicketItem extends vscode.TreeItem {
   constructor(
     public readonly ticketKey: string,
@@ -211,7 +214,7 @@ class TicketDetailItem extends vscode.TreeItem {
 function actionIcon(action: string): { icon: string; color: vscode.ThemeColor } {
   switch (action) {
     case 'implement': return { icon: 'circle-outline', color: new vscode.ThemeColor('disabledForeground') };
-    case 'in_progress': return { icon: 'wrench', color: new vscode.ThemeColor('charts.blue') };
+    case 'in_progress': return { icon: 'tools', color: new vscode.ThemeColor('charts.blue') };
     case 'await_review': return { icon: 'git-pull-request', color: new vscode.ThemeColor('charts.yellow') };
     case 'deploy_monitor': return { icon: 'rocket', color: new vscode.ThemeColor('charts.blue') };
     case 'fix_build': return { icon: 'flame', color: new vscode.ThemeColor('testing.iconFailed') };
@@ -236,7 +239,7 @@ function actionToLabel(action: string): string {
   }
 }
 
-function evidenceItemCount(ticket: any): number {
+function evidenceItemCount(ticket: Ticket): number {
   const notes = Array.isArray(ticket.evidence?.notes) ? ticket.evidence.notes.length : 0;
   const checks = Array.isArray(ticket.evidence?.checks) ? ticket.evidence.checks.length : 0;
   const environments = ticket.evidence?.environment_results && typeof ticket.evidence.environment_results === 'object'
