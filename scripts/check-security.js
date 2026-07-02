@@ -153,8 +153,8 @@ for (const requiredIgnore of ['.git/**', '.claude/**', 'node_modules/**', 'scrip
 }
 
 const enableScriptsTrue = [...extension.matchAll(/enableScripts:\s*true/g)].length;
-if (enableScriptsTrue !== 2) {
-  fail(`Expected exactly 2 script-enabled webviews, found ${enableScriptsTrue}.`);
+if (enableScriptsTrue !== 4) {
+  fail(`Expected exactly 4 script-enabled webviews, found ${enableScriptsTrue}.`);
 }
 for (const [file, source] of Object.entries({ 'src/extension.ts': extension, 'src/runners/sessionDispatcher.ts': dispatcher })) {
   for (const [idx, line] of source.split(/\r?\n/).entries()) {
@@ -243,8 +243,15 @@ for (const marker of [
   'updateTicketAcceptanceCriteria',
   'kronos.humanReviewInbox',
   'openHumanReviewInbox',
+  'const HUMAN_REVIEW_MESSAGE_COMMANDS = new Set',
+  'function humanReviewActionButtons',
+  "actionButton('startTicket', 'Start'",
   'kronos.evidenceGate',
   'openEvidenceGatePanel',
+  'const EVIDENCE_GATE_MESSAGE_COMMANDS = new Set',
+  'function evidenceGateActionButtons',
+  "actionButton('extractAcceptanceCriteria', 'Extract AC'",
+  'function kronosActionPanelScript',
   'kronos.evidenceHandoff',
   'openEvidenceHandoffPanel',
   'Kronos did not call a posting API',

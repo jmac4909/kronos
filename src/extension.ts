@@ -131,6 +131,31 @@ const BOARD_MESSAGE_COMMANDS = new Set([
   'evidenceHandoff',
   'publishEvidence',
 ]);
+const EVIDENCE_GATE_MESSAGE_COMMANDS = new Set([
+  'addEvidence',
+  'addEvidenceCheck',
+  'recordEnvironmentResult',
+  'extractAcceptanceCriteria',
+  'updateAcceptanceCriteria',
+  'viewTicket',
+  'evidenceHandoff',
+  'publishEvidence',
+]);
+const HUMAN_REVIEW_MESSAGE_COMMANDS = new Set([
+  'addEvidence',
+  'addEvidenceCheck',
+  'recordEnvironmentResult',
+  'extractAcceptanceCriteria',
+  'updateAcceptanceCriteria',
+  'startTicket',
+  'addToQueue',
+  'viewTicket',
+  'openEvidenceGate',
+  'openRunCenter',
+  'openRecoveryCenter',
+  'openDoctor',
+  'queuePlanner',
+]);
 
 function normalizeWebviewCommand(raw: unknown, allowed: Set<string>): string | null {
   if (!raw || typeof raw !== 'object') { return null; }
@@ -147,6 +172,17 @@ function normalizeBoardMessage(raw: unknown): { command: string; ticket: string;
     command,
     ticket: typeof message.ticket === 'string' ? message.ticket : '',
     project: typeof message.project === 'string' ? message.project : '',
+  };
+}
+
+function normalizeActionPanelMessage(raw: unknown, allowed: Set<string>): { command: string; ticket: string; runId: string } | null {
+  const command = normalizeWebviewCommand(raw, allowed);
+  if (!command || !raw || typeof raw !== 'object') { return null; }
+  const message = raw as { ticket?: unknown; runId?: unknown };
+  return {
+    command,
+    ticket: typeof message.ticket === 'string' ? message.ticket : '',
+    runId: typeof message.runId === 'string' ? message.runId : '',
   };
 }
 
@@ -1403,7 +1439,7 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('kronos.evidenceGate', async (treeItem: any) => {
       const ticketKey = resolveTicketKey(treeItem);
       if (ticketKey && state.state?.tickets?.[ticketKey]) {
-        openEvidenceGatePanel([evaluateEvidenceGate(ticketKey, state.state.tickets[ticketKey])], `Evidence Gate: ${ticketKey}`);
+        openEvidenceGatePanel(state, [evaluateEvidenceGate(ticketKey, state.state.tickets[ticketKey])], `Evidence Gate: ${ticketKey}`);
         return;
       }
       if (!state.state) {
@@ -1412,7 +1448,7 @@ export function activate(context: vscode.ExtensionContext) {
       }
       const gates = evaluateEvidenceGates(state.state.tickets)
         .filter(gate => gate.status !== 'pass' || ['await_review', 'verify', 'deploy_monitor', 'done'].includes(state.state!.tickets[gate.ticketKey]?.next_action));
-      openEvidenceGatePanel(gates, 'Kronos Evidence Gate');
+      openEvidenceGatePanel(state, gates, 'Kronos Evidence Gate');
     }),
 
     vscode.commands.registerCommand('kronos.exportEvidence', async (treeItem: any) => {
@@ -2339,7 +2375,7 @@ export function activate(context: vscode.ExtensionContext) {
             'Cancel'
           );
           if (action === 'Open Gate') {
-            openEvidenceGatePanel([handoffDecision.gate], `Evidence Gate: ${ticketKey}`);
+            openEvidenceGatePanel(state, [handoffDecision.gate], `Evidence Gate: ${ticketKey}`);
           } else if (action === 'Add Evidence') {
             await vscode.commands.executeCommand('kronos.addEvidence', { ticketKey: evidenceTicketKey });
           }
@@ -2353,7 +2389,7 @@ export function activate(context: vscode.ExtensionContext) {
             'Cancel'
           );
           if (action === 'Open Gate') {
-            openEvidenceGatePanel([handoffDecision.gate], `Evidence Gate: ${ticketKey}`);
+            openEvidenceGatePanel(state, [handoffDecision.gate], `Evidence Gate: ${ticketKey}`);
             return;
           }
           if (action !== 'Continue Handoff') { return; }
@@ -3478,6 +3514,9 @@ function kronosOperatorPanelCss(): string {
   .operator-hero { border: 1px solid var(--k-border); border-left: 3px solid var(--k-accent); border-radius: var(--k-radius); padding: 14px 16px; background: var(--k-surface-soft); }
   .operator-hero .score { font-size: 34px; line-height: 1; font-weight: 750; }
   .operator-hero .grade { color: var(--k-muted); font-size: 18px; margin-left: 8px; }
+  .action-cell { min-width: 150px; }
+  .inline-actions { gap: 6px; align-items: flex-start; }
+  .inline-actions .kronos-button { min-height: 24px; padding: 3px 8px; font-size: 10px; }
   .plan-list { display: grid; gap: 10px; }
   .plan-card { display: grid; grid-template-columns: 34px 1fr; gap: 10px; }
   .rank { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border: 1px solid var(--k-border); border-radius: 999px; background: var(--k-surface-soft); font-weight: 700; }
@@ -3524,29 +3563,43 @@ function buildRecoveryHtml(inventory: RecoveryInventory): string {
 }
 
 function openHumanReviewInbox(state: KronosState): void {
-  const inbox = buildHumanReviewInbox({
-    state: state.state,
-    queue: state.queue,
-    runs: listRuns(),
-    worktreeReport: cleanupStaleWorktrees({ remove: false }),
-    doctorChecks: runDoctorChecks(state),
-  });
   const panel = vscode.window.createWebviewPanel(
     'kronosHumanReviewInbox',
     'Kronos Human Review Inbox',
     vscode.ViewColumn.One,
-    { enableScripts: false }
+    { enableScripts: true }
   );
-  panel.webview.html = withWebviewCsp(buildHumanReviewInboxHtml(inbox));
+  const nonce = createNonce();
+  const render = () => {
+    const inbox = buildHumanReviewInbox({
+      state: state.state,
+      queue: state.queue,
+      runs: listRuns(),
+      worktreeReport: cleanupStaleWorktrees({ remove: false }),
+      doctorChecks: runDoctorChecks(state),
+    });
+    panel.webview.html = withWebviewCsp(buildHumanReviewInboxHtml(inbox, state, nonce), { allowScripts: true, nonce });
+  };
+  render();
+  panel.webview.onDidReceiveMessage(async msg => {
+    const request = normalizeActionPanelMessage(msg, HUMAN_REVIEW_MESSAGE_COMMANDS);
+    if (!request) {
+      vscode.window.showWarningMessage('Ignored invalid Kronos human review request.');
+      return;
+    }
+    await executeHumanReviewAction(state, request.command, request.ticket);
+    render();
+  });
 }
 
-function buildHumanReviewInboxHtml(inbox: HumanReviewInbox): string {
+function buildHumanReviewInboxHtml(inbox: HumanReviewInbox, state: KronosState, nonce: string): string {
   const rows = inbox.items.map(item => `<tr class="${item.severity}">
     <td><span class="pill ${item.severity}">${escapeHtml(item.severity.toUpperCase())}</span></td>
     <td>${escapeHtml(item.kind)}</td>
     <td>${escapeHtml(item.title)}</td>
     <td class="detail">${escapeHtml(item.detail)}</td>
     <td>${escapeHtml(item.ticketKey || item.runId || '')}</td>
+    <td class="action-cell">${humanReviewActionButtons(item, state)}</td>
   </tr>`).join('');
   const empty = inbox.items.length === 0 ? '<div class="empty">No human-review items found.</div>' : '';
 
@@ -3561,18 +3614,146 @@ function buildHumanReviewInboxHtml(inbox: HumanReviewInbox): string {
     <div class="summary-card"><div class="num">${inbox.summary.info}</div><div class="lbl">Info</div></div>
     <div class="summary-card"><div class="num">${inbox.summary.total}</div><div class="lbl">Total</div></div>
   </div>
-  ${empty || `<div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Severity</th><th>Kind</th><th>Item</th><th>Detail</th><th>Ref</th></tr>${rows}</table></div>`}
-</div></body></html>`;
+  ${empty || `<div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Severity</th><th>Kind</th><th>Item</th><th>Detail</th><th>Ref</th><th>Actions</th></tr>${rows}</table></div>`}
+</div>${kronosActionPanelScript(nonce)}</body></html>`;
 }
 
-function openEvidenceGatePanel(gates: EvidenceGateResult[], title: string): void {
+function humanReviewActionButtons(item: HumanReviewInbox['items'][number], state: KronosState): string {
+  const ticket = item.ticketKey ? state.state?.tickets?.[item.ticketKey] : undefined;
+  const hasLinkedProject = Boolean(ticket?.projects?.length);
+  const buttons: string[] = [];
+
+  if (item.kind === 'evidence' && item.ticketKey) {
+    if (/acceptance criteria not extracted/i.test(item.title)) {
+      buttons.push(actionButton('extractAcceptanceCriteria', 'Extract AC', { ticket: item.ticketKey, primary: true }));
+    } else if (/acceptance criterion item.*unchecked/i.test(item.title)) {
+      buttons.push(actionButton('updateAcceptanceCriteria', 'Check AC', { ticket: item.ticketKey, primary: true }));
+    } else if (/test evidence|evidence check|build/i.test(item.title)) {
+      buttons.push(actionButton('addEvidenceCheck', 'Add Check', { ticket: item.ticketKey, primary: true }));
+    } else {
+      buttons.push(actionButton('addEvidence', 'Add Evidence', { ticket: item.ticketKey, primary: true }));
+    }
+    buttons.push(actionButton('openEvidenceGate', 'Gate', { ticket: item.ticketKey }));
+  } else if (item.kind === 'ticket' && item.ticketKey) {
+    if (hasLinkedProject && ticket?.next_action !== 'done') {
+      buttons.push(actionButton('startTicket', 'Start', { ticket: item.ticketKey, primary: item.severity === 'critical' }));
+      buttons.push(actionButton('addToQueue', 'Queue', { ticket: item.ticketKey }));
+    }
+    buttons.push(actionButton('viewTicket', item.title.includes('blocked') || !hasLinkedProject ? 'Fix' : 'View', { ticket: item.ticketKey, primary: !hasLinkedProject }));
+  } else if (item.kind === 'run') {
+    buttons.push(actionButton('openRunCenter', 'Open Run Center', { primary: item.severity === 'critical' }));
+    buttons.push(actionButton('openRecoveryCenter', 'Recovery'));
+  } else if (item.kind === 'integration') {
+    buttons.push(actionButton('openDoctor', 'Open Doctor', { primary: item.severity === 'critical' }));
+  } else if (item.kind === 'worktree') {
+    buttons.push(actionButton('openRecoveryCenter', 'Review Worktree', { primary: item.severity === 'critical' }));
+    if (item.ticketKey) {
+      buttons.push(actionButton('viewTicket', 'View Ticket', { ticket: item.ticketKey }));
+    }
+  } else if (item.kind === 'queue') {
+    buttons.push(actionButton('queuePlanner', 'Open Queue', { primary: item.severity === 'critical' }));
+    if (item.ticketKey) {
+      buttons.push(actionButton('viewTicket', 'View Ticket', { ticket: item.ticketKey }));
+    }
+  }
+
+  return actionRow(buttons);
+}
+
+async function executeHumanReviewAction(state: KronosState, command: string, ticketKey: string): Promise<void> {
+  if (ticketKey && !state.state?.tickets?.[ticketKey]) {
+    vscode.window.showWarningMessage(`${ticketKey} is no longer in Kronos state.`);
+    return;
+  }
+
+  if (command === 'addEvidence' && ticketKey) {
+    await vscode.commands.executeCommand('kronos.addEvidence', { ticketKey });
+  } else if (command === 'addEvidenceCheck' && ticketKey) {
+    await vscode.commands.executeCommand('kronos.addEvidenceCheck', { ticketKey });
+  } else if (command === 'recordEnvironmentResult' && ticketKey) {
+    await vscode.commands.executeCommand('kronos.recordEnvironmentResult', { ticketKey });
+  } else if (command === 'extractAcceptanceCriteria' && ticketKey) {
+    await vscode.commands.executeCommand('kronos.extractAcceptanceCriteria', { ticketKey });
+  } else if (command === 'updateAcceptanceCriteria' && ticketKey) {
+    await vscode.commands.executeCommand('kronos.updateAcceptanceCriteria', { ticketKey });
+  } else if (command === 'startTicket' && ticketKey) {
+    await startTicketFromActionPanel(state, ticketKey);
+  } else if (command === 'addToQueue' && ticketKey) {
+    await vscode.commands.executeCommand('kronos.addToQueue', { ticketKey });
+  } else if (command === 'viewTicket' && ticketKey) {
+    await vscode.commands.executeCommand('kronos.viewTicket', { ticketKey });
+  } else if (command === 'openEvidenceGate' && ticketKey) {
+    await vscode.commands.executeCommand('kronos.evidenceGate', { ticketKey });
+  } else if (command === 'openRunCenter') {
+    await vscode.commands.executeCommand('kronos.runCenter');
+  } else if (command === 'openRecoveryCenter') {
+    await vscode.commands.executeCommand('kronos.recoveryCenter');
+  } else if (command === 'openDoctor') {
+    await vscode.commands.executeCommand('kronos.doctor');
+  } else if (command === 'queuePlanner') {
+    await vscode.commands.executeCommand('kronos.queuePlanner');
+  } else {
+    vscode.window.showWarningMessage('Ignored Kronos human review action without a valid target.');
+  }
+}
+
+async function startTicketFromActionPanel(state: KronosState, ticketKey: string): Promise<void> {
+  const ticket = state.state?.tickets?.[ticketKey];
+  if (!ticket) {
+    vscode.window.showWarningMessage(`${ticketKey} is no longer in Kronos state.`);
+    return;
+  }
+  if (!ticket.projects?.length) {
+    vscode.window.showWarningMessage(`${ticketKey} is not linked to a project.`);
+    return;
+  }
+  if (ticket.next_action === 'done') {
+    vscode.window.showInformationMessage(`${ticketKey} is already done.`);
+    return;
+  }
+
+  const plan = planNextActions(state).find(candidate => candidate.ticketKey === ticketKey) || {
+    planId: `human-review:${ticketKey}`,
+    ticketKey,
+    action: ticket.next_action === 'blocked' ? 'implement' : (ticket.next_action || 'implement'),
+    projects: ticket.projects,
+    score: 0,
+    scoreBreakdown: [],
+    reason: 'Started from Human Review Inbox.',
+    source: 'ticket' as const,
+    ticketSummary: ticket.summary,
+  };
+  await vscode.commands.executeCommand('kronos.startQueueItem', { item: planToQueueItem(state, plan) });
+}
+
+function openEvidenceGatePanel(state: KronosState, gates: EvidenceGateResult[], title: string): void {
   const panel = vscode.window.createWebviewPanel(
     'kronosEvidenceGate',
     title,
     vscode.ViewColumn.One,
-    { enableScripts: false }
+    { enableScripts: true }
   );
-  panel.webview.html = withWebviewCsp(buildEvidenceGateHtml(gates, title));
+  const nonce = createNonce();
+  const gateTicketKeys = gates.map(gate => gate.ticketKey);
+  const render = () => {
+    const freshGates = gateTicketKeys
+      .map(ticketKey => {
+        const ticket = state.state?.tickets?.[ticketKey];
+        return ticket ? evaluateEvidenceGate(ticketKey, ticket) : undefined;
+      })
+      .filter((gate): gate is EvidenceGateResult => Boolean(gate));
+    panel.webview.html = withWebviewCsp(buildEvidenceGateHtml(freshGates, title, nonce), { allowScripts: true, nonce });
+  };
+  render();
+  panel.webview.onDidReceiveMessage(async msg => {
+    const request = normalizeActionPanelMessage(msg, EVIDENCE_GATE_MESSAGE_COMMANDS);
+    if (!request || !request.ticket || !state.state?.tickets?.[request.ticket]) {
+      vscode.window.showWarningMessage('Ignored invalid Kronos evidence gate request.');
+      return;
+    }
+    await executeEvidenceGateAction(request.command, request.ticket);
+    render();
+  });
 }
 
 function openEvidenceHandoffPanel(plan: EvidenceHandoffPlan): void {
@@ -3654,7 +3835,7 @@ function publishPillClass(status: string): string {
   return 'warn';
 }
 
-function buildEvidenceGateHtml(gates: EvidenceGateResult[], title: string): string {
+function buildEvidenceGateHtml(gates: EvidenceGateResult[], title: string, nonce: string): string {
   const summary = {
     fail: gates.filter(g => g.status === 'fail').length,
     warn: gates.filter(g => g.status === 'warn').length,
@@ -3666,6 +3847,7 @@ function buildEvidenceGateHtml(gates: EvidenceGateResult[], title: string): stri
     <td>${escapeHtml(check.kind)}</td>
     <td>${escapeHtml(check.title)}</td>
     <td class="detail">${escapeHtml(check.detail)}</td>
+    <td class="action-cell">${evidenceGateActionButtons(gate, check)}</td>
   </tr>`)).join('');
   const empty = gates.length === 0 ? '<div class="empty">No evidence gate items found.</div>' : '';
 
@@ -3679,8 +3861,87 @@ function buildEvidenceGateHtml(gates: EvidenceGateResult[], title: string): stri
     <div class="summary-card"><div class="num">${summary.warn}</div><div class="lbl">Warnings</div></div>
     <div class="summary-card"><div class="num">${summary.pass}</div><div class="lbl">Passing</div></div>
   </div>
-  ${empty || `<div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Status</th><th>Ticket</th><th>Check</th><th>Item</th><th>Detail</th></tr>${rows}</table></div>`}
-</div></body></html>`;
+  ${empty || `<div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Status</th><th>Ticket</th><th>Check</th><th>Item</th><th>Detail</th><th>Actions</th></tr>${rows}</table></div>`}
+</div>${kronosActionPanelScript(nonce)}</body></html>`;
+}
+
+function evidenceGateActionButtons(gate: EvidenceGateResult, check: EvidenceGateResult['checks'][number]): string {
+  if (check.status === 'pass') {
+    return actionRow([actionButton('viewTicket', 'View Ticket', { ticket: gate.ticketKey })]);
+  }
+
+  const buttons: string[] = [];
+  if (check.kind === 'notes' || check.kind === 'risk') {
+    buttons.push(actionButton('addEvidence', 'Add Evidence', { ticket: gate.ticketKey, primary: true }));
+  } else if (check.kind === 'test') {
+    buttons.push(actionButton('addEvidenceCheck', 'Add Check', { ticket: gate.ticketKey, primary: true }));
+    buttons.push(actionButton('addEvidence', 'Add Note', { ticket: gate.ticketKey }));
+  } else if (check.kind === 'acceptance') {
+    const isMissingExtraction = /not extracted/i.test(check.title);
+    buttons.push(actionButton(isMissingExtraction ? 'extractAcceptanceCriteria' : 'updateAcceptanceCriteria', isMissingExtraction ? 'Extract AC' : 'Check AC', { ticket: gate.ticketKey, primary: true }));
+  } else if (check.kind === 'environment') {
+    buttons.push(actionButton('recordEnvironmentResult', 'Record Env', { ticket: gate.ticketKey, primary: true }));
+    buttons.push(actionButton('addEvidenceCheck', 'Add Check', { ticket: gate.ticketKey }));
+  } else if (check.kind === 'build') {
+    buttons.push(actionButton('addEvidenceCheck', 'Add Build Check', { ticket: gate.ticketKey, primary: true }));
+  } else if (check.kind === 'project' || check.kind === 'mr') {
+    buttons.push(actionButton('viewTicket', 'Fix', { ticket: gate.ticketKey, primary: true }));
+  }
+
+  if (gate.ready) {
+    buttons.push(actionButton('evidenceHandoff', 'Handoff', { ticket: gate.ticketKey }));
+    buttons.push(actionButton('publishEvidence', 'Publish', { ticket: gate.ticketKey }));
+  }
+  return actionRow(buttons);
+}
+
+async function executeEvidenceGateAction(command: string, ticketKey: string): Promise<void> {
+  if (command === 'addEvidence') {
+    await vscode.commands.executeCommand('kronos.addEvidence', { ticketKey });
+  } else if (command === 'addEvidenceCheck') {
+    await vscode.commands.executeCommand('kronos.addEvidenceCheck', { ticketKey });
+  } else if (command === 'recordEnvironmentResult') {
+    await vscode.commands.executeCommand('kronos.recordEnvironmentResult', { ticketKey });
+  } else if (command === 'extractAcceptanceCriteria') {
+    await vscode.commands.executeCommand('kronos.extractAcceptanceCriteria', { ticketKey });
+  } else if (command === 'updateAcceptanceCriteria') {
+    await vscode.commands.executeCommand('kronos.updateAcceptanceCriteria', { ticketKey });
+  } else if (command === 'viewTicket') {
+    await vscode.commands.executeCommand('kronos.viewTicket', { ticketKey });
+  } else if (command === 'evidenceHandoff') {
+    await vscode.commands.executeCommand('kronos.evidenceHandoff', { ticketKey });
+  } else if (command === 'publishEvidence') {
+    await vscode.commands.executeCommand('kronos.publishEvidence', { ticketKey });
+  }
+}
+
+function actionButton(action: string, label: string, options: { ticket?: string; runId?: string; primary?: boolean } = {}): string {
+  const classes = `kronos-button${options.primary ? ' primary' : ''}`;
+  const ticketAttr = options.ticket ? ` data-ticket="${escapeAttr(options.ticket)}"` : '';
+  const runAttr = options.runId ? ` data-run-id="${escapeAttr(options.runId)}"` : '';
+  return `<button type="button" class="${classes}" data-action="${escapeAttr(action)}"${ticketAttr}${runAttr}>${escapeHtml(label)}</button>`;
+}
+
+function actionRow(buttons: string[]): string {
+  return buttons.length > 0
+    ? `<div class="kronos-action-row inline-actions">${buttons.join('')}</div>`
+    : '<span class="muted">No action</span>';
+}
+
+function kronosActionPanelScript(nonce: string): string {
+  return `<script nonce="${escapeAttr(nonce)}">
+const vscode = acquireVsCodeApi();
+document.addEventListener('click', function(event) {
+  const target = event.target instanceof Element ? event.target.closest('[data-action]') : null;
+  if (!target) { return; }
+  event.preventDefault();
+  vscode.postMessage({
+    command: target.getAttribute('data-action') || '',
+    ticket: target.getAttribute('data-ticket') || '',
+    runId: target.getAttribute('data-run-id') || ''
+  });
+});
+</script>`;
 }
 
 function openQueuePlannerPanel(state: KronosState): void {
@@ -4442,7 +4703,7 @@ async function removeTicketFromQueue(state: KronosState, ticketKey: string, inte
       'Cancel'
     );
     if (action === 'Open Gate') {
-      openEvidenceGatePanel([gate], `Evidence Gate: ${ticketKey}`);
+      openEvidenceGatePanel(state, [gate], `Evidence Gate: ${ticketKey}`);
       return false;
     }
     if (action !== 'Remove Anyway') {
