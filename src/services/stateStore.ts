@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { KronosState, QueueState } from '../state/types';
+import { unknownErrorMessage } from './errorUtils';
 
 export const KRONOS_DIR = process.env.KRONOS_DIR || path.join(os.homedir(), '.claude', 'kronos');
 export const STATE_FILE = path.join(KRONOS_DIR, 'state.json');
@@ -81,21 +82,21 @@ export function readStateFileWithIssues(): StateFileReadResult {
     const issues = repairStateForUi(migrated);
     try {
       validateStateFileShape(migrated);
-    } catch (e: any) {
+    } catch (e: unknown) {
       issues.push({
         target: 'state.json',
         filePath: STATE_FILE,
-        detail: `State loaded with remaining validation warning: ${e?.message || 'unknown validation error'}`,
+        detail: `State loaded with remaining validation warning: ${unknownErrorMessage(e, 'unknown validation error')}`,
       });
     }
     return { state: migrated, issues };
-  } catch (e: any) {
+  } catch (e: unknown) {
     return {
       state: null,
       issues: [{
         target: 'state.json',
         filePath: STATE_FILE,
-        detail: e?.message || 'Failed to load state.json',
+        detail: unknownErrorMessage(e, 'Failed to load state.json'),
       }],
     };
   }
@@ -300,9 +301,9 @@ function repairStateForUi(state: KronosState): StateFileLoadIssue[] {
     try {
       repairProjectRecord(name, project, issues);
       validateProjectRecord(name, project);
-    } catch (e: any) {
+    } catch (e: unknown) {
       delete state.projects[name];
-      addStateIssue(issues, `Skipped project ${name}: ${e?.message || 'invalid project record'}`);
+      addStateIssue(issues, `Skipped project ${name}: ${unknownErrorMessage(e, 'invalid project record')}`);
     }
   }
 
@@ -310,9 +311,9 @@ function repairStateForUi(state: KronosState): StateFileLoadIssue[] {
     try {
       repairTicketRecord(key, ticket, issues);
       validateTicketRecord(key, ticket);
-    } catch (e: any) {
+    } catch (e: unknown) {
       delete state.tickets[key];
-      addStateIssue(issues, `Skipped ticket ${key}: ${e?.message || 'invalid ticket record'}`);
+      addStateIssue(issues, `Skipped ticket ${key}: ${unknownErrorMessage(e, 'invalid ticket record')}`);
     }
   }
 
@@ -795,11 +796,11 @@ export function listStateAuditEvents(limit = 100): StateAuditEvent[] {
         action: typeof event.action === 'string' ? event.action : 'unknown',
         ...event,
       };
-    } catch (e: any) {
+    } catch (e: unknown) {
       return {
         at: '',
         action: 'invalid-audit-entry',
-        error: e?.message || 'Invalid audit JSONL entry',
+        error: unknownErrorMessage(e, 'Invalid audit JSONL entry'),
         raw: line.slice(0, 500),
       };
     }
@@ -823,7 +824,7 @@ function acquireStateWriteLock(action: string, target: string): () => void {
   try {
     fd = fs.openSync(STATE_WRITE_LOCK_FILE, 'wx');
     fs.writeFileSync(fd, payload);
-  } catch (e: any) {
+  } catch {
     if (fd !== undefined) {
       try { fs.closeSync(fd); } catch {}
     }

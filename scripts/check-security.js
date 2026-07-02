@@ -1035,9 +1035,25 @@ for (const marker of [
   'acquireStateWriteLock',
   'clearStaleWriteLock',
   'DEFAULT_OVERNIGHT',
+  "import { unknownErrorMessage } from './errorUtils'",
+  'catch (e: unknown)',
+  "unknownErrorMessage(e, 'unknown validation error')",
+  "unknownErrorMessage(e, 'Failed to load state.json')",
+  "unknownErrorMessage(e, 'invalid project record')",
+  "unknownErrorMessage(e, 'invalid ticket record')",
+  "unknownErrorMessage(e, 'Invalid audit JSONL entry')",
 ]) {
   if (!stateStore.includes(marker)) {
     fail(`Missing state store marker: ${marker}`);
+  }
+}
+
+for (const forbidden of [
+  'catch (e: any)',
+  'e?.message',
+]) {
+  if (stateStore.includes(forbidden)) {
+    fail(`State store must normalize unknown errors instead of using ${forbidden}.`);
   }
 }
 

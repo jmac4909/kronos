@@ -549,6 +549,27 @@ test('state store tolerant read reports bad nested records without blanking vali
   assert.ok(result.issues.some(issue => issue.detail.includes('Skipped ticket K-SKIPPED')));
 });
 
+test('state store load issues normalize unknown errors', () => {
+  const source = readSourceFixture('src', 'services', 'stateStore.ts');
+  for (const marker of [
+    "import { unknownErrorMessage } from './errorUtils'",
+    'catch (e: unknown)',
+    "unknownErrorMessage(e, 'unknown validation error')",
+    "unknownErrorMessage(e, 'Failed to load state.json')",
+    "unknownErrorMessage(e, 'invalid project record')",
+    "unknownErrorMessage(e, 'invalid ticket record')",
+    "unknownErrorMessage(e, 'Invalid audit JSONL entry')",
+  ]) {
+    assert.ok(source.includes(marker), marker);
+  }
+  for (const marker of [
+    'catch (e: any)',
+    'e?.message',
+  ]) {
+    assert.equal(source.includes(marker), false, marker);
+  }
+});
+
 test('KronosState load issues normalize unknown errors', () => {
   const source = readSourceFixture('src', 'state', 'KronosState.ts');
   for (const marker of [
