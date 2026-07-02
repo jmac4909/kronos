@@ -3,7 +3,7 @@ import { AgingThresholds, analyzeAging } from './agingAnalyzer';
 import { evaluateEvidenceGates } from './evidenceGate';
 import { buildHumanReviewInbox } from './humanReviewInbox';
 import { RunRecord } from './runStore';
-import { runStatus } from './runStatus';
+import { isActiveRun, runStatus } from './runStatus';
 
 export interface AttentionBadgeInput {
   state?: KronosState | null;
@@ -40,7 +40,7 @@ export function computeAttentionBadge(input: AttentionBadgeInput): AttentionBadg
     staleCritical: agingReport.summary.critical,
     staleWarning: agingReport.summary.warning,
     newReviewItems: nonNegativeInteger(input.newReviewItems),
-    pausedRuns: runs.filter(run => runStatus(run) === 'paused').length,
+    pausedRuns: runs.filter(run => runStatus(run) === 'paused' && isActiveRun(run)).length,
   };
   const count = attentionBadgeCount(summary);
   return {

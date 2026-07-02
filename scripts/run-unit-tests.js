@@ -3213,10 +3213,16 @@ test('run status helper centralizes active persisted run semantics', () => {
   assert.equal(runStatus.isActiveRunStatus('paused'), true);
   assert.equal(runStatus.isActiveRunStatus('completed'), false);
   assert.equal(runStatus.isActiveRun({ status: 'running' }), true);
+  assert.equal(runStatus.isActiveRun({ status: 'running', endedAt: '2026-07-01T10:00:00.000Z' }), false);
+  assert.equal(runStatus.isActiveRun({ status: 'running', exitCode: 0 }), false);
+  assert.equal(runStatus.isActiveRun({ status: 'running', events: [{ type: 'done', label: 'Complete - 1.0s' }] }), false);
+  assert.equal(runStatus.isActiveRun({ status: 'running', events: [{ type: 'error', label: 'Session exited with code 1' }] }), false);
   assert.equal(runStatus.isActiveRun({ status: 'waiting_for_review' }), false);
   assert.equal(runStatus.activeRunSummary([
     { status: 'running' },
     { status: 'running' },
+    { status: 'running', endedAt: '2026-07-01T10:00:00.000Z' },
+    { status: 'preflight', exitCode: 1 },
     { status: 'preflight' },
     { status: 'paused' },
     { status: 'completed' },
@@ -3227,6 +3233,9 @@ test('run status helper centralizes active persisted run semantics', () => {
     "ACTIVE_RUN_STATUSES = new Set(['preflight', 'running', 'paused'])",
     'export function isActiveRunStatus',
     'export function isActiveRun',
+    'export function hasTerminalRunSignal',
+    'hasDateLikeValue(run.endedAt)',
+    'label.startsWith(\'Session exited with code\')',
     'export function activeRunSummary',
     "['running', 'preflight', 'paused']",
   ]) {
@@ -3284,6 +3293,7 @@ test('attention badge aggregates review, aging, and paused-run signals', () => {
     runs: [
       { id: 'run-1', status: 'paused' },
       { id: 'run-2', status: 'running' },
+      { id: 'run-3', status: 'paused', endedAt: '2026-07-01T10:00:00.000Z' },
     ],
     newReviewItems: 2,
     now: new Date('2026-07-02T00:00:00.000Z'),
@@ -3320,6 +3330,7 @@ test('attention badge aggregates review, aging, and paused-run signals', () => {
     'evaluateEvidenceGates',
     'analyzeAging',
     'runStatus(run)',
+    'isActiveRun(run)',
   ]) {
     assert.ok(source.includes(marker), marker);
   }
@@ -3373,6 +3384,7 @@ test('collision detector flags active runs, duplicate queue work, and open MRs',
       { id: 'run-ticket', ticket: 'K-1', project: 'app', status: 'running', skill: 'implement' },
       { id: 'run-project', ticket: 'K-4', project: 'app', status: 'preflight', skill: 'implement' },
       { id: 'paused-run', ticket: 'K-7', project: 'app', status: 'paused', skill: 'implement' },
+      { id: 'terminal-running', ticket: 'K-1', project: 'app', status: 'running', skill: 'implement', endedAt: '2026-07-01T11:45:00.000Z' },
       {
         id: 'recent-run',
         ticket: 'K-5',
@@ -3398,6 +3410,7 @@ test('collision detector flags active runs, duplicate queue work, and open MRs',
   assert.ok(collisions.some(c => c.kind === 'queued_project'));
   assert.ok(collisions.some(c => c.kind === 'open_mr'));
   assert.ok(collisions.some(c => c.kind === 'recent_file' && c.detail.includes('src/checkout/retry.ts')));
+  assert.equal(collisions.some(c => c.id.includes('terminal-running')), false);
   assert.equal(collisions.some(c => c.id.includes('malformed-events')), false);
   assert.ok(collisions.some(c => c.kind === 'ticket_area' && c.detail.includes('checkout')));
   assert.ok(collisions.some(c => c.kind === 'mr_file' && c.severity === 'high' && c.detail.includes('src/checkout/retry.ts')));
@@ -5294,6 +5307,7 @@ test('dashboard worklist builds command-center lanes from review, run, gate, and
       null,
       'not-a-run',
       { id: 'active-old', status: 'running', project: 'api', skill: 'implement', ticket: 'K-1', startedAt: '2026-07-01T09:00:00.000Z' },
+      { id: 'terminal-active', status: 'running', project: 'api', skill: 'implement', ticket: 'K-DONE', startedAt: '2026-07-01T09:30:00.000Z', endedAt: '2026-07-01T09:45:00.000Z' },
       { id: 'active-new', status: 'paused', project: 'web', skill: 'verify', ticket: 'K-2', startedAt: '2026-07-01T10:00:00.000Z' },
       { id: 'done', status: 'completed', project: 'web', skill: 'verify', ticket: 'K-PASS', endedAt: '2026-07-01T11:00:00.000Z' },
     ],
@@ -5326,13 +5340,15 @@ test('dashboard worklist builds command-center lanes from review, run, gate, and
   assert.equal(lane('needs_human').items[0].title, 'web verify needs review');
   assert.equal(lane('active_runs').items[0].runId, 'active-new');
   assert.equal(lane('active_runs').items[0].severity, 'warning');
+  assert.equal(lane('active_runs').items.some(item => item.runId === 'terminal-active'), false);
   assert.equal(lane('failing_gates').items[0].ticketKey, 'K-FAIL');
   assert.match(lane('recent_completed').items[0].detail, /evidence gate pass/);
   assert.equal(lane('stale_items').items[0].ticketKey, 'K-OLD');
 
   const source = readSourceFixture('src', 'services', 'dashboardWorklist.ts');
-  assert.ok(source.includes("import { ACTIVE_RUN_STATUSES } from './runStatus'"));
-  assert.ok(source.includes("const WORKLIST_RUN_STATUSES = new Set(['queued', ...ACTIVE_RUN_STATUSES])"));
+  assert.ok(source.includes("import { isActiveRun } from './runStatus'"));
+  assert.ok(source.includes('function isDashboardActiveRun'));
+  assert.ok(source.includes("runString(run, 'status') === 'queued' || isActiveRun(run)"));
   assert.ok(source.includes('type DashboardRunRecord = RunRecord & Record<string, unknown>'));
   assert.equal(source.includes('type DashboardRunRecord = RunRecord & Record<string, any>'), false);
 });

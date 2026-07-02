@@ -2,7 +2,7 @@ import { AgingReport } from './agingAnalyzer';
 import { EvidenceGateResult } from './evidenceGate';
 import { HumanReviewInbox } from './humanReviewInbox';
 import { RunRecord } from './runStore';
-import { ACTIVE_RUN_STATUSES } from './runStatus';
+import { isActiveRun } from './runStatus';
 
 export type DashboardWorklistKind = 'needs_human' | 'active_runs' | 'failing_gates' | 'recent_completed' | 'stale_items';
 export type DashboardWorklistSeverity = 'critical' | 'warning' | 'info' | 'ok';
@@ -31,7 +31,6 @@ export interface DashboardWorklistInput {
   agingReport: AgingReport;
 }
 
-const WORKLIST_RUN_STATUSES = new Set(['queued', ...ACTIVE_RUN_STATUSES]);
 const COMPLETED_RUN_STATUSES = new Set(['completed', 'waiting_for_review']);
 type DashboardRunRecord = RunRecord & Record<string, unknown>;
 
@@ -55,7 +54,7 @@ export function buildDashboardWorklist(input: DashboardWorklistInput, limit = 5)
       kind: 'active_runs',
       title: 'Active Runs',
       emptyText: 'No active agent runs.',
-      items: sortRuns(runs.filter(run => WORKLIST_RUN_STATUSES.has(runString(run, 'status'))), 'startedAt')
+      items: sortRuns(runs.filter(isDashboardActiveRun), 'startedAt')
         .slice(0, limit)
         .map(run => {
           const status = runString(run, 'status') || 'unknown';
@@ -124,6 +123,10 @@ export function buildDashboardWorklist(input: DashboardWorklistInput, limit = 5)
 
 function sortRuns(runs: DashboardRunRecord[], timestampField: 'startedAt' | 'endedAt'): DashboardRunRecord[] {
   return [...runs].sort((a, b) => timestampValue(runString(b, timestampField)) - timestampValue(runString(a, timestampField)) || runId(a).localeCompare(runId(b)));
+}
+
+function isDashboardActiveRun(run: DashboardRunRecord): boolean {
+  return runString(run, 'status') === 'queued' || isActiveRun(run);
 }
 
 function timestampValue(value: unknown): number {

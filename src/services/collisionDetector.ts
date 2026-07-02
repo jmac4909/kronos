@@ -1,6 +1,6 @@
 import { MergeRequestChangedFile, QueueState, Ticket } from '../state/types';
 import { changedFilePaths } from './changedFiles';
-import { isActiveRunStatus } from './runStatus';
+import { isActiveRun } from './runStatus';
 
 export type CollisionSeverity = 'high' | 'medium' | 'low';
 export type CollisionKind = 'active_run' | 'queued_ticket' | 'queued_project' | 'open_mr' | 'recent_file' | 'ticket_area' | 'mr_file';
@@ -51,7 +51,7 @@ export function detectDispatchCollisions(input: DispatchCollisionInput): Dispatc
   const collisions: DispatchCollision[] = [];
 
   for (const run of input.runs || []) {
-    const isActive = isActiveRunStatus(run.status);
+    const isActive = isActiveRun(run);
     if (isActive && ticketKey && run.ticket === ticketKey) {
       collisions.push({
         id: `run-ticket:${run.id}`,

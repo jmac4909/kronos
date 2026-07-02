@@ -1717,6 +1717,9 @@ for (const marker of [
   "ACTIVE_RUN_STATUSES = new Set(['preflight', 'running', 'paused'])",
   'export function isActiveRunStatus',
   'export function isActiveRun',
+  'export function hasTerminalRunSignal',
+  'hasDateLikeValue(run.endedAt)',
+  "label.startsWith('Session exited with code')",
   'export function activeRunSummary',
   "['running', 'preflight', 'paused']",
 ]) {
@@ -1747,6 +1750,7 @@ for (const marker of [
   'evaluateEvidenceGates',
   'analyzeAging',
   'runStatus(run)',
+  'isActiveRun(run)',
 ]) {
   if (!attentionBadge.includes(marker)) {
     fail(`Missing attention badge marker: ${marker}`);
@@ -1755,8 +1759,8 @@ for (const marker of [
 
 for (const marker of [
   'recent_file',
-  "import { isActiveRunStatus } from './runStatus'",
-  'const isActive = isActiveRunStatus(run.status)',
+  "import { isActiveRun } from './runStatus'",
+  'const isActive = isActiveRun(run)',
   'ticket_area',
   'mr_file',
   'editedFilesForRun',
@@ -2020,8 +2024,9 @@ for (const marker of [
   'recent_completed',
   'stale_items',
   'evidenceStatusForRun',
-  "import { ACTIVE_RUN_STATUSES } from './runStatus'",
-  "const WORKLIST_RUN_STATUSES = new Set(['queued', ...ACTIVE_RUN_STATUSES])",
+  "import { isActiveRun } from './runStatus'",
+  'function isDashboardActiveRun',
+  "runString(run, 'status') === 'queued' || isActiveRun(run)",
   'type DashboardRunRecord = RunRecord & Record<string, unknown>',
   'const runs = (Array.isArray(input.runs) ? input.runs : []).filter(isRunRecord)',
   "runString(run, 'status')",
