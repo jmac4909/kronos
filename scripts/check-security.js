@@ -908,6 +908,8 @@ for (const marker of [
   "unknownErrorMessage(e, 'Invalid JSON')",
   "unknownErrorMessage(e, 'Failed to read Kronos state.')",
   "unknownErrorMessage(e, 'Invalid dispatch model.')",
+  "unknownErrorMessage(e, 'Failed to parse Claude stream event.')",
+  "label: 'Failed to parse Claude stream event'",
   "import { isActiveRun } from '../services/runStatus'",
   "import { runProgressSummary } from '../services/runProgress'",
   "'refreshPanel'",
@@ -955,6 +957,9 @@ for (const marker of [
 }
 if (dispatcher.includes("target.closest('[data-action][data-run-id]')")) {
   fail('Run Center script must allow panel-level actions without a run id.');
+}
+if (dispatcher.includes('} catch {}')) {
+  fail('Dispatcher must not silently swallow run stream failures.');
 }
 
 for (const marker of [

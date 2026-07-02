@@ -793,7 +793,18 @@ export async function dispatchClaudeSession(
           addRunEvent(run, pe);
           panel.webview.html = withWebviewCsp(buildProgressHtml(projectName, skill, ticket || '', events));
         }
-      } catch {}
+      } catch (e: unknown) {
+        const detail = unknownErrorMessage(e, 'Failed to parse Claude stream event.');
+        const event = {
+          type: 'error' as const,
+          label: 'Failed to parse Claude stream event',
+          detail,
+          timestamp: new Date(),
+        };
+        events.push(event);
+        addRunEvent(run, event);
+        panel.webview.html = withWebviewCsp(buildProgressHtml(projectName, skill, ticket || '', events));
+      }
     }
   });
 

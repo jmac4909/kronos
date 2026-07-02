@@ -2628,6 +2628,8 @@ test('dispatcher records branch and permission metadata for persisted runs', () 
     "unknownErrorMessage(e, 'Invalid JSON')",
     "unknownErrorMessage(e, 'Failed to read Kronos state.')",
     "unknownErrorMessage(e, 'Invalid dispatch model.')",
+    "unknownErrorMessage(e, 'Failed to parse Claude stream event.')",
+    "label: 'Failed to parse Claude stream event'",
     'writeSavedSession(session)',
     'export { getAggregateStats, listSavedSessions, listSessionStoreIssues }',
     'const id = safeSessionId',
@@ -2745,6 +2747,11 @@ test('dispatcher records branch and permission metadata for persisted runs', () 
     source.includes('catch (e: any)'),
     false,
     'dispatcher should keep caught errors unknown until normalized',
+  );
+  assert.equal(
+    source.includes('} catch {}'),
+    false,
+    'dispatcher should not silently swallow run stream failures',
   );
   assert.equal(
     source.includes('e?.message'),
