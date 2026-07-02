@@ -61,6 +61,7 @@ const webviewSecurity = require('../out/services/webviewSecurity.js');
 const operatorPanel = require('../out/services/operatorPanel.js');
 const promptPanelView = require('../out/services/promptPanelView.js');
 const recoveryPanelView = require('../out/services/recoveryPanelView.js');
+const humanReviewPanelView = require('../out/services/humanReviewPanelView.js');
 const runStatus = require('../out/services/runStatus.js');
 const runProgress = require('../out/services/runProgress.js');
 const relativeTime = require('../out/services/relativeTime.js');
@@ -4790,6 +4791,35 @@ test('human review inbox aggregates runs, tickets, evidence gaps, integrations, 
   const source = readSourceFixture('src', 'services', 'humanReviewInbox.ts');
   assert.ok(source.includes('type HumanReviewRunRecord = HumanReviewRun & Record<string, unknown>'));
   assert.equal(source.includes('type HumanReviewRunRecord = HumanReviewRun & Record<string, any>'), false);
+
+  const html = humanReviewPanelView.buildHumanReviewInboxHtml(inbox, {
+    tickets: state.tickets,
+    nonce: 'nonce-hr',
+  });
+  assert.ok(html.includes('Kronos Human Review Inbox'));
+  assert.ok(html.includes('data-action="refreshPanel"'));
+  assert.ok(html.includes('data-action="extractAcceptanceCriteria"'));
+  assert.ok(html.includes('data-action="startTicket"'));
+  assert.ok(html.includes('data-action="runCenter"'));
+  assert.ok(html.includes('Kronos Human Review Inbox'));
+
+  const escapedHtml = humanReviewPanelView.buildHumanReviewInboxHtml({
+    summary: { critical: 1, warning: 0, info: 0, total: 1 },
+    items: [{
+      id: 'unsafe',
+      kind: 'ticket',
+      severity: 'critical',
+      title: 'Unsafe <ticket>',
+      detail: 'Needs & review',
+      ticketKey: 'BAD-1',
+    }],
+  }, {
+    tickets: { 'BAD-1': ticket({ projects: [] }) },
+    nonce: 'nonce-escape',
+  });
+  assert.ok(escapedHtml.includes('Unsafe &lt;ticket&gt;'));
+  assert.ok(escapedHtml.includes('Needs &amp; review'));
+  assert.ok(escapedHtml.includes('data-action="viewTicket"'));
 });
 
 test('evidence gate fails objective blockers and warns on incomplete proof', () => {
@@ -5193,6 +5223,7 @@ test('extension webviews use shared UI shell and board filtering affordances', (
   const operatorPanelSource = readSourceFixture('src', 'services', 'operatorPanel.ts');
   const promptPanelViewSource = readSourceFixture('src', 'services', 'promptPanelView.ts');
   const recoveryPanelViewSource = readSourceFixture('src', 'services', 'recoveryPanelView.ts');
+  const humanReviewPanelViewSource = readSourceFixture('src', 'services', 'humanReviewPanelView.ts');
   const boardHandlerStart = source.indexOf('panel.webview.onDidReceiveMessage(async (msg) => {\n        if (logReady(msg)) { return; }\n        const request = normalizeBoardMessage(msg);');
   const boardHandlerEnd = source.indexOf("    vscode.commands.registerCommand('kronos.viewTicket'", boardHandlerStart);
   assert.ok(boardHandlerStart >= 0 && boardHandlerEnd > boardHandlerStart, 'Jira board message handler should be present');
@@ -5202,6 +5233,7 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     "import { actionButton, actionRow, kronosActionPanelScript, kronosOperatorPanelCss, operatorCommandRow } from './services/operatorPanel'",
     "import { buildPromptHistoryHtml, buildPromptManagerHtml, buildPromptSmokeTestsHtml } from './services/promptPanelView'",
     "import { buildRecoveryHtml, buildStateAuditLogHtml } from './services/recoveryPanelView'",
+    "import { buildHumanReviewInboxHtml } from './services/humanReviewPanelView'",
     "import { createWebviewReadyMonitor } from './services/webviewDiagnostics'",
     'const nonce = createWebviewNonce()',
     'webviewScriptCspOptions(panel.webview.cspSource, nonce)',
@@ -5257,13 +5289,6 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'function normalizeActionPanelMessage',
     'planId: typeof message.planId === \'string\' ? message.planId : \'\'',
     'itemId: typeof message.itemId === \'string\' ? message.itemId : \'\'',
-    'function humanReviewActionButtons',
-    "actionButton('extractAcceptanceCriteria', 'Extract AC'",
-    "actionButton('startTicket', 'Start'",
-    "actionButton('evidenceGate', 'Gate'",
-    "actionButton('runCenter', 'Open Run Center'",
-    "actionButton('recoveryCenter', 'Recovery'",
-    "actionButton('doctor', 'Open Doctor'",
     'await executeOperatorCommandAction(command, ticketKey)',
     "command === 'runCenter' || command === 'recoveryCenter' || command === 'doctor' || command === 'queuePlanner'",
     'const render = (currentChecks: DoctorCheck[]) =>',
@@ -5480,6 +5505,23 @@ test('extension webviews use shared UI shell and board filtering affordances', (
   ]) {
     assert.ok(recoveryPanelViewSource.includes(marker), marker);
   }
+  for (const marker of [
+    'export function buildHumanReviewInboxHtml',
+    'HumanReviewInboxHtmlOptions',
+    'Kronos Human Review Inbox',
+    'humanReviewActionButtons',
+    "actionButton('refreshPanel', 'Refresh')",
+    "actionButton('extractAcceptanceCriteria', 'Extract AC'",
+    "actionButton('startTicket', 'Start'",
+    "actionButton('evidenceGate', 'Gate'",
+    "actionButton('runCenter', 'Open Run Center'",
+    "actionButton('recoveryCenter', 'Recovery'",
+    "actionButton('doctor', 'Open Doctor'",
+    'kronosOperatorPanelCss',
+    'kronosActionPanelScript(options.nonce',
+  ]) {
+    assert.ok(humanReviewPanelViewSource.includes(marker), marker);
+  }
   assert.equal(/^\s*vscode\.window\.withProgress\(/m.test(source), false, 'progress tasks should be awaited by their command handlers');
   assert.equal((source.match(/dispatchClaudeSession\(/g) || []).length, 1, 'command handlers should use startClaudeDispatch for Claude session startup');
   assert.equal(source.includes('await startClaudeDispatch('), true, 'Claude session startup should await the wrapper preflight');
@@ -5507,7 +5549,7 @@ test('extension webviews use shared UI shell and board filtering affordances', (
   assert.ok(source.includes("unknownErrorMessage(e, 'Kronos panel auto-refresh failed.')"), 'panel auto-refresh errors should be normalized');
   for (const [label, startMarker, endMarker] of [
     ['Dashboard', "vscode.commands.registerCommand('kronos.openDashboard'", "    vscode.commands.registerCommand('kronos.queueMoveUp'"],
-    ['Human Review Inbox', 'function openHumanReviewInbox', 'function buildHumanReviewInboxHtml'],
+    ['Human Review Inbox', 'function openHumanReviewInbox', 'async function executeHumanReviewAction'],
     ['Evidence Gate', 'function openEvidenceGatePanel', 'function evidenceGatePanelGatesForState'],
     ['Aging Report', 'function openAgingReportPanel', 'function openIntegrationManifestPanel'],
   ]) {

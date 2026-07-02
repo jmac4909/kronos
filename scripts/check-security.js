@@ -73,6 +73,7 @@ const webviewSecurity = readSource('src/services/webviewSecurity.ts');
 const operatorPanel = readSource('src/services/operatorPanel.ts');
 const promptPanelView = readSource('src/services/promptPanelView.ts');
 const recoveryPanelView = readSource('src/services/recoveryPanelView.ts');
+const humanReviewPanelView = readSource('src/services/humanReviewPanelView.ts');
 const cliProbes = readSource('src/services/cliProbes.ts');
 const combinedVerification = readSource('src/services/combinedVerification.ts');
 const changedFiles = readSource('src/services/changedFiles.ts');
@@ -344,21 +345,14 @@ for (const marker of [
   'kronos.humanReviewInbox',
   'openHumanReviewInbox',
   'const HUMAN_REVIEW_MESSAGE_COMMANDS = new Set',
-  "actionButton('refreshPanel', 'Refresh')",
   "request.command === 'refreshPanel'",
-  'function humanReviewActionButtons',
-  "actionButton('startTicket', 'Start'",
-  "actionButton('evidenceGate', 'Gate'",
-  "actionButton('runCenter', 'Open Run Center'",
-  "actionButton('recoveryCenter', 'Recovery'",
-  "actionButton('doctor', 'Open Doctor'",
   'await executeOperatorCommandAction(command, ticketKey)',
   "command === 'runCenter' || command === 'recoveryCenter' || command === 'doctor' || command === 'queuePlanner'",
   'kronos.evidenceGate',
   'openEvidenceGatePanel',
   'const EVIDENCE_GATE_MESSAGE_COMMANDS = new Set',
   'function evidenceGateActionButtons',
-  "actionButton('extractAcceptanceCriteria', 'Extract AC'",
+  "actionButton(isMissingExtraction ? 'extractAcceptanceCriteria' : 'updateAcceptanceCriteria'",
   "if (request.command === 'refreshPanel') {\n      state.reloadAndNotify();\n      render();\n      return;\n    }",
   "openEvidenceGatePanel(state, evidenceGatePanelGatesForState(state), 'Kronos Evidence Gate', { refreshAllEvidenceGates: true })",
   'options.refreshAllEvidenceGates',
@@ -660,7 +654,7 @@ if (!extension.includes("unknownErrorMessage(e, 'Kronos panel auto-refresh faile
 }
 for (const [label, startMarker, endMarker] of [
   ['Dashboard', "vscode.commands.registerCommand('kronos.openDashboard'", "    vscode.commands.registerCommand('kronos.queueMoveUp'"],
-  ['Human Review Inbox', 'function openHumanReviewInbox', 'function buildHumanReviewInboxHtml'],
+  ['Human Review Inbox', 'function openHumanReviewInbox', 'async function executeHumanReviewAction'],
   ['Evidence Gate', 'function openEvidenceGatePanel', 'function evidenceGatePanelGatesForState'],
   ['Aging Report', 'function openAgingReportPanel', 'function openIntegrationManifestPanel'],
 ]) {
@@ -993,6 +987,26 @@ for (const marker of [
 ]) {
   if (!recoveryPanelView.includes(marker)) {
     fail(`Missing recovery panel view marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  'export function buildHumanReviewInboxHtml',
+  'HumanReviewInboxHtmlOptions',
+  'Kronos Human Review Inbox',
+  'humanReviewActionButtons',
+  "actionButton('refreshPanel', 'Refresh')",
+  "actionButton('extractAcceptanceCriteria', 'Extract AC'",
+  "actionButton('startTicket', 'Start'",
+  "actionButton('evidenceGate', 'Gate'",
+  "actionButton('runCenter', 'Open Run Center'",
+  "actionButton('recoveryCenter', 'Recovery'",
+  "actionButton('doctor', 'Open Doctor'",
+  'kronosOperatorPanelCss',
+  'kronosActionPanelScript(options.nonce',
+]) {
+  if (!humanReviewPanelView.includes(marker)) {
+    fail(`Missing human review panel view marker: ${marker}`);
   }
 }
 
