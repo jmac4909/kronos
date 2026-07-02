@@ -70,6 +70,7 @@ const gitWorkspace = readSource('src/services/gitWorkspace.ts');
 const processTree = readSource('src/services/processTree.ts');
 const webviewDiagnostics = readSource('src/services/webviewDiagnostics.ts');
 const webviewSecurity = readSource('src/services/webviewSecurity.ts');
+const operatorPanel = readSource('src/services/operatorPanel.ts');
 const cliProbes = readSource('src/services/cliProbes.ts');
 const combinedVerification = readSource('src/services/combinedVerification.ts');
 const changedFiles = readSource('src/services/changedFiles.ts');
@@ -361,13 +362,6 @@ for (const marker of [
   'options.refreshAllEvidenceGates',
   'function evidenceGatePanelGatesForState(state: KronosState): EvidenceGateResult[]',
   'function isProofSensitiveAction',
-  'function kronosActionPanelScript',
-  'webviewActionPostScript(webviewName, [',
-  'readyDiagnostic ? { readyCommand: WEBVIEW_READY_COMMAND } : {}',
-  "{ messageKey: 'ticket', dataAttribute: 'data-ticket' }",
-  "{ messageKey: 'runId', dataAttribute: 'data-run-id' }",
-  "{ messageKey: 'planId', dataAttribute: 'data-plan-id' }",
-  "{ messageKey: 'itemId', dataAttribute: 'data-item-id' }",
   'kronos.evidenceHandoff',
   'openEvidenceHandoffPanel',
   'Kronos did not call a posting API',
@@ -619,6 +613,27 @@ if (extension.includes('skip failures silently')) {
 }
 if (extension.includes('function webviewScriptCsp(') || dispatcher.includes('function webviewScriptCsp(')) {
   fail('Webview CSP option construction must stay centralized in webviewSecurity.');
+}
+
+for (const marker of [
+  'export function actionButton',
+  'export function actionRow',
+  'export function operatorCommandRow',
+  'export function kronosActionPanelScript',
+  'webviewActionPostScript(webviewName, [',
+  'readyDiagnostic ? { readyCommand: WEBVIEW_READY_COMMAND } : {}',
+  "{ messageKey: 'ticket', dataAttribute: 'data-ticket' }",
+  "{ messageKey: 'runId', dataAttribute: 'data-run-id' }",
+  "{ messageKey: 'planId', dataAttribute: 'data-plan-id' }",
+  "{ messageKey: 'itemId', dataAttribute: 'data-item-id' }",
+  'script nonce="${escapeAttr(nonce)}"',
+  "data-action=\"${escapeAttr(action)}\"",
+  "data-plan-id=\"${escapeAttr(options.planId)}\"",
+  "data-item-id=\"${escapeAttr(options.itemId)}\"",
+]) {
+  if (!operatorPanel.includes(marker)) {
+    fail(`Missing operator panel helper marker: ${marker}`);
+  }
 }
 
 const boardHandlerStart = extension.indexOf('panel.webview.onDidReceiveMessage(async (msg) => {\n        if (logReady(msg)) { return; }\n        const request = normalizeBoardMessage(msg);');
@@ -1008,6 +1023,12 @@ for (const marker of [
   "unknownErrorMessage(e, 'Failed to add ticket to queue.')",
   'class="kronos-shell board-shell"',
   'class="kronos-shell dashboard-shell"',
+  'let data: unknown = {}',
+  'let loadWarning: string | undefined',
+  "loadWarning = unknownErrorMessage(e, 'Morning brief unavailable.')",
+  'buildDashboardHtml(state, data, nonce, loadWarning)',
+  'Morning brief unavailable',
+  'dashboard-warning',
   'class="kronos-shell ticket-shell"',
   'class="kronos-shell diff-shell"',
   'function dashboardBriefRecord',

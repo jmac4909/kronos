@@ -58,6 +58,7 @@ const gitWorkspace = require('../out/services/gitWorkspace.js');
 const processTree = require('../out/services/processTree.js');
 const webviewDiagnostics = require('../out/services/webviewDiagnostics.js');
 const webviewSecurity = require('../out/services/webviewSecurity.js');
+const operatorPanel = require('../out/services/operatorPanel.js');
 const runStatus = require('../out/services/runStatus.js');
 const runProgress = require('../out/services/runProgress.js');
 const relativeTime = require('../out/services/relativeTime.js');
@@ -1736,6 +1737,33 @@ test('webview security injects CSP and preserves existing nonce policies', () =>
   ], { readyCommand: webviewSecurity.WEBVIEW_READY_COMMAND });
   assert.match(diagnosticActionScript, /__kronosWebviewReady/);
   assert.match(diagnosticActionScript, /Kronos webview could not post script readiness/);
+
+  const button = operatorPanel.actionButton('open<Thing>', 'Open & Check', {
+    ticket: 'T-1',
+    runId: 'run"1',
+    planId: 'plan<1>',
+    itemId: 'item&1',
+    primary: true,
+  });
+  assert.match(button, /class="kronos-button primary"/);
+  assert.match(button, /data-action="open&lt;Thing&gt;"/);
+  assert.match(button, /data-ticket="T-1"/);
+  assert.match(button, /data-run-id="run&quot;1"/);
+  assert.match(button, /data-plan-id="plan&lt;1&gt;"/);
+  assert.match(button, /data-item-id="item&amp;1"/);
+  assert.ok(button.endsWith('>Open &amp; Check</button>'));
+  assert.equal(operatorPanel.actionRow([]), '<span class="muted">No action</span>');
+  assert.equal(operatorPanel.operatorCommandRow([]), '');
+  assert.match(operatorPanel.actionRow([button]), /inline-actions/);
+  assert.match(operatorPanel.operatorCommandRow([button]), /operator-command-row/);
+  const panelScript = operatorPanel.kronosActionPanelScript('nonce123', 'Kronos Test', true);
+  assert.match(panelScript, /script nonce="nonce123"/);
+  assert.match(panelScript, /Kronos Test/);
+  assert.match(panelScript, /data-ticket/);
+  assert.match(panelScript, /data-run-id/);
+  assert.match(panelScript, /data-plan-id/);
+  assert.match(panelScript, /data-item-id/);
+  assert.match(panelScript, /__kronosWebviewReady/);
 
   const existing = '<html><head><meta http-equiv="Content-Security-Policy" content="default-src test"></head><body></body></html>';
   assert.equal(webviewSecurity.withWebviewCsp(existing), existing);
@@ -5120,17 +5148,25 @@ test('webview html helpers centralize escaping and safe HTTP links', () => {
 
 test('extension webviews use shared UI shell and board filtering affordances', () => {
   const source = readSourceFixture('src', 'extension.ts');
+  const operatorPanelSource = readSourceFixture('src', 'services', 'operatorPanel.ts');
   const boardHandlerStart = source.indexOf('panel.webview.onDidReceiveMessage(async (msg) => {\n        if (logReady(msg)) { return; }\n        const request = normalizeBoardMessage(msg);');
   const boardHandlerEnd = source.indexOf("    vscode.commands.registerCommand('kronos.viewTicket'", boardHandlerStart);
   assert.ok(boardHandlerStart >= 0 && boardHandlerEnd > boardHandlerStart, 'Jira board message handler should be present');
   const boardHandlerSource = source.slice(boardHandlerStart, boardHandlerEnd);
   for (const marker of [
-    "import { WEBVIEW_READY_COMMAND, createWebviewNonce, webviewActionPostScript, webviewReadyPostScript, webviewScriptCspOptions, webviewVsCodeApiScript, withWebviewCsp } from './services/webviewSecurity'",
+    "import { createWebviewNonce, webviewReadyPostScript, webviewScriptCspOptions, webviewVsCodeApiScript, withWebviewCsp } from './services/webviewSecurity'",
+    "import { actionButton, actionRow, kronosActionPanelScript, operatorCommandRow } from './services/operatorPanel'",
     "import { createWebviewReadyMonitor } from './services/webviewDiagnostics'",
     'const nonce = createWebviewNonce()',
     'webviewScriptCspOptions(panel.webview.cspSource, nonce)',
     'kronosWebviewBaseCss',
     'class="kronos-shell dashboard-shell"',
+    'let data: unknown = {}',
+    'let loadWarning: string | undefined',
+    "loadWarning = unknownErrorMessage(e, 'Morning brief unavailable.')",
+    'buildDashboardHtml(state, data, nonce, loadWarning)',
+    'Morning brief unavailable',
+    'dashboard-warning',
     'class="kronos-shell board-shell"',
     'class="kronos-shell ticket-shell"',
     'class="kronos-shell diff-shell"',
@@ -5198,17 +5234,6 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'options.refreshAllEvidenceGates',
     'function evidenceGatePanelGatesForState(state: KronosState): EvidenceGateResult[]',
     'function isProofSensitiveAction',
-    'function kronosActionPanelScript',
-    'webviewActionPostScript(webviewName, [',
-    'readyDiagnostic ? { readyCommand: WEBVIEW_READY_COMMAND } : {}',
-    "{ messageKey: 'ticket', dataAttribute: 'data-ticket' }",
-    "{ messageKey: 'runId', dataAttribute: 'data-run-id' }",
-    "{ messageKey: 'planId', dataAttribute: 'data-plan-id' }",
-    "{ messageKey: 'itemId', dataAttribute: 'data-item-id' }",
-    'script nonce="${escapeAttr(nonce)}"',
-    "data-action=\"${escapeAttr(action)}\"",
-    "data-plan-id=\"${escapeAttr(options.planId)}\"",
-    "data-item-id=\"${escapeAttr(options.itemId)}\"",
     'function openInteractiveRunCenter',
     'function executeRunCenterAction',
     'async function archiveFinishedRuns',
@@ -5362,6 +5387,24 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'Kronos Doctor',
   ]) {
     assert.ok(source.includes(marker), marker);
+  }
+  for (const marker of [
+    'export function actionButton',
+    'export function actionRow',
+    'export function operatorCommandRow',
+    'export function kronosActionPanelScript',
+    'webviewActionPostScript(webviewName, [',
+    'readyDiagnostic ? { readyCommand: WEBVIEW_READY_COMMAND } : {}',
+    "{ messageKey: 'ticket', dataAttribute: 'data-ticket' }",
+    "{ messageKey: 'runId', dataAttribute: 'data-run-id' }",
+    "{ messageKey: 'planId', dataAttribute: 'data-plan-id' }",
+    "{ messageKey: 'itemId', dataAttribute: 'data-item-id' }",
+    'script nonce="${escapeAttr(nonce)}"',
+    "data-action=\"${escapeAttr(action)}\"",
+    "data-plan-id=\"${escapeAttr(options.planId)}\"",
+    "data-item-id=\"${escapeAttr(options.itemId)}\"",
+  ]) {
+    assert.ok(operatorPanelSource.includes(marker), marker);
   }
   assert.equal(/^\s*vscode\.window\.withProgress\(/m.test(source), false, 'progress tasks should be awaited by their command handlers');
   assert.equal((source.match(/dispatchClaudeSession\(/g) || []).length, 1, 'command handlers should use startClaudeDispatch for Claude session startup');

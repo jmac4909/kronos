@@ -54,12 +54,13 @@ import { buildNextActionContext, buildNextActionStartDecision, skillForAction } 
 import { createWorkspaceDiffArtifact, firstRemoteBranchMatching, originProjectPath } from './services/gitWorkspace';
 import { signalProcessTree, stopProcessTree } from './services/processTree';
 import { createWebviewReadyMonitor } from './services/webviewDiagnostics';
-import { WEBVIEW_READY_COMMAND, createWebviewNonce, webviewActionPostScript, webviewReadyPostScript, webviewScriptCspOptions, webviewVsCodeApiScript, withWebviewCsp } from './services/webviewSecurity';
+import { createWebviewNonce, webviewReadyPostScript, webviewScriptCspOptions, webviewVsCodeApiScript, withWebviewCsp } from './services/webviewSecurity';
 import { escapeAttr, escapeClass, escapeHtml, kronosWebviewBaseCss, safeHttpHref } from './services/webviewHtml';
 import { kronosTerminalOptions } from './services/terminalProfiles';
 import { unknownErrorCode, unknownErrorMessage } from './services/errorUtils';
 import { activeRunSummary, isActiveRun } from './services/runStatus';
 import { runAttentionDetail } from './services/runAttention';
+import { actionButton, actionRow, kronosActionPanelScript, operatorCommandRow } from './services/operatorPanel';
 
 let statusBarItem: vscode.StatusBarItem;
 interface BadgeTarget {
@@ -1520,7 +1521,6 @@ export function activate(context: vscode.ExtensionContext) {
     }),
 
     vscode.commands.registerCommand('kronos.jiraBoard', async () => {
-      if (!state.state) { return; }
       const panel = vscode.window.createWebviewPanel(
         'kronosJiraBoard', 'Kronos: Jira Board',
         vscode.ViewColumn.One, { enableScripts: true }
@@ -2203,8 +2203,15 @@ export function activate(context: vscode.ExtensionContext) {
         );
         const nonce = createWebviewNonce();
         const render = async () => {
-          const data = await state.morningBrief();
-          panel.webview.html = withWebviewCsp(buildDashboardHtml(state, data, nonce), webviewScriptCspOptions(panel.webview.cspSource, nonce));
+          let data: unknown = {};
+          let loadWarning: string | undefined;
+          try {
+            data = await state.morningBrief();
+          } catch (e: unknown) {
+            loadWarning = unknownErrorMessage(e, 'Morning brief unavailable.');
+            console.warn(loadWarning);
+          }
+          panel.webview.html = withWebviewCsp(buildDashboardHtml(state, data, nonce, loadWarning), webviewScriptCspOptions(panel.webview.cspSource, nonce));
         };
         await render();
         startActiveRunPanelRefresh(panel, state, render);
@@ -4529,27 +4536,6 @@ async function executeEvidenceGateAction(command: string, ticketKey: string): Pr
   }
 }
 
-function actionButton(action: string, label: string, options: { ticket?: string; runId?: string; planId?: string; itemId?: string; primary?: boolean } = {}): string {
-  const classes = `kronos-button${options.primary ? ' primary' : ''}`;
-  const ticketAttr = options.ticket ? ` data-ticket="${escapeAttr(options.ticket)}"` : '';
-  const runAttr = options.runId ? ` data-run-id="${escapeAttr(options.runId)}"` : '';
-  const planAttr = options.planId ? ` data-plan-id="${escapeAttr(options.planId)}"` : '';
-  const itemAttr = options.itemId ? ` data-item-id="${escapeAttr(options.itemId)}"` : '';
-  return `<button type="button" class="${classes}" data-action="${escapeAttr(action)}"${ticketAttr}${runAttr}${planAttr}${itemAttr}>${escapeHtml(label)}</button>`;
-}
-
-function actionRow(buttons: string[]): string {
-  return buttons.length > 0
-    ? `<div class="kronos-action-row inline-actions">${buttons.join('')}</div>`
-    : '<span class="muted">No action</span>';
-}
-
-function operatorCommandRow(buttons: string[]): string {
-  return buttons.length > 0
-    ? `<div class="kronos-action-row operator-command-row">${buttons.join('')}</div>`
-    : '';
-}
-
 async function executeOperatorCommandAction(command: string, ticketKey = ''): Promise<void> {
   if (TICKET_SCOPED_OPERATOR_COMMANDS.has(command)) {
     if (!ticketKey) {
@@ -4575,17 +4561,6 @@ function attachOperatorCommandHandler(panel: vscode.WebviewPanel): void {
     }
     await executeOperatorCommandAction(request.command, request.ticket);
   });
-}
-
-function kronosActionPanelScript(nonce: string, webviewName = 'Kronos action panel', readyDiagnostic = false): string {
-  return `<script nonce="${escapeAttr(nonce)}">
-${webviewActionPostScript(webviewName, [
-  { messageKey: 'ticket', dataAttribute: 'data-ticket' },
-  { messageKey: 'runId', dataAttribute: 'data-run-id' },
-  { messageKey: 'planId', dataAttribute: 'data-plan-id' },
-  { messageKey: 'itemId', dataAttribute: 'data-item-id' },
-], readyDiagnostic ? { readyCommand: WEBVIEW_READY_COMMAND } : {})}
-</script>`;
 }
 
 function openQueuePlannerPanel(state: KronosState): void {
@@ -6161,7 +6136,7 @@ async function executeDashboardAction(command: string): Promise<void> {
   }
 }
 
-function buildDashboardHtml(state: KronosState, brief: unknown, nonce?: string): string {
+function buildDashboardHtml(state: KronosState, brief: unknown, nonce?: string, loadWarning?: string): string {
   const safeBrief = dashboardBriefRecord(brief);
   const projects = state.state?.projects || {};
 
@@ -6242,6 +6217,9 @@ function buildDashboardHtml(state: KronosState, brief: unknown, nonce?: string):
   const readyItems = dashboardBriefItems(safeBrief, 'ready_to_go').map((r: unknown) => `<li>${escapeHtml(String(r))}</li>`).join('');
   const attentionItems = dashboardBriefItems(safeBrief, 'needs_attention').map((r: unknown) => `<li>${escapeHtml(String(r))}</li>`).join('');
   const worklistHtml = buildDashboardWorklistHtml(worklistLanes);
+  const warningHtml = loadWarning
+    ? `<div class="dashboard-warning kronos-panel pad"><strong>Morning brief unavailable</strong><div>${escapeHtml(loadWarning)}</div></div>`
+    : '';
 
   return `<!DOCTYPE html>
 <html>
@@ -6287,6 +6265,9 @@ function buildDashboardHtml(state: KronosState, brief: unknown, nonce?: string):
   .lane-empty { color: var(--k-muted); font-size: 12px; }
   .dashboard-list { display: grid; gap: 7px; list-style: none; padding: 0; margin: 8px 0 0; }
   .dashboard-list li { padding: 8px 10px; border: 1px solid var(--k-border); border-radius: var(--k-radius-sm); background: var(--k-surface-soft); }
+  .dashboard-warning { margin: 12px 0; border-color: color-mix(in srgb, #ff9800 42%, var(--k-border)); color: var(--k-fg); }
+  .dashboard-warning strong { display: block; margin-bottom: 4px; color: #ff9800; }
+  .dashboard-warning div { color: var(--k-muted); font-size: 12px; line-height: 1.45; }
   @media (max-width: 820px) {
     .next-action { grid-column: 1; }
   }
@@ -6299,6 +6280,7 @@ function buildDashboardHtml(state: KronosState, brief: unknown, nonce?: string):
       <div class="kronos-subtitle">${Object.keys(projects).length} project${Object.keys(projects).length === 1 ? '' : 's'} tracked, ${Object.keys(allTickets).length} ticket${Object.keys(allTickets).length === 1 ? '' : 's'} in state</div>
     </div>
   </div>
+  ${warningHtml}
   ${cockpitHtml}
   ${briefHtml}
   ${worklistHtml}
