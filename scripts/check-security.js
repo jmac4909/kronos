@@ -354,6 +354,14 @@ for (const marker of [
   'updateTicketMergeRequestStatus({ ticketKey: candidate.ticketKey, status })',
   'update.closedNow',
   'MR closed - ticket moved to blocked.',
+  'type TicketWithOpenMergeRequest = Ticket & { mr: NonNullable<Ticket[\'mr\']> }',
+  'function isOpenReviewMergeRequestEntry(entry: [string, Ticket]): entry is [string, TicketWithOpenMergeRequest]',
+  '.filter(isOpenReviewMergeRequestEntry)',
+  'function reviewBranchTickets(state: KronosState): ReviewBranchTicket[]',
+  'return reviewMergeRequestCandidates(state).map(({ ticketKey, ticket }) => ({',
+  "vscode.window.showInformationMessage('No open review MRs to fix.')",
+  "vscode.window.showInformationMessage('Need at least 2 open review MRs to resolve conflicts.')",
+  "vscode.window.showInformationMessage('No open review MRs to verify.')",
   'startDeployMonitorForMergedTicket',
   "dispatchClaudeSession(projectPath, 'deploy-monitor', ticketKey",
   'projectNameOverride: projectName',
@@ -478,6 +486,12 @@ if (boardHandlerStart < 0 || boardHandlerEnd <= boardHandlerStart) {
   fail('Missing Jira board message handler block.');
 }
 const boardHandlerSource = extension.slice(boardHandlerStart, boardHandlerEnd);
+if (extension.includes(".filter(([_, t]) => t.next_action === 'await_review' && t.mr)")) {
+  fail('Review branch commands should share the open-MR review candidate helper.');
+}
+if (extension.includes('mr: ticket.mr!')) {
+  fail('Review branch helper should not need non-null assertions.');
+}
 for (const forbidden of [
   'catch (e: any)',
   'e?.message',

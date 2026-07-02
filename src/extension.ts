@@ -2286,11 +2286,9 @@ export function activate(context: vscode.ExtensionContext) {
 
     vscode.commands.registerCommand('kronos.sonarCombined', async () => {
       if (!state.state) { return; }
-      const reviewTickets = Object.entries(state.state.tickets)
-        .filter(([_, t]) => t.next_action === 'await_review' && t.mr)
-        .map(([k, t]) => ({ key: k, summary: t.summary, mr: t.mr!, projects: t.projects }));
+      const reviewTickets = reviewBranchTickets(state);
       if (reviewTickets.length === 0) {
-        vscode.window.showInformationMessage('No tickets in review to fix.');
+        vscode.window.showInformationMessage('No open review MRs to fix.');
         return;
       }
 
@@ -2487,11 +2485,9 @@ export function activate(context: vscode.ExtensionContext) {
 
     vscode.commands.registerCommand('kronos.resolveConflicts', async () => {
       if (!state.state) { return; }
-      const reviewTickets = Object.entries(state.state.tickets)
-        .filter(([_, t]) => t.next_action === 'await_review' && t.mr)
-        .map(([k, t]) => ({ key: k, summary: t.summary, mr: t.mr!, projects: t.projects }));
+      const reviewTickets = reviewBranchTickets(state);
       if (reviewTickets.length < 2) {
-        vscode.window.showInformationMessage('Need at least 2 branches in review to resolve conflicts.');
+        vscode.window.showInformationMessage('Need at least 2 open review MRs to resolve conflicts.');
         return;
       }
 
@@ -2539,11 +2535,9 @@ export function activate(context: vscode.ExtensionContext) {
 
     vscode.commands.registerCommand('kronos.verifyCombined', async () => {
       if (!state.state) { return; }
-      const reviewTickets = Object.entries(state.state.tickets)
-        .filter(([_, t]) => t.next_action === 'await_review' && t.mr)
-        .map(([k, t]) => ({ key: k, summary: t.summary, mr: t.mr!, projects: t.projects }));
+      const reviewTickets = reviewBranchTickets(state);
       if (reviewTickets.length === 0) {
-        vscode.window.showInformationMessage('No tickets in review to verify.');
+        vscode.window.showInformationMessage('No open review MRs to verify.');
         return;
       }
 
@@ -5664,11 +5658,28 @@ async function pollReviewMergeRequests(state: KronosState): Promise<void> {
   }
 }
 
-function reviewMergeRequestCandidates(state: KronosState): Array<{ ticketKey: string; ticket: Ticket }> {
+type TicketWithOpenMergeRequest = Ticket & { mr: NonNullable<Ticket['mr']> };
+
+function reviewMergeRequestCandidates(state: KronosState): Array<{ ticketKey: string; ticket: TicketWithOpenMergeRequest }> {
   if (!state.state) { return []; }
   return Object.entries(state.state.tickets || {})
-    .filter((entry): entry is [string, Ticket] => entry[1].next_action === 'await_review' && entry[1].mr?.state === 'opened')
+    .filter(isOpenReviewMergeRequestEntry)
     .map(([ticketKey, ticket]) => ({ ticketKey, ticket }));
+}
+
+function isOpenReviewMergeRequestEntry(entry: [string, Ticket]): entry is [string, TicketWithOpenMergeRequest] {
+  return entry[1].next_action === 'await_review' && entry[1].mr?.state === 'opened';
+}
+
+type ReviewBranchTicket = { key: string; summary: string; mr: TicketWithOpenMergeRequest['mr']; projects: string[] };
+
+function reviewBranchTickets(state: KronosState): ReviewBranchTicket[] {
+  return reviewMergeRequestCandidates(state).map(({ ticketKey, ticket }) => ({
+    key: ticketKey,
+    summary: ticket.summary,
+    mr: ticket.mr,
+    projects: ticket.projects,
+  }));
 }
 
 async function startDeployMonitorForMergedTicket(state: KronosState, ticketKey: string, ticket: Ticket): Promise<void> {
