@@ -567,7 +567,7 @@ async function archiveSelectedRun(runId: string): Promise<void> {
   }
 }
 
-const FINISHED_ARCHIVE_STATUSES = new Set<KronosRun['status']>(['completed', 'failed', 'cancelled']);
+const FINISHED_ARCHIVE_STATUSES = new Set<KronosRun['status']>(['completed', 'waiting_for_review', 'failed', 'cancelled']);
 
 function isFinishedArchiveRun(run: KronosRun): boolean {
   return FINISHED_ARCHIVE_STATUSES.has(run.status);
@@ -580,11 +580,11 @@ function runCountLabel(count: number): string {
 async function archiveFinishedRuns(): Promise<void> {
   const runs = listRuns().filter(isFinishedArchiveRun);
   if (runs.length === 0) {
-    vscode.window.showInformationMessage('No completed, failed, or cancelled Kronos runs to archive.');
+    vscode.window.showInformationMessage('No completed, review-ready, failed, or cancelled Kronos runs to archive.');
     return;
   }
   const confirm = await vscode.window.showWarningMessage(
-    `Archive ${runCountLabel(runs.length)}? Completed, failed, and cancelled runs will move under the run archive. Active, paused, waiting-for-review, and needs-human runs stay visible.`,
+    `Archive ${runCountLabel(runs.length)}? Completed, review-ready, failed, and cancelled runs will move under the run archive. Active, paused, and needs-human runs stay visible.`,
     'Archive Finished',
     'Cancel'
   );
