@@ -13,6 +13,14 @@ function readSourceFixture(...segments) {
   return fs.readFileSync(path.join(__dirname, '..', ...segments), 'utf8').replace(/\r\n/g, '\n');
 }
 
+function mockCommandName(command) {
+  return String(command).split(/[\\/]/).pop().replace(/\.(cmd|bat|exe)$/i, '').toLowerCase();
+}
+
+function mockCommandLine(command, args) {
+  return [mockCommandName(command), ...args].join(' ');
+}
+
 const promptManager = require('../out/services/promptManager.js');
 const stateStore = require('../out/services/stateStore.js');
 const queuePlanner = require('../out/services/queuePlanner.js');
@@ -1455,7 +1463,7 @@ test('CLI probes centralize Claude and GCloud argv checks', () => {
   const calls = [];
   const commandRunner = (command, args, options) => {
     calls.push({ command, args, options });
-    const joined = [command, ...args].join(' ');
+    const joined = mockCommandLine(command, args);
     if (joined === 'claude agents --json') {
       return JSON.stringify([{ id: 'agent-1', status: 'running' }]);
     }
@@ -1472,9 +1480,22 @@ test('CLI probes centralize Claude and GCloud argv checks', () => {
   assert.equal(cliProbes.checkClaudeModelAccess('claude-sonnet-4-6', { commandRunner }).ok, true);
   assert.equal(cliProbes.checkGcloudApplicationDefaultAuth({ commandRunner }).ok, true);
 
-  assert.deepEqual(calls.map(call => [call.command, call.args, call.options.timeoutMs]), [
+  assert.deepEqual(calls.map(call => [mockCommandName(call.command), call.args, call.options.timeoutMs]), [
     ['claude', ['agents', '--json'], 5000],
     ['claude', ['-p', 'ok', '--model', 'claude-sonnet-4-6', '--permission-mode', 'auto'], 15000],
+    ['gcloud', ['auth', 'application-default', 'print-access-token'], 10000],
+  ]);
+
+  const windowsCalls = [];
+  assert.equal(cliProbes.checkGcloudApplicationDefaultAuth({
+    platform: 'win32',
+    existsSync: () => false,
+    commandRunner(command, args, options) {
+      windowsCalls.push({ command, args, options });
+      return commandRunner(command, args, options);
+    },
+  }).ok, true);
+  assert.deepEqual(windowsCalls.map(call => [mockCommandName(call.command), call.args, call.options.timeoutMs]), [
     ['gcloud', ['auth', 'application-default', 'print-access-token'], 10000],
   ]);
 });
@@ -3611,7 +3632,7 @@ test('doctor checks centralize command, credential, project config, and reachabi
     SONAR_HOST_URL: 'https://sonar.example',
   };
   const commandRunner = (command, args) => {
-    const joined = [command, ...args].join(' ');
+    const joined = mockCommandLine(command, args);
     if (joined === 'python --version') { return 'Python 3.12.0\n'; }
     if (joined === 'git --version') { return 'git version 2.45.0\n'; }
     if (joined === 'claude --version') { return 'claude 1.2.3\n'; }
@@ -3755,7 +3776,7 @@ test('doctor checks centralize command, credential, project config, and reachabi
     dispatchModel: 'claude-opus-4-6',
     env,
     commandRunner: (command, args) => {
-      const joined = [command, ...args].join(' ');
+      const joined = mockCommandLine(command, args);
       if (joined === 'python --version') { throw { message: '   ' }; }
       if (joined === 'claude --version') { throw { message: '   ' }; }
       if (joined === 'gcloud auth application-default print-access-token') { throw { message: '   ' }; }

@@ -67,6 +67,7 @@ const changedFiles = readSource('src/services/changedFiles.ts');
 const sonarReportView = readSource('src/services/sonarReportView.ts');
 const agingReportView = readSource('src/services/agingReportView.ts');
 const webviewHtml = readSource('src/services/webviewHtml.ts');
+const unitTests = readSource('scripts/run-unit-tests.js');
 const vscodeIgnore = readSource('.vscodeignore');
 const extension = sources['src/extension.ts'];
 
@@ -146,10 +147,24 @@ for (const forbidden of ['--set-project-config', '--unregister', '--set-setting'
   }
 }
 
-for (const requiredIgnore of ['.git/**', '.claude/**', 'node_modules/**', 'scripts/**', 'CLAUDE.md', '*.zip', '*.tgz', '*.log', '.env*', 'GOOD_TO_GREAT_REVIEW.md']) {
+for (const requiredIgnore of ['.git/**', '.claude/**', 'node_modules/**', 'scripts/**', 'CLAUDE.md', '*.zip', '*.tgz', '*.log', '.env*', 'GOOD_TO_GREAT_REVIEW.md', 'WINDOWS_FEEDBACK_*.md']) {
   if (!vscodeIgnore.split(/\r?\n/).includes(requiredIgnore)) {
     fail(`.vscodeignore must exclude ${requiredIgnore}`);
   }
+}
+for (const marker of [
+  'function mockCommandName(command)',
+  'function mockCommandLine(command, args)',
+  "replace(/\\.(cmd|bat|exe)$/i, '')",
+  "platform: 'win32'",
+  "['gcloud', ['auth', 'application-default', 'print-access-token'], 10000]",
+]) {
+  if (!unitTests.includes(marker)) {
+    fail(`Missing Windows command mock marker: ${marker}`);
+  }
+}
+if (unitTests.includes("const joined = [command, ...args].join(' ');")) {
+  fail('Unit test command mocks must normalize command names so gcloud.cmd works on Windows.');
 }
 
 const enableScriptsTrue = [...extension.matchAll(/enableScripts:\s*true/g)].length;

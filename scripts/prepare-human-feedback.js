@@ -87,6 +87,12 @@ requireFile('HUMAN_FEEDBACK_CHECKLIST.md', [
   'Stop Conditions',
   'Signoff Bar',
 ]);
+requireFile('WINDOWS_FEEDBACK_2026-07-02.md', [
+  'VS Code 1.127.0',
+  'gcloud.cmd',
+  'Run records can remain `running`',
+  'Webview buttons are dead',
+]);
 requireFile('LICENSE', ['All rights reserved']);
 requireFile('.vscode/launch.json', ['Run Kronos Extension']);
 
@@ -121,6 +127,7 @@ for (const marker of [
   '.git/',
   '.claude/',
   'GOOD_TO_GREAT_REVIEW.md',
+  'WINDOWS_FEEDBACK_2026-07-02.md',
   'push-master.sh',
   'cache-github-token.sh',
 ]) {

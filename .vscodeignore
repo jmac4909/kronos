@@ -12,6 +12,7 @@ CLAUDE.md
 *.log
 .env*
 GOOD_TO_GREAT_REVIEW.md
+WINDOWS_FEEDBACK_*.md
 push-master.sh
 cache-github-token.sh
 tsconfig.json
