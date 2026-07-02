@@ -167,6 +167,19 @@ export function kronosWebviewBaseCss(): string {
     padding: 10px 12px;
     font-size: 12px;
   }
+  .kronos-script-required {
+    margin: 0 0 14px;
+    padding: 10px 12px;
+    border: 1px solid rgba(255,152,0,0.42);
+    border-left: 3px solid var(--k-warn);
+    border-radius: var(--k-radius);
+    color: var(--k-warn);
+    background: rgba(255,152,0,0.12);
+    font-size: 12px;
+  }
+  html[data-kronos-script-ready="true"] .kronos-script-required {
+    display: none;
+  }
   .kronos-table {
     width: 100%;
     border-collapse: collapse;

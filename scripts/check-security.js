@@ -955,6 +955,8 @@ for (const marker of [
   '.kronos-toolbar',
   '.kronos-card',
   '.kronos-empty.compact',
+  '.kronos-script-required',
+  'html[data-kronos-script-ready="true"] .kronos-script-required',
 ]) {
   if (!webviewHtml.includes(marker)) {
     fail(`Missing shared webview design marker: ${marker}`);
@@ -1619,6 +1621,10 @@ for (const marker of [
   "console.info('Kronos webview script ready', webviewName, navigator.userAgent)",
   "console.error('Kronos webview script error', webviewName",
   "console.error('Kronos webview unhandled rejection', webviewName",
+  'export function webviewScriptDiagnosticBanner',
+  'data-kronos-script-required',
+  'function injectWebviewScriptDiagnostic(html: string): string',
+  'injectWebviewScriptDiagnostic(value)',
   'export function webviewActionPostScript',
   'function postKronosAction(event)',
   "document.addEventListener('click', postKronosAction, true)",

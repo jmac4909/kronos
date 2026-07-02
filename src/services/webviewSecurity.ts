@@ -106,18 +106,37 @@ export function webviewCspMeta(options: WebviewCspOptions = {}): string {
   return `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${styleSrc}; style-src-elem ${styleSrc}; style-src-attr 'unsafe-inline'; script-src ${scriptSrc}; script-src-elem ${scriptSrc}; script-src-attr 'none'; base-uri 'none'; form-action 'none';${imgSrc}">`;
 }
 
+export function webviewScriptDiagnosticBanner(): string {
+  return '<div class="kronos-script-required" data-kronos-script-required role="status">Kronos webview JavaScript has not started. Check the VS Code Extension Host DevTools console for CSP or sandbox errors.</div>';
+}
+
 export function withWebviewCsp(html: string, options: WebviewCspOptions = {}): string {
+  const injectDiagnostic = options.allowScripts === true;
+  const withDiagnostic = (value: string): string => injectDiagnostic
+    ? injectWebviewScriptDiagnostic(value)
+    : value;
   if (/http-equiv=["']Content-Security-Policy["']/i.test(html)) {
-    return html;
+    return withDiagnostic(html);
   }
   const meta = webviewCspMeta(options);
   if (/<head[^>]*>/i.test(html)) {
-    return html.replace(/<head[^>]*>/i, match => `${match}\n${meta}`);
+    return withDiagnostic(html.replace(/<head[^>]*>/i, match => `${match}\n${meta}`));
   }
   if (/<html[^>]*>/i.test(html)) {
-    return html.replace(/<html[^>]*>/i, match => `${match}<head>\n${meta}\n</head>`);
+    return withDiagnostic(html.replace(/<html[^>]*>/i, match => `${match}<head>\n${meta}\n</head>`));
   }
-  return wrapWebviewHtmlWithCsp(html, meta);
+  return withDiagnostic(wrapWebviewHtmlWithCsp(html, meta));
+}
+
+function injectWebviewScriptDiagnostic(html: string): string {
+  if (/data-kronos-script-required/i.test(html)) {
+    return html;
+  }
+  const banner = webviewScriptDiagnosticBanner();
+  if (/<body[^>]*>/i.test(html)) {
+    return html.replace(/<body[^>]*>/i, match => `${match}\n${banner}`);
+  }
+  return `${banner}${html}`;
 }
 
 function wrapWebviewHtmlWithCsp(html: string, meta: string): string {

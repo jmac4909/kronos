@@ -1691,6 +1691,21 @@ test('webview security injects CSP and preserves existing nonce policies', () =>
   assert.match(apiScript, /Kronos webview unhandled rejection/);
   assert.doesNotMatch(apiScript, /window\.__kronosVscodeApi/);
   assert.doesNotMatch(apiScript, /var vscode =/);
+  const diagnosticBanner = webviewSecurity.webviewScriptDiagnosticBanner();
+  assert.match(diagnosticBanner, /data-kronos-script-required/);
+  assert.match(diagnosticBanner, /Extension Host DevTools/);
+  const scriptableHtml = webviewSecurity.withWebviewCsp('<!DOCTYPE html><html><head><style>body{}</style></head><body><button>ok</button></body></html>', {
+    allowScripts: true,
+    nonce: 'abc123',
+  });
+  assert.match(scriptableHtml, /data-kronos-script-required/);
+  assert.match(scriptableHtml, /<body>\n<div class="kronos-script-required"/);
+  assert.equal((scriptableHtml.match(/data-kronos-script-required/g) || []).length, 1);
+  const alreadyDiagnosed = webviewSecurity.withWebviewCsp('<!DOCTYPE html><html><head></head><body><div data-kronos-script-required></div></body></html>', {
+    allowScripts: true,
+    nonce: 'abc123',
+  });
+  assert.equal((alreadyDiagnosed.match(/data-kronos-script-required/g) || []).length, 1);
   const actionScript = webviewSecurity.webviewActionPostScript('Kronos Actions', [
     { messageKey: 'ticket', dataAttribute: 'data-ticket' },
     { messageKey: 'runId', dataAttribute: 'data-run-id' },
@@ -4946,6 +4961,8 @@ test('webview html helpers centralize escaping and safe HTTP links', () => {
   assert.match(baseCss, /\.kronos-toolbar/);
   assert.match(baseCss, /\.kronos-card/);
   assert.match(baseCss, /\.kronos-empty\.compact/);
+  assert.match(baseCss, /\.kronos-script-required/);
+  assert.match(baseCss, /html\[data-kronos-script-ready="true"\] \.kronos-script-required/);
   assert.match(baseCss, /@media \(max-width: 760px\)/);
 });
 
