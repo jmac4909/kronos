@@ -58,6 +58,7 @@ const webviewHtml = require('../out/services/webviewHtml.js');
 const fileNames = require('../out/services/fileNames.js');
 const sessionStore = require('../out/services/sessionStore.js');
 const worktreeRegistry = require('../out/services/worktreeRegistry.js');
+const terminalProfiles = require('../out/services/terminalProfiles.js');
 
 function makeTempProject() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'kronos-test-'));
@@ -1260,6 +1261,44 @@ test('CLI probes normalize failures and invalid Claude agent output', () => {
 
   assert.deepEqual(cliProbes.readClaudeAgents({ commandRunner: () => '{bad json' }), []);
   assert.deepEqual(cliProbes.readClaudeAgents({ commandRunner: () => JSON.stringify({ id: 'not-an-array' }) }), []);
+});
+
+test('terminal profiles prefer Windows Git Bash and avoid PowerShell gcloud shims', () => {
+  const gitBash = 'C:\\Program Files\\Git\\bin\\bash.exe';
+  const windowsEnv = { ProgramFiles: 'C:\\Program Files' };
+  const existsSync = filePath => filePath === gitBash;
+
+  const authTerminal = terminalProfiles.kronosTerminalOptions(
+    { name: 'Kronos Auth' },
+    { platform: 'win32', env: windowsEnv, existsSync },
+  );
+
+  assert.equal(authTerminal.shellPath, gitBash);
+  assert.deepEqual(authTerminal.shellArgs, ['--login']);
+  assert.equal(
+    terminalProfiles.gcloudApplicationDefaultLoginCommand(authTerminal.shellPath, { platform: 'win32' }),
+    'gcloud auth application-default login',
+  );
+
+  const fallbackTerminal = terminalProfiles.kronosTerminalOptions(
+    { name: 'Kronos Auth' },
+    { platform: 'win32', env: windowsEnv, existsSync: () => false },
+  );
+
+  assert.equal(fallbackTerminal.shellPath, undefined);
+  assert.equal(
+    terminalProfiles.gcloudApplicationDefaultLoginCommand(fallbackTerminal.shellPath, { platform: 'win32' }),
+    'gcloud.cmd auth application-default login',
+  );
+
+  const linuxClaudeTerminal = terminalProfiles.kronosLoginShellTerminalOptions(
+    { name: 'Claude', cwd: '/repo/app' },
+    { platform: 'linux', env: { BASH_PATH: '/custom/bash' }, existsSync: () => false },
+  );
+
+  assert.equal(linuxClaudeTerminal.shellPath, '/custom/bash');
+  assert.deepEqual(linuxClaudeTerminal.shellArgs, ['--login']);
+  assert.equal(linuxClaudeTerminal.cwd, '/repo/app');
 });
 
 test('combined verification plans merge real MR branches with safe fallbacks', () => {

@@ -53,6 +53,7 @@ import { createWorkspaceDiffArtifact, firstRemoteBranchMatching, originProjectPa
 import { signalProcessTree, stopProcessTree } from './services/processTree';
 import { withWebviewCsp } from './services/webviewSecurity';
 import { escapeAttr, escapeClass, escapeHtml, kronosWebviewBaseCss, safeHttpHref } from './services/webviewHtml';
+import { kronosTerminalOptions } from './services/terminalProfiles';
 
 let statusBarItem: vscode.StatusBarItem;
 const REQUIRED_PROMPTS = [
@@ -1008,10 +1009,10 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('kronos.openProject', async (item: any) => {
       const projectPath = getProjectPath(state, item?.projectName);
       if (projectPath) {
-        const terminal = vscode.window.createTerminal({
+        const terminal = vscode.window.createTerminal(kronosTerminalOptions({
           name: item.projectName,
           cwd: projectPath,
-        });
+        }));
         terminal.show();
       }
     }),
@@ -2591,7 +2592,7 @@ export function activate(context: vscode.ExtensionContext) {
       } else if (action === 'Open Workspace Terminal') {
         const cwd = picked.run.worktreePath || picked.run.cwd || picked.run.projectPath;
         if (cwd && fs.existsSync(cwd)) {
-          const terminal = vscode.window.createTerminal({ name: `Kronos ${picked.run.project}`, cwd });
+          const terminal = vscode.window.createTerminal(kronosTerminalOptions({ name: `Kronos ${picked.run.project}`, cwd }));
           terminal.show();
         } else {
           vscode.window.showWarningMessage('Run workspace no longer exists.');

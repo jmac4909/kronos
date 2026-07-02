@@ -16,22 +16,9 @@ import { resolveDefaultBaseBranch, sanitizeBranch } from '../services/profileMan
 import { safeFileStem } from '../services/fileNames';
 import { SavedSession, SessionStats, safeSessionId, writeSavedSession } from '../services/sessionStore';
 import { ACTIVE_WORKTREES_FILE, ActiveWorktreeEntry, loadActiveWorktreeRegistry, trackActiveWorktree, untrackActiveWorktree } from '../services/worktreeRegistry';
+import { gcloudApplicationDefaultLoginCommand, kronosLoginShellTerminalOptions, kronosTerminalOptions } from '../services/terminalProfiles';
 export { getAggregateStats, listSavedSessions, listSessionStoreIssues } from '../services/sessionStore';
 
-function findBash(): string {
-  if (process.platform !== 'win32') { return '/bin/bash'; }
-  const candidates = [
-    process.env.BASH_PATH,
-    'C:\\Program Files\\Git\\bin\\bash.exe',
-    'C:\\Program Files (x86)\\Git\\bin\\bash.exe',
-    'C:\\Windows\\System32\\bash.exe',
-  ];
-  for (const p of candidates) {
-    if (p && fs.existsSync(p)) { return p; }
-  }
-  return 'bash';
-}
-const BASH_PATH = findBash();
 const CLAUDE_PATH = process.env.CLAUDE_PATH || 'claude';
 const CLAUDE_PERMISSION_MODE = 'acceptEdits';
 const CLAUDE_ALLOWED_TOOL_PATTERNS = [
@@ -411,8 +398,9 @@ export async function ensureAuth(): Promise<boolean> {
     'Login', 'Cancel'
   );
   if (action === 'Login') {
-    const terminal = vscode.window.createTerminal({ name: 'Kronos Auth' });
-    terminal.sendText('gcloud auth application-default login');
+    const terminalOptions = kronosTerminalOptions({ name: 'Kronos Auth' });
+    const terminal = vscode.window.createTerminal(terminalOptions);
+    terminal.sendText(gcloudApplicationDefaultLoginCommand(terminalOptions.shellPath));
     terminal.show();
     vscode.window.showInformationMessage('Complete browser login, then try again.');
   }
@@ -790,12 +778,10 @@ export async function dispatchClaudeSession(
 export async function openInClaude(projectPath: string): Promise<void> {
   const authed = await ensureAuth();
   if (!authed) { return; }
-  const terminal = vscode.window.createTerminal({
+  const terminal = vscode.window.createTerminal(kronosLoginShellTerminalOptions({
     name: `Claude: ${projectPath.split(/[\\/]/).pop() || 'project'}`,
     cwd: projectPath,
-    shellPath: BASH_PATH,
-    shellArgs: ['--login'],
-  });
+  }));
   terminal.sendText('claude');
   terminal.show();
 }
