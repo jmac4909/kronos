@@ -1566,7 +1566,13 @@ for (const marker of [
   'export function withWebviewCsp',
   "default-src 'none'",
   'style-src ${styleSrc}',
+  'style-src-elem ${styleSrc}',
+  "style-src-attr 'unsafe-inline'",
   "script-src ${scriptSrc}",
+  'script-src-elem ${scriptSrc}',
+  "script-src-attr 'none'",
+  "base-uri 'none'",
+  "form-action 'none'",
   'Content-Security-Policy',
 ]) {
   if (!webviewSecurity.includes(marker)) {

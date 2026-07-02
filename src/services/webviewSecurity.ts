@@ -103,7 +103,7 @@ export function webviewCspMeta(options: WebviewCspOptions = {}): string {
     "'unsafe-inline'",
   ].filter((source): source is string => Boolean(source)).join(' ');
   const imgSrc = options.imgSrc?.length ? ` img-src ${options.imgSrc.join(' ')};` : '';
-  return `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${styleSrc}; script-src ${scriptSrc};${imgSrc}">`;
+  return `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${styleSrc}; style-src-elem ${styleSrc}; style-src-attr 'unsafe-inline'; script-src ${scriptSrc}; script-src-elem ${scriptSrc}; script-src-attr 'none'; base-uri 'none'; form-action 'none';${imgSrc}">`;
 }
 
 export function withWebviewCsp(html: string, options: WebviewCspOptions = {}): string {

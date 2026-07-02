@@ -1620,10 +1620,17 @@ test('webview security injects CSP and preserves existing nonce policies', () =>
 
   const scriptable = webviewSecurity.webviewCspMeta({ allowScripts: true, nonce: 'abc123', imgSrc: ['data:', 'https:'] });
   assert.match(scriptable, /script-src 'nonce-abc123'/);
+  assert.match(scriptable, /script-src-elem 'nonce-abc123'/);
+  assert.match(scriptable, /script-src-attr 'none'/);
+  assert.match(scriptable, /style-src-elem 'unsafe-inline'/);
+  assert.match(scriptable, /style-src-attr 'unsafe-inline'/);
+  assert.match(scriptable, /base-uri 'none'/);
+  assert.match(scriptable, /form-action 'none'/);
   assert.match(scriptable, /img-src data: https:/);
   const scriptableWithSource = webviewSecurity.webviewCspMeta({ allowScripts: true, nonce: 'abc123', cspSource: 'vscode-resource:' });
   assert.match(scriptableWithSource, /style-src vscode-resource: 'unsafe-inline'/);
   assert.match(scriptableWithSource, /script-src vscode-resource: 'nonce-abc123'/);
+  assert.match(scriptableWithSource, /script-src-elem vscode-resource: 'nonce-abc123'/);
 
   const sourceOnlyScripts = webviewSecurity.webviewCspMeta({ allowScripts: true, cspSource: 'vscode-resource:' });
   assert.match(sourceOnlyScripts, /script-src vscode-resource:/);
