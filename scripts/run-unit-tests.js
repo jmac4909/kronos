@@ -2476,6 +2476,12 @@ test('dispatcher records branch and permission metadata for persisted runs', () 
     'Active worktree registry needs manual review before creating a worktree',
     'registryIssue: registry.issue',
     "from '../services/sessionStore'",
+    "import { unknownErrorMessage } from '../services/errorUtils'",
+    'catch (e: unknown)',
+    "unknownErrorMessage(e, 'Could not read Kronos state for base branch.')",
+    "unknownErrorMessage(e, 'Invalid JSON')",
+    "unknownErrorMessage(e, 'Failed to read Kronos state.')",
+    "unknownErrorMessage(e, 'Invalid dispatch model.')",
     'writeSavedSession(session)',
     'export { getAggregateStats, listSavedSessions, listSessionStoreIssues }',
     'const id = safeSessionId',
@@ -2548,6 +2554,16 @@ test('dispatcher records branch and permission metadata for persisted runs', () 
     source.includes('run.events[run.events.length - 1]'),
     false,
     'run center should tolerate missing or malformed run.events',
+  );
+  assert.equal(
+    source.includes('catch (e: any)'),
+    false,
+    'dispatcher should keep caught errors unknown until normalized',
+  );
+  assert.equal(
+    source.includes('e?.message'),
+    false,
+    'dispatcher should normalize unknown error messages through errorUtils',
   );
 
   assert.ok(

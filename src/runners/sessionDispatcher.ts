@@ -17,6 +17,7 @@ import { safeFileStem } from '../services/fileNames';
 import { SavedSession, SessionStats, safeSessionId, writeSavedSession } from '../services/sessionStore';
 import { ACTIVE_WORKTREES_FILE, ActiveWorktreeEntry, loadActiveWorktreeRegistry, trackActiveWorktree, untrackActiveWorktree } from '../services/worktreeRegistry';
 import { gcloudApplicationDefaultLoginCommand, kronosLoginShellTerminalOptions, kronosTerminalOptions } from '../services/terminalProfiles';
+import { unknownErrorMessage } from '../services/errorUtils';
 export { getAggregateStats, listSavedSessions, listSessionStoreIssues } from '../services/sessionStore';
 
 const CLAUDE_PATH = process.env.CLAUDE_PATH || 'claude';
@@ -136,8 +137,8 @@ function configuredStateBaseBranch(projectPath: string): { branch?: string; warn
     return branch
       ? { branch }
       : { warning: `Ignoring unsafe state base branch for ${projectPath}: ${configured}` };
-  } catch (e: any) {
-    return { warning: e?.message || 'Could not read Kronos state for base branch.' };
+  } catch (e: unknown) {
+    return { warning: unknownErrorMessage(e, 'Could not read Kronos state for base branch.') };
   }
 }
 
@@ -151,8 +152,8 @@ function configuredProjectJsonBaseBranch(projConfig: string): { branch?: string;
     return branch
       ? { branch }
       : { warning: `Ignoring unsafe project base branch in ${projConfig}: ${configured}` };
-  } catch (e: any) {
-    return { warning: `Could not read project base branch from ${projConfig}: ${e?.message || 'Invalid JSON'}` };
+  } catch (e: unknown) {
+    return { warning: `Could not read project base branch from ${projConfig}: ${unknownErrorMessage(e, 'Invalid JSON')}` };
   }
 }
 
@@ -166,8 +167,8 @@ function configuredProjectExtraDirs(projectPath: string): { dirs: string[]; warn
         ? dirs.filter((dir): dir is string => typeof dir === 'string' && dir.trim().length > 0)
         : [],
     };
-  } catch (e: any) {
-    return { dirs: [], warning: e?.message || 'Failed to read Kronos state.' };
+  } catch (e: unknown) {
+    return { dirs: [], warning: unknownErrorMessage(e, 'Failed to read Kronos state.') };
   }
 }
 
@@ -539,8 +540,8 @@ export async function dispatchClaudeSession(
   let model: string;
   try {
     model = validateModel(config.get<string>('dispatchModel', 'claude-opus-4-6'));
-  } catch (e: any) {
-    vscode.window.showErrorMessage(e.message);
+  } catch (e: unknown) {
+    vscode.window.showErrorMessage(unknownErrorMessage(e, 'Invalid dispatch model.'));
     panel.dispose();
     return;
   }
@@ -647,9 +648,9 @@ export async function dispatchClaudeSession(
           managedWorktree: true,
         }),
       });
-    } catch (e: any) {
+    } catch (e: unknown) {
       vscode.window.showWarningMessage('Could not create worktree — running in main repo instead.');
-      const event = { type: 'error' as const, label: 'Could not create worktree; running in main repo', detail: e?.message || '', timestamp: new Date() };
+      const event = { type: 'error' as const, label: 'Could not create worktree; running in main repo', detail: unknownErrorMessage(e, ''), timestamp: new Date() };
       events.push(event);
       addRunEvent(run, event);
     }

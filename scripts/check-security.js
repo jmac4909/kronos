@@ -574,6 +574,12 @@ for (const marker of [
   'projectBaseWarning',
   'Could not fully resolve project base branch config',
   "from '../services/sessionStore'",
+  "import { unknownErrorMessage } from '../services/errorUtils'",
+  'catch (e: unknown)',
+  "unknownErrorMessage(e, 'Could not read Kronos state for base branch.')",
+  "unknownErrorMessage(e, 'Invalid JSON')",
+  "unknownErrorMessage(e, 'Failed to read Kronos state.')",
+  "unknownErrorMessage(e, 'Invalid dispatch model.')",
   'writeSavedSession(session)',
   'export { getAggregateStats, listSavedSessions, listSessionStoreIssues }',
   'const id = safeSessionId',
@@ -640,6 +646,14 @@ if (dispatcher.includes('new Date(run.startedAt).toLocaleString()')) {
 }
 if (dispatcher.includes('run.events[run.events.length - 1]')) {
   fail('Run Center must tolerate missing or malformed run.events.');
+}
+for (const forbidden of [
+  'catch (e: any)',
+  'e?.message',
+]) {
+  if (dispatcher.includes(forbidden)) {
+    fail(`Dispatcher must normalize unknown errors instead of using ${forbidden}.`);
+  }
 }
 
 for (const marker of [
