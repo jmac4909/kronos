@@ -628,6 +628,17 @@ export function activate(context: vscode.ExtensionContext) {
   state.onDidSessionChange(() => updateStatusBar(state));
   statusBarItem.show();
   context.subscriptions.push(statusBarItem);
+  if (state.loadIssues.length > 0) {
+    const loaded = state.state ? 'loaded with warnings' : 'could not load state.json';
+    vscode.window.showWarningMessage(
+      `Kronos ${loaded}. Run Doctor for details.`,
+      'Run Doctor'
+    ).then(action => {
+      if (action === 'Run Doctor') {
+        vscode.commands.executeCommand('kronos.doctor');
+      }
+    });
+  }
 
   // --- Commands ---
 
@@ -4623,7 +4634,7 @@ async function pickProjectFromTickets<T extends { key: string; projects: string[
 
 function updateStatusBar(state: KronosState): void {
   if (state.loadIssues.length > 0) {
-    statusBarItem.text = '$(error) Kronos: state error';
+    statusBarItem.text = state.state ? '$(warning) Kronos: state warnings' : '$(error) Kronos: state error';
     statusBarItem.tooltip = state.loadIssues.map(issue => `${issue.target}: ${issue.detail}`).join('\n');
     return;
   }

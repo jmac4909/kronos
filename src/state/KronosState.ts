@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import { KronosState as KronosStateType, QueueState, ClaudeSession } from './types';
 import { RenderedPrompt, renderPrompt } from '../services/promptManager';
-import { STATE_FILE, QUEUE_FILE, readQueueFile, readStateFile } from '../services/stateStore';
+import { STATE_FILE, QUEUE_FILE, readQueueFile, readStateFileWithIssues } from '../services/stateStore';
 import { ScriptRunOptions } from '../services/scriptClient';
 import { DiscoverProjectsResult, MorningBriefResult, addAdhocTask, completeAdhocTask, discoverProjectsJson, readMorningBriefJson, refreshKronosState, registerProject, runStateScript } from '../services/stateScriptAdapter';
 import { readClaudeAgents } from '../services/cliProbes';
@@ -40,7 +40,9 @@ export class KronosState {
   load(): void {
     const issues: KronosStateLoadIssue[] = [];
     try {
-      this._state = readStateFile();
+      const result = readStateFileWithIssues();
+      this._state = result.state;
+      issues.push(...result.issues);
     } catch (e: any) {
       this._state = null;
       issues.push({

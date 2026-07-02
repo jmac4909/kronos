@@ -8,6 +8,7 @@ import { KronosProfile } from './profileManager';
 import { ProviderReachabilityOptions, ProviderReachabilityTarget, probeProviderReachability } from './providerReachability';
 import { requiredScripts } from './scriptClient';
 import { KRONOS_DIR } from './stateStore';
+import { resolveGcloudCommand } from './cliProbes';
 
 export interface DoctorCheck {
   name: string;
@@ -85,7 +86,8 @@ export function runDoctorChecks(input: DoctorChecksInput): DoctorCheck[] {
   commandCheck(checks, commandRunner, 'Python', 'python', ['--version']);
   commandCheck(checks, commandRunner, 'Git', 'git', ['--version']);
   claudeVersionCheck(checks, commandRunner);
-  commandCheck(checks, commandRunner, 'GCloud CLI', 'gcloud', ['--version']);
+  const gcloudCommand = resolveGcloudCommand({ env: env as NodeJS.ProcessEnv });
+  commandCheck(checks, commandRunner, 'GCloud CLI', gcloudCommand, ['--version']);
 
   add('Active integration profile', 'pass', `${input.profile.label} (${input.profile.id})`);
   credentialCheck(checks, env, 'Jira credentials', input.profile.providers.jira, ['JIRA_BASE_URL', 'JIRA_EMAIL', 'JIRA_API_TOKEN']);
@@ -95,7 +97,7 @@ export function runDoctorChecks(input: DoctorChecksInput): DoctorCheck[] {
   credentialAnyCheck(checks, env, 'GitHub Actions credentials', input.profile.providers.githubActions, ['GITHUB_TOKEN', 'GH_TOKEN']);
 
   try {
-    commandRunner('gcloud', ['auth', 'application-default', 'print-access-token'], { timeoutMs: TOKEN_TIMEOUT_MS });
+    commandRunner(gcloudCommand, ['auth', 'application-default', 'print-access-token'], { timeoutMs: TOKEN_TIMEOUT_MS });
     add('GCP application default auth', 'pass', 'Token command succeeded');
   } catch (e: any) {
     add('GCP application default auth', 'warn', e?.message || 'Auth check failed');
@@ -107,7 +109,12 @@ export function runDoctorChecks(input: DoctorChecksInput): DoctorCheck[] {
   if (input.state) {
     const projectCount = Object.keys(input.state.projects || {}).length;
     const ticketCount = Object.keys(input.state.tickets || {}).length;
-    add('state.json parse', 'pass', `${projectCount} project(s), ${ticketCount} ticket(s)`);
+    const stateWarnings = input.stateLoadErrors?.filter(error => error.target === 'state.json') || [];
+    add(
+      'state.json parse',
+      stateWarnings.length > 0 ? 'warn' : 'pass',
+      `${projectCount} project(s), ${ticketCount} ticket(s)${stateWarnings.length ? `; ${stateWarnings.slice(0, 3).map(error => error.detail).join('; ')}${stateWarnings.length > 3 ? `; and ${stateWarnings.length - 3} more` : ''}` : ''}`
+    );
     const missingConfig = projectConfigGaps(input.state, input.profile);
     add(
       'Project config completeness',

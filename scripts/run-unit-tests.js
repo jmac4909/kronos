@@ -486,6 +486,44 @@ test('state store migrates legacy state shape before validation and reads', () =
   assert.equal(read.tickets['K-1'].priority, 'Medium');
 });
 
+test('state store tolerant read reports bad nested records without blanking valid UI state', () => {
+  const state = baseState({
+    'K-GOOD': ticket({ summary: 'Good ticket' }),
+    'K-REPAIRED': ticket({
+      projects: ['app', 123],
+      build: { number: '77', status: 200, url: 12345 },
+      next_action: 'invented',
+      evidence: { notes: {} },
+    }),
+    'K-SKIPPED': ticket({ mr: { iid: 'bad', state: 'draft', review_status: 'pending_review', url: 'https://gitlab.example/mr/1' } }),
+  });
+  state.projects.app.config = {
+    default_branch: 'main',
+    gitlab_project_id: '42',
+    jenkins_url: 12345,
+    extra_dirs: ['/repo/shared', 99],
+  };
+
+  fs.writeFileSync(stateStore.STATE_FILE, JSON.stringify(state, null, 2));
+  assert.throws(() => stateStore.readStateFile(), /gitlab_project_id|jenkins_url/);
+
+  const result = stateStore.readStateFileWithIssues();
+  assert.ok(result.state);
+  assert.equal(result.state.projects.app.config.gitlab_project_id, 42);
+  assert.equal(result.state.projects.app.config.jenkins_url, '12345');
+  assert.deepEqual(result.state.projects.app.config.extra_dirs, ['/repo/shared']);
+  assert.equal(result.state.tickets['K-GOOD'].summary, 'Good ticket');
+  assert.equal(result.state.tickets['K-REPAIRED'].next_action, 'implement');
+  assert.deepEqual(result.state.tickets['K-REPAIRED'].projects, ['app']);
+  assert.equal(result.state.tickets['K-REPAIRED'].build.number, 77);
+  assert.equal(result.state.tickets['K-REPAIRED'].build.status, '200');
+  assert.equal(result.state.tickets['K-REPAIRED'].build.url, '12345');
+  assert.equal(result.state.tickets['K-REPAIRED'].evidence?.notes, undefined);
+  assert.equal(result.state.tickets['K-SKIPPED'], undefined);
+  assert.ok(result.issues.some(issue => issue.detail.includes('gitlab_project_id was coerced')));
+  assert.ok(result.issues.some(issue => issue.detail.includes('Skipped ticket K-SKIPPED')));
+});
+
 test('state store migrates legacy queue shape before validation and reads', () => {
   const legacyQueue = {
     items: [
@@ -1261,6 +1299,42 @@ test('CLI probes normalize failures and invalid Claude agent output', () => {
 
   assert.deepEqual(cliProbes.readClaudeAgents({ commandRunner: () => '{bad json' }), []);
   assert.deepEqual(cliProbes.readClaudeAgents({ commandRunner: () => JSON.stringify({ id: 'not-an-array' }) }), []);
+});
+
+test('CLI probes resolve gcloud.cmd on Windows', () => {
+  const gcloudCmd = 'C:\\Users\\dev\\AppData\\Local\\Google\\Cloud SDK\\google-cloud-sdk\\bin\\gcloud.cmd';
+  const env = { LocalAppData: 'C:\\Users\\dev\\AppData\\Local' };
+  assert.equal(
+    cliProbes.resolveGcloudCommand({
+      platform: 'win32',
+      env,
+      existsSync: filePath => filePath === gcloudCmd,
+    }),
+    gcloudCmd,
+  );
+  assert.equal(
+    cliProbes.resolveGcloudCommand({
+      platform: 'win32',
+      env: {},
+      existsSync: () => false,
+    }),
+    'gcloud.cmd',
+  );
+
+  const calls = [];
+  const result = cliProbes.checkGcloudApplicationDefaultAuth({
+    platform: 'win32',
+    env,
+    existsSync: filePath => filePath === gcloudCmd,
+    commandRunner(command, args, options) {
+      calls.push({ command, args, options });
+      return 'token-value\n';
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(calls[0].command, gcloudCmd);
+  assert.deepEqual(calls[0].args, ['auth', 'application-default', 'print-access-token']);
 });
 
 test('terminal profiles prefer Windows Git Bash and avoid PowerShell gcloud shims', () => {
@@ -2990,6 +3064,10 @@ test('provider reachability probes configured endpoints without secrets', async 
     assert.equal(results.find(result => result.name === 'Disabled Provider').status, 'pass');
     assert.equal(results.find(result => result.name === 'Bad Scheme').status, 'fail');
     assert.doesNotMatch(results.find(result => result.name === 'Local HEAD').detail, /secret/);
+    const systemCa = providerReachability.systemCaCertificatesForHttps();
+    if (systemCa) {
+      assert.equal(systemCa.length > 0, true);
+    }
   } finally {
     await new Promise(resolve => server.close(resolve));
   }
@@ -3104,6 +3182,23 @@ test('doctor checks centralize command, credential, project config, and reachabi
   });
   assert.equal(githubTargets.find(target => target.name === 'GitHub API network reachability').enabled, true);
   assert.equal(githubTargets.find(target => target.name === 'GitHub API network reachability').url, 'https://github.enterprise.example/api/v3');
+
+  const warningChecks = doctorChecks.runDoctorChecks({
+    state,
+    queue: null,
+    stateLoadErrors: [
+      { target: 'state.json', filePath: '/tmp/kronos/state.json', detail: 'project app config.gitlab_project_id was coerced to a number.' },
+    ],
+    profile,
+    requiredPrompts: [],
+    dispatchModel: 'claude-opus-4-6',
+    env,
+    commandRunner,
+    kronosDir: process.env.KRONOS_DIR,
+  });
+  const warningByName = Object.fromEntries(warningChecks.map(check => [check.name, check]));
+  assert.equal(warningByName['state.json parse'].status, 'warn');
+  assert.match(warningByName['state.json parse'].detail, /gitlab_project_id was coerced/);
 
   const loadErrorChecks = doctorChecks.runDoctorChecks({
     state: null,

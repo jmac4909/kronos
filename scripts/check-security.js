@@ -988,6 +988,7 @@ for (const marker of [
   'validateActionValue(t.next_action',
   'validateActionValue(item.action',
   'export function migrateStateFileShape',
+  'export function readStateFileWithIssues',
   'export function migrateQueueFileShape',
   'function migrateQueueItemShape',
   'export function readStateFile',
@@ -1002,8 +1003,8 @@ for (const marker of [
   }
 }
 
-if (!sources['src/state/KronosState.ts'].includes('this._state = readStateFile()')) {
-  fail('KronosState must load state through readStateFile.');
+if (!sources['src/state/KronosState.ts'].includes('const result = readStateFileWithIssues()')) {
+  fail('KronosState must load UI state through readStateFileWithIssues.');
 }
 for (const marker of [
   'export interface KronosStateLoadIssue',
@@ -1034,7 +1035,8 @@ for (const marker of [
   'sessionStoreIssues: listSessionStoreIssues()',
   'No readable saved sessions',
   'No readable session stats',
-  "statusBarItem.text = '$(error) Kronos: state error'",
+  "state.state ? '$(warning) Kronos: state warnings' : '$(error) Kronos: state error'",
+  'Run Doctor for details.',
 ]) {
   if (!extension.includes(marker)) {
     fail(`Missing extension load issue marker: ${marker}`);

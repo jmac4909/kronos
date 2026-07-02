@@ -1,5 +1,6 @@
 import * as http from 'http';
 import * as https from 'https';
+import * as tls from 'tls';
 import { URL } from 'url';
 
 export type ProviderReachabilityStatus = 'pass' | 'warn' | 'fail';
@@ -18,6 +19,7 @@ export interface ProviderReachabilityResult {
 
 export interface ProviderReachabilityOptions {
   timeoutMs?: number;
+  useSystemCa?: boolean;
 }
 
 const DEFAULT_TIMEOUT_MS = 5000;
@@ -43,9 +45,9 @@ async function probeProvider(
   }
 
   try {
-    const result = await requestUrl(normalized.url, options.timeoutMs || DEFAULT_TIMEOUT_MS, 'HEAD');
+    const result = await requestUrl(normalized.url, options.timeoutMs || DEFAULT_TIMEOUT_MS, 'HEAD', options);
     if (result.statusCode === 405) {
-      return { ...(await requestUrl(normalized.url, options.timeoutMs || DEFAULT_TIMEOUT_MS, 'GET')), name: target.name };
+      return { ...(await requestUrl(normalized.url, options.timeoutMs || DEFAULT_TIMEOUT_MS, 'GET', options)), name: target.name };
     }
     return { ...result, name: target.name };
   } catch (e: any) {
@@ -70,14 +72,21 @@ function normalizeReachabilityUrl(raw: string | undefined): { status: ProviderRe
   }
 }
 
-function requestUrl(url: URL, timeoutMs: number, method: 'HEAD' | 'GET'): Promise<ProviderReachabilityResult & { statusCode?: number }> {
+function requestUrl(url: URL, timeoutMs: number, method: 'HEAD' | 'GET', options: ProviderReachabilityOptions): Promise<ProviderReachabilityResult & { statusCode?: number }> {
   return new Promise(resolve => {
     const client = url.protocol === 'https:' ? https : http;
-    const req = client.request(url, {
+    const requestOptions: http.RequestOptions | https.RequestOptions = {
       method,
       timeout: timeoutMs,
       headers: { 'User-Agent': 'kronos-doctor' },
-    }, res => {
+    };
+    const ca = url.protocol === 'https:' && options.useSystemCa !== false
+      ? systemCaCertificatesForHttps()
+      : undefined;
+    if (ca) {
+      (requestOptions as https.RequestOptions).ca = ca;
+    }
+    const req = client.request(url, requestOptions, res => {
       res.resume();
       const statusCode = res.statusCode || 0;
       const status: ProviderReachabilityStatus = statusCode >= 500 || statusCode === 0 ? 'warn' : 'pass';
@@ -102,4 +111,19 @@ function requestUrl(url: URL, timeoutMs: number, method: 'HEAD' | 'GET'): Promis
 function safeUrlLabel(url: URL): string {
   const path = url.pathname && url.pathname !== '/' ? url.pathname : '';
   return `${url.protocol}//${url.host}${path}`;
+}
+
+export function systemCaCertificatesForHttps(): string[] | undefined {
+  const getCACertificates = (tls as any).getCACertificates;
+  if (typeof getCACertificates !== 'function') {
+    return undefined;
+  }
+  try {
+    const bundled = getCACertificates('bundled') as string[];
+    const system = getCACertificates('system') as string[];
+    const combined = [...bundled, ...system].filter((cert): cert is string => typeof cert === 'string' && cert.length > 0);
+    return Array.from(new Set(combined));
+  } catch {
+    return undefined;
+  }
 }
