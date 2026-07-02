@@ -74,6 +74,7 @@ const operatorPanel = readSource('src/services/operatorPanel.ts');
 const promptPanelView = readSource('src/services/promptPanelView.ts');
 const recoveryPanelView = readSource('src/services/recoveryPanelView.ts');
 const humanReviewPanelView = readSource('src/services/humanReviewPanelView.ts');
+const evidencePanelView = readSource('src/services/evidencePanelView.ts');
 const cliProbes = readSource('src/services/cliProbes.ts');
 const combinedVerification = readSource('src/services/combinedVerification.ts');
 const changedFiles = readSource('src/services/changedFiles.ts');
@@ -351,8 +352,6 @@ for (const marker of [
   'kronos.evidenceGate',
   'openEvidenceGatePanel',
   'const EVIDENCE_GATE_MESSAGE_COMMANDS = new Set',
-  'function evidenceGateActionButtons',
-  "actionButton(isMissingExtraction ? 'extractAcceptanceCriteria' : 'updateAcceptanceCriteria'",
   "if (request.command === 'refreshPanel') {\n      state.reloadAndNotify();\n      render();\n      return;\n    }",
   "openEvidenceGatePanel(state, evidenceGatePanelGatesForState(state), 'Kronos Evidence Gate', { refreshAllEvidenceGates: true })",
   'options.refreshAllEvidenceGates',
@@ -360,7 +359,6 @@ for (const marker of [
   'function isProofSensitiveAction',
   'kronos.evidenceHandoff',
   'openEvidenceHandoffPanel',
-  'Kronos did not call a posting API',
   'kronos.publishEvidence',
   'openEvidencePublishPanel',
   'Publish Evidence Comment',
@@ -1007,6 +1005,31 @@ for (const marker of [
 ]) {
   if (!humanReviewPanelView.includes(marker)) {
     fail(`Missing human review panel view marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  'export function buildEvidenceGateHtml',
+  'export function buildEvidenceHandoffHtml',
+  'export function buildEvidencePublishHtml',
+  'Evidence Handoff:',
+  'Evidence Publish:',
+  'Kronos Evidence Gate',
+  'Kronos did not call a posting API',
+  'publishPillClass',
+  'evidenceGateActionButtons',
+  "actionButton('refreshPanel', 'Refresh')",
+  "actionButton('addEvidence', 'Add Evidence'",
+  "actionButton(isMissingExtraction ? 'extractAcceptanceCriteria' : 'updateAcceptanceCriteria'",
+  "actionButton('recordEnvironmentResult', 'Record Env'",
+  "actionButton('evidenceHandoff', 'Handoff'",
+  "actionButton('publishEvidence', 'Publish'",
+  'safeHttpHref',
+  'kronosOperatorPanelCss',
+  "kronosActionPanelScript(nonce, 'Kronos Evidence Gate', true)",
+]) {
+  if (!evidencePanelView.includes(marker)) {
+    fail(`Missing evidence panel view marker: ${marker}`);
   }
 }
 

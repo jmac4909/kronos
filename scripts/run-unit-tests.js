@@ -62,6 +62,7 @@ const operatorPanel = require('../out/services/operatorPanel.js');
 const promptPanelView = require('../out/services/promptPanelView.js');
 const recoveryPanelView = require('../out/services/recoveryPanelView.js');
 const humanReviewPanelView = require('../out/services/humanReviewPanelView.js');
+const evidencePanelView = require('../out/services/evidencePanelView.js');
 const runStatus = require('../out/services/runStatus.js');
 const runProgress = require('../out/services/runProgress.js');
 const relativeTime = require('../out/services/relativeTime.js');
@@ -4822,6 +4823,65 @@ test('human review inbox aggregates runs, tickets, evidence gaps, integrations, 
   assert.ok(escapedHtml.includes('data-action="viewTicket"'));
 });
 
+test('evidence panel renderers emit safe links and action buttons', () => {
+  const gateHtml = evidencePanelView.buildEvidenceGateHtml([{
+    ticketKey: 'K-1',
+    status: 'warn',
+    ready: true,
+    summary: 'Needs <proof>',
+    checks: [
+      { kind: 'notes', status: 'fail', title: 'No evidence records', detail: 'Add <note> & proof' },
+      { kind: 'acceptance', status: 'warn', title: 'Acceptance criteria not extracted', detail: 'Run extraction' },
+      { kind: 'environment', status: 'warn', title: 'Environment pending', detail: 'test: unknown' },
+    ],
+  }], 'Gate <unsafe>', 'nonce-evidence');
+
+  assert.ok(gateHtml.includes('Gate &lt;unsafe&gt;'));
+  assert.ok(gateHtml.includes('Add &lt;note&gt; &amp; proof'));
+  assert.ok(gateHtml.includes('data-action="refreshPanel"'));
+  assert.ok(gateHtml.includes('data-action="addEvidence"'));
+  assert.ok(gateHtml.includes('data-action="extractAcceptanceCriteria"'));
+  assert.ok(gateHtml.includes('data-action="recordEnvironmentResult"'));
+  assert.ok(gateHtml.includes('data-action="evidenceHandoff"'));
+  assert.ok(gateHtml.includes('data-action="publishEvidence"'));
+  assert.ok(gateHtml.includes('__kronosWebviewReady'));
+  assert.ok(gateHtml.includes('Kronos Evidence Gate'));
+
+  const handoffHtml = evidencePanelView.buildEvidenceHandoffHtml({
+    ticketKey: 'K-1',
+    summary: 'Summary <unsafe>',
+    destinations: [
+      { kind: 'jira', label: 'Jira <ticket>', available: true, url: 'https://jira.example/K-1?x=1&y=2', detail: 'Paste & review' },
+      { kind: 'mr', label: 'Unsafe MR', available: false, url: 'javascript:alert(1)', detail: 'Bad URL' },
+    ],
+    exportPath: '/tmp/evidence-<unsafe>.md',
+    comment: 'Comment <body> & evidence',
+    manualSteps: ['Check <payload>'],
+  }, 'nonce-handoff');
+
+  assert.ok(handoffHtml.includes('Summary &lt;unsafe&gt;'));
+  assert.ok(handoffHtml.includes('Jira &lt;ticket&gt;'));
+  assert.ok(handoffHtml.includes('Paste &amp; review'));
+  assert.ok(handoffHtml.includes('Comment &lt;body&gt; &amp; evidence'));
+  assert.ok(handoffHtml.includes('href="https://jira.example/K-1?x=1&amp;y=2"'));
+  assert.equal(handoffHtml.includes('href="javascript:alert(1)"'), false);
+  assert.ok(handoffHtml.includes('Kronos did not call a posting API'));
+  assert.ok(handoffHtml.includes('data-action="publishEvidence"'));
+
+  const publishHtml = evidencePanelView.buildEvidencePublishHtml([
+    { kind: 'jira', label: 'Jira <comment>', status: 'failed', detail: 'Boom <body>', endpoint: 'https://jira.example/api?x=1&y=2', httpStatus: 500 },
+    { kind: 'gitlab_mr', label: 'MR', status: 'posted', detail: 'OK & done', endpoint: 'javascript:alert(1)' },
+  ], 'K-1', 'nonce-publish');
+
+  assert.ok(publishHtml.includes('Jira &lt;comment&gt;'));
+  assert.ok(publishHtml.includes('Boom &lt;body&gt;'));
+  assert.ok(publishHtml.includes('OK &amp; done'));
+  assert.ok(publishHtml.includes('HTTP 500'));
+  assert.ok(publishHtml.includes('href="https://jira.example/api?x=1&amp;y=2"'));
+  assert.equal(publishHtml.includes('href="javascript:alert(1)"'), false);
+  assert.ok(publishHtml.includes('data-action="evidenceHandoff"'));
+});
+
 test('evidence gate fails objective blockers and warns on incomplete proof', () => {
   const failing = evidenceGate.evaluateEvidenceGate('K-1', ticket({
     projects: [],
@@ -5224,6 +5284,7 @@ test('extension webviews use shared UI shell and board filtering affordances', (
   const promptPanelViewSource = readSourceFixture('src', 'services', 'promptPanelView.ts');
   const recoveryPanelViewSource = readSourceFixture('src', 'services', 'recoveryPanelView.ts');
   const humanReviewPanelViewSource = readSourceFixture('src', 'services', 'humanReviewPanelView.ts');
+  const evidencePanelViewSource = readSourceFixture('src', 'services', 'evidencePanelView.ts');
   const boardHandlerStart = source.indexOf('panel.webview.onDidReceiveMessage(async (msg) => {\n        if (logReady(msg)) { return; }\n        const request = normalizeBoardMessage(msg);');
   const boardHandlerEnd = source.indexOf("    vscode.commands.registerCommand('kronos.viewTicket'", boardHandlerStart);
   assert.ok(boardHandlerStart >= 0 && boardHandlerEnd > boardHandlerStart, 'Jira board message handler should be present');
@@ -5234,6 +5295,7 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     "import { buildPromptHistoryHtml, buildPromptManagerHtml, buildPromptSmokeTestsHtml } from './services/promptPanelView'",
     "import { buildRecoveryHtml, buildStateAuditLogHtml } from './services/recoveryPanelView'",
     "import { buildHumanReviewInboxHtml } from './services/humanReviewPanelView'",
+    "import { buildEvidenceGateHtml, buildEvidenceHandoffHtml, buildEvidencePublishHtml } from './services/evidencePanelView'",
     "import { createWebviewReadyMonitor } from './services/webviewDiagnostics'",
     'const nonce = createWebviewNonce()',
     'webviewScriptCspOptions(panel.webview.cspSource, nonce)',
@@ -5294,10 +5356,6 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'const render = (currentChecks: DoctorCheck[]) =>',
     ".catch((e: unknown) => render([...checks, {",
     "unknownErrorMessage(e, 'Provider reachability checks failed.')",
-    'function evidenceGateActionButtons',
-    "actionButton('addEvidence', 'Add Evidence'",
-    "actionButton(isMissingExtraction ? 'extractAcceptanceCriteria' : 'updateAcceptanceCriteria'",
-    "actionButton('refreshPanel', 'Refresh')",
     "request.command === 'refreshPanel'",
     "if (request.command === 'refreshPanel') {\n      state.reloadAndNotify();\n      render();\n      return;\n    }",
     "openEvidenceGatePanel(state, evidenceGatePanelGatesForState(state), 'Kronos Evidence Gate', { refreshAllEvidenceGates: true })",
@@ -5521,6 +5579,28 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'kronosActionPanelScript(options.nonce',
   ]) {
     assert.ok(humanReviewPanelViewSource.includes(marker), marker);
+  }
+  for (const marker of [
+    'export function buildEvidenceGateHtml',
+    'export function buildEvidenceHandoffHtml',
+    'export function buildEvidencePublishHtml',
+    'Evidence Handoff:',
+    'Evidence Publish:',
+    'Kronos Evidence Gate',
+    'Kronos did not call a posting API',
+    'publishPillClass',
+    'evidenceGateActionButtons',
+    "actionButton('refreshPanel', 'Refresh')",
+    "actionButton('addEvidence', 'Add Evidence'",
+    "actionButton(isMissingExtraction ? 'extractAcceptanceCriteria' : 'updateAcceptanceCriteria'",
+    "actionButton('recordEnvironmentResult', 'Record Env'",
+    "actionButton('evidenceHandoff', 'Handoff'",
+    "actionButton('publishEvidence', 'Publish'",
+    'safeHttpHref',
+    'kronosOperatorPanelCss',
+    "kronosActionPanelScript(nonce, 'Kronos Evidence Gate', true)",
+  ]) {
+    assert.ok(evidencePanelViewSource.includes(marker), marker);
   }
   assert.equal(/^\s*vscode\.window\.withProgress\(/m.test(source), false, 'progress tasks should be awaited by their command handlers');
   assert.equal((source.match(/dispatchClaudeSession\(/g) || []).length, 1, 'command handlers should use startClaudeDispatch for Claude session startup');
