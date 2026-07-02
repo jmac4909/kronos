@@ -58,6 +58,7 @@ const gitWorkspace = require('../out/services/gitWorkspace.js');
 const processTree = require('../out/services/processTree.js');
 const webviewSecurity = require('../out/services/webviewSecurity.js');
 const runStatus = require('../out/services/runStatus.js');
+const runProgress = require('../out/services/runProgress.js');
 const cliProbes = require('../out/services/cliProbes.js');
 const errorUtils = require('../out/services/errorUtils.js');
 const combinedVerification = require('../out/services/combinedVerification.js');
@@ -2556,6 +2557,7 @@ test('dispatcher records branch and permission metadata for persisted runs', () 
     'const id = safeSessionId',
     "from '../services/webviewSecurity'",
     "import { isActiveRun } from '../services/runStatus'",
+    "import { runProgressSummary } from '../services/runProgress'",
     'createWebviewNonce',
     'webviewVsCodeApiScript',
     "const nonce = interactive ? createWebviewNonce() : ''",
@@ -2584,6 +2586,7 @@ test('dispatcher records branch and permission metadata for persisted runs', () 
     'const statusClass = escapeClass(status)',
     'const started = progressDateTimeLabel(run.startedAt)',
     'const runEvents = Array.isArray(run.events) ? run.events : []',
+    'const progress = runProgressSummary(run)',
     'export interface RunCenterActionRequest',
     'const RUN_CENTER_MESSAGE_COMMANDS = new Set',
     'function normalizeRunCenterMessage',
@@ -2594,6 +2597,8 @@ test('dispatcher records branch and permission metadata for persisted runs', () 
     'panel.webview.onDidReceiveMessage(async msg =>',
     'buildRunCenterHtml(runs, interactive ? nonce : undefined)',
     'const interactive = Boolean(nonce)',
+    '<th>Progress</th>',
+    'class="progress-cell"',
     "const actionHeader = interactive ? '<th>Actions</th>' : ''",
     'const actionCell = interactive ?',
     'const promptMeta = isRecord(run.promptMetadata) ? run.promptMetadata : undefined',
@@ -3082,6 +3087,41 @@ test('run status helper centralizes active persisted run semantics', () => {
     'export function isActiveRun',
     'export function activeRunSummary',
     "['running', 'preflight', 'paused']",
+  ]) {
+    assert.ok(source.includes(marker), marker);
+  }
+});
+
+test('run progress helper summarizes active run activity', () => {
+  const summary = runProgress.runProgressSummary({
+    status: 'running',
+    startedAt: '2026-07-02T00:00:00.000Z',
+    events: [
+      { type: 'tool', label: 'Reading src/app.ts', timestamp: '2026-07-02T00:01:00.000Z' },
+      { type: 'tool', label: 'Editing src/app.ts', timestamp: '2026-07-02T00:02:00.000Z' },
+      { type: 'tool', label: 'Writing src/new.ts', timestamp: '2026-07-02T00:03:00.000Z' },
+      { type: 'error', label: 'Command failed', timestamp: '2026-07-02T00:04:00.000Z' },
+    ],
+  }, new Date('2026-07-02T00:05:30.000Z'));
+  assert.equal(summary.toolCalls, 3);
+  assert.equal(summary.toolErrors, 1);
+  assert.equal(summary.filesRead, 1);
+  assert.equal(summary.filesChanged, 2);
+  assert.equal(summary.elapsedSeconds, 330);
+  assert.equal(summary.label, '3 tools | 2 changed | 5m 30s');
+  assert.equal(summary.detail, '1 read | 1 error');
+  assert.equal(runProgress.formatRunProgress({ events: [] }, new Date('2026-07-02T00:05:30.000Z')), '0 tools | 0 changed | 0s');
+
+  const source = readSourceFixture('src', 'services', 'runProgress.ts');
+  for (const marker of [
+    "import { isActiveRunStatus } from './runStatus'",
+    'export function runProgressSummary',
+    'export function formatRunProgress',
+    'function elapsedRunSeconds',
+    'function fileCount',
+    'function formatElapsed',
+    "countLabel(toolCalls, 'tool')",
+    "countLabel(filesChanged, 'changed', 'changed')",
   ]) {
     assert.ok(source.includes(marker), marker);
   }
@@ -4700,7 +4740,10 @@ test('tree providers share action labels and icons', () => {
   for (const marker of [
     "import { KronosRun, listRuns } from '../runners/sessionDispatcher'",
     "import { isActiveRun } from '../services/runStatus'",
+    "import { formatRunProgress } from '../services/runProgress'",
     'const activeRuns = listRuns().filter(isActiveRun)',
+    'const progress = formatRunProgress(run)',
+    'Progress: ${progress}',
     "new vscode.ThemeIcon('sync~spin'",
     "this.command = { command: 'kronos.runCenter'",
   ]) {

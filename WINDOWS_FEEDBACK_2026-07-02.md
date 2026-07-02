@@ -29,6 +29,7 @@ Context: Windows 11 manual testing on VS Code 1.127.0.
 - Bug 4 is fixed by adding a basic completion evidence note when an implement run reaches `await_review` with no evidence notes, before post-run queue removal.
 - Feature 5 is implemented with active persisted runs in the Sessions tree using a `sync~spin` icon.
 - Feature 6 is implemented with a status bar `Kronos: N running` indicator that opens Run Center.
+- Feature 7 is implemented with shared persisted-run progress summaries shown in Run Center and active Sessions tree rows.
 - Feature 8 is implemented with a review-ready completion toast that can open the review/MR diff or Run Center.
 - Features 9 and 11 are implemented with an in-memory Review tree badge count plus `NEW` highlighting for review items that appeared since the Review view was last opened.
 - Feature 12 is implemented with Run Center polling while active persisted runs exist plus refresh buttons on Run Center, Evidence Gate, Human Review Inbox, Dashboard, and Aging Report.

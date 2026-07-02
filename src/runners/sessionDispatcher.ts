@@ -19,6 +19,7 @@ import { ACTIVE_WORKTREES_FILE, ActiveWorktreeEntry, loadActiveWorktreeRegistry,
 import { gcloudApplicationDefaultLoginCommand, kronosLoginShellTerminalOptions, kronosTerminalOptions } from '../services/terminalProfiles';
 import { unknownErrorMessage } from '../services/errorUtils';
 import { isActiveRun } from '../services/runStatus';
+import { runProgressSummary } from '../services/runProgress';
 export { getAggregateStats, listSavedSessions, listSessionStoreIssues } from '../services/sessionStore';
 
 const CLAUDE_PATH = process.env.CLAUDE_PATH || 'claude';
@@ -1188,11 +1189,13 @@ function buildRunCenterHtml(runs: KronosRun[], nonce?: string): string {
     const branchSummary = branch?.currentRef
       ? `ref ${String(branch.currentRef)}${branch.currentCommit ? ` @ ${String(branch.currentCommit).substring(0, 12)}` : ''}`
       : '';
+    const progress = runProgressSummary(run);
     const actionCell = interactive ? `<td class="action-cell">${runCenterActionButtons(run)}</td>` : '';
     return `<tr class="${statusClass}">
       <td><span class="kronos-pill status ${statusClass}">${escapeHtml(status)}</span></td>
       <td><strong>${escapeHtml(stringOrDefault(run.project, 'unknown project'))}</strong><br><span>${escapeHtml(stringOrDefault(run.skill, 'unknown skill'))} ${escapeHtml(stringOrDefault(run.ticket, ''))}</span></td>
       <td>${escapeHtml(started)}${ended ? `<br><span>${escapeHtml(ended)}</span>` : ''}</td>
+      <td class="progress-cell"><strong>${escapeHtml(progress.label)}</strong>${progress.detail ? `<br><span>${escapeHtml(progress.detail)}</span>` : ''}</td>
       <td><code>${escapeHtml(run.model)}</code><br><span>${escapeHtml(promptLabel)} ${escapeHtml(promptHash.substring(0, 12))}${run.promptPath ? ' saved' : ''}</span>${missing}${permissionSummary ? `<br><span>${escapeHtml(permissionSummary)}</span>` : ''}</td>
       <td><span class="kronos-pill readiness ${escapeClass(readinessStatus)}">${escapeHtml(readinessStatus)}</span><br><span>${escapeHtml(readinessSummary)}</span></td>
       <td class="workspace-cell">${escapeHtml(stringOrDefault(run.worktreePath || run.cwd, 'unknown workspace'))}${branchSummary ? `<br><span>${escapeHtml(branchSummary)}</span>` : ''}</td>
@@ -1215,8 +1218,9 @@ function buildRunCenterHtml(runs: KronosRun[], nonce?: string): string {
 <html><head><style>
   ${kronosWebviewBaseCss()}
   .run-table-wrap { overflow: auto; }
-  .kronos-table { min-width: ${interactive ? '1080' : '860'}px; }
+  .kronos-table { min-width: ${interactive ? '1160' : '940'}px; }
   td span:not(.kronos-pill), .muted { color: var(--k-muted); }
+  .progress-cell strong { display: block; font-size: 11px; }
   .readiness.ready { background: rgba(76,175,80,0.18); color: #4caf50; }
   .readiness.needs_human, .readiness.not_ready, .readiness.unknown { background: rgba(255,152,0,0.18); color: #ff9800; }
   .readiness.blocked { background: rgba(244,67,54,0.18); color: #f44336; }
@@ -1236,7 +1240,7 @@ function buildRunCenterHtml(runs: KronosRun[], nonce?: string): string {
     ${refreshAction}
   </div>
   ${runs.length === 0 ? '<div class="kronos-empty">No persisted runs yet.</div>' : `<div class="run-table-wrap kronos-panel"><table class="kronos-table">
-    <tr><th>Status</th><th>Run</th><th>Time</th><th>Model</th><th>Readiness</th><th>Workspace</th><th>Last event</th>${actionHeader}</tr>
+    <tr><th>Status</th><th>Run</th><th>Time</th><th>Progress</th><th>Model</th><th>Readiness</th><th>Workspace</th><th>Last event</th>${actionHeader}</tr>
     ${rows}
   </table></div>`}
 </div>${nonce ? runCenterScript(nonce) : ''}</body></html>`;

@@ -4,6 +4,7 @@ import { KronosState } from '../state/KronosState';
 import { ClaudeSession } from '../state/types';
 import { KronosRun, listRuns } from '../runners/sessionDispatcher';
 import { isActiveRun } from '../services/runStatus';
+import { formatRunProgress } from '../services/runProgress';
 
 type SessionTreeEntry =
   | { kind: 'run'; run: KronosRun }
@@ -65,9 +66,10 @@ class SessionTreeItem extends vscode.TreeItem {
 
     if (entry.kind === 'run') {
       const run = entry.run;
+      const progress = formatRunProgress(run);
       this.contextValue = 'run';
-      this.description = run.status;
-      this.tooltip = `Run: ${run.id}\nProject: ${run.project || 'unknown'}\nTicket: ${run.ticket || 'none'}\nSkill: ${run.skill || 'unknown'}\nStatus: ${run.status}\nStarted: ${run.startedAt || 'unknown'}`;
+      this.description = `${run.status} - ${progress}`;
+      this.tooltip = `Run: ${run.id}\nProject: ${run.project || 'unknown'}\nTicket: ${run.ticket || 'none'}\nSkill: ${run.skill || 'unknown'}\nStatus: ${run.status}\nProgress: ${progress}\nStarted: ${run.startedAt || 'unknown'}`;
       this.iconPath = new vscode.ThemeIcon('sync~spin', new vscode.ThemeColor('charts.blue'));
       this.command = { command: 'kronos.runCenter', title: 'Open Run Center' };
       return;

@@ -40,6 +40,7 @@ const evidenceGate = readSource('src/services/evidenceGate.ts');
 const evidenceGatePolicy = readSource('src/services/evidenceGatePolicy.ts');
 const collisionDetector = readSource('src/services/collisionDetector.ts');
 const runStatus = readSource('src/services/runStatus.ts');
+const runProgress = readSource('src/services/runProgress.ts');
 const queuePlanner = readSource('src/services/queuePlanner.ts');
 const agentQualityScore = readSource('src/services/agentQualityScore.ts');
 const integrationManifest = readSource('src/services/integrationManifest.ts');
@@ -769,6 +770,7 @@ for (const marker of [
   "unknownErrorMessage(e, 'Failed to read Kronos state.')",
   "unknownErrorMessage(e, 'Invalid dispatch model.')",
   "import { isActiveRun } from '../services/runStatus'",
+  "import { runProgressSummary } from '../services/runProgress'",
   "'refreshPanel'",
   'pollIntervalMs?: number',
   'const pollTimer = setInterval',
@@ -798,6 +800,9 @@ for (const marker of [
   'const statusClass = escapeClass(status)',
   'const started = progressDateTimeLabel(run.startedAt)',
   'const runEvents = Array.isArray(run.events) ? run.events : []',
+  'const progress = runProgressSummary(run)',
+  '<th>Progress</th>',
+  'class="progress-cell"',
   'const promptMeta = isRecord(run.promptMetadata) ? run.promptMetadata : undefined',
   '${escapeClass(readinessStatus)}',
   "stringOrDefault(run.worktreePath || run.cwd, 'unknown workspace')",
@@ -1068,7 +1073,10 @@ for (const marker of [
 for (const marker of [
   "import { KronosRun, listRuns } from '../runners/sessionDispatcher'",
   "import { isActiveRun } from '../services/runStatus'",
+  "import { formatRunProgress } from '../services/runProgress'",
   'const activeRuns = listRuns().filter(isActiveRun)',
+  'const progress = formatRunProgress(run)',
+  'Progress: ${progress}',
   "new vscode.ThemeIcon('sync~spin'",
   "this.command = { command: 'kronos.runCenter'",
 ]) {
@@ -1475,6 +1483,21 @@ for (const marker of [
 ]) {
   if (!runStatus.includes(marker)) {
     fail(`Missing run status marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  "import { isActiveRunStatus } from './runStatus'",
+  'export function runProgressSummary',
+  'export function formatRunProgress',
+  'function elapsedRunSeconds',
+  'function fileCount',
+  'function formatElapsed',
+  "countLabel(toolCalls, 'tool')",
+  "countLabel(filesChanged, 'changed', 'changed')",
+]) {
+  if (!runProgress.includes(marker)) {
+    fail(`Missing run progress marker: ${marker}`);
   }
 }
 
