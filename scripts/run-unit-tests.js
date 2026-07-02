@@ -1292,6 +1292,29 @@ test('git workspace service owns branch metadata and safe worktree lifecycle com
   assert.equal(dirty.status, 'blocked');
   assert.match(dirty.reason, /Dirty worktree/);
 
+  const onlyClaudeArtifacts = gitWorkspace.inspectTrackedWorktree(entry, {
+    exists: () => true,
+    runner: args => {
+      const joined = args.join(' ');
+      if (joined === 'status --porcelain') { return '?? .claude/\n?? .claude/settings.local.json\n'; }
+      if (joined === 'branch --show-current') { return ''; }
+      throw new Error(`unexpected git call: ${joined}`);
+    },
+  });
+  assert.equal(onlyClaudeArtifacts.status, 'removable');
+
+  const mixedClaudeArtifacts = gitWorkspace.inspectTrackedWorktree(entry, {
+    exists: () => true,
+    runner: args => {
+      const joined = args.join(' ');
+      if (joined === 'status --porcelain') { return '?? .claude/\n?? src/generated.ts\n'; }
+      throw new Error(`unexpected git call: ${joined}`);
+    },
+  });
+  assert.equal(mixedClaudeArtifacts.status, 'blocked');
+  assert.match(mixedClaudeArtifacts.reason, /src\/generated\.ts/);
+  assert.doesNotMatch(mixedClaudeArtifacts.reason, /\.claude/);
+
   const missingOrigin = gitWorkspace.inspectTrackedWorktree(entry, {
     exists: () => true,
     runner: args => {
@@ -1331,6 +1354,9 @@ test('git workspace service owns branch metadata and safe worktree lifecycle com
     'catch (e: unknown)',
     "unknownErrorMessage(e, 'Could not remove worktree safely')",
     "unknownErrorMessage(e, 'Could not inspect worktree.')",
+    'function blockingWorktreeStatus',
+    'function isIgnorableWorktreeStatusLine',
+    "statusPath === '.claude' || statusPath === '.claude/' || statusPath.startsWith('.claude/')",
   ]) {
     assert.ok(source.includes(marker), marker);
   }

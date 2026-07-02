@@ -149,8 +149,9 @@ export function inspectTrackedWorktree(
   }
   try {
     const status = runner(['status', '--porcelain'], { cwd: entry.worktreePath, timeoutMs: 5000 }).trim();
-    if (status.length > 0) {
-      return { entry, status: 'blocked', reason: `Dirty worktree:\n${status.substring(0, 200)}` };
+    const blockingStatus = blockingWorktreeStatus(status);
+    if (blockingStatus.length > 0) {
+      return { entry, status: 'blocked', reason: `Dirty worktree:\n${blockingStatus.substring(0, 200)}` };
     }
     const branch = runner(['branch', '--show-current'], { cwd: entry.worktreePath, timeoutMs: 5000 }).trim();
     if (branch) {
@@ -168,6 +169,22 @@ export function inspectTrackedWorktree(
   } catch (e: unknown) {
     return { entry, status: 'error', reason: unknownErrorMessage(e, 'Could not inspect worktree.') };
   }
+}
+
+function blockingWorktreeStatus(status: string): string {
+  return status
+    .split('\n')
+    .map(line => line.trimEnd())
+    .filter(line => line.trim().length > 0 && !isIgnorableWorktreeStatusLine(line))
+    .join('\n');
+}
+
+function isIgnorableWorktreeStatusLine(line: string): boolean {
+  if (!line.startsWith('?? ')) {
+    return false;
+  }
+  const statusPath = line.slice(3).trim();
+  return statusPath === '.claude' || statusPath === '.claude/' || statusPath.startsWith('.claude/');
 }
 
 export function createWorkspaceDiffArtifact(
