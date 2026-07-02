@@ -4690,6 +4690,8 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'await vscode.window.withProgress(',
     'unknownErrorMessage(e, failureFallback)',
     "unknownErrorMessage(e, 'Kronos auto-refresh failed.')",
+    'unknownErrorMessage(e, `Failed to register ${s.label || s.detail}.`)',
+    "unknownErrorMessage(e, 'Failed to parse discovery results.')",
     "'Failed to refresh Kronos projects.'",
     "'Failed to discover Kronos projects.'",
     "'Failed to open merge request diff.'",
@@ -4863,6 +4865,11 @@ test('extension run recovery helpers use typed run records', () => {
     source.includes('try { await state.refresh(); } catch {}'),
     false,
     'background refresh failures should be logged',
+  );
+  assert.equal(
+    source.includes('skip failures silently'),
+    false,
+    'discovery registration failures should be visible',
   );
   for (const marker of [
     'catch (e: any)',

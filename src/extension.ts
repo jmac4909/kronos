@@ -1117,14 +1117,14 @@ export function activate(context: vscode.ExtensionContext) {
                       state.reloadAndNotify();
                     }
                   }
-                } catch {
-                  // skip failures silently
+                } catch (e: unknown) {
+                  vscode.window.showWarningMessage(unknownErrorMessage(e, `Failed to register ${s.label || s.detail}.`));
                 }
               }
               vscode.window.showInformationMessage(`Registered ${registered} project(s). Run Refresh to pull tickets.`);
             }
-          } catch {
-            vscode.window.showErrorMessage('Failed to parse discovery results.');
+          } catch (e: unknown) {
+            vscode.window.showErrorMessage(unknownErrorMessage(e, 'Failed to parse discovery results.'));
           }
         },
         'Failed to discover Kronos projects.'
