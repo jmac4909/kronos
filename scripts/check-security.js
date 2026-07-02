@@ -153,8 +153,8 @@ for (const requiredIgnore of ['.git/**', '.claude/**', 'node_modules/**', 'scrip
 }
 
 const enableScriptsTrue = [...extension.matchAll(/enableScripts:\s*true/g)].length;
-if (enableScriptsTrue !== 4) {
-  fail(`Expected exactly 4 script-enabled webviews, found ${enableScriptsTrue}.`);
+if (enableScriptsTrue !== 28) {
+  fail(`Expected exactly 28 script-enabled webviews, found ${enableScriptsTrue}.`);
 }
 for (const [file, source] of Object.entries({ 'src/extension.ts': extension, 'src/runners/sessionDispatcher.ts': dispatcher })) {
   for (const [idx, line] of source.split(/\r?\n/).entries()) {

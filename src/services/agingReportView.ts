@@ -1,7 +1,12 @@
 import { AgingReport } from './agingAnalyzer';
 import { escapeClass, escapeHtml, kronosWebviewBaseCss, safeHttpHref } from './webviewHtml';
 
-export function buildAgingReportHtml(report: AgingReport): string {
+export interface AgingReportHtmlOptions {
+  actionsHtml?: string;
+  scriptHtml?: string;
+}
+
+export function buildAgingReportHtml(report: AgingReport, options: AgingReportHtmlOptions = {}): string {
   const generated = formatDateTime(report.generatedAt);
   const rows = report.items.map(item => {
     const href = safeHttpHref(item.url);
@@ -32,6 +37,7 @@ export function buildAgingReportHtml(report: AgingReport): string {
       <div class="kronos-subtitle">Generated ${escapeHtml(generated)}. Stale reviews, builds, blockers, verification, and tickets.</div>
     </div>
   </div>
+  ${options.actionsHtml || ''}
   <div class="kronos-stat-grid">
     <div class="kronos-stat"><div class="kronos-stat-value">${escapeHtml(String(report.summary.critical))}</div><div class="kronos-stat-label">Critical</div></div>
     <div class="kronos-stat"><div class="kronos-stat-value">${escapeHtml(String(report.summary.warning))}</div><div class="kronos-stat-label">Warnings</div></div>
@@ -39,7 +45,7 @@ export function buildAgingReportHtml(report: AgingReport): string {
     <div class="kronos-stat"><div class="kronos-stat-value">${escapeHtml(String(report.summary.total))}</div><div class="kronos-stat-label">Total</div></div>
   </div>
   ${empty || `<div class="kronos-table-wrap kronos-panel"><table class="kronos-table"><tr><th>Severity</th><th>Ticket</th><th>Kind</th><th>Age</th><th>Issue</th><th>Ref</th></tr>${rows}</table></div>`}
-</div></body></html>`;
+</div>${options.scriptHtml || ''}</body></html>`;
 }
 
 function formatDateTime(value: unknown): string {

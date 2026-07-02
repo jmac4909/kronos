@@ -2240,6 +2240,13 @@ test('dispatcher records branch and permission metadata for persisted runs', () 
     'const statusClass = escapeClass(status)',
     'const started = progressDateTimeLabel(run.startedAt)',
     'const runEvents = Array.isArray(run.events) ? run.events : []',
+    'export interface RunCenterActionRequest',
+    'const RUN_CENTER_MESSAGE_COMMANDS = new Set',
+    'function normalizeRunCenterMessage',
+    'function runCenterActionButtons',
+    "runCenterActionButton('cancelRun', 'Stop'",
+    'panel.webview.onDidReceiveMessage(async msg =>',
+    'buildRunCenterHtml(runs, interactive ? nonce : undefined)',
     'const promptMeta = isRecord(run.promptMetadata) ? run.promptMetadata : undefined',
     '${escapeClass(readinessStatus)}',
     "stringOrDefault(run.worktreePath || run.cwd, 'unknown workspace')",
@@ -3674,7 +3681,14 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'function kronosOperatorPanelCss',
     'const EVIDENCE_GATE_MESSAGE_COMMANDS = new Set',
     'const HUMAN_REVIEW_MESSAGE_COMMANDS = new Set',
+    'const DASHBOARD_MESSAGE_COMMANDS = new Set',
+    'const PLAN_MESSAGE_COMMANDS = new Set',
+    'const BACKLOG_TRIAGE_MESSAGE_COMMANDS = new Set',
+    'const TICKET_DETAIL_MESSAGE_COMMANDS = new Set',
+    'const RECOVERY_MESSAGE_COMMANDS = new Set',
     'function normalizeActionPanelMessage',
+    'planId: typeof message.planId === \'string\' ? message.planId : \'\'',
+    'itemId: typeof message.itemId === \'string\' ? message.itemId : \'\'',
     'function humanReviewActionButtons',
     "actionButton('extractAcceptanceCriteria', 'Extract AC'",
     "actionButton('startTicket', 'Start'",
@@ -3684,6 +3698,22 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'function kronosActionPanelScript',
     'acquireVsCodeApi',
     "data-action=\"${escapeAttr(action)}\"",
+    "data-plan-id=\"${escapeAttr(options.planId)}\"",
+    "data-item-id=\"${escapeAttr(options.itemId)}\"",
+    'function openInteractiveRunCenter',
+    'function executeRunCenterAction',
+    'function executeTicketDetailAction',
+    'function openTicketExternalUrl',
+    'function runQuickPickDetail',
+    'function planActionRow',
+    'function executePlanPanelAction',
+    'function triageActionButtons',
+    'function executeBacklogTriageAction',
+    'function executeDashboardAction',
+    'function buildRecoveryInventoryForState',
+    "actionButton('executeRecoveryItem'",
+    "actionButton('startTicket', 'Start Work'",
+    "actionButton('evidenceGate', 'Evidence Gate'",
     "from './services/evidenceData'",
     'const existingCriteria = evidenceAcceptanceCriteria(ticket)',
     'const criteria = evidenceAcceptanceCriteria(ticket)',
@@ -3710,6 +3740,11 @@ test('extension webviews use shared UI shell and board filtering affordances', (
   ]) {
     assert.ok(source.includes(marker), marker);
   }
+  assert.equal(
+    source.includes('run.events[run.events.length - 1]'),
+    false,
+    'extension run pickers should tolerate missing or malformed run.events',
+  );
 });
 
 test('trend metrics report rework, build pass, verification pass, and cycle time', () => {

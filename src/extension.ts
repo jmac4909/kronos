@@ -11,7 +11,7 @@ import * as os from 'os';
 import * as fs from 'fs';
 import { randomBytes } from 'crypto';
 import { DiscoveredProject, MergeRequestChangedFile } from './state/types';
-import { dispatchClaudeSession, openInClaude, ensureAuth, cleanupStaleWorktrees, listSavedSessions, listSessionStoreIssues, openSavedSession, getAggregateStats, openRunCenter, listRuns, PromptRunMetadata } from './runners/sessionDispatcher';
+import { dispatchClaudeSession, openInClaude, ensureAuth, cleanupStaleWorktrees, listSavedSessions, listSessionStoreIssues, openSavedSession, getAggregateStats, openRunCenter, listRuns, PromptRunMetadata, RunCenterActionRequest } from './runners/sessionDispatcher';
 import { PromptHistoryDiff, PromptHistorySnapshot, PromptSmokeResult, PromptSmokeTest, PromptTemplateInfo, buildDefaultPromptSmokeTests, createPromptHistorySnapshot, diffPromptHistorySnapshots, latestPromptHistorySnapshot, listPromptHistorySnapshots, listPromptTemplates, repairRequiredPromptTemplates, runPromptSmokeTests } from './services/promptManager';
 import { KRONOS_DIR, STATE_AUDIT_FILE, StateAuditEvent, listBackups, listStateAuditEvents, restoreBackup } from './services/stateStore';
 import { BacklogTriageReport, PlannedAction, ProjectBatchPlan, ReleaseBatchPlan, actionToLabel, buildBacklogTriageReport, estimatePlanMinutes, overnightCandidatePlans, planByProject, planByRelease, planForMinutes, planNextActions as buildNextActionPlan, planToQueueItem as buildQueueItemFromPlan } from './services/queuePlanner';
@@ -156,6 +156,92 @@ const HUMAN_REVIEW_MESSAGE_COMMANDS = new Set([
   'openDoctor',
   'queuePlanner',
 ]);
+const DASHBOARD_MESSAGE_COMMANDS = new Set([
+  'nextBestAction',
+  'queuePlanner',
+  'runCenter',
+  'humanReviewInbox',
+  'evidenceGate',
+  'recoveryCenter',
+]);
+const PLAN_MESSAGE_COMMANDS = new Set([
+  'startPlan',
+  'queuePlan',
+  'pinPlan',
+  'snoozePlan',
+  'snoozePlanToday',
+  'rejectPlan',
+  'viewTicket',
+  'addEvidence',
+]);
+const BACKLOG_TRIAGE_MESSAGE_COMMANDS = new Set([
+  'linkTicket',
+  'startTicket',
+  'addToQueue',
+  'addEvidence',
+  'addEvidenceCheck',
+  'viewTicket',
+]);
+const TICKET_DETAIL_MESSAGE_COMMANDS = new Set([
+  'startTicket',
+  'addToQueue',
+  'removeFromQueue',
+  'linkTicket',
+  'addEvidence',
+  'addEvidenceCheck',
+  'recordEnvironmentResult',
+  'evidenceGate',
+  'exportEvidence',
+  'evidenceHandoff',
+  'publishEvidence',
+  'openJira',
+  'openMr',
+  'openBuild',
+]);
+const RECOVERY_MESSAGE_COMMANDS = new Set([
+  'executeRecoveryItem',
+]);
+const OPERATOR_COMMAND_MESSAGE_COMMANDS = new Set([
+  'addEvidence',
+  'addEvidenceCheck',
+  'setup',
+  'settings',
+  'doctor',
+  'integrationManifest',
+  'snapshotIntegrationManifest',
+  'profiles',
+  'queuePlanner',
+  'humanReviewInbox',
+  'promptManager',
+  'promptSmokeTests',
+  'snapshotPromptPack',
+  'promptHistory',
+  'repairPromptPack',
+  'runCenter',
+  'stats',
+  'sessionHistory',
+  'viewTicket',
+  'recordEnvironmentResult',
+  'evidenceGate',
+  'exportEvidence',
+  'evidenceHandoff',
+  'publishEvidence',
+  'agentQualityScore',
+  'trendMetrics',
+  'agingReport',
+  'recoveryCenter',
+  'stateAuditLog',
+]);
+const TICKET_OPERATOR_COMMANDS = new Set([
+  'addEvidence',
+  'addEvidenceCheck',
+  'recordEnvironmentResult',
+  'viewTicket',
+  'evidenceGate',
+  'exportEvidence',
+  'evidenceHandoff',
+  'publishEvidence',
+]);
 
 function normalizeWebviewCommand(raw: unknown, allowed: Set<string>): string | null {
   if (!raw || typeof raw !== 'object') { return null; }
@@ -175,14 +261,16 @@ function normalizeBoardMessage(raw: unknown): { command: string; ticket: string;
   };
 }
 
-function normalizeActionPanelMessage(raw: unknown, allowed: Set<string>): { command: string; ticket: string; runId: string } | null {
+function normalizeActionPanelMessage(raw: unknown, allowed: Set<string>): { command: string; ticket: string; runId: string; planId: string; itemId: string } | null {
   const command = normalizeWebviewCommand(raw, allowed);
   if (!command || !raw || typeof raw !== 'object') { return null; }
-  const message = raw as { ticket?: unknown; runId?: unknown };
+  const message = raw as { ticket?: unknown; runId?: unknown; planId?: unknown; itemId?: unknown };
   return {
     command,
     ticket: typeof message.ticket === 'string' ? message.ticket : '',
     runId: typeof message.runId === 'string' ? message.runId : '',
+    planId: typeof message.planId === 'string' ? message.planId : '',
+    itemId: typeof message.itemId === 'string' ? message.itemId : '',
   };
 }
 
@@ -453,6 +541,120 @@ async function markSelectedRunNeedsHuman(run: any): Promise<void> {
     vscode.window.showInformationMessage(`Marked run ${run.id} as needs-human.`);
   } catch (e: any) {
     vscode.window.showErrorMessage(e?.message || 'Failed to mark run needs-human.');
+  }
+}
+
+function runLastEventLabel(run: any): string {
+  const events = Array.isArray(run?.events) ? run.events : [];
+  const last = events[events.length - 1];
+  return typeof last?.label === 'string' ? last.label : '';
+}
+
+function runQuickPickDetail(run: any): string {
+  return `${formatWebviewDateTime(run?.startedAt)} - ${run?.failureReason || runLastEventLabel(run) || run?.cwd || ''}`;
+}
+
+function findRunById(runId: string): any | undefined {
+  return listRuns().find(run => run.id === runId);
+}
+
+function openInteractiveRunCenter(state: KronosState): void {
+  openRunCenter({
+    onAction: request => executeRunCenterAction(state, request),
+  });
+}
+
+async function executeRunCenterAction(state: KronosState, request: RunCenterActionRequest): Promise<void> {
+  const run = findRunById(request.runId);
+  if (!run && request.command !== 'openRunRecord') {
+    vscode.window.showWarningMessage('Run record not found.');
+    return;
+  }
+
+  if (request.command === 'openRunRecord') {
+    await openTextFileIfExists(runRecordPath(request.runId), 'Run record not found.');
+  } else if (request.command === 'openRunLog') {
+    await openTextFileIfExists(run?.logPath || '', 'Run log not found.');
+  } else if (request.command === 'openRunPrompt') {
+    await openTextFileIfExists(run?.promptPath || '', 'Run prompt artifact not found.');
+  } else if (request.command === 'openRunWorkspace') {
+    const cwd = run?.worktreePath || run?.cwd || run?.projectPath;
+    if (cwd && fs.existsSync(cwd)) {
+      const terminal = vscode.window.createTerminal(kronosTerminalOptions({ name: `Kronos ${run.project || run.id}`, cwd }));
+      terminal.show();
+    } else {
+      vscode.window.showWarningMessage('Run workspace no longer exists.');
+    }
+  } else if (request.command === 'openRunDiff') {
+    await openRunDiffArtifact(run);
+  } else if (request.command === 'markNeedsHuman') {
+    await markSelectedRunNeedsHuman(run);
+  } else if (request.command === 'pauseRun') {
+    await pauseSelectedRun(run);
+  } else if (request.command === 'continueRun') {
+    await continueSelectedRun(run);
+  } else if (request.command === 'cancelRun') {
+    await cancelSelectedRun(run);
+  } else if (request.command === 'resumeRun') {
+    await resumeSelectedRun(state, run);
+  } else if (request.command === 'retryRun') {
+    await retryRunFromPrompt(run);
+  } else if (request.command === 'archiveRun') {
+    await archiveSelectedRun(request.runId);
+  }
+}
+
+function openTicketExternalUrl(state: KronosState, ticketKey: string, kind: 'jira' | 'mr' | 'build'): void {
+  const ticket = state.state?.tickets?.[ticketKey];
+  if (!ticket) {
+    vscode.window.showWarningMessage(`${ticketKey} is no longer in Kronos state.`);
+    return;
+  }
+  const url = kind === 'jira'
+    ? ticketStringField(ticket, 'jira_url')
+    : kind === 'mr'
+      ? ticketStringField(ticketRecord(ticket.mr) ? ticket.mr : null, 'url')
+      : ticketStringField(ticketRecord(ticket.build) ? ticket.build : null, 'url');
+  if (!url) {
+    vscode.window.showWarningMessage(`No ${kind} URL recorded for ${ticketKey}.`);
+    return;
+  }
+  openExternalHttpUrl(url);
+}
+
+async function executeTicketDetailAction(state: KronosState, command: string, ticketKey: string): Promise<void> {
+  if (!ticketKey || !state.state?.tickets?.[ticketKey]) {
+    vscode.window.showWarningMessage(`${ticketKey || 'Ticket'} is no longer in Kronos state.`);
+    return;
+  }
+  if (command === 'startTicket') {
+    await startTicketFromActionPanel(state, ticketKey);
+  } else if (command === 'addToQueue') {
+    await vscode.commands.executeCommand('kronos.addToQueue', { ticketKey });
+  } else if (command === 'removeFromQueue') {
+    await removeTicketFromQueue(state, ticketKey, true);
+  } else if (command === 'linkTicket') {
+    await vscode.commands.executeCommand('kronos.linkTicket', { ticketKey });
+  } else if (command === 'addEvidence') {
+    await vscode.commands.executeCommand('kronos.addEvidence', { ticketKey });
+  } else if (command === 'addEvidenceCheck') {
+    await vscode.commands.executeCommand('kronos.addEvidenceCheck', { ticketKey });
+  } else if (command === 'recordEnvironmentResult') {
+    await vscode.commands.executeCommand('kronos.recordEnvironmentResult', { ticketKey });
+  } else if (command === 'evidenceGate') {
+    await vscode.commands.executeCommand('kronos.evidenceGate', { ticketKey });
+  } else if (command === 'exportEvidence') {
+    await vscode.commands.executeCommand('kronos.exportEvidence', { ticketKey });
+  } else if (command === 'evidenceHandoff') {
+    await vscode.commands.executeCommand('kronos.evidenceHandoff', { ticketKey });
+  } else if (command === 'publishEvidence') {
+    await vscode.commands.executeCommand('kronos.publishEvidence', { ticketKey });
+  } else if (command === 'openJira') {
+    openTicketExternalUrl(state, ticketKey, 'jira');
+  } else if (command === 'openMr') {
+    openTicketExternalUrl(state, ticketKey, 'mr');
+  } else if (command === 'openBuild') {
+    openTicketExternalUrl(state, ticketKey, 'build');
   }
 }
 
@@ -965,25 +1167,7 @@ export function activate(context: vscode.ExtensionContext) {
       if (!action) { return; }
 
       if (action === 'Start') {
-        const startDecision = buildNextActionStartDecision(picked.plan, picked.context);
-        if (!startDecision.allowed) {
-          vscode.window.showWarningMessage(startDecision.reason || 'Next Best Action is blocked.');
-          return;
-        }
-        if (startDecision.safetyPlan) {
-          const confirmed = await confirmSafetyGate(startDecision.safetyPlan);
-          if (!confirmed) { return; }
-        }
-        if (startDecision.commandId === 'kronos.refresh') {
-          vscode.window.showInformationMessage(`Starting: ${startDecision.safetyPlan?.target || 'refresh'}`);
-          if (startDecision.refreshProjects.length > 0) {
-            for (const project of startDecision.refreshProjects) { await state.refresh(project); }
-          } else {
-            await state.refresh();
-          }
-        } else {
-          vscode.commands.executeCommand('kronos.startQueueItem', { item: planToQueueItem(state, picked.plan) });
-        }
+        await startPlannedAction(state, picked.plan, picked.context);
       } else if (action === 'Add to Queue' && picked.plan.ticketKey) {
         addPlanToQueue(state, picked.plan, false);
       } else if (action === 'Pin to Queue' && picked.plan.ticketKey) {
@@ -1188,13 +1372,31 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('kronos.viewTicket', async (treeItem: any) => {
       const ticketKey = treeItem?.ticketKey;
       if (!ticketKey || !state.state) { return; }
-      const ticket = state.state.tickets[ticketKey];
-      if (!ticket) { return; }
+      if (!state.state.tickets[ticketKey]) { return; }
       const panel = vscode.window.createWebviewPanel(
-        'kronosTicket', `${ticketKey}: ${ticket.summary}`,
-        vscode.ViewColumn.One, { enableScripts: false }
+        'kronosTicket', `${ticketKey}: Ticket`,
+        vscode.ViewColumn.One, { enableScripts: true }
       );
-      panel.webview.html = withWebviewCsp(buildTicketHtml(ticketKey, ticket, state));
+      const nonce = createNonce();
+      const render = () => {
+        const freshTicket = state.state?.tickets?.[ticketKey];
+        if (!freshTicket) {
+          panel.webview.html = withWebviewCsp(`<!DOCTYPE html><html><body><div class="kronos-empty">Ticket not found.</div></body></html>`);
+          return;
+        }
+        panel.title = `${ticketKey}: ${freshTicket.summary}`;
+        panel.webview.html = withWebviewCsp(buildTicketHtml(ticketKey, freshTicket, state, nonce), { allowScripts: true, nonce });
+      };
+      render();
+      panel.webview.onDidReceiveMessage(async msg => {
+        const request = normalizeActionPanelMessage(msg, TICKET_DETAIL_MESSAGE_COMMANDS);
+        if (!request) {
+          vscode.window.showWarningMessage('Ignored invalid Kronos ticket action.');
+          return;
+        }
+        await executeTicketDetailAction(state, request.command, ticketKey);
+        render();
+      });
     }),
 
     vscode.commands.registerCommand('kronos.addEvidence', async (treeItem: any) => {
@@ -1721,14 +1923,27 @@ export function activate(context: vscode.ExtensionContext) {
 
     vscode.commands.registerCommand('kronos.openDashboard', async () => {
       try {
-        const data = await state.morningBrief();
         const panel = vscode.window.createWebviewPanel(
           'kronosDashboard',
           'Kronos Dashboard',
           vscode.ViewColumn.One,
-          { enableScripts: false }
+          { enableScripts: true }
         );
-        panel.webview.html = withWebviewCsp(buildDashboardHtml(state, data));
+        const nonce = createNonce();
+        const render = async () => {
+          const data = await state.morningBrief();
+          panel.webview.html = withWebviewCsp(buildDashboardHtml(state, data, nonce), { allowScripts: true, nonce });
+        };
+        await render();
+        panel.webview.onDidReceiveMessage(async msg => {
+          const request = normalizeActionPanelMessage(msg, DASHBOARD_MESSAGE_COMMANDS);
+          if (!request) {
+            vscode.window.showWarningMessage('Ignored invalid Kronos dashboard action.');
+            return;
+          }
+          await executeDashboardAction(request.command);
+          await render();
+        });
       } catch {
         vscode.window.showErrorMessage('Failed to generate dashboard.');
       }
@@ -2539,7 +2754,9 @@ export function activate(context: vscode.ExtensionContext) {
         }
         return;
       }
-      const panel = vscode.window.createWebviewPanel('kronosStats', 'Kronos: Session Stats', vscode.ViewColumn.One, { enableScripts: false });
+      const panel = vscode.window.createWebviewPanel('kronosStats', 'Kronos: Session Stats', vscode.ViewColumn.One, { enableScripts: true });
+      const nonce = createNonce();
+      attachOperatorCommandHandler(panel, nonce);
       const esc = escapeHtml;
 
       const totalSessions = sessions.length;
@@ -2567,6 +2784,12 @@ export function activate(context: vscode.ExtensionContext) {
         const verdict = s.verdict === 'success' ? '<span class="pill pass">PASS</span>' : '<span class="pill fail">FAIL</span>';
         return `<tr><td>${date}</td><td>${esc(s.project)}</td><td>${esc(s.skill)}</td><td>${esc(s.ticket || '-')}</td><td>${verdict}</td><td>${s.durationSec}s</td><td>${s.toolCalls}</td><td>${s.toolErrors}</td><td>${s.filesEdited}</td></tr>`;
       }).join('');
+      const actions = operatorCommandRow([
+        actionButton('runCenter', 'Run Center'),
+        actionButton('sessionHistory', 'Session History'),
+        actionButton('agentQualityScore', 'Agent Quality'),
+        actionButton('trendMetrics', 'Trend Metrics'),
+      ]);
 
       panel.webview.html = withWebviewCsp(`<!DOCTYPE html>
 <html><head><style>
@@ -2578,6 +2801,7 @@ export function activate(context: vscode.ExtensionContext) {
       <div class="kronos-subtitle">Aggregate run outcomes, tool use, errors, and recent session history</div>
     </div>
   </div>
+  ${actions}
   <div class="operator-summary">
     <div class="summary-card"><div class="num">${totalSessions}</div><div class="lbl">Sessions</div></div>
     <div class="summary-card"><div class="num">${successes}/${totalSessions}</div><div class="lbl">Success Rate</div></div>
@@ -2590,7 +2814,7 @@ export function activate(context: vscode.ExtensionContext) {
   <div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Action</th><th>Sessions</th><th>Success</th><th>Avg Time</th><th>Avg Tools</th></tr>${skillRows}</table></div></div>
   <div class="operator-section"><h2>Recent Sessions</h2>
   <div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Date</th><th>Project</th><th>Action</th><th>Ticket</th><th>Result</th><th>Time</th><th>Tools</th><th>Errors</th><th>Files</th></tr>${recentRows}</table></div></div>
-</div></body></html>`);
+</div>${kronosActionPanelScript(nonce)}</body></html>`, { allowScripts: true, nonce });
     }),
 
     vscode.commands.registerCommand('kronos.agentQualityScore', async () => {
@@ -2606,7 +2830,7 @@ export function activate(context: vscode.ExtensionContext) {
     }),
 
     vscode.commands.registerCommand('kronos.runCenter', async () => {
-      openRunCenter();
+      openInteractiveRunCenter(state);
     }),
 
     vscode.commands.registerCommand('kronos.openRunArtifact', async () => {
@@ -2619,7 +2843,7 @@ export function activate(context: vscode.ExtensionContext) {
       const picked = await vscode.window.showQuickPick(runs.map(run => ({
         label: `${run.project} - ${run.skill}${run.ticket ? ` ${run.ticket}` : ''}`,
         description: run.status,
-        detail: `${formatWebviewDateTime(run.startedAt)} - ${run.failureReason || run.events[run.events.length - 1]?.label || run.cwd}`,
+        detail: runQuickPickDetail(run),
         run,
       })), { placeHolder: 'Select a Kronos run' });
       if (!picked) { return; }
@@ -2673,7 +2897,7 @@ export function activate(context: vscode.ExtensionContext) {
       const picked = await vscode.window.showQuickPick(runs.map(run => ({
         label: `${run.project} - ${run.skill}${run.ticket ? ` ${run.ticket}` : ''}`,
         description: run.status,
-        detail: `${formatWebviewDateTime(run.startedAt)} - ${run.promptHash.substring(0, 12)}`,
+        detail: `${formatWebviewDateTime(run.startedAt)} - ${String(run.promptHash || '').substring(0, 12)}`,
         run,
       })), { placeHolder: 'Retry which saved Kronos prompt?' });
       if (!picked) { return; }
@@ -2690,7 +2914,7 @@ export function activate(context: vscode.ExtensionContext) {
       const picked = await vscode.window.showQuickPick(runs.map(run => ({
         label: `${run.project} - ${run.skill}${run.ticket ? ` ${run.ticket}` : ''}`,
         description: run.status,
-        detail: `${formatWebviewDateTime(run.startedAt)} - ${run.failureReason || run.events[run.events.length - 1]?.label || run.cwd}`,
+        detail: runQuickPickDetail(run),
         run,
       })), { placeHolder: 'Resume which Kronos run?' });
       if (!picked) { return; }
@@ -2707,7 +2931,7 @@ export function activate(context: vscode.ExtensionContext) {
       const picked = await vscode.window.showQuickPick(runs.map(run => ({
         label: `${run.project} - ${run.skill}${run.ticket ? ` ${run.ticket}` : ''}`,
         description: run.status,
-        detail: `${formatWebviewDateTime(run.startedAt)} - ${run.failureReason || run.events[run.events.length - 1]?.label || run.cwd}`,
+        detail: runQuickPickDetail(run),
         run,
       })), { placeHolder: 'Pause which Kronos run?' });
       if (!picked) { return; }
@@ -2724,7 +2948,7 @@ export function activate(context: vscode.ExtensionContext) {
       const picked = await vscode.window.showQuickPick(runs.map(run => ({
         label: `${run.project} - ${run.skill}${run.ticket ? ` ${run.ticket}` : ''}`,
         description: run.status,
-        detail: `${formatWebviewDateTime(run.startedAt)} - ${run.failureReason || run.events[run.events.length - 1]?.label || run.cwd}`,
+        detail: runQuickPickDetail(run),
         run,
       })), { placeHolder: 'Continue which Kronos run?' });
       if (!picked) { return; }
@@ -2741,7 +2965,7 @@ export function activate(context: vscode.ExtensionContext) {
       const picked = await vscode.window.showQuickPick(runs.map(run => ({
         label: `${run.project} - ${run.skill}${run.ticket ? ` ${run.ticket}` : ''}`,
         description: run.status,
-        detail: `${formatWebviewDateTime(run.startedAt)} - ${run.failureReason || run.events[run.events.length - 1]?.label || run.cwd}`,
+        detail: runQuickPickDetail(run),
         run,
       })), { placeHolder: 'Archive which Kronos run?' });
       if (!picked) { return; }
@@ -2758,7 +2982,7 @@ export function activate(context: vscode.ExtensionContext) {
       const picked = await vscode.window.showQuickPick(runs.map(run => ({
         label: `${run.project} - ${run.skill}${run.ticket ? ` ${run.ticket}` : ''}`,
         description: run.status,
-        detail: `${formatWebviewDateTime(run.startedAt)} - ${run.failureReason || run.events[run.events.length - 1]?.label || run.cwd}`,
+        detail: runQuickPickDetail(run),
         run,
       })), { placeHolder: 'Cancel which Kronos run?' });
       if (!picked) { return; }
@@ -2993,15 +3217,18 @@ function openPromptManager(state: KronosState): void {
     'kronosPromptManager',
     'Kronos Prompt Manager',
     vscode.ViewColumn.One,
-    { enableScripts: false }
+    { enableScripts: true }
   );
-  panel.webview.html = withWebviewCsp(buildPromptManagerHtml(globalTemplates, projectOverrides, smokeResults));
+  const nonce = createNonce();
+  panel.webview.html = withWebviewCsp(buildPromptManagerHtml(globalTemplates, projectOverrides, smokeResults, nonce), { allowScripts: true, nonce });
+  attachOperatorCommandHandler(panel, nonce);
 }
 
 function buildPromptManagerHtml(
   globalTemplates: PromptTemplateInfo[],
   projectOverrides: Array<{ project: string; template: PromptTemplateInfo }>,
   smokeResults: PromptSmokeResult[],
+  nonce?: string,
 ): string {
   const globalByName = new Map(globalTemplates.map(t => [t.name, t]));
   const missing = REQUIRED_PROMPTS.filter(name => !globalByName.has(name));
@@ -3029,6 +3256,12 @@ function buildPromptManagerHtml(
       <td>${escapeHtml(template.variables.join(', ') || '-')}</td>
       <td>${escapeHtml(template.path)}</td>
     </tr>`).join('');
+  const actions = operatorCommandRow([
+    actionButton('promptSmokeTests', 'Smoke Tests'),
+    actionButton('snapshotPromptPack', 'Snapshot'),
+    actionButton('promptHistory', 'History'),
+    actionButton('repairPromptPack', 'Repair'),
+  ]);
 
   return `<!DOCTYPE html>
 <html><head><style>
@@ -3040,6 +3273,7 @@ function buildPromptManagerHtml(
       <div class="kronos-subtitle">Required prompts, smoke coverage, global templates, and project overrides</div>
     </div>
   </div>
+  ${actions}
   <div class="operator-section"><h2>Required Prompt Pack</h2>
   <div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Status</th><th>Prompt</th><th>Detail</th></tr>${requiredRows}</table></div>
   ${missing.length > 0 ? `<div class="kronos-empty">Missing required prompts: ${escapeHtml(missing.join(', '))}</div>` : ''}</div>
@@ -3053,7 +3287,7 @@ function buildPromptManagerHtml(
 
   <div class="operator-section"><h2>Project Overrides</h2>
   ${projectOverrides.length === 0 ? '<div class="kronos-empty">No project prompt overrides found.</div>' : `<div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Project</th><th>Name</th><th>Hash</th><th>Modified</th><th>Variables</th><th>Path</th></tr>${overrideRows}</table></div>`}</div>
-</div></body></html>`;
+</div>${nonce ? kronosActionPanelScript(nonce) : ''}</body></html>`;
 }
 
 function openPromptSmokeTestsPanel(state: KronosState): void {
@@ -3069,9 +3303,11 @@ function openPromptSmokeTestsPanel(state: KronosState): void {
     'kronosPromptSmokeTests',
     'Kronos Prompt Smoke Tests',
     vscode.ViewColumn.One,
-    { enableScripts: false }
+    { enableScripts: true }
   );
-  panel.webview.html = withWebviewCsp(buildPromptSmokeTestsHtml(results));
+  const nonce = createNonce();
+  panel.webview.html = withWebviewCsp(buildPromptSmokeTestsHtml(results, nonce), { allowScripts: true, nonce });
+  attachOperatorCommandHandler(panel, nonce);
 }
 
 function snapshotPromptPack(state: KronosState): void {
@@ -3093,9 +3329,11 @@ function openPromptHistoryPanel(): void {
     'kronosPromptHistory',
     'Kronos Prompt History',
     vscode.ViewColumn.One,
-    { enableScripts: false }
+    { enableScripts: true }
   );
-  panel.webview.html = withWebviewCsp(buildPromptHistoryHtml(snapshots, diff));
+  const nonce = createNonce();
+  panel.webview.html = withWebviewCsp(buildPromptHistoryHtml(snapshots, diff, nonce), { allowScripts: true, nonce });
+  attachOperatorCommandHandler(panel, nonce);
 }
 
 async function repairPromptPack(state: KronosState): Promise<void> {
@@ -3135,12 +3373,14 @@ function openPromptHistoryDiffPanel(diff: PromptHistoryDiff): void {
     'kronosPromptHistory',
     'Kronos Prompt History',
     vscode.ViewColumn.One,
-    { enableScripts: false }
+    { enableScripts: true }
   );
-  panel.webview.html = withWebviewCsp(buildPromptHistoryHtml(listPromptHistorySnapshots(25), diff));
+  const nonce = createNonce();
+  panel.webview.html = withWebviewCsp(buildPromptHistoryHtml(listPromptHistorySnapshots(25), diff, nonce), { allowScripts: true, nonce });
+  attachOperatorCommandHandler(panel, nonce);
 }
 
-function buildPromptHistoryHtml(snapshots: PromptHistorySnapshot[], diff?: PromptHistoryDiff): string {
+function buildPromptHistoryHtml(snapshots: PromptHistorySnapshot[], diff?: PromptHistoryDiff, nonce?: string): string {
   const snapshotRows = snapshots.map(snapshot => `<tr>
     <td>${escapeHtml(snapshot.createdAt)}</td>
     <td>${escapeHtml(snapshot.scope)}</td>
@@ -3161,6 +3401,12 @@ function buildPromptHistoryHtml(snapshots: PromptHistorySnapshot[], diff?: Promp
   const diffSummary = diff
     ? `${diff.summary.added} added, ${diff.summary.removed} removed, ${diff.summary.changed} changed, ${diff.summary.unchanged} unchanged.`
     : 'No prompt history snapshots yet.';
+  const actions = operatorCommandRow([
+    actionButton('snapshotPromptPack', 'Snapshot'),
+    actionButton('promptManager', 'Prompt Manager'),
+    actionButton('promptSmokeTests', 'Smoke Tests'),
+    actionButton('repairPromptPack', 'Repair'),
+  ]);
 
   return `<!DOCTYPE html>
 <html><head><style>
@@ -3176,11 +3422,12 @@ function buildPromptHistoryHtml(snapshots: PromptHistorySnapshot[], diff?: Promp
       <div class="kronos-subtitle">${escapeHtml(diffSummary)}</div>
     </div>
   </div>
+  ${actions}
   <div class="operator-section"><h2>Latest Diff</h2>
   ${diff ? `<div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Status</th><th>Prompt</th><th>Hash</th><th>Variables</th><th>Path</th></tr>${diffRows}</table></div>` : '<div class="kronos-empty">Create a prompt snapshot to start history tracking.</div>'}</div>
   <div class="operator-section"><h2>Snapshots</h2>
   ${snapshots.length === 0 ? '<div class="kronos-empty">No prompt snapshots found.</div>' : `<div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Created</th><th>Scope</th><th>Templates</th><th>ID</th></tr>${snapshotRows}</table></div>`}</div>
-</div></body></html>`;
+</div>${nonce ? kronosActionPanelScript(nonce) : ''}</body></html>`;
 }
 
 function promptHistoryTemplatesForState(state: KronosState): PromptTemplateInfo[] {
@@ -3196,10 +3443,16 @@ function promptHistoryTemplatesForState(state: KronosState): PromptTemplateInfo[
   return Array.from(byKey.values()).sort((a, b) => `${a.source}:${a.name}:${a.path}`.localeCompare(`${b.source}:${b.name}:${b.path}`));
 }
 
-function buildPromptSmokeTestsHtml(results: PromptSmokeResult[]): string {
+function buildPromptSmokeTestsHtml(results: PromptSmokeResult[], nonce?: string): string {
   const pass = results.filter(result => result.status === 'pass').length;
   const fail = results.filter(result => result.status === 'fail').length;
   const rows = results.map(promptSmokeResultRow).join('');
+  const actions = operatorCommandRow([
+    actionButton('promptManager', 'Prompt Manager'),
+    actionButton('snapshotPromptPack', 'Snapshot'),
+    actionButton('promptHistory', 'History'),
+    actionButton('repairPromptPack', 'Repair'),
+  ]);
   return `<!DOCTYPE html>
 <html><head><style>
   ${kronosOperatorPanelCss()}
@@ -3210,8 +3463,9 @@ function buildPromptSmokeTestsHtml(results: PromptSmokeResult[]): string {
       <div class="kronos-subtitle">${pass} passing, ${fail} failing.</div>
     </div>
   </div>
+  ${actions}
   ${results.length === 0 ? '<div class="kronos-empty">No prompt smoke tests configured.</div>' : `<div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Status</th><th>Test</th><th>Template</th><th>Detail</th></tr>${rows}</table></div>`}
-</div></body></html>`;
+</div>${nonce ? kronosActionPanelScript(nonce) : ''}</body></html>`;
 }
 
 function buildPromptSmokeTests(
@@ -3268,17 +3522,8 @@ function promptTemplateRow(template: PromptTemplateInfo): string {
 
 async function openRecoveryCenter(state: KronosState): Promise<void> {
   const backups = listBackups();
-  const worktreeReport = cleanupStaleWorktrees({ remove: false });
-  const doctorChecks = runDoctorChecks(state);
-  const inventory = buildRecoveryInventory({
-    runs: listRuns(),
-    runStoreIssues: listRunStoreIssues(),
-    tickets: state.state?.tickets,
-    backups,
-    worktreeReport,
-    doctorChecks,
-  });
-  openRecoveryPanel(inventory);
+  const inventory = buildRecoveryInventoryForState(state, backups);
+  openRecoveryPanel(inventory, state, backups);
 
   const actions = inventory.items
     .filter(item => item.action)
@@ -3290,23 +3535,50 @@ async function openRecoveryCenter(state: KronosState): Promise<void> {
     }));
   if (actions.length === 0) {
     vscode.window.showInformationMessage('Recovery Center found no active recovery items.');
-    return;
   }
-
-  const picked = await vscode.window.showQuickPick(actions, { placeHolder: 'Select a recovery action' });
-  if (!picked) { return; }
-
-  await executeRecoveryAction(picked.item, state, backups);
 }
 
-function openRecoveryPanel(inventory: RecoveryInventory): void {
+function buildRecoveryInventoryForState(state: KronosState, backups = listBackups()): RecoveryInventory {
+  return buildRecoveryInventory({
+    runs: listRuns(),
+    runStoreIssues: listRunStoreIssues(),
+    tickets: state.state?.tickets,
+    backups,
+    worktreeReport: cleanupStaleWorktrees({ remove: false }),
+    doctorChecks: runDoctorChecks(state),
+  });
+}
+
+function openRecoveryPanel(inventory: RecoveryInventory, state: KronosState, initialBackups = listBackups()): void {
   const panel = vscode.window.createWebviewPanel(
     'kronosRecoveryCenter',
     'Kronos Recovery Center',
     vscode.ViewColumn.One,
-    { enableScripts: false }
+    { enableScripts: true }
   );
-  panel.webview.html = withWebviewCsp(buildRecoveryHtml(inventory));
+  const nonce = createNonce();
+  let currentInventory = inventory;
+  let currentBackups = initialBackups;
+  const render = () => {
+    currentBackups = listBackups();
+    currentInventory = buildRecoveryInventoryForState(state, currentBackups);
+    panel.webview.html = withWebviewCsp(buildRecoveryHtml(currentInventory, nonce), { allowScripts: true, nonce });
+  };
+  render();
+  panel.webview.onDidReceiveMessage(async msg => {
+    const request = normalizeActionPanelMessage(msg, RECOVERY_MESSAGE_COMMANDS);
+    if (!request) {
+      vscode.window.showWarningMessage('Ignored invalid Kronos recovery action.');
+      return;
+    }
+    const item = currentInventory.items.find(candidate => candidate.id === request.itemId);
+    if (!item) {
+      vscode.window.showWarningMessage('Recovery item is no longer available.');
+      return;
+    }
+    await executeRecoveryAction(item, state, currentBackups);
+    render();
+  });
 }
 
 function openStateAuditLogPanel(): void {
@@ -3315,12 +3587,14 @@ function openStateAuditLogPanel(): void {
     'kronosStateAuditLog',
     'Kronos State Audit Log',
     vscode.ViewColumn.One,
-    { enableScripts: false }
+    { enableScripts: true }
   );
-  panel.webview.html = withWebviewCsp(buildStateAuditLogHtml(events));
+  const nonce = createNonce();
+  panel.webview.html = withWebviewCsp(buildStateAuditLogHtml(events, nonce), { allowScripts: true, nonce });
+  attachOperatorCommandHandler(panel, nonce);
 }
 
-function buildStateAuditLogHtml(events: StateAuditEvent[]): string {
+function buildStateAuditLogHtml(events: StateAuditEvent[], nonce?: string): string {
   const rows = events.length === 0
     ? '<tr><td colspan="5" class="empty">No state audit events found.</td></tr>'
     : events.map(event => {
@@ -3341,6 +3615,11 @@ function buildStateAuditLogHtml(events: StateAuditEvent[]): string {
         <td><pre>${escapeHtml(detail || '-')}</pre></td>
       </tr>`;
     }).join('');
+  const actions = operatorCommandRow([
+    actionButton('recoveryCenter', 'Recovery Center'),
+    actionButton('doctor', 'Doctor'),
+    actionButton('stats', 'Session Stats'),
+  ]);
 
   return `<!DOCTYPE html>
 <html><head><style>
@@ -3353,13 +3632,14 @@ function buildStateAuditLogHtml(events: StateAuditEvent[]): string {
       <div class="kronos-subtitle">${escapeHtml(STATE_AUDIT_FILE)} · newest first · ${events.length} event(s)</div>
     </div>
   </div>
+  ${actions}
   <div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Time</th><th>Action</th><th>Target</th><th>Backup</th><th>Detail</th></tr>${rows}</table></div>
-</div></body></html>`;
+</div>${nonce ? kronosActionPanelScript(nonce) : ''}</body></html>`;
 }
 
 async function executeRecoveryAction(item: RecoveryItem, state: KronosState, backups = listBackups()): Promise<void> {
   if (item.action === 'openRunCenter') {
-    openRunCenter();
+    openInteractiveRunCenter(state);
     return;
   }
   if (item.action === 'retryRun') {
@@ -3517,6 +3797,8 @@ function kronosOperatorPanelCss(): string {
   .action-cell { min-width: 150px; }
   .inline-actions { gap: 6px; align-items: flex-start; }
   .inline-actions .kronos-button { min-height: 24px; padding: 3px 8px; font-size: 10px; }
+  .operator-command-row { margin: 12px 0 18px; gap: 8px; align-items: flex-start; }
+  .operator-command-row .kronos-button { min-height: 28px; }
   .plan-list { display: grid; gap: 10px; }
   .plan-card { display: grid; grid-template-columns: 34px 1fr; gap: 10px; }
   .rank { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border: 1px solid var(--k-border); border-radius: 999px; background: var(--k-surface-soft); font-weight: 700; }
@@ -3537,13 +3819,18 @@ function kronosOperatorPanelCss(): string {
   li { margin: 4px 0; }`;
 }
 
-function buildRecoveryHtml(inventory: RecoveryInventory): string {
+function buildRecoveryHtml(inventory: RecoveryInventory, nonce?: string): string {
   const rows = inventory.items.map(item => `<tr class="${item.severity}">
     <td><span class="pill ${item.severity}">${escapeHtml(item.severity.toUpperCase())}</span></td>
     <td>${escapeHtml(item.kind)}</td>
     <td>${escapeHtml(item.title)}</td>
     <td class="detail">${escapeHtml(item.detail)}</td>
-    <td>${escapeHtml(item.actionLabel || recoveryActionLabel(item.action))}</td>
+    <td class="action-cell">${actionButton('executeRecoveryItem', item.actionLabel || recoveryActionLabel(item.action), {
+      itemId: item.id,
+      ticket: item.ticketKey,
+      runId: item.runId,
+      primary: item.severity === 'critical',
+    })}</td>
   </tr>`).join('');
   const empty = inventory.items.length === 0 ? '<div class="empty">No active recovery items.</div>' : '';
 
@@ -3559,7 +3846,7 @@ function buildRecoveryHtml(inventory: RecoveryInventory): string {
     <div class="summary-card"><div class="num">${inventory.summary.total}</div><div class="lbl">Total</div></div>
   </div>
   ${empty || `<div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Severity</th><th>Kind</th><th>Item</th><th>Detail</th><th>Action</th></tr>${rows}</table></div>`}
-</div></body></html>`;
+</div>${nonce ? kronosActionPanelScript(nonce) : ''}</body></html>`;
 }
 
 function openHumanReviewInbox(state: KronosState): void {
@@ -3761,12 +4048,14 @@ function openEvidenceHandoffPanel(plan: EvidenceHandoffPlan): void {
     'kronosEvidenceHandoff',
     `Evidence Handoff: ${plan.ticketKey}`,
     vscode.ViewColumn.One,
-    { enableScripts: false }
+    { enableScripts: true }
   );
-  panel.webview.html = withWebviewCsp(buildEvidenceHandoffHtml(plan));
+  const nonce = createNonce();
+  panel.webview.html = withWebviewCsp(buildEvidenceHandoffHtml(plan, nonce), { allowScripts: true, nonce });
+  attachOperatorCommandHandler(panel, nonce);
 }
 
-function buildEvidenceHandoffHtml(plan: EvidenceHandoffPlan): string {
+function buildEvidenceHandoffHtml(plan: EvidenceHandoffPlan, nonce?: string): string {
   const destinations = plan.destinations.map(destination => {
     const href = safeHttpHref(destination.url);
     return `<tr class="${destination.available ? 'available' : 'missing'}">
@@ -3778,12 +4067,19 @@ function buildEvidenceHandoffHtml(plan: EvidenceHandoffPlan): string {
   }).join('');
   const steps = plan.manualSteps.map(step => `<li>${escapeHtml(step)}</li>`).join('');
   const comment = escapeHtml(plan.comment);
+  const actions = operatorCommandRow([
+    actionButton('viewTicket', 'View Ticket', { ticket: plan.ticketKey }),
+    actionButton('evidenceGate', 'Evidence Gate', { ticket: plan.ticketKey }),
+    actionButton('exportEvidence', 'Export', { ticket: plan.ticketKey }),
+    actionButton('publishEvidence', 'Publish', { ticket: plan.ticketKey }),
+  ]);
 
   return `<!DOCTYPE html>
 <html><head><style>
   ${kronosOperatorPanelCss()}
 </style></head><body><div class="kronos-shell operator-shell">
   <div class="kronos-header"><div><h1 class="kronos-title">Evidence Handoff: ${escapeHtml(plan.ticketKey)}</h1><div class="kronos-subtitle">Manual posting packet with destinations, steps, and copied comment payload</div></div></div>
+  ${actions}
   <div class="subtitle">${escapeHtml(plan.summary)}<br>Comment text has been copied to the clipboard. Kronos did not call a posting API.</div>
   <div class="operator-section"><h2>Destinations</h2>
   <div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Status</th><th>Destination</th><th>Detail</th><th>Open</th></tr>${destinations}</table></div></div>
@@ -3793,7 +4089,7 @@ function buildEvidenceHandoffHtml(plan: EvidenceHandoffPlan): string {
   <div class="operator-section"><h2>Comment Payload</h2>
   <pre>${comment}</pre></div>
   <p>Markdown artifact: ${escapeHtml(plan.exportPath)}</p>
-</div></body></html>`;
+</div>${nonce ? kronosActionPanelScript(nonce) : ''}</body></html>`;
 }
 
 function openEvidencePublishPanel(results: Array<EvidencePublishResult | EvidencePublishDestination>, ticketKey: string): void {
@@ -3801,12 +4097,14 @@ function openEvidencePublishPanel(results: Array<EvidencePublishResult | Evidenc
     'kronosEvidencePublish',
     `Evidence Publish: ${ticketKey}`,
     vscode.ViewColumn.One,
-    { enableScripts: false }
+    { enableScripts: true }
   );
-  panel.webview.html = withWebviewCsp(buildEvidencePublishHtml(results, ticketKey));
+  const nonce = createNonce();
+  panel.webview.html = withWebviewCsp(buildEvidencePublishHtml(results, ticketKey, nonce), { allowScripts: true, nonce });
+  attachOperatorCommandHandler(panel, nonce);
 }
 
-function buildEvidencePublishHtml(results: Array<EvidencePublishResult | EvidencePublishDestination>, ticketKey: string): string {
+function buildEvidencePublishHtml(results: Array<EvidencePublishResult | EvidencePublishDestination>, ticketKey: string, nonce?: string): string {
   const rows = results.map(result => {
     const href = safeHttpHref(result.endpoint);
     const httpStatus = 'httpStatus' in result && result.httpStatus ? `HTTP ${result.httpStatus}` : '';
@@ -3818,15 +4116,22 @@ function buildEvidencePublishHtml(results: Array<EvidencePublishResult | Evidenc
     </tr>`;
   }).join('');
   const empty = results.length === 0 ? '<div class="empty">No publish destinations were evaluated.</div>' : '';
+  const actions = operatorCommandRow([
+    actionButton('viewTicket', 'View Ticket', { ticket: ticketKey }),
+    actionButton('evidenceGate', 'Evidence Gate', { ticket: ticketKey }),
+    actionButton('exportEvidence', 'Export', { ticket: ticketKey }),
+    actionButton('evidenceHandoff', 'Handoff', { ticket: ticketKey }),
+  ]);
 
   return `<!DOCTYPE html>
 <html><head><style>
   ${kronosOperatorPanelCss()}
 </style></head><body><div class="kronos-shell operator-shell">
   <div class="kronos-header"><div><h1 class="kronos-title">Evidence Publish: ${escapeHtml(ticketKey)}</h1><div class="kronos-subtitle">External publish results and endpoint safety status</div></div></div>
+  ${actions}
   <div class="subtitle">External publishing is safety-gated and credential values are never displayed.</div>
   ${empty || `<div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Status</th><th>Destination</th><th>Detail</th><th>Endpoint</th></tr>${rows}</table></div>`}
-</div></body></html>`;
+</div>${nonce ? kronosActionPanelScript(nonce) : ''}</body></html>`;
 }
 
 function publishPillClass(status: string): string {
@@ -3915,17 +4220,44 @@ async function executeEvidenceGateAction(command: string, ticketKey: string): Pr
   }
 }
 
-function actionButton(action: string, label: string, options: { ticket?: string; runId?: string; primary?: boolean } = {}): string {
+function actionButton(action: string, label: string, options: { ticket?: string; runId?: string; planId?: string; itemId?: string; primary?: boolean } = {}): string {
   const classes = `kronos-button${options.primary ? ' primary' : ''}`;
   const ticketAttr = options.ticket ? ` data-ticket="${escapeAttr(options.ticket)}"` : '';
   const runAttr = options.runId ? ` data-run-id="${escapeAttr(options.runId)}"` : '';
-  return `<button type="button" class="${classes}" data-action="${escapeAttr(action)}"${ticketAttr}${runAttr}>${escapeHtml(label)}</button>`;
+  const planAttr = options.planId ? ` data-plan-id="${escapeAttr(options.planId)}"` : '';
+  const itemAttr = options.itemId ? ` data-item-id="${escapeAttr(options.itemId)}"` : '';
+  return `<button type="button" class="${classes}" data-action="${escapeAttr(action)}"${ticketAttr}${runAttr}${planAttr}${itemAttr}>${escapeHtml(label)}</button>`;
 }
 
 function actionRow(buttons: string[]): string {
   return buttons.length > 0
     ? `<div class="kronos-action-row inline-actions">${buttons.join('')}</div>`
     : '<span class="muted">No action</span>';
+}
+
+function operatorCommandRow(buttons: string[]): string {
+  return buttons.length > 0
+    ? `<div class="kronos-action-row operator-command-row">${buttons.join('')}</div>`
+    : '';
+}
+
+async function executeOperatorCommandAction(command: string, ticketKey = ''): Promise<void> {
+  if (TICKET_OPERATOR_COMMANDS.has(command) && ticketKey) {
+    await vscode.commands.executeCommand(`kronos.${command}`, { ticketKey });
+    return;
+  }
+  await vscode.commands.executeCommand(`kronos.${command}`);
+}
+
+function attachOperatorCommandHandler(panel: vscode.WebviewPanel, nonce: string): void {
+  panel.webview.onDidReceiveMessage(async msg => {
+    const request = normalizeActionPanelMessage(msg, OPERATOR_COMMAND_MESSAGE_COMMANDS);
+    if (!request) {
+      vscode.window.showWarningMessage('Ignored invalid Kronos operator action.');
+      return;
+    }
+    await executeOperatorCommandAction(request.command, request.ticket);
+  });
 }
 
 function kronosActionPanelScript(nonce: string): string {
@@ -3938,24 +4270,40 @@ document.addEventListener('click', function(event) {
   vscode.postMessage({
     command: target.getAttribute('data-action') || '',
     ticket: target.getAttribute('data-ticket') || '',
-    runId: target.getAttribute('data-run-id') || ''
+    runId: target.getAttribute('data-run-id') || '',
+    planId: target.getAttribute('data-plan-id') || '',
+    itemId: target.getAttribute('data-item-id') || ''
   });
 });
 </script>`;
 }
 
 function openQueuePlannerPanel(state: KronosState): void {
-  const plans = planNextActions(state).slice(0, 50);
   const panel = vscode.window.createWebviewPanel(
     'kronosQueuePlanner',
     'Kronos Queue Planner',
     vscode.ViewColumn.One,
-    { enableScripts: false }
+    { enableScripts: true }
   );
-  panel.webview.html = withWebviewCsp(buildQueuePlannerHtml(plans));
+  const nonce = createNonce();
+  let currentPlans: PlannedAction[] = [];
+  const render = () => {
+    currentPlans = planNextActions(state).slice(0, 50);
+    panel.webview.html = withWebviewCsp(buildQueuePlannerHtml(currentPlans, nonce), { allowScripts: true, nonce });
+  };
+  render();
+  panel.webview.onDidReceiveMessage(async msg => {
+    const request = normalizeActionPanelMessage(msg, PLAN_MESSAGE_COMMANDS);
+    if (!request) {
+      vscode.window.showWarningMessage('Ignored invalid Kronos queue planner action.');
+      return;
+    }
+    await executePlanPanelAction(state, currentPlans, request);
+    render();
+  });
 }
 
-function buildQueuePlannerHtml(plans: PlannedAction[]): string {
+function buildQueuePlannerHtml(plans: PlannedAction[], nonce?: string): string {
   const rows = plans.map((plan, idx) => {
     const parts = plan.scoreBreakdown
       .map(part => `<div class="score-part"><span>${escapeHtml(part.label)}</span><strong>${escapeHtml(String(part.value))}</strong><small>${escapeHtml(part.detail)}</small></div>`)
@@ -3967,6 +4315,7 @@ function buildQueuePlannerHtml(plans: PlannedAction[]): string {
         <div class="operator-card-meta">${escapeHtml(plan.projects.join(', ') || 'unlinked')} | ${escapeHtml(plan.source)} | score ${escapeHtml(String(plan.score))}</div>
         <div class="detail">${escapeHtml(plan.reason)}</div>
         <div class="score-grid">${parts}</div>
+        ${planActionRow(plan)}
       </div>
     </div>`;
   }).join('');
@@ -3983,21 +4332,96 @@ function buildQueuePlannerHtml(plans: PlannedAction[]): string {
     </div>
   </div>
   ${empty || `<div class="plan-list">${rows}</div>`}
-</div></body></html>`;
+</div>${nonce ? kronosActionPanelScript(nonce) : ''}</body></html>`;
+}
+
+function planActionRow(plan: PlannedAction): string {
+  const buttons: string[] = [
+    actionButton('startPlan', 'Start', { planId: plan.planId, primary: true }),
+  ];
+  if (plan.ticketKey) {
+    if (plan.source === 'queue') {
+      buttons.push(actionButton('pinPlan', 'Pin', { planId: plan.planId, ticket: plan.ticketKey }));
+    } else {
+      buttons.push(actionButton('queuePlan', 'Queue', { planId: plan.planId, ticket: plan.ticketKey }));
+      buttons.push(actionButton('pinPlan', 'Pin', { planId: plan.planId, ticket: plan.ticketKey }));
+      buttons.push(actionButton('snoozePlan', 'Snooze', { planId: plan.planId, ticket: plan.ticketKey }));
+      buttons.push(actionButton('snoozePlanToday', 'Tomorrow', { planId: plan.planId, ticket: plan.ticketKey }));
+      buttons.push(actionButton('rejectPlan', 'Reject', { planId: plan.planId, ticket: plan.ticketKey }));
+    }
+    buttons.push(actionButton('viewTicket', 'View', { planId: plan.planId, ticket: plan.ticketKey }));
+    buttons.push(actionButton('addEvidence', 'Evidence', { planId: plan.planId, ticket: plan.ticketKey }));
+  }
+  return actionRow(buttons);
+}
+
+function findPlanById(plans: PlannedAction[], planId: string): PlannedAction | undefined {
+  return plans.find(plan => plan.planId === planId);
+}
+
+async function executePlanPanelAction(
+  state: KronosState,
+  plans: PlannedAction[],
+  request: { command: string; ticket: string; planId: string },
+): Promise<void> {
+  const plan = findPlanById(plans, request.planId);
+  if (!plan) {
+    vscode.window.showWarningMessage('That Kronos recommendation is no longer available.');
+    return;
+  }
+
+  if (request.command === 'startPlan') {
+    await startPlannedAction(state, plan);
+  } else if (request.command === 'queuePlan' && plan.ticketKey) {
+    addPlanToQueue(state, plan, false);
+  } else if (request.command === 'pinPlan' && plan.ticketKey) {
+    addPlanToQueue(state, plan, true);
+  } else if (request.command === 'snoozePlan' && plan.ticketKey) {
+    recordPlanDecision(state, plan, 'snoozed', 60);
+    vscode.window.showInformationMessage(`Snoozed ${plan.ticketKey} for 1 hour.`);
+  } else if (request.command === 'snoozePlanToday' && plan.ticketKey) {
+    recordPlanDecision(state, plan, 'snoozed', minutesUntilTomorrow());
+    vscode.window.showInformationMessage(`Snoozed ${plan.ticketKey} until tomorrow.`);
+  } else if (request.command === 'rejectPlan' && plan.ticketKey) {
+    const reason = await vscode.window.showInputBox({
+      prompt: `Why reject ${plan.ticketKey}?`,
+      placeHolder: 'e.g., not in scope this sprint, blocked by product',
+    });
+    if (reason === undefined) { return; }
+    recordPlanDecision(state, plan, 'rejected', undefined, reason || undefined);
+    vscode.window.showInformationMessage(`Rejected ${plan.ticketKey} recommendation.`);
+  } else if (request.command === 'viewTicket' && plan.ticketKey) {
+    await vscode.commands.executeCommand('kronos.viewTicket', { ticketKey: plan.ticketKey });
+  } else if (request.command === 'addEvidence' && plan.ticketKey) {
+    await vscode.commands.executeCommand('kronos.addEvidence', { ticketKey: plan.ticketKey });
+  }
 }
 
 function openBacklogTriagePanel(state: KronosState): void {
-  const report = buildBacklogTriageReport({ state: state.state, queue: state.queue });
   const panel = vscode.window.createWebviewPanel(
     'kronosBacklogTriage',
     'Kronos Backlog Triage',
     vscode.ViewColumn.One,
-    { enableScripts: false }
+    { enableScripts: true }
   );
-  panel.webview.html = withWebviewCsp(buildBacklogTriageHtml(report));
+  const nonce = createNonce();
+  const render = () => {
+    const report = buildBacklogTriageReport({ state: state.state, queue: state.queue });
+    panel.webview.html = withWebviewCsp(buildBacklogTriageHtml(report, nonce), { allowScripts: true, nonce });
+  };
+  render();
+  panel.webview.onDidReceiveMessage(async msg => {
+    const request = normalizeActionPanelMessage(msg, BACKLOG_TRIAGE_MESSAGE_COMMANDS);
+    if (!request) {
+      vscode.window.showWarningMessage('Ignored invalid Kronos backlog triage action.');
+      return;
+    }
+    await executeBacklogTriageAction(state, request.command, request.ticket);
+    render();
+  });
 }
 
-function buildBacklogTriageHtml(report: BacklogTriageReport): string {
+function buildBacklogTriageHtml(report: BacklogTriageReport, nonce?: string): string {
   const cards = Object.entries(report.summary)
     .filter(([, count]) => count > 0)
     .map(([kind, count]) => `<div class="summary-card"><div class="num">${escapeHtml(String(count))}</div><div class="lbl">${escapeHtml(triageKindLabel(kind))}</div></div>`)
@@ -4010,6 +4434,7 @@ function buildBacklogTriageHtml(report: BacklogTriageReport): string {
     <td>${escapeHtml(item.projects.join(', ') || 'unlinked')}</td>
     <td>${item.ageDays === undefined ? '-' : `${escapeHtml(String(item.ageDays))}d`}</td>
     <td>${escapeHtml(item.detail)}</td>
+    <td class="action-cell">${triageActionButtons(item)}</td>
   </tr>`).join('');
   const empty = report.items.length === 0 ? '<div class="kronos-empty">No backlog triage items found.</div>' : '';
   const summaryCards = cards || '<div class="kronos-empty">No active backlog categories.</div>';
@@ -4028,26 +4453,78 @@ function buildBacklogTriageHtml(report: BacklogTriageReport): string {
     </div>
   </div>
   <div class="operator-summary">${summaryCards}</div>
-  ${empty || `<div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Severity</th><th>Ticket</th><th>Category</th><th>Action</th><th>Projects</th><th>Age</th><th>Detail</th></tr>${rows}</table></div>`}
-</div></body></html>`;
+  ${empty || `<div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Severity</th><th>Ticket</th><th>Category</th><th>Action</th><th>Projects</th><th>Age</th><th>Detail</th><th>Actions</th></tr>${rows}</table></div>`}
+</div>${nonce ? kronosActionPanelScript(nonce) : ''}</body></html>`;
 }
 
 function triageKindLabel(kind: string): string {
   return kind.replace(/_/g, ' ');
 }
 
+function triageActionButtons(item: BacklogTriageReport['items'][number]): string {
+  const buttons: string[] = [];
+  if (item.kind === 'unlinked') {
+    buttons.push(actionButton('linkTicket', 'Link', { ticket: item.ticketKey, primary: true }));
+  }
+  if (item.kind === 'evidence_gap') {
+    buttons.push(actionButton('addEvidenceCheck', 'Add Check', { ticket: item.ticketKey, primary: true }));
+    buttons.push(actionButton('addEvidence', 'Add Note', { ticket: item.ticketKey }));
+  }
+  if (['build_failed', 'ready_to_plan', 'stale'].includes(item.kind) && item.projects.length > 0) {
+    buttons.push(actionButton('startTicket', 'Start', { ticket: item.ticketKey, primary: item.kind === 'build_failed' }));
+    buttons.push(actionButton('addToQueue', 'Queue', { ticket: item.ticketKey }));
+  }
+  buttons.push(actionButton('viewTicket', 'View', { ticket: item.ticketKey, primary: buttons.length === 0 }));
+  return actionRow(buttons);
+}
+
+async function executeBacklogTriageAction(state: KronosState, command: string, ticketKey: string): Promise<void> {
+  if (!ticketKey || !state.state?.tickets?.[ticketKey]) {
+    vscode.window.showWarningMessage(`${ticketKey || 'Ticket'} is no longer in Kronos state.`);
+    return;
+  }
+  if (command === 'linkTicket') {
+    await vscode.commands.executeCommand('kronos.linkTicket', { ticketKey });
+  } else if (command === 'startTicket') {
+    await startTicketFromActionPanel(state, ticketKey);
+  } else if (command === 'addToQueue') {
+    await vscode.commands.executeCommand('kronos.addToQueue', { ticketKey });
+  } else if (command === 'addEvidence') {
+    await vscode.commands.executeCommand('kronos.addEvidence', { ticketKey });
+  } else if (command === 'addEvidenceCheck') {
+    await vscode.commands.executeCommand('kronos.addEvidenceCheck', { ticketKey });
+  } else if (command === 'viewTicket') {
+    await vscode.commands.executeCommand('kronos.viewTicket', { ticketKey });
+  }
+}
+
 function openProjectBatchPlanPanel(state: KronosState): void {
-  const batches = planByProject(planNextActions(state), 5).slice(0, 20);
   const panel = vscode.window.createWebviewPanel(
     'kronosProjectBatchPlan',
     'Kronos Project Batch Plan',
     vscode.ViewColumn.One,
-    { enableScripts: false }
+    { enableScripts: true }
   );
-  panel.webview.html = withWebviewCsp(buildProjectBatchPlanHtml(batches));
+  const nonce = createNonce();
+  let currentPlans: PlannedAction[] = [];
+  const render = () => {
+    currentPlans = planNextActions(state);
+    const batches = planByProject(currentPlans, 5).slice(0, 20);
+    panel.webview.html = withWebviewCsp(buildProjectBatchPlanHtml(batches, nonce), { allowScripts: true, nonce });
+  };
+  render();
+  panel.webview.onDidReceiveMessage(async msg => {
+    const request = normalizeActionPanelMessage(msg, PLAN_MESSAGE_COMMANDS);
+    if (!request) {
+      vscode.window.showWarningMessage('Ignored invalid Kronos project batch action.');
+      return;
+    }
+    await executePlanPanelAction(state, currentPlans, request);
+    render();
+  });
 }
 
-function buildProjectBatchPlanHtml(batches: ProjectBatchPlan[]): string {
+function buildProjectBatchPlanHtml(batches: ProjectBatchPlan[], nonce?: string): string {
   const rows = batches.map(batch => {
     const actions = Object.entries(batch.actionCounts)
       .map(([action, count]) => `${actionToLabel(action)}: ${count}`)
@@ -4058,11 +4535,12 @@ function buildProjectBatchPlanHtml(batches: ProjectBatchPlan[]): string {
       <td>${escapeHtml(String(plan.score))}</td>
       <td>${escapeHtml(String(estimatePlanMinutes(plan)))}m</td>
       <td>${escapeHtml(plan.reason)}</td>
+      <td class="action-cell">${planActionRow(plan)}</td>
     </tr>`).join('');
     return `<section class="operator-card">
       <div class="operator-card-header"><div class="operator-card-title">${escapeHtml(batch.project)}</div><div class="operator-card-meta">${escapeHtml(String(batch.plans.length))} action(s)</div></div>
       <div class="subtitle">Score ${escapeHtml(String(batch.totalScore))} | estimated ${escapeHtml(String(batch.estimatedMinutes))}m | ${escapeHtml(actions || 'no actions')}</div>
-      <div class="table-wrap"><table class="kronos-table"><tr><th>Ticket</th><th>Action</th><th>Score</th><th>Estimate</th><th>Reason</th></tr>${plans}</table></div>
+      <div class="table-wrap"><table class="kronos-table"><tr><th>Ticket</th><th>Action</th><th>Score</th><th>Estimate</th><th>Reason</th><th>Actions</th></tr>${plans}</table></div>
     </section>`;
   }).join('');
   const empty = batches.length === 0 ? '<div class="kronos-empty">No project batch plan recommendations found.</div>' : '';
@@ -4078,21 +4556,36 @@ function buildProjectBatchPlanHtml(batches: ProjectBatchPlan[]): string {
     </div>
   </div>
   ${empty || `<div class="plan-list">${rows}</div>`}
-</div></body></html>`;
+</div>${nonce ? kronosActionPanelScript(nonce) : ''}</body></html>`;
 }
 
 function openReleaseBatchPlanPanel(state: KronosState): void {
-  const batches = planByRelease(planNextActions(state), 8).slice(0, 20);
   const panel = vscode.window.createWebviewPanel(
     'kronosReleaseBatchPlan',
     'Kronos Release Batch Plan',
     vscode.ViewColumn.One,
-    { enableScripts: false }
+    { enableScripts: true }
   );
-  panel.webview.html = withWebviewCsp(buildReleaseBatchPlanHtml(batches));
+  const nonce = createNonce();
+  let currentPlans: PlannedAction[] = [];
+  const render = () => {
+    currentPlans = planNextActions(state);
+    const batches = planByRelease(currentPlans, 8).slice(0, 20);
+    panel.webview.html = withWebviewCsp(buildReleaseBatchPlanHtml(batches, nonce), { allowScripts: true, nonce });
+  };
+  render();
+  panel.webview.onDidReceiveMessage(async msg => {
+    const request = normalizeActionPanelMessage(msg, PLAN_MESSAGE_COMMANDS);
+    if (!request) {
+      vscode.window.showWarningMessage('Ignored invalid Kronos release batch action.');
+      return;
+    }
+    await executePlanPanelAction(state, currentPlans, request);
+    render();
+  });
 }
 
-function buildReleaseBatchPlanHtml(batches: ReleaseBatchPlan[]): string {
+function buildReleaseBatchPlanHtml(batches: ReleaseBatchPlan[], nonce?: string): string {
   const rows = batches.map(batch => {
     const actions = Object.entries(batch.actionCounts)
       .map(([action, count]) => `${actionToLabel(action)}: ${count}`)
@@ -4104,11 +4597,12 @@ function buildReleaseBatchPlanHtml(batches: ReleaseBatchPlan[]): string {
       <td>${escapeHtml(String(plan.score))}</td>
       <td>${escapeHtml(String(estimatePlanMinutes(plan)))}m</td>
       <td>${escapeHtml(plan.reason)}</td>
+      <td class="action-cell">${planActionRow(plan)}</td>
     </tr>`).join('');
     return `<section class="operator-card">
       <div class="operator-card-header"><div class="operator-card-title">${escapeHtml(batch.release)}</div><div class="operator-card-meta">${escapeHtml(String(batch.plans.length))} action(s)</div></div>
       <div class="subtitle">Score ${escapeHtml(String(batch.totalScore))} | estimated ${escapeHtml(String(batch.estimatedMinutes))}m | ${escapeHtml(actions || 'no actions')}</div>
-      <div class="table-wrap"><table class="kronos-table"><tr><th>Ticket</th><th>Action</th><th>Projects</th><th>Score</th><th>Estimate</th><th>Reason</th></tr>${plans}</table></div>
+      <div class="table-wrap"><table class="kronos-table"><tr><th>Ticket</th><th>Action</th><th>Projects</th><th>Score</th><th>Estimate</th><th>Reason</th><th>Actions</th></tr>${plans}</table></div>
     </section>`;
   }).join('');
   const empty = batches.length === 0 ? '<div class="kronos-empty">No release batch plan recommendations found.</div>' : '';
@@ -4124,41 +4618,55 @@ function buildReleaseBatchPlanHtml(batches: ReleaseBatchPlan[]): string {
     </div>
   </div>
   ${empty || `<div class="plan-list">${rows}</div>`}
-</div></body></html>`;
+</div>${nonce ? kronosActionPanelScript(nonce) : ''}</body></html>`;
 }
 
 async function openCollisionReportPanel(state: KronosState): Promise<void> {
-  const plans = planNextActions(state).slice(0, 25);
-  const mrFiles = await loadMrFileHints(state, plans);
-  const reports = plans.map(plan => {
-    const collisions = detectDispatchCollisions({
-      ticketKey: plan.ticketKey,
-      projects: plan.projects,
-      action: plan.action,
-      queue: state.queue,
-      runs: listRuns(),
-      tickets: state.state?.tickets,
-      mrFiles,
-      excludeQueueItemId: plan.queueItem?.id,
-    });
-    return { plan, collisions };
-  }).filter(report => report.collisions.length > 0);
-
   const panel = vscode.window.createWebviewPanel(
     'kronosCollisionReport',
     'Kronos Collision Report',
     vscode.ViewColumn.One,
-    { enableScripts: false }
+    { enableScripts: true }
   );
-  panel.webview.html = withWebviewCsp(buildCollisionReportHtml(reports));
+  const nonce = createNonce();
+  let plans: PlannedAction[] = [];
+  const render = async () => {
+    plans = planNextActions(state).slice(0, 25);
+    const mrFiles = await loadMrFileHints(state, plans);
+    const reports = plans.map(plan => {
+      const collisions = detectDispatchCollisions({
+        ticketKey: plan.ticketKey,
+        projects: plan.projects,
+        action: plan.action,
+        queue: state.queue,
+        runs: listRuns(),
+        tickets: state.state?.tickets,
+        mrFiles,
+        excludeQueueItemId: plan.queueItem?.id,
+      });
+      return { plan, collisions };
+    }).filter(report => report.collisions.length > 0);
+    panel.webview.html = withWebviewCsp(buildCollisionReportHtml(reports, nonce), { allowScripts: true, nonce });
+  };
+  await render();
+  panel.webview.onDidReceiveMessage(async msg => {
+    const request = normalizeActionPanelMessage(msg, PLAN_MESSAGE_COMMANDS);
+    if (!request) {
+      vscode.window.showWarningMessage('Ignored invalid Kronos collision report action.');
+      return;
+    }
+    await executePlanPanelAction(state, plans, request);
+    await render();
+  });
 }
 
-function buildCollisionReportHtml(reports: Array<{ plan: PlannedAction; collisions: DispatchCollision[] }>): string {
+function buildCollisionReportHtml(reports: Array<{ plan: PlannedAction; collisions: DispatchCollision[] }>, nonce?: string): string {
   const rows = reports.flatMap(report => report.collisions.map(collision => `<tr class="${escapeClass(collision.severity)}">
     <td><span class="pill ${escapeClass(collision.severity)}">${escapeHtml(collision.severity)}</span></td>
     <td>${escapeHtml(report.plan.ticketKey || 'Refresh')}<br><span class="collision-plan-detail">${escapeHtml(actionToLabel(report.plan.action))}</span></td>
     <td>${escapeHtml(collision.kind)}</td>
     <td><strong>${escapeHtml(collision.title)}</strong><div>${escapeHtml(collision.detail)}</div></td>
+    <td class="action-cell">${planActionRow(report.plan)}</td>
   </tr>`)).join('');
   const empty = reports.length === 0 ? '<div class="kronos-empty">No collisions found for the top planned actions.</div>' : '';
 
@@ -4176,8 +4684,8 @@ function buildCollisionReportHtml(reports: Array<{ plan: PlannedAction; collisio
       <div class="kronos-subtitle">Active runs, duplicate queue work, and open merge requests that overlap top planned actions</div>
     </div>
   </div>
-  ${empty || `<div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Severity</th><th>Plan</th><th>Kind</th><th>Detail</th></tr>${rows}</table></div>`}
-</div></body></html>`;
+  ${empty || `<div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Severity</th><th>Plan</th><th>Kind</th><th>Detail</th><th>Actions</th></tr>${rows}</table></div>`}
+</div>${nonce ? kronosActionPanelScript(nonce) : ''}</body></html>`;
 }
 
 async function loadMrFileHints(state: KronosState, targets: Array<{ ticketKey?: string | null; projects: string[]; action: string }>): Promise<Record<string, MergeRequestChangedFile[]>> {
@@ -4233,36 +4741,67 @@ function normalizeChangedFileHints(files: any[]): MergeRequestChangedFile[] {
 }
 
 function openQueuePlanWindowPanel(state: KronosState): void {
-  const window = planForMinutes(planNextActions(state), 120);
   const panel = vscode.window.createWebviewPanel(
     'kronosPlanNextTwoHours',
     'Kronos Plan Next 2 Hours',
     vscode.ViewColumn.One,
-    { enableScripts: false }
+    { enableScripts: true }
   );
-  panel.webview.html = withWebviewCsp(buildQueuePlanModeHtml(
-    'Kronos Plan Next 2 Hours',
-    `${window.plans.length} action(s), estimated ${window.estimatedMinutes} minutes`,
-    window.plans
-  ));
+  const nonce = createNonce();
+  let currentPlans: PlannedAction[] = [];
+  const render = () => {
+    const window = planForMinutes(planNextActions(state), 120);
+    currentPlans = window.plans;
+    panel.webview.html = withWebviewCsp(buildQueuePlanModeHtml(
+      'Kronos Plan Next 2 Hours',
+      `${window.plans.length} action(s), estimated ${window.estimatedMinutes} minutes`,
+      window.plans,
+      nonce,
+    ), { allowScripts: true, nonce });
+  };
+  render();
+  panel.webview.onDidReceiveMessage(async msg => {
+    const request = normalizeActionPanelMessage(msg, PLAN_MESSAGE_COMMANDS);
+    if (!request) {
+      vscode.window.showWarningMessage('Ignored invalid Kronos planning action.');
+      return;
+    }
+    await executePlanPanelAction(state, currentPlans, request);
+    render();
+  });
 }
 
 function openOvernightCandidatesPanel(state: KronosState): void {
-  const candidates = overnightCandidatePlans(planNextActions(state), 20);
   const panel = vscode.window.createWebviewPanel(
     'kronosOvernightCandidates',
     'Kronos Overnight Candidates',
     vscode.ViewColumn.One,
-    { enableScripts: false }
+    { enableScripts: true }
   );
-  panel.webview.html = withWebviewCsp(buildQueuePlanModeHtml(
-    'Kronos Overnight Candidates',
-    `${candidates.length} linked implementation/build candidate(s)`,
-    candidates
-  ));
+  const nonce = createNonce();
+  let currentPlans: PlannedAction[] = [];
+  const render = () => {
+    currentPlans = overnightCandidatePlans(planNextActions(state), 20);
+    panel.webview.html = withWebviewCsp(buildQueuePlanModeHtml(
+      'Kronos Overnight Candidates',
+      `${currentPlans.length} linked implementation/build candidate(s)`,
+      currentPlans,
+      nonce,
+    ), { allowScripts: true, nonce });
+  };
+  render();
+  panel.webview.onDidReceiveMessage(async msg => {
+    const request = normalizeActionPanelMessage(msg, PLAN_MESSAGE_COMMANDS);
+    if (!request) {
+      vscode.window.showWarningMessage('Ignored invalid Kronos overnight candidate action.');
+      return;
+    }
+    await executePlanPanelAction(state, currentPlans, request);
+    render();
+  });
 }
 
-function buildQueuePlanModeHtml(title: string, subtitle: string, plans: PlannedAction[]): string {
+function buildQueuePlanModeHtml(title: string, subtitle: string, plans: PlannedAction[], nonce?: string): string {
   const rows = plans.map((plan, idx) => `<tr>
     <td>${idx + 1}</td>
     <td><strong>${escapeHtml(plan.ticketKey || 'Refresh')}</strong><div class="muted">${escapeHtml(plan.ticketSummary || '')}</div></td>
@@ -4271,6 +4810,7 @@ function buildQueuePlanModeHtml(title: string, subtitle: string, plans: PlannedA
     <td>${escapeHtml(String(plan.score))}</td>
     <td>${escapeHtml(String(estimatePlanMinutes(plan)))}m</td>
     <td>${escapeHtml(plan.reason)}</td>
+    <td class="action-cell">${planActionRow(plan)}</td>
   </tr>`).join('');
   const empty = plans.length === 0 ? '<div class="kronos-empty">No matching recommendations found.</div>' : '';
 
@@ -4284,8 +4824,8 @@ function buildQueuePlanModeHtml(title: string, subtitle: string, plans: PlannedA
       <div class="kronos-subtitle">${escapeHtml(subtitle)}</div>
     </div>
   </div>
-  ${empty || `<div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>#</th><th>Ticket</th><th>Action</th><th>Projects</th><th>Score</th><th>Estimate</th><th>Reason</th></tr>${rows}</table></div>`}
-</div></body></html>`;
+  ${empty || `<div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>#</th><th>Ticket</th><th>Action</th><th>Projects</th><th>Score</th><th>Estimate</th><th>Reason</th><th>Actions</th></tr>${rows}</table></div>`}
+</div>${nonce ? kronosActionPanelScript(nonce) : ''}</body></html>`;
 }
 
 function openAgentQualityScorePanel(state: KronosState): void {
@@ -4294,18 +4834,26 @@ function openAgentQualityScorePanel(state: KronosState): void {
     'kronosAgentQualityScore',
     'Kronos Agent Quality Score',
     vscode.ViewColumn.One,
-    { enableScripts: false }
+    { enableScripts: true }
   );
-  panel.webview.html = withWebviewCsp(buildAgentQualityScoreHtml(score));
+  const nonce = createNonce();
+  panel.webview.html = withWebviewCsp(buildAgentQualityScoreHtml(score, nonce), { allowScripts: true, nonce });
+  attachOperatorCommandHandler(panel, nonce);
 }
 
-function buildAgentQualityScoreHtml(score: AgentQualityScore): string {
+function buildAgentQualityScoreHtml(score: AgentQualityScore, nonce?: string): string {
   const componentRows = score.components.map(component => `<tr>
     <td>${escapeHtml(component.label)}</td>
     <td><strong>${escapeHtml(String(component.score))}</strong> / ${escapeHtml(String(component.max))}</td>
     <td>${escapeHtml(component.detail)}</td>
   </tr>`).join('');
   const metricRows = score.metrics.map(metric => `<div class="summary-card"><div class="num">${escapeHtml(metric.value)}</div><div class="lbl">${escapeHtml(metric.label)}</div></div>`).join('');
+  const actions = operatorCommandRow([
+    actionButton('runCenter', 'Run Center'),
+    actionButton('stats', 'Session Stats'),
+    actionButton('trendMetrics', 'Trend Metrics'),
+    actionButton('evidenceGate', 'Evidence Gate'),
+  ]);
 
   return `<!DOCTYPE html>
 <html><head><style>
@@ -4317,13 +4865,14 @@ function buildAgentQualityScoreHtml(score: AgentQualityScore): string {
       <div class="kronos-subtitle">Run outcomes, evidence gates, builds, reviews, retries, and handoff readiness</div>
     </div>
   </div>
+  ${actions}
   <div class="operator-hero">
     <div><span class="score">${score.score}</span><span class="grade">Grade ${escapeHtml(score.grade)}</span></div>
     <div>${escapeHtml(score.summary)}</div>
   </div>
   <div class="operator-summary">${metricRows}</div>
   <div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Component</th><th>Score</th><th>Detail</th></tr>${componentRows}</table></div>
-</div></body></html>`;
+</div>${nonce ? kronosActionPanelScript(nonce) : ''}</body></html>`;
 }
 
 function openTrendMetricsPanel(state: KronosState): void {
@@ -4336,12 +4885,14 @@ function openTrendMetricsPanel(state: KronosState): void {
     'kronosTrendMetrics',
     'Kronos Trend Metrics',
     vscode.ViewColumn.One,
-    { enableScripts: false }
+    { enableScripts: true }
   );
-  panel.webview.html = withWebviewCsp(buildTrendMetricsHtml(report));
+  const nonce = createNonce();
+  panel.webview.html = withWebviewCsp(buildTrendMetricsHtml(report, nonce), { allowScripts: true, nonce });
+  attachOperatorCommandHandler(panel, nonce);
 }
 
-function buildTrendMetricsHtml(report: TrendMetricsReport): string {
+function buildTrendMetricsHtml(report: TrendMetricsReport, nonce?: string): string {
   const metricCards = report.metrics.map(metric => `<div class="summary-card ${escapeClass(metric.status)}">
     <div class="num">${escapeHtml(metric.value)}</div>
     <div class="lbl">${escapeHtml(metric.label)}</div>
@@ -4353,6 +4904,12 @@ function buildTrendMetricsHtml(report: TrendMetricsReport): string {
     <td><strong>${escapeHtml(metric.value)}</strong></td>
     <td>${escapeHtml(metric.detail)}</td>
   </tr>`).join('');
+  const actions = operatorCommandRow([
+    actionButton('runCenter', 'Run Center'),
+    actionButton('stats', 'Session Stats'),
+    actionButton('agentQualityScore', 'Agent Quality'),
+    actionButton('agingReport', 'Aging Report'),
+  ]);
 
   return `<!DOCTYPE html>
 <html><head><style>
@@ -4371,9 +4928,10 @@ function buildTrendMetricsHtml(report: TrendMetricsReport): string {
       <div class="kronos-subtitle">${escapeHtml(report.summary)} ${report.runsConsidered} run(s), ${report.ticketsConsidered} ticket(s), ${report.windowDays}-day window.</div>
     </div>
   </div>
+  ${actions}
   <div class="operator-summary">${metricCards}</div>
   <div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Status</th><th>Metric</th><th>Value</th><th>Detail</th></tr>${rows}</table></div>
-</div></body></html>`;
+</div>${nonce ? kronosActionPanelScript(nonce) : ''}</body></html>`;
 }
 
 function openAgingReportPanel(state: KronosState): void {
@@ -4385,9 +4943,19 @@ function openAgingReportPanel(state: KronosState): void {
     'kronosAgingReport',
     'Kronos Aging Report',
     vscode.ViewColumn.One,
-    { enableScripts: false }
+    { enableScripts: true }
   );
-  panel.webview.html = withWebviewCsp(buildAgingReportHtml(report));
+  const nonce = createNonce();
+  panel.webview.html = withWebviewCsp(buildAgingReportHtml(report, {
+    actionsHtml: operatorCommandRow([
+      actionButton('queuePlanner', 'Queue Planner'),
+      actionButton('humanReviewInbox', 'Human Review'),
+      actionButton('trendMetrics', 'Trend Metrics'),
+      actionButton('evidenceGate', 'Evidence Gate'),
+    ]),
+    scriptHtml: kronosActionPanelScript(nonce),
+  }), { allowScripts: true, nonce });
+  attachOperatorCommandHandler(panel, nonce);
 }
 
 function openIntegrationManifestPanel(): void {
@@ -4397,9 +4965,11 @@ function openIntegrationManifestPanel(): void {
     'kronosIntegrationManifest',
     'Kronos Integration Manifest',
     vscode.ViewColumn.One,
-    { enableScripts: false }
+    { enableScripts: true }
   );
-  panel.webview.html = withWebviewCsp(buildIntegrationManifestHtml(status, audit));
+  const nonce = createNonce();
+  panel.webview.html = withWebviewCsp(buildIntegrationManifestHtml(status, audit, nonce), { allowScripts: true, nonce });
+  attachOperatorCommandHandler(panel, nonce);
 }
 
 async function snapshotIntegrationManifest(): Promise<void> {
@@ -4435,7 +5005,7 @@ async function snapshotIntegrationManifest(): Promise<void> {
   }
 }
 
-function buildIntegrationManifestHtml(status: IntegrationManifestStatus, audit: IntegrationManifestAudit): string {
+function buildIntegrationManifestHtml(status: IntegrationManifestStatus, audit: IntegrationManifestAudit, nonce?: string): string {
   const artifactByKey = new Map(audit.artifacts.map(artifact => [`${artifact.kind}:${artifact.name}`, artifact]));
   const hashCell = (artifact: IntegrationManifestAudit['artifacts'][number] | undefined) => {
     if (!artifact) {
@@ -4478,6 +5048,12 @@ function buildIntegrationManifestHtml(status: IntegrationManifestStatus, audit: 
   const auditSummary = `<div class="message ${audit.status}">${escapeHtml(`Hash audit: ${audit.summary}`)}</div>`;
   const manifestPillClass = !status.present ? 'warn' : status.valid ? 'pass' : 'fail';
   const manifestPillLabel = status.present ? (status.valid ? 'VALID' : 'INVALID') : 'MISSING';
+  const actions = operatorCommandRow([
+    actionButton('snapshotIntegrationManifest', 'Snapshot'),
+    actionButton('doctor', 'Doctor'),
+    actionButton('profiles', 'Profiles'),
+    actionButton('promptManager', 'Prompt Manager'),
+  ]);
 
   return `<!DOCTYPE html>
 <html><head><style>
@@ -4490,6 +5066,7 @@ function buildIntegrationManifestHtml(status: IntegrationManifestStatus, audit: 
     </div>
     <span class="pill ${manifestPillClass}">${manifestPillLabel}</span>
   </div>
+  ${actions}
   <div class="path">${escapeHtml(status.path)}</div>
   ${messageRows}
   ${auditSummary}
@@ -4499,7 +5076,7 @@ function buildIntegrationManifestHtml(status: IntegrationManifestStatus, audit: 
   ${prompts ? `<div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Prompt</th><th>Required</th><th>Hash Status</th><th>Manifest SHA-256</th></tr>${prompts}</table></div>` : '<div class="kronos-empty">No prompt manifest entries.</div>'}</div>
   <div class="operator-section"><h2>Providers</h2>
   ${providers ? `<div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Provider</th><th>Status</th><th>Base URL</th></tr>${providers}</table></div>` : '<div class="kronos-empty">No provider manifest entries.</div>'}</div>
-</div></body></html>`;
+</div>${nonce ? kronosActionPanelScript(nonce) : ''}</body></html>`;
 }
 
 function openProfilesPanel(): void {
@@ -4508,12 +5085,14 @@ function openProfilesPanel(): void {
     'kronosProfiles',
     'Kronos Profiles',
     vscode.ViewColumn.One,
-    { enableScripts: false }
+    { enableScripts: true }
   );
-  panel.webview.html = withWebviewCsp(buildProfilesHtml(active));
+  const nonce = createNonce();
+  panel.webview.html = withWebviewCsp(buildProfilesHtml(active, nonce), { allowScripts: true, nonce });
+  attachOperatorCommandHandler(panel, nonce);
 }
 
-function buildProfilesHtml(active: KronosProfile): string {
+function buildProfilesHtml(active: KronosProfile, nonce?: string): string {
   const rows = listProfiles().map(profile => {
     const providers = Object.entries(profile.providers)
       .filter(([, enabled]) => enabled)
@@ -4526,6 +5105,11 @@ function buildProfilesHtml(active: KronosProfile): string {
       <td>${escapeHtml(profile.description)}</td>
     </tr>`;
   }).join('');
+  const actions = operatorCommandRow([
+    actionButton('settings', 'Settings'),
+    actionButton('doctor', 'Doctor'),
+    actionButton('integrationManifest', 'Manifest'),
+  ]);
 
   return `<!DOCTYPE html>
 <html><head><style>
@@ -4539,8 +5123,9 @@ function buildProfilesHtml(active: KronosProfile): string {
       <div class="kronos-subtitle">Current profile, default branch behavior, and enabled provider groups</div>
     </div>
   </div>
+  ${actions}
   <div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Profile</th><th>Default Branch</th><th>Providers</th><th>Description</th></tr>${rows}</table></div>
-</div></body></html>`;
+</div>${nonce ? kronosActionPanelScript(nonce) : ''}</body></html>`;
 }
 
 function openDoctorPanel(state: KronosState): void {
@@ -4549,16 +5134,18 @@ function openDoctorPanel(state: KronosState): void {
     'kronosDoctor',
     'Kronos Doctor',
     vscode.ViewColumn.One,
-    { enableScripts: false }
+    { enableScripts: true }
   );
+  const nonce = createNonce();
+  attachOperatorCommandHandler(panel, nonce);
   const pendingCheck: DoctorCheck = {
     name: 'Provider network reachability',
     status: 'warn',
     detail: 'Checking configured provider endpoints...',
   };
-  panel.webview.html = withWebviewCsp(buildDoctorHtml([...checks, pendingCheck]));
+  panel.webview.html = withWebviewCsp(buildDoctorHtml([...checks, pendingCheck], nonce), { allowScripts: true, nonce });
   runDoctorReachabilityChecks(state).then(reachabilityChecks => {
-    panel.webview.html = withWebviewCsp(buildDoctorHtml([...checks, ...reachabilityChecks]));
+    panel.webview.html = withWebviewCsp(buildDoctorHtml([...checks, ...reachabilityChecks], nonce), { allowScripts: true, nonce });
   });
 }
 
@@ -4583,7 +5170,7 @@ async function runDoctorReachabilityChecks(state: KronosState): Promise<DoctorCh
   return collectDoctorReachabilityChecks(doctorChecksInput(state), { timeoutMs: 5000 });
 }
 
-function buildDoctorHtml(checks: DoctorCheck[]): string {
+function buildDoctorHtml(checks: DoctorCheck[], nonce?: string): string {
   const summary = {
     pass: checks.filter(c => c.status === 'pass').length,
     warn: checks.filter(c => c.status === 'warn').length,
@@ -4594,6 +5181,14 @@ function buildDoctorHtml(checks: DoctorCheck[]): string {
     <td>${escapeHtml(c.name)}</td>
     <td>${escapeHtml(c.detail)}</td>
   </tr>`).join('');
+  const actions = operatorCommandRow([
+    actionButton('setup', 'Auth Check'),
+    actionButton('settings', 'Settings'),
+    actionButton('integrationManifest', 'Manifest'),
+    actionButton('profiles', 'Profiles'),
+    actionButton('recoveryCenter', 'Recovery'),
+    actionButton('stateAuditLog', 'Audit Log'),
+  ]);
 
   return `<!DOCTYPE html>
 <html><head><style>
@@ -4605,6 +5200,7 @@ function buildDoctorHtml(checks: DoctorCheck[]): string {
       <div class="kronos-subtitle">Commands, credentials, project config, state integrity, and provider reachability</div>
     </div>
   </div>
+  ${actions}
   <div class="operator-summary">
     <div class="summary-card"><div class="num">${summary.pass}</div><div class="lbl">Passing</div></div>
     <div class="summary-card"><div class="num">${summary.warn}</div><div class="lbl">Warnings</div></div>
@@ -4614,7 +5210,33 @@ function buildDoctorHtml(checks: DoctorCheck[]): string {
     <tr><th>Status</th><th>Check</th><th>Detail</th></tr>
     ${rows}
   </table></div>
-</div></body></html>`;
+</div>${nonce ? kronosActionPanelScript(nonce) : ''}</body></html>`;
+}
+
+async function startPlannedAction(
+  state: KronosState,
+  plan: PlannedAction,
+  context = buildNextActionContext(plan, { state: state.state, queue: state.queue }),
+): Promise<void> {
+  const startDecision = buildNextActionStartDecision(plan, context);
+  if (!startDecision.allowed) {
+    vscode.window.showWarningMessage(startDecision.reason || 'Planned action is blocked.');
+    return;
+  }
+  if (startDecision.safetyPlan) {
+    const confirmed = await confirmSafetyGate(startDecision.safetyPlan);
+    if (!confirmed) { return; }
+  }
+  if (startDecision.commandId === 'kronos.refresh') {
+    vscode.window.showInformationMessage(`Starting: ${startDecision.safetyPlan?.target || 'refresh'}`);
+    if (startDecision.refreshProjects.length > 0) {
+      for (const project of startDecision.refreshProjects) { await state.refresh(project); }
+    } else {
+      await state.refresh();
+    }
+    return;
+  }
+  await vscode.commands.executeCommand('kronos.startQueueItem', { item: planToQueueItem(state, plan) });
 }
 
 function addPlanToQueue(state: KronosState, plan: PlannedAction, pinTop: boolean): void {
@@ -4938,7 +5560,23 @@ function dashboardBriefCount(brief: Record<string, unknown>, key: string): numbe
   return 0;
 }
 
-function buildDashboardHtml(state: KronosState, brief: unknown): string {
+async function executeDashboardAction(command: string): Promise<void> {
+  if (command === 'nextBestAction') {
+    await vscode.commands.executeCommand('kronos.nextBestAction');
+  } else if (command === 'queuePlanner') {
+    await vscode.commands.executeCommand('kronos.queuePlanner');
+  } else if (command === 'runCenter') {
+    await vscode.commands.executeCommand('kronos.runCenter');
+  } else if (command === 'humanReviewInbox') {
+    await vscode.commands.executeCommand('kronos.humanReviewInbox');
+  } else if (command === 'evidenceGate') {
+    await vscode.commands.executeCommand('kronos.evidenceGate');
+  } else if (command === 'recoveryCenter') {
+    await vscode.commands.executeCommand('kronos.recoveryCenter');
+  }
+}
+
+function buildDashboardHtml(state: KronosState, brief: unknown, nonce?: string): string {
   const safeBrief = dashboardBriefRecord(brief);
   const projects = state.state?.projects || {};
 
@@ -4962,6 +5600,14 @@ function buildDashboardHtml(state: KronosState, brief: unknown): string {
   const cycleMetric = trendMetric('Average cycle time');
   const nextPlan = planNextActions(state)[0];
   const nextContext = nextPlan ? buildNextActionContext(nextPlan, { state: state.state, queue: state.queue }) : undefined;
+  const dashboardActions = actionRow([
+    actionButton('nextBestAction', 'Next Best Action', { primary: true }),
+    actionButton('queuePlanner', 'Queue Planner'),
+    actionButton('runCenter', 'Run Center'),
+    actionButton('humanReviewInbox', 'Human Review'),
+    actionButton('evidenceGate', 'Evidence Gate'),
+    actionButton('recoveryCenter', 'Recovery'),
+  ]);
   const cockpitHtml = `<div class="cockpit">
     <div class="metric"><div class="num">${qualityScore.score}</div><div class="lbl">Agent Quality</div></div>
     <div class="metric ${escapeClass(reworkMetric?.status || 'neutral')}"><div class="num">${escapeHtml(reworkMetric?.value || 'n/a')}</div><div class="lbl">Rework Rate</div></div>
@@ -4982,6 +5628,7 @@ function buildDashboardHtml(state: KronosState, brief: unknown): string {
       ${nextContext ? `<div class="next-meta"><strong>Command:</strong> ${escapeHtml(nextContext.commandLabel)}</div>` : ''}
       ${nextContext ? `<div class="next-meta"><strong>Risk:</strong> ${escapeHtml(nextContext.risks.join(', '))}</div>` : ''}
       ${nextContext ? `<div class="next-meta"><strong>${nextContext.blockers.length ? 'Blocked' : 'Preflight'}:</strong> ${escapeHtml((nextContext.blockers.length ? nextContext.blockers : nextContext.preflight).join('; '))}</div>` : ''}
+      <div class="next-action-controls">${dashboardActions}</div>
     </div>
   </div>`;
   const projectCards = Object.entries(projects).map(([name, proj]) => {
@@ -5029,6 +5676,7 @@ function buildDashboardHtml(state: KronosState, brief: unknown): string {
   .next-action strong { display: block; margin: 4px 0; font-size: 14px; line-height: 1.35; }
   .next-meta { margin-top: 6px; color: var(--k-muted); line-height: 1.4; }
   .next-meta strong { display: inline; color: var(--k-fg); font-size: 12px; margin: 0; }
+  .next-action-controls { margin-top: 10px; }
   .project-card { transition: border-color 0.15s, background-color 0.15s; }
   .project-card:hover { border-color: var(--k-accent); background: var(--k-surface-soft); }
   .card-header { font-weight: 650; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
@@ -5076,7 +5724,7 @@ function buildDashboardHtml(state: KronosState, brief: unknown): string {
 
   ${attentionItems ? `<div class="section"><h3>Needs Attention</h3><ul class="dashboard-list">${attentionItems}</ul></div>` : ''}
   ${readyItems ? `<div class="section"><h3>Ready to Implement</h3><ul class="dashboard-list">${readyItems}</ul></div>` : ''}
-</div></body>
+</div>${nonce ? kronosActionPanelScript(nonce) : ''}</body>
 </html>`;
 }
 
@@ -5621,7 +6269,7 @@ if (document.readyState === 'loading') {
 </div></body></html>`;
 }
 
-function buildTicketHtml(key: string, ticket: any, state: KronosState): string {
+function buildTicketHtml(key: string, ticket: any, state: KronosState, nonce?: string): string {
   const esc = escapeHtml;
   const projectList = ticketStringArray(ticket.projects);
   const labelList = ticketStringArray(ticket.labels);
@@ -5736,6 +6384,25 @@ function buildTicketHtml(key: string, ticket: any, state: KronosState): string {
   const jiraUrl = safeHttpHref(ticketStringField(ticket, 'jira_url'));
   const mrActionUrl = mr ? safeHttpHref(ticketStringField(mr, 'url')) : '';
   const buildActionUrl = build ? safeHttpHref(ticketStringField(build, 'url')) : '';
+  const isQueued = Boolean(state.queue?.items?.some(item => item.ticket === key));
+  const actionButtons = [
+    projectList.length > 0
+      ? actionButton('startTicket', 'Start Work', { ticket: key, primary: true })
+      : actionButton('linkTicket', 'Link Project', { ticket: key, primary: true }),
+    isQueued
+      ? actionButton('removeFromQueue', 'Remove Queue', { ticket: key })
+      : actionButton('addToQueue', 'Add Queue', { ticket: key }),
+    actionButton('addEvidence', 'Add Evidence', { ticket: key }),
+    actionButton('addEvidenceCheck', 'Add Check', { ticket: key }),
+    actionButton('recordEnvironmentResult', 'Record Env', { ticket: key }),
+    actionButton('evidenceGate', 'Evidence Gate', { ticket: key }),
+    actionButton('evidenceHandoff', 'Handoff', { ticket: key }),
+    actionButton('publishEvidence', 'Publish', { ticket: key }),
+    actionButton('exportEvidence', 'Export', { ticket: key }),
+    jiraUrl ? actionButton('openJira', 'Open Jira', { ticket: key }) : '',
+    mrActionUrl ? actionButton('openMr', 'Open MR', { ticket: key }) : '',
+    buildActionUrl ? actionButton('openBuild', 'Open Build', { ticket: key }) : '',
+  ].filter(Boolean).join('');
 
   return `<!DOCTYPE html>
 <html><head><style>
@@ -5788,9 +6455,7 @@ function buildTicketHtml(key: string, ticket: any, state: KronosState): string {
   .link { color: var(--k-accent); text-decoration: none; font-size: 12px; }
   .link:hover { text-decoration: underline; }
   .actions { display: flex; gap: 8px; margin: 20px 0; flex-wrap: wrap; }
-  .actions a { display: inline-flex; align-items: center; min-height: 30px; padding: 6px 12px; border: 1px solid var(--vscode-button-border, var(--k-border)); border-radius: var(--k-radius-sm); color: var(--k-fg); text-decoration: none; font-size: 12px; font-weight: 550; }
-  .actions a:hover { background: var(--vscode-list-hoverBackground); }
-  .actions a.primary { background: var(--vscode-button-background); color: var(--vscode-button-foreground); border: none; }
+  .actions .kronos-button { min-height: 30px; }
 </style></head><body><div class="kronos-shell ticket-shell">
   <div class="kronos-header ticket-header">
     <div>
@@ -5820,12 +6485,8 @@ function buildTicketHtml(key: string, ticket: any, state: KronosState): string {
   ${mrHtml}
   ${buildHtml}
 
-  <div class="actions">
-    ${jiraUrl ? `<a href="${jiraUrl}" class="kronos-button primary">Open in Jira &rarr;</a>` : ''}
-    ${mrActionUrl ? `<a href="${mrActionUrl}" class="kronos-button">View MR in GitLab</a>` : ''}
-    ${buildActionUrl ? `<a href="${buildActionUrl}" class="kronos-button">View Build</a>` : ''}
-  </div>
-</div></body></html>`;
+  <div class="actions">${actionButtons}</div>
+</div>${nonce ? kronosActionPanelScript(nonce) : ''}</body></html>`;
 }
 
 function buildTicketGateHtml(gate: EvidenceGateResult): string {

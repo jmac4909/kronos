@@ -68,11 +68,13 @@
       },
       {
         "command": "kronos.refreshProject",
-        "title": "Kronos: Refresh Project"
+        "title": "Kronos: Refresh Project",
+        "icon": "$(refresh)"
       },
       {
         "command": "kronos.openExternalUrl",
-        "title": "Kronos: Open External URL"
+        "title": "Kronos: Open External URL",
+        "icon": "$(link-external)"
       },
       {
         "command": "kronos.filterTickets",
@@ -101,11 +103,13 @@
       },
       {
         "command": "kronos.discover",
-        "title": "Kronos: Discover Projects"
+        "title": "Kronos: Discover Projects",
+        "icon": "$(search)"
       },
       {
         "command": "kronos.register",
-        "title": "Kronos: Register Project"
+        "title": "Kronos: Register Project",
+        "icon": "$(add)"
       },
       {
         "command": "kronos.implement",
@@ -160,12 +164,12 @@
       {
         "command": "kronos.planNextTwoHours",
         "title": "Kronos: Plan Next 2 Hours",
-        "icon": "$(clock)"
+        "icon": "$(clockface)"
       },
       {
         "command": "kronos.overnightCandidates",
         "title": "Kronos: Overnight Candidates",
-        "icon": "$(moon)"
+        "icon": "$(watch)"
       },
       {
         "command": "kronos.addTask",
@@ -184,11 +188,13 @@
       },
       {
         "command": "kronos.overnightStart",
-        "title": "Kronos: Start Overnight Run"
+        "title": "Kronos: Start Overnight Run",
+        "icon": "$(run-all)"
       },
       {
         "command": "kronos.overnightStop",
-        "title": "Kronos: Stop Overnight Run"
+        "title": "Kronos: Stop Overnight Run",
+        "icon": "$(debug-stop)"
       },
       {
         "command": "kronos.openProject",
@@ -202,7 +208,8 @@
       },
       {
         "command": "kronos.registerDiscovered",
-        "title": "Kronos: Register Discovered Project"
+        "title": "Kronos: Register Discovered Project",
+        "icon": "$(add)"
       },
       {
         "command": "kronos.startQueueItem",
@@ -231,7 +238,8 @@
       },
       {
         "command": "kronos.queuePinTop",
-        "title": "Kronos: Pin to Top"
+        "title": "Kronos: Pin to Top",
+        "icon": "$(pin)"
       },
       {
         "command": "kronos.openMrDiff",
@@ -266,12 +274,12 @@
       {
         "command": "kronos.fixSonarIssues",
         "title": "Kronos: Fix SonarQube Issues",
-        "icon": "$(wrench)"
+        "icon": "$(tools)"
       },
       {
         "command": "kronos.fixFinding",
         "title": "Kronos: Fix Verification Finding",
-        "icon": "$(wrench)"
+        "icon": "$(tools)"
       },
       {
         "command": "kronos.verifyDevelop",
@@ -510,7 +518,8 @@
       },
       {
         "command": "kronos.cleanupWorktrees",
-        "title": "Kronos: Cleanup Stale Worktrees"
+        "title": "Kronos: Cleanup Stale Worktrees",
+        "icon": "$(clear-all)"
       }
     ],
     "menus": {

@@ -3,7 +3,7 @@ import { spawn } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
-import { createHash } from 'crypto';
+import { createHash, randomBytes } from 'crypto';
 import { RUNS_DIR, appendRunLog as appendRunLogFile, markRunCancelled, readRunRecord, readRuns, writeRunPrompt, writeRunRecord } from '../services/runStore';
 import { readStateFile } from '../services/stateStore';
 import { RunFailureKind, classifyRunFailure } from '../services/postRunReadiness';
@@ -11,7 +11,7 @@ import { stopProcessTree } from '../services/processTree';
 import { withWebviewCsp } from '../services/webviewSecurity';
 import { currentGitCommit, currentGitRef, inspectTrackedWorktree, prepareManagedWorktree, removeWorktreeSafely } from '../services/gitWorkspace';
 import { checkGcloudApplicationDefaultAuth } from '../services/cliProbes';
-import { escapeClass, escapeHtml, kronosWebviewBaseCss } from '../services/webviewHtml';
+import { escapeAttr, escapeClass, escapeHtml, kronosWebviewBaseCss } from '../services/webviewHtml';
 import { resolveDefaultBaseBranch, sanitizeBranch } from '../services/profileManager';
 import { safeFileStem } from '../services/fileNames';
 import { SavedSession, SessionStats, safeSessionId, writeSavedSession } from '../services/sessionStore';
@@ -45,6 +45,29 @@ const CLAUDE_ALLOWED_TOOL_PATTERNS = [
   'PowerShell(Get-Process *)',
 ];
 const CLAUDE_ALLOWED_TOOLS = CLAUDE_ALLOWED_TOOL_PATTERNS.join(' ');
+const RUN_CENTER_MESSAGE_COMMANDS = new Set([
+  'openRunRecord',
+  'openRunLog',
+  'openRunPrompt',
+  'openRunWorkspace',
+  'openRunDiff',
+  'markNeedsHuman',
+  'pauseRun',
+  'continueRun',
+  'cancelRun',
+  'resumeRun',
+  'retryRun',
+  'archiveRun',
+]);
+
+export interface RunCenterActionRequest {
+  command: string;
+  runId: string;
+}
+
+export interface RunCenterOptions {
+  onAction?: (request: RunCenterActionRequest) => Promise<void> | void;
+}
 
 function ensureDir(dir: string): void {
   if (!fs.existsSync(dir)) { fs.mkdirSync(dir, { recursive: true }); }
@@ -453,15 +476,34 @@ export function cleanupStaleWorktrees(options: { remove?: boolean } = {}): Workt
   };
 }
 
-export function openRunCenter(): void {
-  const runs = listRuns();
+export function openRunCenter(options: RunCenterOptions = {}): void {
+  const interactive = Boolean(options.onAction);
+  const nonce = interactive ? randomBytes(16).toString('base64') : '';
   const panel = vscode.window.createWebviewPanel(
     'kronosRunCenter',
     'Kronos Run Center',
     vscode.ViewColumn.One,
-    { enableScripts: false }
+    { enableScripts: interactive }
   );
-  panel.webview.html = withWebviewCsp(buildRunCenterHtml(runs));
+  const render = () => {
+    const runs = listRuns();
+    panel.webview.html = withWebviewCsp(
+      buildRunCenterHtml(runs, interactive ? nonce : undefined),
+      interactive ? { allowScripts: true, nonce } : {},
+    );
+  };
+  render();
+  if (interactive && options.onAction) {
+    panel.webview.onDidReceiveMessage(async msg => {
+      const request = normalizeRunCenterMessage(msg);
+      if (!request) {
+        vscode.window.showWarningMessage('Ignored invalid Kronos Run Center action.');
+        return;
+      }
+      await options.onAction!(request);
+      render();
+    });
+  }
 }
 
 export async function dispatchClaudeSession(
@@ -991,7 +1033,71 @@ export function buildProgressHtml(project: string, skill: string, ticket: string
 </div></body></html>`;
 }
 
-function buildRunCenterHtml(runs: KronosRun[]): string {
+function normalizeRunCenterMessage(raw: unknown): RunCenterActionRequest | null {
+  if (!raw || typeof raw !== 'object') { return null; }
+  const message = raw as { command?: unknown; runId?: unknown };
+  if (typeof message.command !== 'string' || !RUN_CENTER_MESSAGE_COMMANDS.has(message.command)) { return null; }
+  if (typeof message.runId !== 'string' || message.runId.trim().length === 0) { return null; }
+  return { command: message.command, runId: message.runId };
+}
+
+function runCenterActionButton(action: string, label: string, runId: string, primary = false): string {
+  const classes = `run-action${primary ? ' primary' : ''}`;
+  return `<button type="button" class="${classes}" data-action="${escapeAttr(action)}" data-run-id="${escapeAttr(runId)}">${escapeHtml(label)}</button>`;
+}
+
+function runCenterActionButtons(run: KronosRun): string {
+  const runId = stringOrDefault(run.id, '');
+  if (!runId) {
+    return '<span class="muted">No action</span>';
+  }
+  const status = stringOrDefault(run.status, 'unknown');
+  const active = status === 'running' || status === 'preflight';
+  const paused = status === 'paused';
+  const hasWorkspace = Boolean(run.worktreePath || run.cwd || run.projectPath);
+  const hasPrompt = Boolean(run.promptPath);
+  const hasLog = Boolean(run.logPath);
+  const canResume = hasPrompt || hasLog;
+  const buttons = [
+    runCenterActionButton('openRunRecord', 'Record', runId),
+  ];
+  if (hasLog) { buttons.push(runCenterActionButton('openRunLog', 'Log', runId)); }
+  if (hasPrompt) { buttons.push(runCenterActionButton('openRunPrompt', 'Prompt', runId)); }
+  if (hasWorkspace) {
+    buttons.push(runCenterActionButton('openRunWorkspace', 'Workspace', runId));
+    buttons.push(runCenterActionButton('openRunDiff', 'Diff', runId));
+  }
+  if (active) {
+    buttons.push(runCenterActionButton('pauseRun', 'Pause', runId));
+    buttons.push(runCenterActionButton('cancelRun', 'Stop', runId, true));
+  } else if (paused) {
+    buttons.push(runCenterActionButton('continueRun', 'Continue', runId, true));
+    buttons.push(runCenterActionButton('cancelRun', 'Stop', runId));
+  } else if (canResume) {
+    buttons.push(runCenterActionButton('resumeRun', 'Resume', runId, status === 'failed' || status === 'needs_human'));
+  }
+  if (hasPrompt) { buttons.push(runCenterActionButton('retryRun', 'Retry', runId)); }
+  if (status !== 'needs_human') { buttons.push(runCenterActionButton('markNeedsHuman', 'Needs Human', runId)); }
+  buttons.push(runCenterActionButton('archiveRun', 'Archive', runId));
+  return `<div class="run-actions">${buttons.join('')}</div>`;
+}
+
+function runCenterScript(nonce: string): string {
+  return `<script nonce="${escapeAttr(nonce)}">
+const vscode = acquireVsCodeApi();
+document.addEventListener('click', function(event) {
+  const target = event.target instanceof Element ? event.target.closest('[data-action][data-run-id]') : null;
+  if (!target) { return; }
+  event.preventDefault();
+  vscode.postMessage({
+    command: target.getAttribute('data-action') || '',
+    runId: target.getAttribute('data-run-id') || ''
+  });
+});
+</script>`;
+}
+
+function buildRunCenterHtml(runs: KronosRun[], nonce?: string): string {
   const rows = runs.map(run => {
     const status = stringOrDefault(run.status, 'unknown');
     const statusClass = escapeClass(status);
@@ -1025,6 +1131,7 @@ function buildRunCenterHtml(runs: KronosRun[]): string {
       <td><span class="kronos-pill readiness ${escapeClass(readinessStatus)}">${escapeHtml(readinessStatus)}</span><br><span>${escapeHtml(readinessSummary)}</span></td>
       <td class="workspace-cell">${escapeHtml(stringOrDefault(run.worktreePath || run.cwd, 'unknown workspace'))}${branchSummary ? `<br><span>${escapeHtml(branchSummary)}</span>` : ''}</td>
       <td>${lastEvent ? escapeHtml(stringOrDefault(lastEvent.label, '')) : ''}${run.failureReason ? `<br><span class="failure">${escapeHtml(run.failureReason)}</span>` : ''}</td>
+      <td class="action-cell">${runCenterActionButtons(run)}</td>
     </tr>`;
   }).join('');
 
@@ -1043,6 +1150,11 @@ function buildRunCenterHtml(runs: KronosRun[]): string {
   .failed, .cancelled, .needs_human { background: rgba(244,67,54,0.18); color: #f44336; }
   .failure { color: #f44336; opacity: 1; }
   .workspace-cell { overflow-wrap: anywhere; }
+  .action-cell { min-width: 210px; }
+  .run-actions { display: flex; flex-wrap: wrap; gap: 5px; align-items: flex-start; }
+  .run-action { min-height: 24px; padding: 3px 8px; border: 1px solid var(--k-border); border-radius: var(--k-radius-sm); background: var(--k-surface); color: var(--k-fg); font: inherit; font-size: 10px; font-weight: 600; cursor: pointer; }
+  .run-action:hover { background: var(--vscode-list-hoverBackground); }
+  .run-action.primary { background: var(--vscode-button-background); color: var(--vscode-button-foreground); border-color: transparent; }
 </style></head><body><div class="kronos-shell">
   <div class="kronos-header">
     <div>
@@ -1051,10 +1163,10 @@ function buildRunCenterHtml(runs: KronosRun[]): string {
     </div>
   </div>
   ${runs.length === 0 ? '<div class="kronos-empty">No persisted runs yet.</div>' : `<div class="run-table-wrap kronos-panel"><table class="kronos-table">
-    <tr><th>Status</th><th>Run</th><th>Time</th><th>Model</th><th>Readiness</th><th>Workspace</th><th>Last event</th></tr>
+    <tr><th>Status</th><th>Run</th><th>Time</th><th>Model</th><th>Readiness</th><th>Workspace</th><th>Last event</th><th>Actions</th></tr>
     ${rows}
   </table></div>`}
-</div></body></html>`;
+</div>${nonce ? runCenterScript(nonce) : ''}</body></html>`;
 }
 
 function renderResult(text: string): string {
