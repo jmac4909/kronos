@@ -5131,6 +5131,7 @@ test('tree providers share action labels and icons', () => {
   const queueTree = readSourceFixture('src', 'views', 'QueueTreeProvider.ts');
   const sessionTree = readSourceFixture('src', 'views', 'SessionTreeProvider.ts');
   const reviewTree = readSourceFixture('src', 'views', 'ReviewTreeProvider.ts');
+  const extensionSource = readSourceFixture('src', 'extension.ts');
   const actionIcons = readSourceFixture('src', 'views', 'actionIcons.ts');
   const actionLabels = readSourceFixture('src', 'services', 'actionLabels.ts');
   const queuePlanner = readSourceFixture('src', 'services', 'queuePlanner.ts');
@@ -5180,15 +5181,23 @@ test('tree providers share action labels and icons', () => {
   }
   for (const marker of [
     'readonly onDidChangeNewReviewCount',
+    'const NEW_REVIEW_SPIN_MS = 6000',
     'private currentReviewKeys = new Set<string>()',
     'private seenReviewKeys = new Set<string>()',
     'private newReviewKeys = new Set<string>()',
+    'private spinningReviewKeys = new Map<string, number>()',
     'this.seedInitialReviewKeys()',
     'getNewReviewCount(): number',
     'markVisibleReviewItemsSeen(): void',
+    'this.spinningReviewKeys.set(key, Date.now() + NEW_REVIEW_SPIN_MS)',
+    'new ReviewItem(key, ticket, isNew, isNew && this.isReviewItemSpinning(key))',
+    'private scheduleSpinRefresh(): void',
+    'private clearSpinTimer(): void',
+    'dispose(): void',
     'private seedInitialReviewKeys(): void',
     'this.seenReviewKeys = new Set(initialKeys)',
     "this.description = `${isNew ? 'NEW · ' : ''}",
+    "new vscode.ThemeIcon('sync~spin', new vscode.ThemeColor('charts.yellow'))",
     "new vscode.ThemeIcon('circle-filled'",
     "new vscode.ThemeIcon('git-pull-request', color)",
     'function isReviewTicket(ticket: Ticket): boolean',
@@ -5196,6 +5205,7 @@ test('tree providers share action labels and icons', () => {
   ]) {
     assert.ok(reviewTree.includes(marker), marker);
   }
+  assert.ok(extensionSource.includes('reviewTree.dispose()'), 'review tree timed spin timer should be disposed with the extension');
   assert.equal(reviewTree.includes("ticket.mr.state === 'merged'"), false, 'review tree should not keep merged MRs in the active review inbox');
   assert.ok(actionLabels.includes('export function actionToLabel'), 'action labels should live outside queue planning');
   assert.ok(queuePlanner.includes("export { actionToLabel } from './actionLabels'"), 'queuePlanner should keep a compatibility re-export');

@@ -3,6 +3,8 @@ import { KronosState } from '../state/KronosState';
 import { Ticket } from '../state/types';
 import { TicketFilter, describeTicketFilter, hasTicketFilter, ticketMatchesFilter } from '../services/ticketFilters';
 
+const NEW_REVIEW_SPIN_MS = 6000;
+
 export class ReviewTreeProvider implements vscode.TreeDataProvider<ReviewItem> {
   private _onDidChangeTreeData = new vscode.EventEmitter<ReviewItem | undefined>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
@@ -12,6 +14,8 @@ export class ReviewTreeProvider implements vscode.TreeDataProvider<ReviewItem> {
   private currentReviewKeys = new Set<string>();
   private seenReviewKeys = new Set<string>();
   private newReviewKeys = new Set<string>();
+  private spinningReviewKeys = new Map<string, number>();
+  private spinTimer: NodeJS.Timeout | undefined;
 
   constructor(private kronosState: KronosState) {
     this.seedInitialReviewKeys();
@@ -41,6 +45,8 @@ export class ReviewTreeProvider implements vscode.TreeDataProvider<ReviewItem> {
       this.seenReviewKeys.add(key);
     }
     this.newReviewKeys.clear();
+    this.spinningReviewKeys.clear();
+    this.clearSpinTimer();
     if (previousCount > 0) {
       this._onDidChangeNewReviewCount.fire(0);
       this._onDidChangeTreeData.fire(undefined);
@@ -54,7 +60,8 @@ export class ReviewTreeProvider implements vscode.TreeDataProvider<ReviewItem> {
     const items: ReviewItem[] = [];
     for (const [key, ticket] of this.reviewEntries()) {
       if (ticketMatchesFilter(key, ticket, this.filter)) {
-        items.push(new ReviewItem(key, ticket, this.newReviewKeys.has(key)));
+        const isNew = this.newReviewKeys.has(key);
+        items.push(new ReviewItem(key, ticket, isNew, isNew && this.isReviewItemSpinning(key)));
       }
     }
 
@@ -78,6 +85,8 @@ export class ReviewTreeProvider implements vscode.TreeDataProvider<ReviewItem> {
     this.currentReviewKeys = initialKeys;
     this.seenReviewKeys = new Set(initialKeys);
     this.newReviewKeys.clear();
+    this.spinningReviewKeys.clear();
+    this.clearSpinTimer();
   }
 
   private refreshReviewKeys(): void {
@@ -91,17 +100,21 @@ export class ReviewTreeProvider implements vscode.TreeDataProvider<ReviewItem> {
     for (const key of nextKeys) {
       if (!this.currentReviewKeys.has(key) && !this.seenReviewKeys.has(key)) {
         this.newReviewKeys.add(key);
+        this.spinningReviewKeys.set(key, Date.now() + NEW_REVIEW_SPIN_MS);
       }
     }
     for (const key of this.newReviewKeys) {
       if (!nextKeys.has(key)) {
         this.newReviewKeys.delete(key);
+        this.spinningReviewKeys.delete(key);
       }
     }
+    this.pruneExpiredSpins();
     this.currentReviewKeys = nextKeys;
     if (previousCount !== this.newReviewKeys.size) {
       this._onDidChangeNewReviewCount.fire(this.newReviewKeys.size);
     }
+    this.scheduleSpinRefresh();
   }
 
   private reviewEntries(): Array<[string, Ticket]> {
@@ -110,6 +123,42 @@ export class ReviewTreeProvider implements vscode.TreeDataProvider<ReviewItem> {
     return Object.entries(state.tickets || {})
       .filter((entry): entry is [string, Ticket] => isReviewTicket(entry[1]));
   }
+
+  private isReviewItemSpinning(ticketKey: string): boolean {
+    return (this.spinningReviewKeys.get(ticketKey) || 0) > Date.now();
+  }
+
+  private pruneExpiredSpins(now = Date.now()): void {
+    for (const [key, until] of this.spinningReviewKeys) {
+      if (until <= now || !this.newReviewKeys.has(key)) {
+        this.spinningReviewKeys.delete(key);
+      }
+    }
+  }
+
+  private scheduleSpinRefresh(): void {
+    this.clearSpinTimer();
+    const now = Date.now();
+    const next = Math.min(...[...this.spinningReviewKeys.values()].filter(until => until > now));
+    if (!Number.isFinite(next)) { return; }
+    this.spinTimer = setTimeout(() => {
+      this.spinTimer = undefined;
+      this.pruneExpiredSpins();
+      this._onDidChangeTreeData.fire(undefined);
+      this.scheduleSpinRefresh();
+    }, Math.max(50, next - now));
+  }
+
+  private clearSpinTimer(): void {
+    if (this.spinTimer) {
+      clearTimeout(this.spinTimer);
+      this.spinTimer = undefined;
+    }
+  }
+
+  dispose(): void {
+    this.clearSpinTimer();
+  }
 }
 
 class ReviewItem extends vscode.TreeItem {
@@ -117,7 +166,7 @@ class ReviewItem extends vscode.TreeItem {
   public readonly ticket: Ticket;
   public readonly projectName: string;
 
-  constructor(ticketKey: string, ticket: Ticket, isNew = false) {
+  constructor(ticketKey: string, ticket: Ticket, isNew = false, isSpinning = false) {
     super(ticketKey || '', vscode.TreeItemCollapsibleState.None);
     this.ticketKey = ticketKey;
     this.ticket = ticket;
@@ -143,7 +192,9 @@ class ReviewItem extends vscode.TreeItem {
     const color = mr.review_status === 'approved' ? new vscode.ThemeColor('testing.iconPassed')
       : mr.review_status === 'changes_requested' ? new vscode.ThemeColor('testing.iconFailed')
       : new vscode.ThemeColor('charts.yellow');
-    this.iconPath = isNew
+    this.iconPath = isSpinning
+      ? new vscode.ThemeIcon('sync~spin', new vscode.ThemeColor('charts.yellow'))
+      : isNew
       ? new vscode.ThemeIcon('circle-filled', new vscode.ThemeColor('charts.yellow'))
       : new vscode.ThemeIcon('git-pull-request', color);
   }

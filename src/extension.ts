@@ -3256,7 +3256,7 @@ export function activate(context: vscode.ExtensionContext) {
     );
   }
 
-  context.subscriptions.push({ dispose: () => { state.dispose(); sessionTree.dispose(); queueTree.dispose(); } });
+  context.subscriptions.push({ dispose: () => { state.dispose(); sessionTree.dispose(); queueTree.dispose(); reviewTree.dispose(); } });
 }
 
 async function runSetupWizard(): Promise<void> {

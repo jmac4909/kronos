@@ -1293,15 +1293,23 @@ for (const marker of [
 
 for (const marker of [
   'readonly onDidChangeNewReviewCount',
+  'const NEW_REVIEW_SPIN_MS = 6000',
   'private currentReviewKeys = new Set<string>()',
   'private seenReviewKeys = new Set<string>()',
   'private newReviewKeys = new Set<string>()',
+  'private spinningReviewKeys = new Map<string, number>()',
   'this.seedInitialReviewKeys()',
   'getNewReviewCount(): number',
   'markVisibleReviewItemsSeen(): void',
+  'this.spinningReviewKeys.set(key, Date.now() + NEW_REVIEW_SPIN_MS)',
+  'new ReviewItem(key, ticket, isNew, isNew && this.isReviewItemSpinning(key))',
+  'private scheduleSpinRefresh(): void',
+  'private clearSpinTimer(): void',
+  'dispose(): void',
   'private seedInitialReviewKeys(): void',
   'this.seenReviewKeys = new Set(initialKeys)',
   "this.description = `${isNew ? 'NEW · ' : ''}",
+  "new vscode.ThemeIcon('sync~spin', new vscode.ThemeColor('charts.yellow'))",
   "new vscode.ThemeIcon('circle-filled'",
   "new vscode.ThemeIcon('git-pull-request', color)",
   'function isReviewTicket(ticket: Ticket): boolean',
@@ -1310,6 +1318,9 @@ for (const marker of [
   if (!reviewTreeProvider.includes(marker)) {
     fail(`Missing review tree new-item marker: ${marker}`);
   }
+}
+if (!extension.includes('reviewTree.dispose()')) {
+  fail('Review tree timed spin timer must be disposed with the extension');
 }
 if (reviewTreeProvider.includes("ticket.mr.state === 'merged'")) {
   fail('Review tree should not keep merged MRs in the active review inbox');
