@@ -1163,7 +1163,8 @@ function runCenterActionButtons(run: KronosRun): string {
     return '<span class="muted">No action</span>';
   }
   const status = stringOrDefault(run.status, 'unknown');
-  const active = status === 'running' || status === 'preflight';
+  const pausable = status === 'running' || status === 'preflight';
+  const stoppable = isActiveRun(run) && status !== 'paused';
   const paused = status === 'paused';
   const hasWorkspace = Boolean(run.worktreePath || run.cwd || run.projectPath);
   const hasPrompt = Boolean(run.promptPath);
@@ -1178,8 +1179,8 @@ function runCenterActionButtons(run: KronosRun): string {
     buttons.push(runCenterActionButton('openRunWorkspace', 'Workspace', runId));
     buttons.push(runCenterActionButton('openRunDiff', 'Diff', runId));
   }
-  if (active) {
-    buttons.push(runCenterActionButton('pauseRun', 'Pause', runId));
+  if (stoppable) {
+    if (pausable) { buttons.push(runCenterActionButton('pauseRun', 'Pause', runId)); }
     buttons.push(runCenterActionButton('cancelRun', 'Stop', runId, true));
   } else if (paused) {
     buttons.push(runCenterActionButton('continueRun', 'Continue', runId, true));
