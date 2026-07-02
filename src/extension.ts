@@ -55,7 +55,7 @@ import { signalProcessTree, stopProcessTree } from './services/processTree';
 import { createWebviewNonce, webviewActionPostScript, webviewScriptCspOptions, webviewVsCodeApiScript, withWebviewCsp } from './services/webviewSecurity';
 import { escapeAttr, escapeClass, escapeHtml, kronosWebviewBaseCss, safeHttpHref } from './services/webviewHtml';
 import { kronosTerminalOptions } from './services/terminalProfiles';
-import { unknownErrorMessage } from './services/errorUtils';
+import { unknownErrorCode, unknownErrorMessage } from './services/errorUtils';
 import { activeRunSummary, isActiveRun } from './services/runStatus';
 import { runAttentionDetail } from './services/runAttention';
 
@@ -993,13 +993,6 @@ function loadEnvFile(): void {
       console.warn(unknownErrorMessage(e, `Could not load Kronos env file ${envPath}.`));
     }
   }
-}
-
-function unknownErrorCode(error: unknown): string {
-  if (!error || typeof error !== 'object') {
-    return '';
-  }
-  return String(Reflect.get(error, 'code') || '');
 }
 
 export function activate(context: vscode.ExtensionContext) {

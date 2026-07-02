@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { KronosState, QueueDecision, QueueItem, QueueState, Ticket, TicketEvidence } from '../state/types';
-import { unknownErrorMessage } from './errorUtils';
+import { unknownErrorCode, unknownErrorMessage } from './errorUtils';
 
 export const KRONOS_DIR = process.env.KRONOS_DIR || path.join(os.homedir(), '.claude', 'kronos');
 export const STATE_FILE = path.join(KRONOS_DIR, 'state.json');
@@ -849,13 +849,20 @@ function acquireStateWriteLock(action: string, target: string): () => void {
   try {
     fd = fs.openSync(STATE_WRITE_LOCK_FILE, 'wx');
     fs.writeFileSync(fd, payload);
-  } catch {
+  } catch (e: unknown) {
     if (fd !== undefined) {
-      try { fs.closeSync(fd); } catch {}
+      try {
+        fs.closeSync(fd);
+      } catch (closeError: unknown) {
+        console.warn(unknownErrorMessage(closeError, 'Could not close failed Kronos state write lock descriptor.'));
+      }
     }
     const current = readCurrentWriteLock();
-    const lockDetail = current ? ` by pid ${current.pid || 'unknown'} for ${current.action || 'unknown action'}` : '';
-    throw new Error(`Kronos state write lock is held${lockDetail}. Retry after the current write finishes.`);
+    if (current) {
+      const lockDetail = ` by pid ${current.pid || 'unknown'} for ${current.action || 'unknown action'}`;
+      throw new Error(`Kronos state write lock is held${lockDetail}. Retry after the current write finishes.`);
+    }
+    throw new Error(`Could not acquire Kronos state write lock: ${unknownErrorMessage(e, 'state lock unavailable')}`);
   }
   fs.closeSync(fd);
   let released = false;
@@ -864,7 +871,11 @@ function acquireStateWriteLock(action: string, target: string): () => void {
     released = true;
     try {
       fs.unlinkSync(STATE_WRITE_LOCK_FILE);
-    } catch {}
+    } catch (e: unknown) {
+      if (unknownErrorCode(e) !== 'ENOENT') {
+        console.warn(unknownErrorMessage(e, 'Could not release Kronos state write lock.'));
+      }
+    }
   };
 }
 
@@ -876,7 +887,11 @@ function clearStaleWriteLock(): void {
       fs.unlinkSync(STATE_WRITE_LOCK_FILE);
       auditEvent('clear-stale-state-write-lock', { lock: STATE_WRITE_LOCK_FILE });
     }
-  } catch {}
+  } catch (e: unknown) {
+    if (unknownErrorCode(e) !== 'ENOENT') {
+      console.warn(unknownErrorMessage(e, 'Could not clear stale Kronos state write lock.'));
+    }
+  }
 }
 
 function readCurrentWriteLock(): StateWriteLock | null {

@@ -203,6 +203,7 @@ export interface KronosRun {
   failureReason?: string;
   failureKind?: RunFailureKind;
   readiness?: PostRunReadiness;
+  warnings?: string[];
   recoveryActions?: Array<{ at: string; action: string; reason: string }>;
   [key: string]: unknown;
 }
@@ -700,6 +701,13 @@ export async function dispatchClaudeSession(
         featureBranch: isFeatureBranch,
       });
       checkoutRef = prepared.checkoutRef;
+      if (prepared.pullWarning) {
+        const warning = `Managed worktree pull skipped: ${prepared.pullWarning}`;
+        const event = { type: 'error' as const, label: 'Managed worktree pull skipped', detail: prepared.pullWarning, timestamp: new Date() };
+        events.push(event);
+        addRunEvent(run, event);
+        updateRun(run, { warnings: [...(run.warnings || []), warning] });
+      }
       cwd = wtDir;
       worktreePath = wtDir;
       managedWorktreePath = wtDir;

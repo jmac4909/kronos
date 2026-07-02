@@ -241,7 +241,7 @@ for (const marker of [
   'async function confirmSafetyGate',
   'async function removeTicketFromQueue',
   'stayed in queue because it has no evidence notes',
-  "import { unknownErrorMessage } from './services/errorUtils'",
+  "import { unknownErrorCode, unknownErrorMessage } from './services/errorUtils'",
   "import type { DiscoveredProject, MergeRequestChangedFile, QueueItem, Ticket } from './state/types'",
   'function planToQueueItem(state: KronosState, plan: PlannedAction): QueueItem',
   'function refreshAfterDispatch(state: KronosState, projectName?: string, ticketKey?: string): (code: number, run: KronosRun) => Promise<void>',
@@ -548,7 +548,6 @@ for (const marker of [
   "unknownErrorMessage(e, 'Failed to restore backup.')",
   "unknownErrorMessage(e, 'Failed to snapshot integration manifest.')",
   'unknownErrorMessage(e, `Could not load Kronos env file ${envPath}.`)',
-  'function unknownErrorCode(error: unknown): string',
   "unknownErrorMessage(e, 'Could not inspect project remotes for setup.')",
   'unknownErrorMessage(e, `Could not inspect run workspace ${candidate}.`)',
   'unknownErrorMessage(e, `Could not resolve MR branch for ${ticket.key}.`)',
@@ -1115,6 +1114,8 @@ for (const marker of [
   "const failureDetail = unknownErrorMessage(e, 'Git worktree setup failed.')",
   "vscode.window.showWarningMessage('Git worktree setup failed; run marked failed before launch.')",
   "label: 'Git worktree setup failed'",
+  "label: 'Managed worktree pull skipped'",
+  'updateRun(run, { warnings: [...(run.warnings || []), warning] })',
   "failureKind: 'git'",
   'classifyRunFailure({ ...run',
   'spawnErrorHandled',
@@ -1369,12 +1370,16 @@ for (const marker of [
   'export function runGitlabJson',
   'export function runPipelineJson',
   'export function requiredScripts',
+  'function pythonCandidateAvailable(candidate: string): boolean',
   'Invalid JSON from',
   'Kronos script missing',
 ]) {
   if (!scriptClient.includes(marker)) {
     fail(`Missing script client marker: ${marker}`);
   }
+}
+if (scriptClient.includes('} catch {}')) {
+  fail('Script client must not silently swallow Python discovery failures.');
 }
 
 for (const marker of [
@@ -1446,6 +1451,8 @@ for (const marker of [
   "path.join(worktreePath, '.claude')",
   'fs.rmSync(dotClaudePath, { recursive: true, force: true })',
   "statusPath === '.claude' || statusPath === '.claude/' || statusPath.startsWith('.claude/')",
+  'pullWarning?: string',
+  "pullWarning = unknownErrorMessage(e, 'Could not fast-forward managed worktree after creation.')",
   "runner(['worktree', 'add'",
   "runner(['worktree', 'remove'",
   "runner(['diff', '--cached', '--']",
@@ -1454,6 +1461,9 @@ for (const marker of [
     fail(`Missing git workspace marker: ${marker}`);
   }
 }
+if (gitWorkspace.includes('} catch {}')) {
+  fail('Git workspace must not silently swallow managed worktree failures.');
+}
 
 for (const marker of [
   'export function stopProcessTree',
@@ -1461,6 +1471,7 @@ for (const marker of [
   "import { unknownErrorMessage } from './errorUtils'",
   'catch (e: unknown)',
   'catch (fallbackError: unknown)',
+  "console.warn(unknownErrorMessage(e, 'Delayed process-group SIGKILL failed.'))",
   "unknownErrorMessage(fallbackError, unknownErrorMessage(e, 'process signal failed'))",
   "unknownErrorMessage(fallbackError, unknownErrorMessage(cause, 'process stop failed'))",
   "'taskkill'",
@@ -1473,6 +1484,9 @@ for (const marker of [
   if (!processTree.includes(marker)) {
     fail(`Missing process tree marker: ${marker}`);
   }
+}
+if (processTree.includes('} catch {}')) {
+  fail('Process tree must not silently swallow delayed kill failures.');
 }
 
 for (const marker of [
@@ -1788,13 +1802,18 @@ for (const marker of [
   'acquireStateWriteLock',
   'clearStaleWriteLock',
   'DEFAULT_OVERNIGHT',
-  "import { unknownErrorMessage } from './errorUtils'",
+  "import { unknownErrorCode, unknownErrorMessage } from './errorUtils'",
   'catch (e: unknown)',
   "unknownErrorMessage(e, 'unknown validation error')",
   "unknownErrorMessage(e, 'Failed to load state.json')",
   "unknownErrorMessage(e, 'invalid project record')",
   "unknownErrorMessage(e, 'invalid ticket record')",
   "unknownErrorMessage(e, 'Invalid audit JSONL entry')",
+  "unknownErrorMessage(closeError, 'Could not close failed Kronos state write lock descriptor.')",
+  "unknownErrorMessage(e, 'state lock unavailable')",
+  "unknownErrorCode(e) !== 'ENOENT'",
+  "unknownErrorMessage(e, 'Could not release Kronos state write lock.')",
+  "unknownErrorMessage(e, 'Could not clear stale Kronos state write lock.')",
 ]) {
   if (!stateStore.includes(marker)) {
     fail(`Missing state store marker: ${marker}`);
@@ -1835,6 +1854,9 @@ for (const forbidden of [
 }
 if (/\bany\b/.test(stateStore)) {
   fail('State store must keep untrusted JSON typed as unknown, not any.');
+}
+if (stateStore.includes('} catch {}')) {
+  fail('State store must not silently swallow lock cleanup failures.');
 }
 
 if (!sources['src/state/KronosState.ts'].includes('const result = readStateFileWithIssues()')) {

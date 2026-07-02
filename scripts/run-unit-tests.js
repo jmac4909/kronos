@@ -564,19 +564,25 @@ test('state store tolerant read reports bad nested records without blanking vali
 test('state store load issues normalize unknown errors', () => {
   const source = readSourceFixture('src', 'services', 'stateStore.ts');
   for (const marker of [
-    "import { unknownErrorMessage } from './errorUtils'",
+    "import { unknownErrorCode, unknownErrorMessage } from './errorUtils'",
     'catch (e: unknown)',
     "unknownErrorMessage(e, 'unknown validation error')",
     "unknownErrorMessage(e, 'Failed to load state.json')",
     "unknownErrorMessage(e, 'invalid project record')",
     "unknownErrorMessage(e, 'invalid ticket record')",
     "unknownErrorMessage(e, 'Invalid audit JSONL entry')",
+    "unknownErrorMessage(closeError, 'Could not close failed Kronos state write lock descriptor.')",
+    "unknownErrorMessage(e, 'state lock unavailable')",
+    "unknownErrorCode(e) !== 'ENOENT'",
+    "unknownErrorMessage(e, 'Could not release Kronos state write lock.')",
+    "unknownErrorMessage(e, 'Could not clear stale Kronos state write lock.')",
   ]) {
     assert.ok(source.includes(marker), marker);
   }
   for (const marker of [
     'catch (e: any)',
     'e?.message',
+    '} catch {}',
   ]) {
     assert.equal(source.includes(marker), false, marker);
   }
@@ -1338,8 +1344,25 @@ test('git workspace service owns branch metadata and safe worktree lifecycle com
     runner,
   });
   assert.equal(prepared.checkoutRef, 'feature/K-1');
+  assert.equal(prepared.pullWarning, undefined);
   assert.ok(calls.some(call => call.args.join(' ') === 'fetch origin'));
   assert.ok(calls.some(call => call.args.join(' ') === 'worktree add /tmp/wt feature/K-1'));
+
+  const preparedWithPullWarning = gitWorkspace.prepareManagedWorktree({
+    projectPath,
+    worktreePath: '/tmp/wt-warning',
+    targetRef: 'origin/main',
+    featureBranch: false,
+    runner: args => {
+      const joined = args.join(' ');
+      if (joined === 'fetch origin') { return ''; }
+      if (joined === 'worktree add /tmp/wt-warning origin/main') { return ''; }
+      if (joined === 'pull --ff-only') { throw new Error('no upstream configured'); }
+      throw new Error(`unexpected git call: ${joined}`);
+    },
+  });
+  assert.equal(preparedWithPullWarning.checkoutRef, 'origin/main');
+  assert.equal(preparedWithPullWarning.pullWarning, 'no upstream configured');
 
   const entry = { projectPath, worktreePath: workspace, ticket: 'K-1', createdAt: 'now' };
   const inspected = gitWorkspace.inspectTrackedWorktree(entry, { runner });
@@ -1445,12 +1468,15 @@ test('git workspace service owns branch metadata and safe worktree lifecycle com
     "path.join(worktreePath, '.claude')",
     'fs.rmSync(dotClaudePath, { recursive: true, force: true })',
     "statusPath === '.claude' || statusPath === '.claude/' || statusPath.startsWith('.claude/')",
+    'pullWarning?: string',
+    "pullWarning = unknownErrorMessage(e, 'Could not fast-forward managed worktree after creation.')",
   ]) {
     assert.ok(source.includes(marker), marker);
   }
   for (const marker of [
     'catch (e: any)',
     'e?.message',
+    '} catch {}',
   ]) {
     assert.equal(source.includes(marker), false, marker);
   }
@@ -1597,6 +1623,7 @@ test('process tree service centralizes stop and pause signaling behavior', () =>
     "import { unknownErrorMessage } from './errorUtils'",
     'catch (e: unknown)',
     'catch (fallbackError: unknown)',
+    "console.warn(unknownErrorMessage(e, 'Delayed process-group SIGKILL failed.'))",
     "unknownErrorMessage(fallbackError, unknownErrorMessage(e, 'process signal failed'))",
     "unknownErrorMessage(fallbackError, unknownErrorMessage(cause, 'process stop failed'))",
   ]) {
@@ -1608,6 +1635,7 @@ test('process tree service centralizes stop and pause signaling behavior', () =>
     'fallbackError?.message',
     'cause?.message',
     'e?.message',
+    '} catch {}',
   ]) {
     assert.equal(source.includes(marker), false, marker);
   }
@@ -1759,10 +1787,14 @@ test('error utils normalize unknown error shapes', () => {
   assert.equal(errorUtils.unknownErrorMessage({ message: '   ' }, 'fallback'), 'fallback');
   assert.equal(errorUtils.unknownErrorMessage(null, 'fallback'), 'fallback');
   assert.equal(errorUtils.unknownErrorField({ stderr: 'stderr failure' }, 'stderr'), 'stderr failure');
+  assert.equal(errorUtils.unknownErrorCode({ code: 'ENOENT' }), 'ENOENT');
+  assert.equal(errorUtils.unknownErrorCode({ code: 13 }), '13');
+  assert.equal(errorUtils.unknownErrorCode({ code: '   ' }), '');
 
   const source = readSourceFixture('src', 'services', 'errorUtils.ts');
   for (const marker of [
     'export function unknownErrorMessage(error: unknown, fallback: string): string',
+    'export function unknownErrorCode(error: unknown): string',
     'export function unknownErrorField(error: unknown, key: string): unknown',
     "Reflect.get(error, key)",
   ]) {
@@ -2832,6 +2864,8 @@ test('dispatcher records branch and permission metadata for persisted runs', () 
     'await opts.onComplete(code, run)',
     "unknownErrorMessage(e, 'Post-run completion callback failed.')",
     "label: 'Post-run completion callback failed'",
+    "label: 'Managed worktree pull skipped'",
+    'updateRun(run, { warnings: [...(run.warnings || []), warning] })',
     "const nextStatus = run.status === 'completed' || run.status === 'waiting_for_review' ? 'needs_human' : run.status",
     'await runCompletionCallback(opts, code ?? 1, run',
   ]) {
@@ -3623,6 +3657,7 @@ test('script client keeps raw JSON and process errors unknown by default', () =>
     'export function runPipelineJson<T = unknown>',
     'function parseScriptJson<T = unknown>',
     'function scriptError(scriptName: RequiredScriptName, args: string[], error: unknown)',
+    'function pythonCandidateAvailable(candidate: string): boolean',
     "import { unknownErrorField, unknownErrorMessage } from './errorUtils'",
     "unknownErrorField(error, 'stderr')",
   ]) {
@@ -3636,6 +3671,7 @@ test('script client keeps raw JSON and process errors unknown by default', () =>
     'error?.stderr',
     'function unknownErrorMessage(error: unknown',
     'function errorField(error: unknown',
+    '} catch {}',
   ]) {
     assert.equal(source.includes(marker), false, marker);
   }
@@ -5134,7 +5170,7 @@ test('extension run recovery helpers use typed run records', () => {
   assert.ok(runActionStart >= 0 && runActionEnd > runActionStart, 'run action helper block should be present');
   const runActionSource = source.slice(runActionStart, runActionEnd);
   for (const marker of [
-    "import { unknownErrorMessage } from './services/errorUtils'",
+    "import { unknownErrorCode, unknownErrorMessage } from './services/errorUtils'",
     "import type { DiscoveredProject, MergeRequestChangedFile, QueueItem, Ticket } from './state/types'",
     'type KronosRun',
     'function planToQueueItem(state: KronosState, plan: PlannedAction): QueueItem',
@@ -5416,7 +5452,7 @@ test('extension command handlers normalize remaining unknown errors', () => {
     "unknownErrorMessage(e, 'Failed to restore backup.')",
     "unknownErrorMessage(e, 'Failed to snapshot integration manifest.')",
     'unknownErrorMessage(e, `Could not load Kronos env file ${envPath}.`)',
-    'function unknownErrorCode(error: unknown): string',
+    "import { unknownErrorCode, unknownErrorMessage } from './services/errorUtils'",
     "unknownErrorMessage(e, 'Could not inspect project remotes for setup.')",
     'unknownErrorMessage(e, `Could not resolve MR branch for ${ticket.key}.`)',
     'unknownErrorMessage(e, `Could not find fallback remote branch for ${ticket.key}.`)',

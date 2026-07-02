@@ -95,12 +95,20 @@ function assertScriptAvailable(scriptName: RequiredScriptName): string {
 function findPython(): string {
   const candidates = [process.env.PYTHON, 'python', 'python3'].filter(Boolean) as string[];
   for (const candidate of candidates) {
-    try {
-      execFileSync(candidate, ['--version'], { encoding: 'utf-8', timeout: 3000, windowsHide: true });
+    if (pythonCandidateAvailable(candidate)) {
       return candidate;
-    } catch {}
+    }
   }
   return process.env.PYTHON || 'python';
+}
+
+function pythonCandidateAvailable(candidate: string): boolean {
+  try {
+    execFileSync(candidate, ['--version'], { encoding: 'utf-8', timeout: 3000, windowsHide: true });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function parseScriptJson<T = unknown>(scriptName: RequiredScriptName, args: string[], raw: string): T {

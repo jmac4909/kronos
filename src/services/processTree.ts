@@ -48,7 +48,11 @@ export function stopProcessTree(pid: number | undefined, options: ProcessTreeOpt
     kill(-processPid, 'SIGTERM');
     const schedule = options.schedule || setTimeout;
     schedule(() => {
-      try { kill(-processPid, 'SIGKILL'); } catch {}
+      try {
+        kill(-processPid, 'SIGKILL');
+      } catch (e: unknown) {
+        console.warn(unknownErrorMessage(e, 'Delayed process-group SIGKILL failed.'));
+      }
     }, options.sigkillDelayMs ?? 2500);
     return result(true, true, 'process-group', false);
   } catch (e: unknown) {

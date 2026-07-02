@@ -56,6 +56,7 @@ export interface ManagedWorktreeInput {
 
 export interface ManagedWorktreeResult {
   checkoutRef: string;
+  pullWarning?: string;
 }
 
 export function runGit(args: string[], options: GitCommandOptions): string {
@@ -108,10 +109,13 @@ export function prepareManagedWorktree(input: ManagedWorktreeInput): ManagedWork
   runner(['fetch', 'origin'], { cwd: input.projectPath, timeoutMs: 15000 });
   const checkoutRef = input.featureBranch ? input.targetRef.replace(/^origin\//, '') : input.targetRef;
   runner(['worktree', 'add', input.worktreePath, checkoutRef], { cwd: input.projectPath, timeoutMs: 15000 });
+  let pullWarning: string | undefined;
   try {
     runner(['pull', '--ff-only'], { cwd: input.worktreePath, timeoutMs: 10000 });
-  } catch {}
-  return { checkoutRef };
+  } catch (e: unknown) {
+    pullWarning = unknownErrorMessage(e, 'Could not fast-forward managed worktree after creation.');
+  }
+  return { checkoutRef, pullWarning };
 }
 
 export function removeWorktreeSafely(
