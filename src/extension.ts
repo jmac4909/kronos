@@ -24,7 +24,7 @@ import { TimelineEvent, buildTicketTimeline } from './services/ticketTimeline';
 import { DispatchCollision, detectDispatchCollisions } from './services/collisionDetector';
 import { requiredScripts } from './services/scriptClient';
 import { gitlabAdapter, jiraAdapter, sonarAdapter, type MergeRequestDiffResult } from './services/integrationAdapters';
-import { buildRunCompletionEvidenceCheck, buildRunCompletionEvidenceText, evaluatePostRunReadiness, shouldRecordRunCompletionEvidence } from './services/postRunReadiness';
+import { buildRunCompletionEvidenceCheck, buildRunCompletionEvidenceText, evaluatePostRunReadiness, resolvePostRunTicket, shouldRecordRunCompletionEvidence } from './services/postRunReadiness';
 import { extractAcceptanceCriteria } from './services/acceptanceCriteria';
 import type { ExistingAcceptanceCriterion } from './services/acceptanceCriteria';
 import { HumanReviewInbox, buildHumanReviewInbox } from './services/humanReviewInbox';
@@ -5700,7 +5700,12 @@ function refreshAfterDispatch(state: KronosState, projectName?: string, ticketKe
   return async (_code: number, run: KronosRun) => {
     let resolvedTicketKey = resolveDispatchTicketKey(ticketKey, run);
     await reloadStateAfterDispatch(state, projectName);
-    const resolvedTicket = resolveTicketAfterDispatch(state, resolvedTicketKey);
+    const resolvedTicket = resolvePostRunTicket({
+      tickets: state.state?.tickets,
+      ticketKey: resolvedTicketKey,
+      projectName,
+      run,
+    });
     resolvedTicketKey = resolvedTicket.ticketKey || resolvedTicketKey;
     if (resolvedTicketKey) {
       let ticket = resolvedTicket.ticket;
@@ -5749,20 +5754,6 @@ function resolveDispatchTicketKey(ticketKey: string | undefined, run: KronosRun)
   return [ticketKey, run.ticket]
     .map(value => typeof value === 'string' ? value.trim() : '')
     .find(Boolean);
-}
-
-function resolveTicketAfterDispatch(state: KronosState, ticketKey: string | undefined): { ticketKey?: string; ticket?: Ticket } {
-  if (!ticketKey || !state.state?.tickets) {
-    return { ticketKey };
-  }
-  const direct = state.state.tickets[ticketKey];
-  if (direct) {
-    return { ticketKey, ticket: direct };
-  }
-  const matchedKey = Object.keys(state.state.tickets).find(key => key.toLowerCase() === ticketKey.toLowerCase());
-  return matchedKey
-    ? { ticketKey: matchedKey, ticket: state.state.tickets[matchedKey] }
-    : { ticketKey };
 }
 
 async function showRunCompletionToast(ticketKey: string, ticket: Ticket | undefined, run: KronosRun): Promise<void> {

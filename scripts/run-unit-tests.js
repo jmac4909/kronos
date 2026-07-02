@@ -4611,6 +4611,30 @@ test('post-run readiness distinguishes process completion from handoff readiness
     run: { id: 'run-1', skill: 'verify-local', status: 'completed' },
     ticket: ticket({ next_action: 'await_review', projects: ['app'] }),
   }), false);
+
+  const resolutionTickets = {
+    'K-READY': ticket({ next_action: 'await_review', projects: ['app'] }),
+    'K-DONE': ticket({ next_action: 'done', projects: ['app'] }),
+    'K-API': ticket({ next_action: 'await_review', projects: ['api'] }),
+  };
+  const directResolution = postRunReadiness.resolvePostRunTicket({ tickets: resolutionTickets, ticketKey: 'k-ready' });
+  assert.equal(directResolution.ticketKey, 'K-READY');
+  assert.equal(directResolution.ticket, resolutionTickets['K-READY']);
+  const inferredResolution = postRunReadiness.resolvePostRunTicket({ tickets: resolutionTickets, ticketKey: 'K-MISSING', projectName: 'app' });
+  assert.equal(inferredResolution.ticketKey, 'K-READY');
+  assert.equal(inferredResolution.ticket, resolutionTickets['K-READY']);
+  const runProjectResolution = postRunReadiness.resolvePostRunTicket({ tickets: resolutionTickets, run: { project: 'api' } });
+  assert.equal(runProjectResolution.ticketKey, 'K-API');
+  const ambiguousResolution = postRunReadiness.resolvePostRunTicket({
+    tickets: {
+      'K-ONE': ticket({ next_action: 'await_review', projects: ['app'] }),
+      'K-TWO': ticket({ next_action: 'verify', projects: ['app'] }),
+    },
+    projectName: 'app',
+  });
+  assert.equal(ambiguousResolution.ticket, undefined);
+  assert.equal(postRunReadiness.resolvePostRunTicket({ tickets: { 'K-DONE': resolutionTickets['K-DONE'] }, projectName: 'app' }).ticket, undefined);
+
   const completionEvidence = postRunReadiness.buildRunCompletionEvidenceText({
     id: 'run-1',
     status: 'completed',
@@ -4716,6 +4740,12 @@ test('post-run readiness distinguishes process completion from handoff readiness
     "import { runProgressSummary } from './runProgress'",
     "import { evidenceNotes } from './evidenceData'",
     'export function shouldRecordRunCompletionEvidence',
+    'export function resolvePostRunTicket',
+    'interface PostRunTicketResolution',
+    'const matchedProjectTickets',
+    'matchedProjectTickets.length === 1',
+    'function ticketLinkedToProject(ticket: Ticket, projectName: string): boolean',
+    'function trimmedString(value: unknown): string | undefined',
     "runString(record.skill) === 'implement'",
     "input.ticket.next_action === 'await_review'",
     'evidenceNotes(input.ticket).length === 0',
@@ -5012,6 +5042,9 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'queueTree.startPolling(sessionPollMs)',
     'queueTree.dispose()',
     'shouldRecordRunCompletionEvidence({ run, ticket })',
+    'resolvePostRunTicket({',
+    'tickets: state.state?.tickets',
+    'projectName,',
     'addTicketEvidenceNote(resolvedTicketKey, {',
     "kind: 'note'",
     'buildRunCompletionEvidenceText(run, ticket)',
@@ -5021,7 +5054,7 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'let resolvedTicketKey = resolveDispatchTicketKey(ticketKey, run)',
     'await reloadStateAfterDispatch(state, projectName)',
     'function resolveDispatchTicketKey(ticketKey: string | undefined, run: KronosRun): string | undefined',
-    'function resolveTicketAfterDispatch(state: KronosState, ticketKey: string | undefined): { ticketKey?: string; ticket?: Ticket }',
+    "import { buildRunCompletionEvidenceCheck, buildRunCompletionEvidenceText, evaluatePostRunReadiness, resolvePostRunTicket, shouldRecordRunCompletionEvidence } from './services/postRunReadiness'",
     'await showRunCompletionToast(resolvedTicketKey, ticket, run)',
     'async function showRunCompletionToast(ticketKey: string, ticket: Ticket | undefined, run: KronosRun): Promise<void>',
     "run.status !== 'waiting_for_review'",

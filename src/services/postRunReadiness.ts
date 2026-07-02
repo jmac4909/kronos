@@ -29,8 +29,47 @@ export interface RunCompletionEvidenceCheck {
   confidence: 'medium' | 'high';
 }
 
+export interface PostRunTicketResolution {
+  ticketKey?: string;
+  ticket?: Ticket;
+}
+
 const HANDOFF_ACTIONS = new Set(['await_review', 'verify', 'deploy_monitor', 'done']);
 const SUCCESS_RUN_STATUSES = new Set(['completed', 'waiting_for_review']);
+
+export function resolvePostRunTicket(input: {
+  tickets?: Record<string, Ticket>;
+  ticketKey?: string;
+  projectName?: string;
+  run?: unknown;
+}): PostRunTicketResolution {
+  const ticketKey = trimmedString(input.ticketKey);
+  const tickets = input.tickets;
+  if (!tickets) {
+    return { ticketKey };
+  }
+  if (ticketKey) {
+    const direct = tickets[ticketKey];
+    if (direct) {
+      return { ticketKey, ticket: direct };
+    }
+    const matchedEntry = Object.entries(tickets).find(([key]) => key.toLowerCase() === ticketKey.toLowerCase());
+    if (matchedEntry) {
+      return { ticketKey: matchedEntry[0], ticket: matchedEntry[1] };
+    }
+  }
+
+  const projectName = trimmedString(input.projectName) || runString(runRecord(input.run).project);
+  if (!projectName) {
+    return { ticketKey };
+  }
+  const matchedProjectTickets = Object.entries(tickets).filter(([, ticket]) => (
+    ticket.next_action !== 'done' && ticketLinkedToProject(ticket, projectName)
+  ));
+  return matchedProjectTickets.length === 1
+    ? { ticketKey: matchedProjectTickets[0][0], ticket: matchedProjectTickets[0][1] }
+    : { ticketKey };
+}
 
 export function shouldRecordRunCompletionEvidence(input: { run: unknown; ticket?: Ticket }): boolean {
   if (!input.ticket) { return false; }
@@ -223,6 +262,11 @@ function runString(value: unknown): string {
   return typeof value === 'string' ? value : '';
 }
 
+function trimmedString(value: unknown): string | undefined {
+  const text = typeof value === 'string' ? value.trim() : '';
+  return text || undefined;
+}
+
 function runText(value: unknown): string | undefined {
   if (value === undefined || value === null) { return undefined; }
   const text = String(value).trim();
@@ -247,6 +291,11 @@ function runEventDetails(value: unknown): unknown[] {
     const record = runRecord(event);
     return [record.label, record.detail];
   });
+}
+
+function ticketLinkedToProject(ticket: Ticket, projectName: string): boolean {
+  const target = projectName.toLowerCase();
+  return ticket.projects.some(project => project.toLowerCase() === target);
 }
 
 function mergeRequestChangedFileCount(ticket?: Ticket): number | undefined {
