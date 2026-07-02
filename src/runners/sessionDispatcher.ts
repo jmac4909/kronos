@@ -20,6 +20,7 @@ import { gcloudApplicationDefaultLoginCommand, kronosLoginShellTerminalOptions, 
 import { unknownErrorMessage } from '../services/errorUtils';
 import { isActiveRun } from '../services/runStatus';
 import { runProgressSummary } from '../services/runProgress';
+import { runAttentionDetail } from '../services/runAttention';
 export { getAggregateStats, listSavedSessions, listSessionStoreIssues } from '../services/sessionStore';
 
 const CLAUDE_PATH = process.env.CLAUDE_PATH || 'claude';
@@ -1248,6 +1249,12 @@ function buildRunCenterHtml(runs: KronosRun[], nonce?: string): string {
       ? `ref ${String(branch.currentRef)}${branch.currentCommit ? ` @ ${String(branch.currentCommit).substring(0, 12)}` : ''}`
       : '';
     const progress = runProgressSummary(run);
+    const needsAttention = status === 'failed' || status === 'needs_human' || status === 'cancelled';
+    const eventLabel = lastEvent ? stringOrDefault(lastEvent.label, '') : '';
+    const attentionDetail = needsAttention ? runAttentionDetail(run) : '';
+    const eventCell = attentionDetail && attentionDetail !== eventLabel
+      ? `${eventLabel ? `${escapeHtml(eventLabel)}<br>` : ''}<span class="failure">${escapeHtml(attentionDetail)}</span>`
+      : escapeHtml(eventLabel || attentionDetail);
     const actionCell = interactive ? `<td class="action-cell">${runCenterActionButtons(run)}</td>` : '';
     return `<tr class="${statusClass}">
       <td><span class="kronos-pill status ${statusClass}">${escapeHtml(status)}</span></td>
@@ -1257,7 +1264,7 @@ function buildRunCenterHtml(runs: KronosRun[], nonce?: string): string {
       <td><code>${escapeHtml(run.model)}</code><br><span>${escapeHtml(promptLabel)} ${escapeHtml(promptHash.substring(0, 12))}${run.promptPath ? ' saved' : ''}</span>${missing}${permissionSummary ? `<br><span>${escapeHtml(permissionSummary)}</span>` : ''}</td>
       <td><span class="kronos-pill readiness ${escapeClass(readinessStatus)}">${escapeHtml(readinessStatus)}</span><br><span>${escapeHtml(readinessSummary)}</span></td>
       <td class="workspace-cell">${escapeHtml(stringOrDefault(run.worktreePath || run.cwd, 'unknown workspace'))}${branchSummary ? `<br><span>${escapeHtml(branchSummary)}</span>` : ''}</td>
-      <td>${lastEvent ? escapeHtml(stringOrDefault(lastEvent.label, '')) : ''}${run.failureReason ? `<br><span class="failure">${escapeHtml(run.failureReason)}</span>` : ''}</td>
+      <td>${eventCell}</td>
       ${actionCell}
     </tr>`;
   }).join('');

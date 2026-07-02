@@ -1,4 +1,5 @@
 import type { RunStoreIssue } from './runStore';
+import { runAttentionDetail } from './runAttention';
 
 export type RecoverySeverity = 'critical' | 'warning' | 'info';
 export type RecoveryKind = 'run' | 'worktree' | 'backup' | 'integration' | 'merge_request';
@@ -198,8 +199,7 @@ function recoveryItemForOrphanMergeRequest(ticketKey: string, ticket: RecoveryTi
 
 function recoveryItemForRun(run: RecoveryRun, now: Date, staleRunMs: number): RecoveryItem | null {
   const label = `${run.project || 'project'} ${run.skill || 'run'}${run.ticket ? ` ${run.ticket}` : ''}`.trim();
-  const lastEvent = run.events?.length ? run.events[run.events.length - 1] : undefined;
-  const detail = run.failureReason || lastEvent?.label || run.logPath || run.id;
+  const detail = runAttentionDetail(run);
   const action = run.promptPath ? 'resumeRun' : 'openRunCenter';
   const actionLabel = run.promptPath ? 'Resume Run' : 'Open Run Center';
 

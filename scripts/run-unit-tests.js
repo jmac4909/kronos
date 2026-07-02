@@ -59,6 +59,7 @@ const processTree = require('../out/services/processTree.js');
 const webviewSecurity = require('../out/services/webviewSecurity.js');
 const runStatus = require('../out/services/runStatus.js');
 const runProgress = require('../out/services/runProgress.js');
+const runAttention = require('../out/services/runAttention.js');
 const attentionBadge = require('../out/services/attentionBadge.js');
 const cliProbes = require('../out/services/cliProbes.js');
 const errorUtils = require('../out/services/errorUtils.js');
@@ -3084,6 +3085,36 @@ test('run recovery builds resume prompts from saved prompt and log tail', () => 
   assert.match(prompt, /recent failure line/);
 });
 
+test('run attention summarizes actionable failure reasons', () => {
+  const buildFailure = runAttention.summarizeRunAttention({
+    id: 'run-9',
+    status: 'needs_human',
+    skill: 'fix_build',
+    events: [
+      { label: 'Session started', detail: 'Working' },
+      { label: 'Process exited with code 1', detail: 'Jenkins build failed' },
+    ],
+  });
+  assert.equal(buildFailure.failureKind, 'build');
+  assert.equal(buildFailure.source, 'eventDetail');
+  assert.match(buildFailure.detail, /Jenkins build failed/);
+  assert.notEqual(buildFailure.detail, 'Run status is needs human');
+
+  const genericBuildFailure = runAttention.runAttentionDetail({
+    status: 'failed',
+    skill: 'fix_build',
+    failureReason: 'Process exited with code 1',
+  });
+  assert.match(genericBuildFailure, /Build failed/);
+  assert.match(genericBuildFailure, /Process exited with code 1/);
+
+  const authFailure = runAttention.runAttentionDetail({
+    status: 'needs_human',
+    failureKind: 'auth',
+  });
+  assert.equal(authFailure, 'Auth or credential issue');
+});
+
 test('recovery center prioritizes failed runs, unsafe worktrees, doctor failures, and backups', () => {
   const inventory = recoveryCenter.buildRecoveryInventory({
     now: new Date('2026-07-01T12:00:00.000Z'),
@@ -3092,10 +3123,10 @@ test('recovery center prioritizes failed runs, unsafe worktrees, doctor failures
       {
         id: 'failed-run',
         project: 'app',
-        skill: 'implement',
+        skill: 'fix_build',
         ticket: 'K-1',
         status: 'failed',
-        failureReason: 'tests failed',
+        events: [{ label: 'Process exited with code 1', detail: 'Jenkins build failed' }],
         promptPath: '/tmp/prompt.txt',
       },
       {
@@ -3170,6 +3201,7 @@ test('recovery center prioritizes failed runs, unsafe worktrees, doctor failures
   assert.equal(inventory.summary.total, 8);
   assert.equal(inventory.items[0].severity, 'critical');
   assert.ok(inventory.items.some(item => item.id === 'run:failed-run' && item.action === 'resumeRun'));
+  assert.ok(inventory.items.some(item => item.id === 'run:failed-run' && item.detail === 'Jenkins build failed'));
   assert.ok(inventory.items.some(item => item.id === 'mr:MR-7:7' && item.action === 'linkMrToTicket' && item.ticketKey === 'MR-7'));
   assert.ok(inventory.items.some(item => item.id === 'run:stale-run' && item.title.includes('may be abandoned')));
   assert.ok(inventory.items.some(item => item.kind === 'backup' && item.action === 'restoreBackup'));
@@ -4400,7 +4432,7 @@ test('human review inbox aggregates runs, tickets, evidence gaps, integrations, 
     runs: [
       null,
       'not-a-run',
-      { id: 'run-1', status: 'needs_human', project: 'app', ticket: 'K-2', skill: 'implement', failureReason: 'dirty worktree' },
+      { id: 'run-1', status: 'needs_human', project: 'app', ticket: 'K-2', skill: 'fix_build', events: [{ label: 'Process exited with code 1', detail: 'Jenkins build failed' }] },
       { id: 'run-2', status: 'completed', project: 'app' },
       { id: 'run-3', status: 'cancelled', project: 'app', ticket: 'K-3', skill: 'verify', failureReason: 'operator cancelled' },
     ],
@@ -4425,6 +4457,7 @@ test('human review inbox aggregates runs, tickets, evidence gaps, integrations, 
   assert.equal(inbox.summary.info, 1);
   assert.equal(inbox.items[0].severity, 'critical');
   assert.ok(inbox.items.some(item => item.id === 'run:run-1'));
+  assert.ok(inbox.items.some(item => item.id === 'run:run-1' && item.detail === 'Jenkins build failed'));
   assert.ok(inbox.items.some(item => item.id === 'run:run-3' && item.detail === 'operator cancelled'));
   assert.ok(inbox.items.some(item => item.id === 'queue:duplicate:K-3'));
   assert.ok(inbox.items.some(item => item.title.includes('No evidence notes')));

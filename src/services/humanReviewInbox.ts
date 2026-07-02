@@ -1,6 +1,7 @@
 import { KronosState, QueueState } from '../state/types';
 import { RecoveryCheck, RecoveryWorktreeReport } from './recoveryCenter';
 import { evaluateEvidenceGate } from './evidenceGate';
+import { runAttentionDetail } from './runAttention';
 
 export type HumanReviewSeverity = 'critical' | 'warning' | 'info';
 export type HumanReviewKind = 'run' | 'ticket' | 'evidence' | 'integration' | 'worktree' | 'queue';
@@ -55,7 +56,7 @@ export function buildHumanReviewInbox(input: HumanReviewInboxInput): HumanReview
         kind: 'run',
         severity: status === 'needs_human' ? 'critical' : 'warning',
         title: `${runString(run, 'project') || 'Project'} ${runString(run, 'skill') || 'run'} needs review`,
-        detail: runString(run, 'failureReason') || `Run status is ${status}`,
+        detail: runAttentionDetail(run),
         ticketKey: ticketKey || undefined,
         runId: runId(run),
       });

@@ -57,6 +57,7 @@ import { escapeAttr, escapeClass, escapeHtml, kronosWebviewBaseCss, safeHttpHref
 import { kronosTerminalOptions } from './services/terminalProfiles';
 import { unknownErrorMessage } from './services/errorUtils';
 import { activeRunSummary, isActiveRun } from './services/runStatus';
+import { runAttentionDetail } from './services/runAttention';
 
 let statusBarItem: vscode.StatusBarItem;
 interface BadgeTarget {
@@ -713,7 +714,11 @@ function runLastEventLabel(run: KronosRun): string {
 }
 
 function runQuickPickDetail(run: KronosRun): string {
-  return `${formatWebviewDateTime(run.startedAt)} - ${run.failureReason || runLastEventLabel(run) || run.cwd || ''}`;
+  const status = String(run.status || '');
+  const detail = status === 'failed' || status === 'needs_human' || status === 'cancelled'
+    ? runAttentionDetail(run)
+    : runLastEventLabel(run);
+  return `${formatWebviewDateTime(run.startedAt)} - ${detail || run.cwd || ''}`;
 }
 
 function runProcessPid(run: KronosRun): number | undefined {
