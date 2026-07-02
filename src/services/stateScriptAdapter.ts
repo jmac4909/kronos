@@ -19,7 +19,7 @@ export interface MorningBriefResult {
   ready_to_go?: unknown[];
   overnight_actions?: number;
   vpn_drops?: number;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export function runStateScript(args: string[], options: StateScriptAdapterOptions = {}): string {
@@ -104,17 +104,22 @@ export function readMorningBriefJson(options: StateScriptAdapterOptions = {}): M
   };
 }
 
-function parseStateScriptJson(raw: string, label: string): any {
+function parseStateScriptJson(raw: string, label: string): unknown {
   try {
     return JSON.parse(raw);
-  } catch (e: any) {
+  } catch (e: unknown) {
     const preview = raw.trim().substring(0, 300);
-    throw new Error(`Invalid JSON from ${label}: ${e?.message || 'parse failed'}${preview ? `; output: ${preview}` : ''}`);
+    throw new Error(`Invalid JSON from ${label}: ${unknownErrorMessage(e, 'parse failed')}${preview ? `; output: ${preview}` : ''}`);
   }
 }
 
-function isPlainObject(value: unknown): value is Record<string, any> {
+function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value));
+}
+
+function unknownErrorMessage(error: unknown, fallback: string): string {
+  const message = error && typeof error === 'object' ? Reflect.get(error, 'message') : undefined;
+  return typeof message === 'string' && message.trim() ? message : fallback;
 }
 
 function arrayOrEmpty(value: unknown): unknown[] {

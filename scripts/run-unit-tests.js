@@ -2874,6 +2874,28 @@ test('state script adapter owns typed kronos_state operations', () => {
   assert.ok(calls.every(call => call.options.timeout === 1234));
 });
 
+test('state script adapter keeps raw JSON payloads unknown until normalized', () => {
+  const source = readSourceFixture('src', 'services', 'stateScriptAdapter.ts');
+  for (const marker of [
+    '[key: string]: unknown',
+    'function parseStateScriptJson(raw: string, label: string): unknown',
+    'function isPlainObject(value: unknown): value is Record<string, unknown>',
+    'function unknownErrorMessage(error: unknown, fallback: string): string',
+    "Reflect.get(error, 'message')",
+  ]) {
+    assert.ok(source.includes(marker), marker);
+  }
+  for (const marker of [
+    '[key: string]: any',
+    'function parseStateScriptJson(raw: string, label: string): any',
+    'catch (e: any)',
+    'e?.message',
+    'value is Record<string, any>',
+  ]) {
+    assert.equal(source.includes(marker), false, marker);
+  }
+});
+
 test('integration adapters wrap selected Jira, GitLab, and Sonar script contracts', async () => {
   const calls = [];
   const runner = {
