@@ -4339,7 +4339,12 @@ test('extension run recovery helpers use typed run records', () => {
   const runActionSource = source.slice(runActionStart, runActionEnd);
   for (const marker of [
     "import { unknownErrorMessage } from './services/errorUtils'",
+    "import type { DiscoveredProject, MergeRequestChangedFile, QueueItem, Ticket } from './state/types'",
     'type KronosRun',
+    'function planToQueueItem(state: KronosState, plan: PlannedAction): QueueItem',
+    'function refreshAfterDispatch(state: KronosState, projectName?: string, ticketKey?: string): (code: number, run: KronosRun) => Promise<void>',
+    'return async (_code: number, run: KronosRun)',
+    'await refreshAfterDispatch(state, projectName)(code, run)',
     'async function retryRunFromPrompt(run: KronosRun)',
     'function resolveRunWorkspace(run: KronosRun)',
     'async function resumeSelectedRun(state: KronosState, run: KronosRun)',
@@ -4373,6 +4378,9 @@ test('extension run recovery helpers use typed run records', () => {
     'openRunDiffArtifact(run: any)',
     'markSelectedRunNeedsHuman(run: any)',
     'findRunById(runId: string): any',
+    'function planToQueueItem(state: KronosState, plan: PlannedAction): any',
+    'return async (_code: number, run?: any)',
+    'await refreshAfterDispatch(state, projectName)(code);',
   ]) {
     assert.equal(source.includes(marker), false, marker);
   }
@@ -4498,7 +4506,7 @@ test('ticket detail rendering uses typed tickets and evidence records', () => {
   const extensionSource = readSourceFixture('src', 'extension.ts');
   const evidenceData = readSourceFixture('src', 'services', 'evidenceData.ts');
   for (const marker of [
-    'import type { DiscoveredProject, MergeRequestChangedFile, Ticket }',
+    'import type { DiscoveredProject, MergeRequestChangedFile, QueueItem, Ticket }',
     'function ticketEvidenceItemCount(ticket: Ticket)',
     'function buildTicketHtml(key: string, ticket: Ticket',
     'const mr = ticket.mr',

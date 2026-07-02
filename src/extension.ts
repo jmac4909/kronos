@@ -9,7 +9,7 @@ import { TicketTreeProvider } from './views/TicketTreeProvider';
 import * as path from 'path';
 import * as os from 'os';
 import * as fs from 'fs';
-import type { DiscoveredProject, MergeRequestChangedFile, Ticket } from './state/types';
+import type { DiscoveredProject, MergeRequestChangedFile, QueueItem, Ticket } from './state/types';
 import { dispatchClaudeSession, openInClaude, ensureAuth, cleanupStaleWorktrees, listSavedSessions, listSessionStoreIssues, openSavedSession, getAggregateStats, openRunCenter, listRuns, type KronosRun, type PromptRunMetadata, type RunCenterActionRequest } from './runners/sessionDispatcher';
 import { PromptHistoryDiff, PromptHistorySnapshot, PromptSmokeResult, PromptSmokeTest, PromptTemplateInfo, buildDefaultPromptSmokeTests, createPromptHistorySnapshot, diffPromptHistorySnapshots, latestPromptHistorySnapshot, listPromptHistorySnapshots, listPromptTemplates, repairRequiredPromptTemplates, runPromptSmokeTests } from './services/promptManager';
 import { KRONOS_DIR, STATE_AUDIT_FILE, StateAuditEvent, listBackups, listStateAuditEvents, restoreBackup } from './services/stateStore';
@@ -2077,8 +2077,8 @@ export function activate(context: vscode.ExtensionContext) {
       const scanPrompt = loadPromptForDispatch(state, 'sonar-scan', { PROJECT_NAME: projectName, SONAR_KEY: sonarKey, BRANCH: branch }, projectPath);
 
       dispatchClaudeSession(projectPath, 'sonar-scan', undefined, {
-        onComplete: async (code: number) => {
-          await refreshAfterDispatch(state, projectName)(code);
+        onComplete: async (code: number, run: KronosRun) => {
+          await refreshAfterDispatch(state, projectName)(code, run);
           const action = await vscode.window.showInformationMessage(
             `SonarQube scan complete for ${projectName}.`,
             'View Report', 'Dismiss'
@@ -2367,8 +2367,8 @@ export function activate(context: vscode.ExtensionContext) {
       const prompt = loadPromptForDispatch(state, 'verify-develop', { PROJECT_NAME: projectName, TICKET_LIST: ticketList }, projectPath);
 
       dispatchClaudeSession(projectPath, 'verify-develop', undefined, {
-        onComplete: async (code: number) => {
-          await refreshAfterDispatch(state, projectName)(code);
+        onComplete: async (code: number, run: KronosRun) => {
+          await refreshAfterDispatch(state, projectName)(code, run);
           const action = await vscode.window.showInformationMessage(
             `Develop verification complete for ${projectName}. Fix any findings?`,
             'Fix Findings', 'Dismiss'
@@ -5374,7 +5374,7 @@ function planNextActions(state: KronosState): PlannedAction[] {
   return buildNextActionPlan({ state: state.state, queue: state.queue });
 }
 
-function planToQueueItem(state: KronosState, plan: PlannedAction): any {
+function planToQueueItem(state: KronosState, plan: PlannedAction): QueueItem {
   return buildQueueItemFromPlan({
     state: state.state,
     queue: state.queue,
@@ -5382,8 +5382,8 @@ function planToQueueItem(state: KronosState, plan: PlannedAction): any {
   }, plan);
 }
 
-function refreshAfterDispatch(state: KronosState, projectName?: string, ticketKey?: string) {
-  return async (_code: number, run?: any) => {
+function refreshAfterDispatch(state: KronosState, projectName?: string, ticketKey?: string): (code: number, run: KronosRun) => Promise<void> {
+  return async (_code: number, run: KronosRun) => {
     if (projectName) {
       await state.refresh(projectName);
     } else if (ticketKey) {
@@ -5391,20 +5391,18 @@ function refreshAfterDispatch(state: KronosState, projectName?: string, ticketKe
     }
     if (ticketKey) {
       const ticket = state.state?.tickets[ticketKey];
-      if (run) {
-        run.readiness = evaluatePostRunReadiness({ run, ticketKey, ticket });
-        run.failureKind = run.readiness.failureKind;
-        if (run.status === 'completed' && run.readiness.status === 'ready') {
-          run.status = 'waiting_for_review';
-        } else if (run.status === 'completed' && run.readiness.status === 'needs_human') {
-          run.status = 'needs_human';
-        }
-        writeRunRecord(run);
+      run.readiness = evaluatePostRunReadiness({ run, ticketKey, ticket });
+      run.failureKind = run.readiness.failureKind;
+      if (run.status === 'completed' && run.readiness.status === 'ready') {
+        run.status = 'waiting_for_review';
+      } else if (run.status === 'completed' && run.readiness.status === 'needs_human') {
+        run.status = 'needs_human';
       }
+      writeRunRecord(run);
       if (ticket && ['await_review', 'done', 'deploy_monitor'].includes(ticket.next_action)) {
         await removeTicketFromQueue(state, ticketKey, false);
       }
-    } else if (run) {
+    } else {
       run.readiness = evaluatePostRunReadiness({ run });
       run.failureKind = run.readiness.failureKind;
       writeRunRecord(run);

@@ -210,6 +210,11 @@ for (const marker of [
   'async function removeTicketFromQueue',
   'stayed in queue because it has no evidence notes',
   "import { unknownErrorMessage } from './services/errorUtils'",
+  "import type { DiscoveredProject, MergeRequestChangedFile, QueueItem, Ticket } from './state/types'",
+  'function planToQueueItem(state: KronosState, plan: PlannedAction): QueueItem',
+  'function refreshAfterDispatch(state: KronosState, projectName?: string, ticketKey?: string): (code: number, run: KronosRun) => Promise<void>',
+  'return async (_code: number, run: KronosRun)',
+  'await refreshAfterDispatch(state, projectName)(code, run)',
   'async function retryRunFromPrompt',
   'async function resumeSelectedRun',
   'function resolveRunWorkspace',
@@ -489,6 +494,9 @@ for (const forbidden of [
   'panel.webview.onDidReceiveMessage(async (msg: any)',
   'issuesData.map((iss: any)',
   'item?.sourceBranch ||',
+  'function planToQueueItem(state: KronosState, plan: PlannedAction): any',
+  'return async (_code: number, run?: any)',
+  'await refreshAfterDispatch(state, projectName)(code);',
 ]) {
   if (extension.includes(forbidden)) {
     fail(`Extension command handlers must normalize unknown errors instead of using ${forbidden}.`);
