@@ -188,6 +188,10 @@ for (const [idx, line] of extension.split(/\r?\n/).entries()) {
     fail(`src/extension.ts:${idx + 1} must await progress tasks so command failures are surfaced.`);
   }
 }
+const directDispatchCallCount = (extension.match(/dispatchClaudeSession\(/g) || []).length;
+if (directDispatchCallCount !== 1 || !extension.includes('await dispatchClaudeSession(projectPath, skill, ticket, onCompleteOrOpts, customPrompt)')) {
+  fail('Extension command handlers must start Claude sessions through startClaudeDispatch.');
+}
 for (const [file, source] of Object.entries({
   'src/extension.ts': extension,
   'src/runners/sessionDispatcher.ts': dispatcher,
@@ -378,7 +382,11 @@ for (const marker of [
   "vscode.window.showInformationMessage('Need at least 2 open review MRs to resolve conflicts.')",
   "vscode.window.showInformationMessage('No open review MRs to verify.')",
   'startDeployMonitorForMergedTicket',
-  "dispatchClaudeSession(projectPath, 'deploy-monitor', ticketKey",
+  'async function startClaudeDispatch',
+  'type DispatchOptions',
+  'await dispatchClaudeSession(projectPath, skill, ticket, onCompleteOrOpts, customPrompt)',
+  'unknownErrorMessage(e, `Failed to start ${skill} session.`)',
+  "await startClaudeDispatch(projectPath, 'deploy-monitor', ticketKey",
   'projectNameOverride: projectName',
   'hasActiveDeployMonitorRun(projectName, projectPath, ticketKey)',
   'run.project === projectName || run.projectPath === projectPath',

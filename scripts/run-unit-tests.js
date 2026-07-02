@@ -4632,7 +4632,11 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     "vscode.window.showInformationMessage('Need at least 2 open review MRs to resolve conflicts.')",
     "vscode.window.showInformationMessage('No open review MRs to verify.')",
     'startDeployMonitorForMergedTicket',
-    "dispatchClaudeSession(projectPath, 'deploy-monitor', ticketKey",
+    'async function startClaudeDispatch',
+    'type DispatchOptions',
+    'await dispatchClaudeSession(projectPath, skill, ticket, onCompleteOrOpts, customPrompt)',
+    'unknownErrorMessage(e, `Failed to start ${skill} session.`)',
+    "await startClaudeDispatch(projectPath, 'deploy-monitor', ticketKey",
     'projectNameOverride: projectName',
     'hasActiveDeployMonitorRun(projectName, projectPath, ticketKey)',
     'run.project === projectName || run.projectPath === projectPath',
@@ -4699,6 +4703,8 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     assert.ok(source.includes(marker), marker);
   }
   assert.equal(/^\s*vscode\.window\.withProgress\(/m.test(source), false, 'progress tasks should be awaited by their command handlers');
+  assert.equal((source.match(/dispatchClaudeSession\(/g) || []).length, 1, 'command handlers should use startClaudeDispatch for Claude session startup');
+  assert.equal(source.includes('await startClaudeDispatch('), true, 'Claude session startup should await the wrapper preflight');
   assert.equal(
     source.includes("randomBytes(16).toString('base64')"),
     false,

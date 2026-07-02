@@ -10,7 +10,7 @@ import * as path from 'path';
 import * as os from 'os';
 import * as fs from 'fs';
 import type { DiscoveredProject, MergeRequestChangedFile, QueueItem, Ticket } from './state/types';
-import { dispatchClaudeSession, openInClaude, ensureAuth, cleanupStaleWorktrees, listSavedSessions, listSessionStoreIssues, openSavedSession, getAggregateStats, openRunCenter, listRuns, type KronosRun, type PromptRunMetadata, type RunCenterActionRequest } from './runners/sessionDispatcher';
+import { dispatchClaudeSession, openInClaude, ensureAuth, cleanupStaleWorktrees, listSavedSessions, listSessionStoreIssues, openSavedSession, getAggregateStats, openRunCenter, listRuns, type DispatchOptions, type KronosRun, type PromptRunMetadata, type RunCenterActionRequest } from './runners/sessionDispatcher';
 import { PromptHistoryDiff, PromptHistorySnapshot, PromptSmokeResult, PromptSmokeTest, PromptTemplateInfo, buildDefaultPromptSmokeTests, createPromptHistorySnapshot, diffPromptHistorySnapshots, latestPromptHistorySnapshot, listPromptHistorySnapshots, listPromptTemplates, repairRequiredPromptTemplates, runPromptSmokeTests } from './services/promptManager';
 import { KRONOS_DIR, STATE_AUDIT_FILE, StateAuditEvent, listBackups, listStateAuditEvents, restoreBackup } from './services/stateStore';
 import { BacklogTriageReport, PlannedAction, ProjectBatchPlan, ReleaseBatchPlan, actionToLabel, buildBacklogTriageReport, estimatePlanMinutes, overnightCandidatePlans, planByProject, planByRelease, planForMinutes, planNextActions as buildNextActionPlan, planToQueueItem as buildQueueItemFromPlan } from './services/queuePlanner';
@@ -148,6 +148,20 @@ async function runCommandProgress(
     await vscode.window.withProgress(options, task);
   } catch (e: unknown) {
     vscode.window.showErrorMessage(unknownErrorMessage(e, failureFallback));
+  }
+}
+
+async function startClaudeDispatch(
+  projectPath: string,
+  skill: string,
+  ticket?: string,
+  onCompleteOrOpts?: ((code: number) => void) | DispatchOptions,
+  customPrompt?: string
+): Promise<void> {
+  try {
+    await dispatchClaudeSession(projectPath, skill, ticket, onCompleteOrOpts, customPrompt);
+  } catch (e: unknown) {
+    vscode.window.showErrorMessage(unknownErrorMessage(e, `Failed to start ${skill} session.`));
   }
 }
 
@@ -409,7 +423,7 @@ async function retryRunFromPrompt(run: KronosRun): Promise<void> {
     ...(run.promptMetadata || {}),
     retryOfRunId: run.id,
   };
-  dispatchClaudeSession(run.projectPath, run.skill, run.ticket || undefined, {
+  await startClaudeDispatch(run.projectPath, run.skill, run.ticket || undefined, {
     customPrompt: prompt,
     promptMetadata: retryMetadata,
     noWorktree: true,
@@ -458,7 +472,7 @@ async function resumeSelectedRun(state: KronosState, run: KronosRun): Promise<vo
       retryOfRunId: run.id,
     };
 
-    dispatchClaudeSession(projectPath, run.skill || 'continue-work', ticketKey, {
+    await startClaudeDispatch(projectPath, run.skill || 'continue-work', ticketKey, {
       customPrompt: resumePrompt,
       promptMetadata: resumeMetadata,
       noWorktree: true,
@@ -1157,7 +1171,7 @@ export function activate(context: vscode.ExtensionContext) {
         const scopeHint = otherProjects.length > 0
           ? `\n\nADDITIONAL CONTEXT FROM USER: You are working in ${projName}. Focus ONLY on changes relevant to this codebase. Other projects also being updated for this ticket: ${otherProjects.join(', ')}.`
           : '';
-        dispatchClaudeSession(projectPath, 'implement', ticketKey, {
+        await startClaudeDispatch(projectPath, 'implement', ticketKey, {
           onComplete: refreshAfterDispatch(state, projName, ticketKey),
           parallel: true,
           appendSystemPrompt: getImplementPrompt(state) + scopeHint,
@@ -1170,7 +1184,7 @@ export function activate(context: vscode.ExtensionContext) {
       const ticketKey = resolveTicketKey(item);
       const projectPath = getProjectPath(state, projectName);
       if (projectPath) {
-        dispatchClaudeSession(projectPath, 'deploy-monitor', ticketKey, {
+        await startClaudeDispatch(projectPath, 'deploy-monitor', ticketKey, {
           onComplete: refreshAfterDispatch(state, projectName, ticketKey),
           noWorktree: true,
           projectNameOverride: projectName,
@@ -1184,7 +1198,7 @@ export function activate(context: vscode.ExtensionContext) {
       const projectName = resolveProjectName(state, item);
       const projectPath = getProjectPath(state, projectName);
       if (projectPath) {
-        dispatchClaudeSession(projectPath, 'verify-fix', item?.ticketKey, {
+        await startClaudeDispatch(projectPath, 'verify-fix', item?.ticketKey, {
           onComplete: refreshAfterDispatch(state, projectName),
           noWorktree: true,
         });
@@ -1221,7 +1235,7 @@ export function activate(context: vscode.ExtensionContext) {
             const skill = skillForAction(item.action);
             const isCodeAction = ['implement', 'in_progress', 'fix_build'].includes(item.action);
             const ticketKey = item.ticket || undefined;
-            dispatchClaudeSession(projectPath, skill, ticketKey, {
+            await startClaudeDispatch(projectPath, skill, ticketKey, {
               onComplete: refreshAfterDispatch(state, projName, ticketKey),
               parallel: isCodeAction,
               appendSystemPrompt: isCodeAction ? getImplementPrompt(state) : undefined,
@@ -1956,7 +1970,7 @@ export function activate(context: vscode.ExtensionContext) {
 5. Do NOT touch .claude/project.json — it has already been configured with gitlab_project_id=${gitlabId} and sonar_project_key=${sonarKey}
 6. Report what was set up`;
 
-            dispatchClaudeSession(projectPath, 'init-project', undefined, {
+            await startClaudeDispatch(projectPath, 'init-project', undefined, {
               onComplete: refreshAfterDispatch(state, projectName),
               customPrompt: setupPrompt,
               noWorktree: true,
@@ -2010,7 +2024,7 @@ export function activate(context: vscode.ExtensionContext) {
         if (!projectPath) { continue; }
         const otherProjects = projs.filter(p => p !== projName);
         const scopeHint = otherProjects.length > 0 ? `\nYou are working in ${projName}. Focus ONLY on this codebase. Other projects: ${otherProjects.join(', ')}.` : '';
-        dispatchClaudeSession(projectPath, skill, queueData.ticket, {
+        await startClaudeDispatch(projectPath, skill, queueData.ticket, {
           onComplete: refreshAfterDispatch(state, projName, queueData.ticket),
           parallel: isCodeAction,
           appendSystemPrompt: isCodeAction ? getImplementPrompt(state) + scopeHint + extraPrompt : extraPrompt || undefined,
@@ -2130,7 +2144,7 @@ export function activate(context: vscode.ExtensionContext) {
 
       const verifyPrompt = loadPromptForDispatch(state, 'verify-local', { TICKET_KEY: ticketKey }, projectPath);
 
-      dispatchClaudeSession(projectPath, 'verify-local', ticketKey, {
+      await startClaudeDispatch(projectPath, 'verify-local', ticketKey, {
         onComplete: refreshAfterDispatch(state, projectName),
         customPrompt: verifyPrompt.text,
         promptMetadata: verifyPrompt.metadata,
@@ -2162,7 +2176,7 @@ export function activate(context: vscode.ExtensionContext) {
       const branch = mode.value === 'new' ? (item?.branch || baseBranch) : '';
       const scanPrompt = loadPromptForDispatch(state, 'sonar-scan', { PROJECT_NAME: projectName, SONAR_KEY: sonarKey, BRANCH: branch }, projectPath);
 
-      dispatchClaudeSession(projectPath, 'sonar-scan', undefined, {
+      await startClaudeDispatch(projectPath, 'sonar-scan', undefined, {
         onComplete: async (code: number, run: KronosRun) => {
           await refreshAfterDispatch(state, projectName)(code, run);
           const action = await vscode.window.showInformationMessage(
@@ -2298,7 +2312,7 @@ export function activate(context: vscode.ExtensionContext) {
 
       const fixPrompt = loadPromptForDispatch(state, 'sonar-fix', { PROJECT_NAME: projectName, SONAR_KEY: sonarKey, CUSTOM_INSTRUCTIONS: instructionBlock }, projectPath);
 
-      dispatchClaudeSession(projectPath, 'fix-sonar', undefined, {
+      await startClaudeDispatch(projectPath, 'fix-sonar', undefined, {
         onComplete: refreshAfterDispatch(state, projectName),
         customPrompt: fixPrompt.text,
         promptMetadata: fixPrompt.metadata,
@@ -2359,7 +2373,7 @@ export function activate(context: vscode.ExtensionContext) {
 
         const prompt = loadPromptForDispatch(state, 'sonar-fix-branch', { SONAR_KEY: sonarKey, TICKET_KEY: ticket.key, CUSTOM_INSTRUCTIONS: instructionBlock }, projectPath);
 
-        dispatchClaudeSession(projectPath, 'sonar-fix', ticket.key, {
+        await startClaudeDispatch(projectPath, 'sonar-fix', ticket.key, {
           onComplete: refreshAfterDispatch(state, projectName, ticket.key),
           customPrompt: prompt.text,
           promptMetadata: prompt.metadata,
@@ -2401,7 +2415,7 @@ export function activate(context: vscode.ExtensionContext) {
 
       const prompt = loadPromptForDispatch(state, 'fix-finding', { FINDING_DESC: findingDesc }, projectPath);
 
-      dispatchClaudeSession(projectPath, 'fix-finding', undefined, {
+      await startClaudeDispatch(projectPath, 'fix-finding', undefined, {
         onComplete: refreshAfterDispatch(state, projectName),
         customPrompt: prompt.text,
         promptMetadata: prompt.metadata,
@@ -2450,7 +2464,7 @@ export function activate(context: vscode.ExtensionContext) {
 
       const prompt = loadPromptForDispatch(state, 'verify-develop', { PROJECT_NAME: projectName, TICKET_LIST: ticketList }, projectPath);
 
-      dispatchClaudeSession(projectPath, 'verify-develop', undefined, {
+      await startClaudeDispatch(projectPath, 'verify-develop', undefined, {
         onComplete: async (code: number, run: KronosRun) => {
           await refreshAfterDispatch(state, projectName)(code, run);
           const action = await vscode.window.showInformationMessage(
@@ -2498,7 +2512,7 @@ export function activate(context: vscode.ExtensionContext) {
 
       const prompt = loadPromptForDispatch(state, 'verify-test', { PROJECT_NAME: projectName, TICKET_LIST: ticketList }, projectPath);
 
-      dispatchClaudeSession(projectPath, 'verify-test', undefined, {
+      await startClaudeDispatch(projectPath, 'verify-test', undefined, {
         onComplete: refreshAfterDispatch(state, projectName),
         customPrompt: prompt.text,
         promptMetadata: prompt.metadata,
@@ -2548,7 +2562,7 @@ export function activate(context: vscode.ExtensionContext) {
       if (!canResolve) { return; }
       const prompt = loadPromptForDispatch(state, 'resolve-conflicts', { BRANCH_ORDER: branchOrder }, projectPath);
 
-      dispatchClaudeSession(projectPath, 'resolve-conflicts', undefined, {
+      await startClaudeDispatch(projectPath, 'resolve-conflicts', undefined, {
         onComplete: refreshAfterDispatch(state, projectName),
         customPrompt: prompt.text,
         promptMetadata: prompt.metadata,
@@ -2592,7 +2606,7 @@ export function activate(context: vscode.ExtensionContext) {
         BRANCH_TABLE: promptVars.branchTable
       }, projectPath);
 
-      dispatchClaudeSession(projectPath, 'verify-combined', undefined, {
+      await startClaudeDispatch(projectPath, 'verify-combined', undefined, {
         onComplete: refreshAfterDispatch(state, projectName),
         customPrompt: combinedPrompt.text,
         promptMetadata: combinedPrompt.metadata,
@@ -2639,7 +2653,7 @@ export function activate(context: vscode.ExtensionContext) {
 
       const continuePrompt = loadPromptForDispatch(state, 'continue-work', { TICKET_KEY: ticketKey, BRANCH: branch || ticketKey, FEEDBACK: feedback }, projectPath);
 
-      dispatchClaudeSession(projectPath, 'implement', ticketKey, {
+      await startClaudeDispatch(projectPath, 'implement', ticketKey, {
         onComplete: refreshAfterDispatch(state, projectName),
         customPrompt: continuePrompt.text,
         promptMetadata: continuePrompt.metadata,
@@ -5733,7 +5747,7 @@ async function startDeployMonitorForMergedTicket(state: KronosState, ticketKey: 
   const projectName = ticket.projects?.[0];
   const projectPath = getProjectPath(state, projectName);
   if (!projectName || !projectPath || hasActiveDeployMonitorRun(projectName, projectPath, ticketKey)) { return; }
-  await dispatchClaudeSession(projectPath, 'deploy-monitor', ticketKey, {
+  await startClaudeDispatch(projectPath, 'deploy-monitor', ticketKey, {
     onComplete: refreshAfterDispatch(state, projectName, ticketKey),
     noWorktree: true,
     projectNameOverride: projectName,
