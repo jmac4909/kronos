@@ -715,9 +715,13 @@ function runLastEventLabel(run: KronosRun): string {
   return typeof last?.label === 'string' ? last.label : '';
 }
 
+function isAttentionRunStatus(status: string): boolean {
+  return status === 'failed' || status === 'needs_human' || status === 'cancelled';
+}
+
 function runQuickPickDetail(run: KronosRun): string {
   const status = String(run.status || '');
-  const detail = status === 'failed' || status === 'needs_human' || status === 'cancelled'
+  const detail = isAttentionRunStatus(status)
     ? runAttentionDetail(run)
     : runLastEventLabel(run);
   return `${formatWebviewDateTime(run.startedAt)} - ${detail || run.cwd || ''}`;
@@ -725,7 +729,7 @@ function runQuickPickDetail(run: KronosRun): string {
 
 function runQuickPickDescription(run: KronosRun): string {
   const status = String(run.status || 'unknown');
-  if (status !== 'failed' && status !== 'needs_human' && status !== 'cancelled') {
+  if (!isAttentionRunStatus(status)) {
     return status;
   }
   const detail = singleLineRunSummary(runAttentionDetail(run));
@@ -5781,21 +5785,34 @@ function resolveDispatchTicketKey(ticketKey: string | undefined, run: KronosRun)
 }
 
 async function showRunCompletionToast(ticketKey: string, ticket: Ticket | undefined, run: KronosRun): Promise<void> {
-  if (run.status !== 'waiting_for_review') { return; }
+  const status = String(run.status || '');
   const skill = run.skill || 'run';
-  const reviewTarget = ticket?.mr ? `MR !${ticket.mr.iid} ready for review` : 'ready for review';
-  const action = await vscode.window.showInformationMessage(
-    `${ticketKey} ${skill} completed - ${reviewTarget}.`,
-    'Open Review',
+  if (status === 'waiting_for_review') {
+    const reviewTarget = ticket?.mr ? `MR !${ticket.mr.iid} ready for review` : 'ready for review';
+    const action = await vscode.window.showInformationMessage(
+      `${ticketKey} ${skill} completed - ${reviewTarget}.`,
+      'Open Review',
+      'Run Center'
+    );
+    if (action === 'Open Review') {
+      if (ticket?.mr) {
+        await vscode.commands.executeCommand('kronos.openMrDiff', { ticketKey, ticket });
+      } else {
+        await vscode.commands.executeCommand('kronos.viewTicket', { ticketKey });
+      }
+    } else if (action === 'Run Center') {
+      await vscode.commands.executeCommand('kronos.runCenter');
+    }
+    return;
+  }
+  if (!isAttentionRunStatus(status)) { return; }
+  const detail = singleLineRunSummary(runAttentionDetail(run), 180);
+  const statusLabel = status.replace(/_/g, ' ');
+  const action = await vscode.window.showWarningMessage(
+    `${ticketKey} ${skill} ${statusLabel}${detail ? ` - ${detail}` : ''}.`,
     'Run Center'
   );
-  if (action === 'Open Review') {
-    if (ticket?.mr) {
-      await vscode.commands.executeCommand('kronos.openMrDiff', { ticketKey, ticket });
-    } else {
-      await vscode.commands.executeCommand('kronos.viewTicket', { ticketKey });
-    }
-  } else if (action === 'Run Center') {
+  if (action === 'Run Center') {
     await vscode.commands.executeCommand('kronos.runCenter');
   }
 }
