@@ -51,7 +51,7 @@ import { buildAgingReportHtml } from './services/agingReportView';
 import { buildNextActionContext, buildNextActionStartDecision, skillForAction } from './services/nextActionContext';
 import { createWorkspaceDiffArtifact, firstRemoteBranchMatching, originProjectPath } from './services/gitWorkspace';
 import { signalProcessTree, stopProcessTree } from './services/processTree';
-import { createWebviewNonce, withWebviewCsp } from './services/webviewSecurity';
+import { createWebviewNonce, webviewVsCodeApiScript, withWebviewCsp } from './services/webviewSecurity';
 import { escapeAttr, escapeClass, escapeHtml, kronosWebviewBaseCss, safeHttpHref } from './services/webviewHtml';
 import { kronosTerminalOptions } from './services/terminalProfiles';
 import { unknownErrorMessage } from './services/errorUtils';
@@ -4272,7 +4272,7 @@ function attachOperatorCommandHandler(panel: vscode.WebviewPanel): void {
 
 function kronosActionPanelScript(nonce: string): string {
   return `<script nonce="${escapeAttr(nonce)}">
-const vscode = acquireVsCodeApi();
+${webviewVsCodeApiScript()}
 document.addEventListener('click', function(event) {
   const target = event.target instanceof Element ? event.target.closest('[data-action]') : null;
   if (!target) { return; }
@@ -6016,7 +6016,7 @@ function buildJiraBoardHtml(state: KronosState, nonce: string): string {
 </style>
 <script nonce="${escapeAttr(nonce)}">
 function initKronosJiraBoard() {
-const vscode = acquireVsCodeApi();
+${webviewVsCodeApiScript()}
 const ticketData = ${ticketJsonRaw};
 let currentModalKey = '';
 let lastFocusedEl = null;

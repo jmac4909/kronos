@@ -1431,13 +1431,21 @@ test('webview security injects CSP and preserves existing nonce policies', () =>
   assert.match(scriptable, /img-src data: https:/);
   const scriptableWithSource = webviewSecurity.webviewCspMeta({ allowScripts: true, nonce: 'abc123', cspSource: 'vscode-resource:' });
   assert.match(scriptableWithSource, /style-src vscode-resource: 'unsafe-inline'/);
-  assert.match(scriptableWithSource, /script-src vscode-resource: 'nonce-abc123'/);
+  assert.match(scriptableWithSource, /script-src 'nonce-abc123'/);
+  assert.doesNotMatch(scriptableWithSource, /script-src vscode-resource:/);
 
   const nonce = webviewSecurity.createWebviewNonce();
   assert.match(nonce, /^[a-f0-9]{32}$/);
   assert.doesNotMatch(nonce, /[+/=]/);
   const nonceSource = webviewSecurity.webviewCspMeta({ allowScripts: true, nonce });
   assert.match(nonceSource, new RegExp(`script-src 'nonce-${nonce}'`));
+  const apiScript = webviewSecurity.webviewVsCodeApiScript();
+  assert.match(apiScript, /window\.__kronosVscodeApi/);
+  assert.match(apiScript, /function kronosAcquireVsCodeApi/);
+  assert.match(apiScript, /typeof acquireVsCodeApi !== 'function'/);
+  assert.match(apiScript, /Failed to acquire VS Code API for Kronos webview action/);
+  assert.match(apiScript, /var vscode = kronosAcquireVsCodeApi\(\)/);
+  assert.match(apiScript, /VS Code API unavailable for Kronos webview action/);
 
   const existing = '<html><head><meta http-equiv="Content-Security-Policy" content="default-src test"></head><body></body></html>';
   assert.equal(webviewSecurity.withWebviewCsp(existing), existing);
@@ -2503,7 +2511,9 @@ test('dispatcher records branch and permission metadata for persisted runs', () 
     'const id = safeSessionId',
     "from '../services/webviewSecurity'",
     'createWebviewNonce',
+    'webviewVsCodeApiScript',
     "const nonce = interactive ? createWebviewNonce() : ''",
+    '${webviewVsCodeApiScript()}',
     'function toValidDate',
     'function progressDateOr',
     'function progressEventTimeLabel',
@@ -4187,7 +4197,7 @@ test('extension webviews use shared UI shell and board filtering affordances', (
   assert.ok(boardHandlerStart >= 0 && boardHandlerEnd > boardHandlerStart, 'Jira board message handler should be present');
   const boardHandlerSource = source.slice(boardHandlerStart, boardHandlerEnd);
   for (const marker of [
-    "import { createWebviewNonce, withWebviewCsp } from './services/webviewSecurity'",
+    "import { createWebviewNonce, webviewVsCodeApiScript, withWebviewCsp } from './services/webviewSecurity'",
     'function createNonce(): string',
     'return createWebviewNonce()',
     'function webviewScriptCsp(webview: vscode.Webview, nonce: string)',
@@ -4241,7 +4251,7 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     "actionButton('addEvidence', 'Add Evidence'",
     "actionButton(isMissingExtraction ? 'extractAcceptanceCriteria' : 'updateAcceptanceCriteria'",
     'function kronosActionPanelScript',
-    'acquireVsCodeApi',
+    '${webviewVsCodeApiScript()}',
     'script nonce="${escapeAttr(nonce)}"',
     "data-action=\"${escapeAttr(action)}\"",
     "data-plan-id=\"${escapeAttr(options.planId)}\"",

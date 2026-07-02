@@ -8,7 +8,7 @@ import { RUNS_DIR, appendRunLog as appendRunLogFile, markRunCancelled, readRunRe
 import { readStateFile } from '../services/stateStore';
 import { RunFailureKind, classifyRunFailure, type PostRunReadiness } from '../services/postRunReadiness';
 import { stopProcessTree } from '../services/processTree';
-import { createWebviewNonce, withWebviewCsp } from '../services/webviewSecurity';
+import { createWebviewNonce, webviewVsCodeApiScript, withWebviewCsp } from '../services/webviewSecurity';
 import { currentGitCommit, currentGitRef, inspectTrackedWorktree, prepareManagedWorktree, removeWorktreeSafely } from '../services/gitWorkspace';
 import { checkGcloudApplicationDefaultAuth } from '../services/cliProbes';
 import { escapeAttr, escapeClass, escapeHtml, kronosWebviewBaseCss } from '../services/webviewHtml';
@@ -1112,7 +1112,7 @@ function runCenterActionButtons(run: KronosRun): string {
 
 function runCenterScript(nonce: string): string {
   return `<script nonce="${escapeAttr(nonce)}">
-const vscode = acquireVsCodeApi();
+${webviewVsCodeApiScript()}
 document.addEventListener('click', function(event) {
   const target = event.target instanceof Element ? event.target.closest('[data-action][data-run-id]') : null;
   if (!target) { return; }

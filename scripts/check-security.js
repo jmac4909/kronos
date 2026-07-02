@@ -163,6 +163,15 @@ for (const [file, source] of Object.entries({ 'src/extension.ts': extension, 'sr
     }
   }
 }
+for (const [file, source] of Object.entries({
+  'src/extension.ts': extension,
+  'src/runners/sessionDispatcher.ts': dispatcher,
+  'src/services/sonarReportView.ts': sonarReportView,
+})) {
+  if (source.includes('const vscode = acquireVsCodeApi()')) {
+    fail(`${file} must use webviewVsCodeApiScript for webview API acquisition.`);
+  }
+}
 
 const runCreateIndex = dispatcher.indexOf('const run = createRun');
 const authPreflightIndex = dispatcher.indexOf('const authed = await ensureAuth()');
@@ -188,6 +197,7 @@ for (const marker of [
   'webviewScriptCsp(panel.webview, nonce)',
   'cspSource: webview.cspSource',
   'script nonce="${escapeAttr(nonce)}"',
+  '${webviewVsCodeApiScript()}',
   'BOARD_MESSAGE_COMMANDS',
   'function normalizeWebviewCommand',
   'function normalizeBoardMessage',
@@ -1001,8 +1011,15 @@ for (const marker of [
 for (const marker of [
   'export function createWebviewNonce',
   "toString('hex')",
+  'export function webviewVsCodeApiScript',
+  'window.__kronosVscodeApi',
+  'function kronosAcquireVsCodeApi',
+  "typeof acquireVsCodeApi !== 'function'",
+  "console.error('Failed to acquire VS Code API for Kronos webview action', error)",
+  'var vscode = kronosAcquireVsCodeApi();',
   'cspSource?: string',
   'options.cspSource',
+  "? options.nonce ? `'nonce-${options.nonce}'` : cspSource.trim() || \"'none'\"",
   'export function webviewCspMeta',
   'export function withWebviewCsp',
   "default-src 'none'",
