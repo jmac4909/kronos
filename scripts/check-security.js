@@ -199,6 +199,7 @@ for (const marker of [
   'async function confirmSafetyGate',
   'async function removeTicketFromQueue',
   'stayed in queue because it has no evidence notes',
+  "import { unknownErrorMessage } from './services/errorUtils'",
   'async function retryRunFromPrompt',
   'async function resumeSelectedRun',
   'function resolveRunWorkspace',
@@ -343,6 +344,13 @@ for (const marker of [
   'kronos.continueRun',
   'Archive Run',
   'kronos.cancelRun',
+  "unknownErrorMessage(e, 'Failed to resume run.')",
+  "unknownErrorMessage(e, 'Failed to archive run.')",
+  "unknownErrorMessage(e, 'Failed to pause run.')",
+  "unknownErrorMessage(e, 'Failed to continue run.')",
+  "unknownErrorMessage(e, 'Failed to cancel run.')",
+  "unknownErrorMessage(e, 'Failed to open run diff.')",
+  "unknownErrorMessage(e, 'Failed to mark run needs-human.')",
   'runRecordPath(picked.run.id)',
   'evaluatePostRunReadiness',
   'writeRunRecord(run)',
@@ -362,6 +370,21 @@ for (const marker of [
 ]) {
   if (!extension.includes(marker)) {
     fail(`Missing safety marker: ${marker}`);
+  }
+}
+
+const runActionStart = extension.indexOf('async function resumeSelectedRun');
+const runActionEnd = extension.indexOf('function runLastEventLabel');
+if (runActionStart < 0 || runActionEnd <= runActionStart) {
+  fail('Missing extension run action helper block.');
+}
+const runActionSource = extension.slice(runActionStart, runActionEnd);
+for (const forbidden of [
+  'catch (e: any)',
+  'e?.message',
+]) {
+  if (runActionSource.includes(forbidden)) {
+    fail(`Run action helpers must normalize unknown errors instead of using ${forbidden}.`);
   }
 }
 

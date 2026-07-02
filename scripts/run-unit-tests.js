@@ -4225,7 +4225,12 @@ test('extension webviews use shared UI shell and board filtering affordances', (
 
 test('extension run recovery helpers use typed run records', () => {
   const source = readSourceFixture('src', 'extension.ts');
+  const runActionStart = source.indexOf('async function resumeSelectedRun');
+  const runActionEnd = source.indexOf('function runLastEventLabel');
+  assert.ok(runActionStart >= 0 && runActionEnd > runActionStart, 'run action helper block should be present');
+  const runActionSource = source.slice(runActionStart, runActionEnd);
   for (const marker of [
+    "import { unknownErrorMessage } from './services/errorUtils'",
     'type KronosRun',
     'async function retryRunFromPrompt(run: KronosRun)',
     'function resolveRunWorkspace(run: KronosRun)',
@@ -4240,6 +4245,14 @@ test('extension run recovery helpers use typed run records', () => {
     'function runProcessPid(run: KronosRun)',
     "Reflect.get(run, 'pid')",
     'function findRunById(runId: string): KronosRun | undefined',
+    'catch (e: unknown)',
+    "unknownErrorMessage(e, 'Failed to resume run.')",
+    "unknownErrorMessage(e, 'Failed to archive run.')",
+    "unknownErrorMessage(e, 'Failed to pause run.')",
+    "unknownErrorMessage(e, 'Failed to continue run.')",
+    "unknownErrorMessage(e, 'Failed to cancel run.')",
+    "unknownErrorMessage(e, 'Failed to open run diff.')",
+    "unknownErrorMessage(e, 'Failed to mark run needs-human.')",
   ]) {
     assert.ok(source.includes(marker), marker);
   }
@@ -4254,6 +4267,12 @@ test('extension run recovery helpers use typed run records', () => {
     'findRunById(runId: string): any',
   ]) {
     assert.equal(source.includes(marker), false, marker);
+  }
+  for (const marker of [
+    'catch (e: any)',
+    'e?.message',
+  ]) {
+    assert.equal(runActionSource.includes(marker), false, marker);
   }
 });
 

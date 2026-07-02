@@ -54,6 +54,7 @@ import { signalProcessTree, stopProcessTree } from './services/processTree';
 import { createWebviewNonce, withWebviewCsp } from './services/webviewSecurity';
 import { escapeAttr, escapeClass, escapeHtml, kronosWebviewBaseCss, safeHttpHref } from './services/webviewHtml';
 import { kronosTerminalOptions } from './services/terminalProfiles';
+import { unknownErrorMessage } from './services/errorUtils';
 
 let statusBarItem: vscode.StatusBarItem;
 const REQUIRED_PROMPTS = [
@@ -402,8 +403,8 @@ async function resumeSelectedRun(state: KronosState, run: KronosRun): Promise<vo
       appendSystemPrompt: getImplementPrompt(state),
       onComplete: refreshAfterDispatch(state, projectName, ticketKey),
     });
-  } catch (e: any) {
-    vscode.window.showErrorMessage(e?.message || 'Failed to resume run.');
+  } catch (e: unknown) {
+    vscode.window.showErrorMessage(unknownErrorMessage(e, 'Failed to resume run.'));
   }
 }
 
@@ -421,8 +422,8 @@ async function archiveSelectedRun(runId: string): Promise<void> {
     if (action === 'Open Archived Record') {
       await openTextFileIfExists(archived.runPath, 'Archived run record not found.');
     }
-  } catch (e: any) {
-    vscode.window.showErrorMessage(e?.message || 'Failed to archive run.');
+  } catch (e: unknown) {
+    vscode.window.showErrorMessage(unknownErrorMessage(e, 'Failed to archive run.'));
   }
 }
 
@@ -444,8 +445,8 @@ async function pauseSelectedRun(run: KronosRun): Promise<void> {
         : `Paused by operator. No process signal was sent${signalResult.error ? `: ${signalResult.error}` : '.'}`,
     );
     vscode.window.showInformationMessage(`Paused run ${run.id}.`);
-  } catch (e: any) {
-    vscode.window.showErrorMessage(e?.message || 'Failed to pause run.');
+  } catch (e: unknown) {
+    vscode.window.showErrorMessage(unknownErrorMessage(e, 'Failed to pause run.'));
   }
 }
 
@@ -467,8 +468,8 @@ async function continueSelectedRun(run: KronosRun): Promise<void> {
         : `Continued by operator. No process signal was sent${signalResult.error ? `: ${signalResult.error}` : '.'}`,
     );
     vscode.window.showInformationMessage(`Continued run ${run.id}.`);
-  } catch (e: any) {
-    vscode.window.showErrorMessage(e?.message || 'Failed to continue run.');
+  } catch (e: unknown) {
+    vscode.window.showErrorMessage(unknownErrorMessage(e, 'Failed to continue run.'));
   }
 }
 
@@ -491,8 +492,8 @@ async function cancelSelectedRun(run: KronosRun): Promise<void> {
         : 'Cancelled by operator. No process pid was recorded.',
     );
     vscode.window.showInformationMessage(`Marked run ${run.id} as cancelled.`);
-  } catch (e: any) {
-    vscode.window.showErrorMessage(e?.message || 'Failed to cancel run.');
+  } catch (e: unknown) {
+    vscode.window.showErrorMessage(unknownErrorMessage(e, 'Failed to cancel run.'));
   }
 }
 
@@ -505,8 +506,8 @@ async function openRunDiffArtifact(run: KronosRun): Promise<void> {
   try {
     const artifact = createWorkspaceDiffArtifact(run, RUNS_DIR);
     await openTextFileIfExists(artifact.filePath, 'Run diff artifact not found.');
-  } catch (e: any) {
-    vscode.window.showErrorMessage(e?.message || 'Failed to open run diff.');
+  } catch (e: unknown) {
+    vscode.window.showErrorMessage(unknownErrorMessage(e, 'Failed to open run diff.'));
   }
 }
 
@@ -519,8 +520,8 @@ async function markSelectedRunNeedsHuman(run: KronosRun): Promise<void> {
   try {
     markRunNeedsHuman(run.id, reason);
     vscode.window.showInformationMessage(`Marked run ${run.id} as needs-human.`);
-  } catch (e: any) {
-    vscode.window.showErrorMessage(e?.message || 'Failed to mark run needs-human.');
+  } catch (e: unknown) {
+    vscode.window.showErrorMessage(unknownErrorMessage(e, 'Failed to mark run needs-human.'));
   }
 }
 
