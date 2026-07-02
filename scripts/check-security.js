@@ -1538,6 +1538,12 @@ for (const marker of [
   "import { KronosRun, listRuns } from '../runners/sessionDispatcher'",
   "import { isActiveRun } from '../services/runStatus'",
   "import { formatRunProgress } from '../services/runProgress'",
+  "import { unknownErrorMessage } from '../services/errorUtils'",
+  'private _refreshing = false',
+  'const safeIntervalMs = Number.isFinite(intervalMs) && intervalMs > 0 ? intervalMs : 5000',
+  'void this.refreshSessionsSafely()',
+  'private async refreshSessionsSafely(): Promise<void>',
+  "unknownErrorMessage(e, 'Kronos session refresh failed.')",
   'const activeRuns = listRuns().filter(isActiveRun)',
   'const progress = formatRunProgress(run)',
   'Progress: ${progress}',
@@ -1547,6 +1553,9 @@ for (const marker of [
   if (!sessionTreeProvider.includes(marker)) {
     fail(`Missing session tree active-run marker: ${marker}`);
   }
+}
+if (sessionTreeProvider.includes('setInterval(async () =>')) {
+  fail('Session tree polling must not leave rejected async intervals unhandled.');
 }
 
 for (const marker of [

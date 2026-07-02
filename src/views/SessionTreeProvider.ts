@@ -5,6 +5,7 @@ import { ClaudeSession } from '../state/types';
 import { KronosRun, listRuns } from '../runners/sessionDispatcher';
 import { isActiveRun } from '../services/runStatus';
 import { formatRunProgress } from '../services/runProgress';
+import { unknownErrorMessage } from '../services/errorUtils';
 
 type SessionTreeEntry =
   | { kind: 'run'; run: KronosRun }
@@ -15,6 +16,7 @@ export class SessionTreeProvider implements vscode.TreeDataProvider<SessionTreeI
   private _onDidChangeTreeData = new vscode.EventEmitter<SessionTreeItem | undefined>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
   private _timer: NodeJS.Timeout | undefined;
+  private _refreshing = false;
 
   constructor(private kronosState: KronosState) {
     kronosState.onDidSessionChange(() => this._onDidChangeTreeData.fire(undefined));
@@ -22,10 +24,11 @@ export class SessionTreeProvider implements vscode.TreeDataProvider<SessionTreeI
 
   startPolling(intervalMs: number): void {
     this.stopPolling();
-    this._timer = setInterval(async () => {
-      await this.kronosState.refreshSessions();
-    }, intervalMs);
-    this.kronosState.refreshSessions();
+    const safeIntervalMs = Number.isFinite(intervalMs) && intervalMs > 0 ? intervalMs : 5000;
+    this._timer = setInterval(() => {
+      void this.refreshSessionsSafely();
+    }, safeIntervalMs);
+    void this.refreshSessionsSafely();
   }
 
   stopPolling(): void {
@@ -54,6 +57,18 @@ export class SessionTreeProvider implements vscode.TreeDataProvider<SessionTreeI
 
   dispose(): void {
     this.stopPolling();
+  }
+
+  private async refreshSessionsSafely(): Promise<void> {
+    if (this._refreshing) { return; }
+    this._refreshing = true;
+    try {
+      await this.kronosState.refreshSessions();
+    } catch (e: unknown) {
+      console.warn(unknownErrorMessage(e, 'Kronos session refresh failed.'));
+    } finally {
+      this._refreshing = false;
+    }
   }
 }
 
