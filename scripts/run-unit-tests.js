@@ -5102,13 +5102,24 @@ test('extension dispatch command handlers normalize tree payloads before use', (
   }
 });
 
-test('extension evidence command handlers normalize unknown errors', () => {
+test('extension evidence command handlers normalize payloads and unknown errors', () => {
   const source = readSourceFixture('src', 'extension.ts');
-  const evidenceCommandStart = source.indexOf("vscode.commands.registerCommand('kronos.addEvidence'");
-  const evidenceCommandEnd = source.indexOf("    vscode.commands.registerCommand('kronos.evidenceGate'", evidenceCommandStart);
+  const evidenceCommandStart = source.indexOf("vscode.commands.registerCommand('kronos.viewTicket'");
+  const evidenceCommandEnd = source.indexOf("    vscode.commands.registerCommand('kronos.addToQueue'", evidenceCommandStart);
   assert.ok(evidenceCommandStart >= 0 && evidenceCommandEnd > evidenceCommandStart, 'evidence command handler block should be present');
   const evidenceCommandSource = source.slice(evidenceCommandStart, evidenceCommandEnd);
   for (const marker of [
+    "vscode.commands.registerCommand('kronos.viewTicket', async (treeItem: unknown)",
+    "vscode.commands.registerCommand('kronos.addEvidence', async (treeItem: unknown)",
+    "vscode.commands.registerCommand('kronos.addEvidenceCheck', async (treeItem: unknown)",
+    "vscode.commands.registerCommand('kronos.recordEnvironmentResult', async (treeItem: unknown)",
+    "vscode.commands.registerCommand('kronos.extractAcceptanceCriteria', async (treeItem: unknown)",
+    "vscode.commands.registerCommand('kronos.updateAcceptanceCriteria', async (treeItem: unknown)",
+    "vscode.commands.registerCommand('kronos.evidenceGate', async (treeItem: unknown)",
+    "vscode.commands.registerCommand('kronos.exportEvidence', async (treeItem: unknown)",
+    "vscode.commands.registerCommand('kronos.evidenceHandoff', async (treeItem: unknown)",
+    "vscode.commands.registerCommand('kronos.publishEvidence', async (treeItem: unknown)",
+    'const ticketKey = resolveTicketKey(treeItem);',
     "unknownErrorMessage(e, 'Failed to add ticket evidence.')",
     "unknownErrorMessage(e, 'Failed to add evidence check.')",
     "unknownErrorMessage(e, 'Failed to record environment result.')",
@@ -5120,6 +5131,17 @@ test('extension evidence command handlers normalize unknown errors', () => {
   for (const marker of [
     'catch (e: any)',
     'e?.message',
+    "vscode.commands.registerCommand('kronos.viewTicket', async (treeItem: any)",
+    "vscode.commands.registerCommand('kronos.addEvidence', async (treeItem: any)",
+    "vscode.commands.registerCommand('kronos.addEvidenceCheck', async (treeItem: any)",
+    "vscode.commands.registerCommand('kronos.recordEnvironmentResult', async (treeItem: any)",
+    "vscode.commands.registerCommand('kronos.extractAcceptanceCriteria', async (treeItem: any)",
+    "vscode.commands.registerCommand('kronos.updateAcceptanceCriteria', async (treeItem: any)",
+    "vscode.commands.registerCommand('kronos.evidenceGate', async (treeItem: any)",
+    "vscode.commands.registerCommand('kronos.exportEvidence', async (treeItem: any)",
+    "vscode.commands.registerCommand('kronos.evidenceHandoff', async (treeItem: any)",
+    "vscode.commands.registerCommand('kronos.publishEvidence', async (treeItem: any)",
+    'const ticketKey = treeItem?.ticketKey;',
   ]) {
     assert.equal(evidenceCommandSource.includes(marker), false, marker);
   }

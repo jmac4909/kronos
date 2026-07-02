@@ -1568,8 +1568,8 @@ export function activate(context: vscode.ExtensionContext) {
       });
     }),
 
-    vscode.commands.registerCommand('kronos.viewTicket', async (treeItem: any) => {
-      const ticketKey = treeItem?.ticketKey;
+    vscode.commands.registerCommand('kronos.viewTicket', async (treeItem: unknown) => {
+      const ticketKey = resolveTicketKey(treeItem);
       if (!ticketKey || !state.state) { return; }
       if (!state.state.tickets[ticketKey]) { return; }
       const panel = vscode.window.createWebviewPanel(
@@ -1598,7 +1598,7 @@ export function activate(context: vscode.ExtensionContext) {
       });
     }),
 
-    vscode.commands.registerCommand('kronos.addEvidence', async (treeItem: any) => {
+    vscode.commands.registerCommand('kronos.addEvidence', async (treeItem: unknown) => {
       const ticketKey = resolveTicketKey(treeItem);
       if (!ticketKey || !state.state?.tickets?.[ticketKey]) {
         vscode.window.showWarningMessage('No ticket selected for evidence.');
@@ -1633,7 +1633,7 @@ export function activate(context: vscode.ExtensionContext) {
       }
     }),
 
-    vscode.commands.registerCommand('kronos.addEvidenceCheck', async (treeItem: any) => {
+    vscode.commands.registerCommand('kronos.addEvidenceCheck', async (treeItem: unknown) => {
       const ticketKey = resolveTicketKey(treeItem);
       if (!ticketKey || !state.state?.tickets?.[ticketKey]) {
         vscode.window.showWarningMessage('No ticket selected for evidence check.');
@@ -1712,7 +1712,7 @@ export function activate(context: vscode.ExtensionContext) {
       }
     }),
 
-    vscode.commands.registerCommand('kronos.recordEnvironmentResult', async (treeItem: any) => {
+    vscode.commands.registerCommand('kronos.recordEnvironmentResult', async (treeItem: unknown) => {
       const ticketKey = resolveTicketKey(treeItem);
       if (!ticketKey || !state.state?.tickets?.[ticketKey]) {
         vscode.window.showWarningMessage('No ticket selected for environment result.');
@@ -1761,7 +1761,7 @@ export function activate(context: vscode.ExtensionContext) {
       }
     }),
 
-    vscode.commands.registerCommand('kronos.extractAcceptanceCriteria', async (treeItem: any) => {
+    vscode.commands.registerCommand('kronos.extractAcceptanceCriteria', async (treeItem: unknown) => {
       const ticketKey = resolveTicketKey(treeItem);
       const ticket = ticketKey ? state.state?.tickets?.[ticketKey] : undefined;
       if (!ticketKey || !ticket) {
@@ -1797,7 +1797,7 @@ export function activate(context: vscode.ExtensionContext) {
       }
     }),
 
-    vscode.commands.registerCommand('kronos.updateAcceptanceCriteria', async (treeItem: any) => {
+    vscode.commands.registerCommand('kronos.updateAcceptanceCriteria', async (treeItem: unknown) => {
       const ticketKey = resolveTicketKey(treeItem);
       const ticket = ticketKey ? state.state?.tickets?.[ticketKey] : undefined;
       if (!ticketKey || !ticket) {
@@ -1839,7 +1839,7 @@ export function activate(context: vscode.ExtensionContext) {
       }
     }),
 
-    vscode.commands.registerCommand('kronos.evidenceGate', async (treeItem: any) => {
+    vscode.commands.registerCommand('kronos.evidenceGate', async (treeItem: unknown) => {
       const ticketKey = resolveTicketKey(treeItem);
       if (ticketKey && state.state?.tickets?.[ticketKey]) {
         openEvidenceGatePanel(state, [evaluateEvidenceGate(ticketKey, state.state.tickets[ticketKey])], `Evidence Gate: ${ticketKey}`);
@@ -1852,7 +1852,7 @@ export function activate(context: vscode.ExtensionContext) {
       openEvidenceGatePanel(state, evidenceGatePanelGatesForState(state), 'Kronos Evidence Gate', { refreshAllEvidenceGates: true });
     }),
 
-    vscode.commands.registerCommand('kronos.exportEvidence', async (treeItem: any) => {
+    vscode.commands.registerCommand('kronos.exportEvidence', async (treeItem: unknown) => {
       const ticketKey = resolveTicketKey(treeItem);
       const ticket = ticketKey ? state.state?.tickets?.[ticketKey] : undefined;
       if (!ticketKey || !ticket) {
@@ -1878,7 +1878,7 @@ export function activate(context: vscode.ExtensionContext) {
       }
     }),
 
-    vscode.commands.registerCommand('kronos.evidenceHandoff', async (treeItem: any) => {
+    vscode.commands.registerCommand('kronos.evidenceHandoff', async (treeItem: unknown) => {
       const ticketKey = resolveTicketKey(treeItem);
       const ticket = ticketKey ? state.state?.tickets?.[ticketKey] : undefined;
       if (!ticketKey || !ticket) {
@@ -1893,7 +1893,7 @@ export function activate(context: vscode.ExtensionContext) {
       vscode.window.showInformationMessage(`Prepared evidence handoff for ${ticketKey} and copied comment text.`);
     }),
 
-    vscode.commands.registerCommand('kronos.publishEvidence', async (treeItem: any) => {
+    vscode.commands.registerCommand('kronos.publishEvidence', async (treeItem: unknown) => {
       const ticketKey = resolveTicketKey(treeItem);
       const ticket = ticketKey ? state.state?.tickets?.[ticketKey] : undefined;
       if (!ticketKey || !ticket) {
