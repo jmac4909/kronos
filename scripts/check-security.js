@@ -71,6 +71,7 @@ const processTree = readSource('src/services/processTree.ts');
 const webviewDiagnostics = readSource('src/services/webviewDiagnostics.ts');
 const webviewSecurity = readSource('src/services/webviewSecurity.ts');
 const operatorPanel = readSource('src/services/operatorPanel.ts');
+const promptPanelView = readSource('src/services/promptPanelView.ts');
 const cliProbes = readSource('src/services/cliProbes.ts');
 const combinedVerification = readSource('src/services/combinedVerification.ts');
 const changedFiles = readSource('src/services/changedFiles.ts');
@@ -620,6 +621,8 @@ for (const marker of [
   'export function actionRow',
   'export function operatorCommandRow',
   'export function kronosActionPanelScript',
+  'export function kronosOperatorPanelCss',
+  'kronosWebviewBaseCss',
   'webviewActionPostScript(webviewName, [',
   'readyDiagnostic ? { readyCommand: WEBVIEW_READY_COMMAND } : {}',
   "{ messageKey: 'ticket', dataAttribute: 'data-ticket' }",
@@ -1034,7 +1037,6 @@ for (const marker of [
   'function dashboardBriefRecord',
   'function dashboardBriefItems',
   'function dashboardBriefCount',
-  'function kronosOperatorPanelCss',
   'class="kronos-shell operator-shell"',
   'operator-summary',
   'summary-card',
@@ -1048,6 +1050,24 @@ for (const marker of [
 ]) {
   if (!extension.includes(marker)) {
     fail(`Missing UI/UX marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  'export function buildPromptManagerHtml',
+  'export function buildPromptHistoryHtml',
+  'export function buildPromptSmokeTestsHtml',
+  'requiredPrompts.filter',
+  'Kronos Prompt Manager',
+  'Kronos Prompt History',
+  'Kronos Prompt Smoke Tests',
+  'promptSmokeResultRow',
+  'promptTemplateRow',
+  'kronosOperatorPanelCss',
+  'kronosActionPanelScript(nonce)',
+]) {
+  if (!promptPanelView.includes(marker)) {
+    fail(`Missing prompt panel view marker: ${marker}`);
   }
 }
 

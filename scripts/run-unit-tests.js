@@ -59,6 +59,7 @@ const processTree = require('../out/services/processTree.js');
 const webviewDiagnostics = require('../out/services/webviewDiagnostics.js');
 const webviewSecurity = require('../out/services/webviewSecurity.js');
 const operatorPanel = require('../out/services/operatorPanel.js');
+const promptPanelView = require('../out/services/promptPanelView.js');
 const runStatus = require('../out/services/runStatus.js');
 const runProgress = require('../out/services/runProgress.js');
 const relativeTime = require('../out/services/relativeTime.js');
@@ -5149,13 +5150,15 @@ test('webview html helpers centralize escaping and safe HTTP links', () => {
 test('extension webviews use shared UI shell and board filtering affordances', () => {
   const source = readSourceFixture('src', 'extension.ts');
   const operatorPanelSource = readSourceFixture('src', 'services', 'operatorPanel.ts');
+  const promptPanelViewSource = readSourceFixture('src', 'services', 'promptPanelView.ts');
   const boardHandlerStart = source.indexOf('panel.webview.onDidReceiveMessage(async (msg) => {\n        if (logReady(msg)) { return; }\n        const request = normalizeBoardMessage(msg);');
   const boardHandlerEnd = source.indexOf("    vscode.commands.registerCommand('kronos.viewTicket'", boardHandlerStart);
   assert.ok(boardHandlerStart >= 0 && boardHandlerEnd > boardHandlerStart, 'Jira board message handler should be present');
   const boardHandlerSource = source.slice(boardHandlerStart, boardHandlerEnd);
   for (const marker of [
     "import { createWebviewNonce, webviewReadyPostScript, webviewScriptCspOptions, webviewVsCodeApiScript, withWebviewCsp } from './services/webviewSecurity'",
-    "import { actionButton, actionRow, kronosActionPanelScript, operatorCommandRow } from './services/operatorPanel'",
+    "import { actionButton, actionRow, kronosActionPanelScript, kronosOperatorPanelCss, operatorCommandRow } from './services/operatorPanel'",
+    "import { buildPromptHistoryHtml, buildPromptManagerHtml, buildPromptSmokeTestsHtml } from './services/promptPanelView'",
     "import { createWebviewReadyMonitor } from './services/webviewDiagnostics'",
     'const nonce = createWebviewNonce()',
     'webviewScriptCspOptions(panel.webview.cspSource, nonce)',
@@ -5199,7 +5202,6 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     "${webviewReadyPostScript('Kronos Jira Board')}",
     "const logReady = createWebviewReadyMonitor(panel, 'Kronos Jira Board')",
     'if (logReady(msg)) { return; }',
-    'function kronosOperatorPanelCss',
     'const EVIDENCE_GATE_MESSAGE_COMMANDS = new Set',
     'const HUMAN_REVIEW_MESSAGE_COMMANDS = new Set',
     'const DASHBOARD_MESSAGE_COMMANDS = new Set',
@@ -5393,6 +5395,8 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'export function actionRow',
     'export function operatorCommandRow',
     'export function kronosActionPanelScript',
+    'export function kronosOperatorPanelCss',
+    'kronosWebviewBaseCss',
     'webviewActionPostScript(webviewName, [',
     'readyDiagnostic ? { readyCommand: WEBVIEW_READY_COMMAND } : {}',
     "{ messageKey: 'ticket', dataAttribute: 'data-ticket' }",
@@ -5405,6 +5409,21 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     "data-item-id=\"${escapeAttr(options.itemId)}\"",
   ]) {
     assert.ok(operatorPanelSource.includes(marker), marker);
+  }
+  for (const marker of [
+    'export function buildPromptManagerHtml',
+    'export function buildPromptHistoryHtml',
+    'export function buildPromptSmokeTestsHtml',
+    'requiredPrompts.filter',
+    'Kronos Prompt Manager',
+    'Kronos Prompt History',
+    'Kronos Prompt Smoke Tests',
+    'promptSmokeResultRow',
+    'promptTemplateRow',
+    'kronosOperatorPanelCss',
+    'kronosActionPanelScript(nonce)',
+  ]) {
+    assert.ok(promptPanelViewSource.includes(marker), marker);
   }
   assert.equal(/^\s*vscode\.window\.withProgress\(/m.test(source), false, 'progress tasks should be awaited by their command handlers');
   assert.equal((source.match(/dispatchClaudeSession\(/g) || []).length, 1, 'command handlers should use startClaudeDispatch for Claude session startup');

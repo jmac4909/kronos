@@ -11,7 +11,7 @@ import * as os from 'os';
 import * as fs from 'fs';
 import type { DiscoveredProject, MergeRequestChangedFile, QueueItem, Ticket } from './state/types';
 import { dispatchClaudeSession, openInClaude, ensureAuth, cleanupStaleWorktrees, listSavedSessions, listSessionStoreIssues, openSavedSession, getAggregateStats, openRunCenter, listRuns, type DispatchOptions, type KronosRun, type PromptRunMetadata, type RunCenterActionRequest } from './runners/sessionDispatcher';
-import { PromptHistoryDiff, PromptHistorySnapshot, PromptSmokeResult, PromptSmokeTest, PromptTemplateInfo, buildDefaultPromptSmokeTests, createPromptHistorySnapshot, diffPromptHistorySnapshots, latestPromptHistorySnapshot, listPromptHistorySnapshots, listPromptTemplates, repairRequiredPromptTemplates, runPromptSmokeTests } from './services/promptManager';
+import { PromptHistoryDiff, PromptSmokeTest, PromptTemplateInfo, buildDefaultPromptSmokeTests, createPromptHistorySnapshot, diffPromptHistorySnapshots, latestPromptHistorySnapshot, listPromptHistorySnapshots, listPromptTemplates, repairRequiredPromptTemplates, runPromptSmokeTests } from './services/promptManager';
 import { KRONOS_DIR, STATE_AUDIT_FILE, StateAuditEvent, listBackups, listStateAuditEvents, restoreBackup } from './services/stateStore';
 import { BacklogTriageReport, PlannedAction, ProjectBatchPlan, ReleaseBatchPlan, buildBacklogTriageReport, estimatePlanMinutes, overnightCandidatePlans, planByProject, planByRelease, planForMinutes, planNextActions as buildNextActionPlan, planToQueueItem as buildQueueItemFromPlan } from './services/queuePlanner';
 import { actionToLabel } from './services/actionLabels';
@@ -60,7 +60,8 @@ import { kronosTerminalOptions } from './services/terminalProfiles';
 import { unknownErrorCode, unknownErrorMessage } from './services/errorUtils';
 import { activeRunSummary, isActiveRun } from './services/runStatus';
 import { runAttentionDetail } from './services/runAttention';
-import { actionButton, actionRow, kronosActionPanelScript, operatorCommandRow } from './services/operatorPanel';
+import { actionButton, actionRow, kronosActionPanelScript, kronosOperatorPanelCss, operatorCommandRow } from './services/operatorPanel';
+import { buildPromptHistoryHtml, buildPromptManagerHtml, buildPromptSmokeTestsHtml } from './services/promptPanelView';
 
 let statusBarItem: vscode.StatusBarItem;
 interface BadgeTarget {
@@ -3508,74 +3509,8 @@ function openPromptManager(state: KronosState): void {
     { enableScripts: true }
   );
   const nonce = createWebviewNonce();
-  panel.webview.html = withWebviewCsp(buildPromptManagerHtml(globalTemplates, projectOverrides, smokeResults, nonce), webviewScriptCspOptions(panel.webview.cspSource, nonce));
+  panel.webview.html = withWebviewCsp(buildPromptManagerHtml(globalTemplates, projectOverrides, smokeResults, REQUIRED_PROMPTS, nonce), webviewScriptCspOptions(panel.webview.cspSource, nonce));
   attachOperatorCommandHandler(panel);
-}
-
-function buildPromptManagerHtml(
-  globalTemplates: PromptTemplateInfo[],
-  projectOverrides: Array<{ project: string; template: PromptTemplateInfo }>,
-  smokeResults: PromptSmokeResult[],
-  nonce?: string,
-): string {
-  const globalByName = new Map(globalTemplates.map(t => [t.name, t]));
-  const missing = REQUIRED_PROMPTS.filter(name => !globalByName.has(name));
-  const requiredRows = REQUIRED_PROMPTS.map(name => {
-    const template = globalByName.get(name);
-    const status = template ? 'pass' : 'fail';
-    const detail = template
-      ? `${template.hash.substring(0, 12)} - ${template.variables.length} variable(s)`
-      : 'missing';
-    return `<tr><td><span class="pill ${status}">${status}</span></td><td>${escapeHtml(name)}</td><td>${escapeHtml(detail)}</td></tr>`;
-  }).join('');
-
-  const templateRows = globalTemplates.map(template => promptTemplateRow(template)).join('');
-  const smokeRows = smokeResults.map(promptSmokeResultRow).join('');
-  const smokeSummary = {
-    pass: smokeResults.filter(result => result.status === 'pass').length,
-    fail: smokeResults.filter(result => result.status === 'fail').length,
-  };
-  const overrideRows = projectOverrides.map(({ project, template }) => `
-    <tr>
-      <td>${escapeHtml(project)}</td>
-      <td>${escapeHtml(template.name)}</td>
-      <td><code>${escapeHtml(template.hash.substring(0, 12))}</code></td>
-      <td>${escapeHtml(template.modifiedAt)}</td>
-      <td>${escapeHtml(template.variables.join(', ') || '-')}</td>
-      <td>${escapeHtml(template.path)}</td>
-    </tr>`).join('');
-  const actions = operatorCommandRow([
-    actionButton('promptSmokeTests', 'Smoke Tests'),
-    actionButton('snapshotPromptPack', 'Snapshot'),
-    actionButton('promptHistory', 'History'),
-    actionButton('repairPromptPack', 'Repair'),
-  ]);
-
-  return `<!DOCTYPE html>
-<html><head><style>
-  ${kronosOperatorPanelCss()}
-</style></head><body><div class="kronos-shell operator-shell">
-  <div class="kronos-header">
-    <div>
-      <h1 class="kronos-title">Kronos Prompt Manager</h1>
-      <div class="kronos-subtitle">Required prompts, smoke coverage, global templates, and project overrides</div>
-    </div>
-  </div>
-  ${actions}
-  <div class="operator-section"><h2>Required Prompt Pack</h2>
-  <div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Status</th><th>Prompt</th><th>Detail</th></tr>${requiredRows}</table></div>
-  ${missing.length > 0 ? `<div class="kronos-empty">Missing required prompts: ${escapeHtml(missing.join(', '))}</div>` : ''}</div>
-
-  <div class="operator-section"><h2>Prompt Smoke Tests</h2>
-  <div class="subtitle">${smokeSummary.pass} passing, ${smokeSummary.fail} failing.</div>
-  ${smokeResults.length === 0 ? '<div class="kronos-empty">No prompt smoke tests configured.</div>' : `<div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Status</th><th>Test</th><th>Template</th><th>Detail</th></tr>${smokeRows}</table></div>`}</div>
-
-  <div class="operator-section"><h2>Global Templates</h2>
-  ${globalTemplates.length === 0 ? '<div class="kronos-empty">No global prompt templates found.</div>' : `<div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Name</th><th>Hash</th><th>Modified</th><th>Variables</th><th>Path</th></tr>${templateRows}</table></div>`}</div>
-
-  <div class="operator-section"><h2>Project Overrides</h2>
-  ${projectOverrides.length === 0 ? '<div class="kronos-empty">No project prompt overrides found.</div>' : `<div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Project</th><th>Name</th><th>Hash</th><th>Modified</th><th>Variables</th><th>Path</th></tr>${overrideRows}</table></div>`}</div>
-</div>${nonce ? kronosActionPanelScript(nonce) : ''}</body></html>`;
 }
 
 function openPromptSmokeTestsPanel(state: KronosState): void {
@@ -3668,56 +3603,6 @@ function openPromptHistoryDiffPanel(diff: PromptHistoryDiff): void {
   attachOperatorCommandHandler(panel);
 }
 
-function buildPromptHistoryHtml(snapshots: PromptHistorySnapshot[], diff?: PromptHistoryDiff, nonce?: string): string {
-  const snapshotRows = snapshots.map(snapshot => `<tr>
-    <td>${escapeHtml(snapshot.createdAt)}</td>
-    <td>${escapeHtml(snapshot.scope)}</td>
-    <td>${escapeHtml(String(snapshot.templateCount))}</td>
-    <td><code>${escapeHtml(snapshot.id)}</code></td>
-  </tr>`).join('');
-  const diffRows = (diff?.changes || []).map(change => {
-    const hash = `${change.beforeHash ? change.beforeHash.substring(0, 12) : '-'} -> ${change.afterHash ? change.afterHash.substring(0, 12) : '-'}`;
-    const variables = `${(change.beforeVariables || []).join(', ') || '-'} -> ${(change.afterVariables || []).join(', ') || '-'}`;
-    return `<tr>
-      <td><span class="pill ${escapeClass(change.kind)}">${escapeHtml(change.kind)}</span></td>
-      <td>${escapeHtml(change.name)}<br><span class="muted">${escapeHtml(change.source)}</span></td>
-      <td><code>${escapeHtml(hash)}</code></td>
-      <td>${escapeHtml(variables)}</td>
-      <td>${escapeHtml(change.path)}</td>
-    </tr>`;
-  }).join('');
-  const diffSummary = diff
-    ? `${diff.summary.added} added, ${diff.summary.removed} removed, ${diff.summary.changed} changed, ${diff.summary.unchanged} unchanged.`
-    : 'No prompt history snapshots yet.';
-  const actions = operatorCommandRow([
-    actionButton('snapshotPromptPack', 'Snapshot'),
-    actionButton('promptManager', 'Prompt Manager'),
-    actionButton('promptSmokeTests', 'Smoke Tests'),
-    actionButton('repairPromptPack', 'Repair'),
-  ]);
-
-  return `<!DOCTYPE html>
-<html><head><style>
-  ${kronosOperatorPanelCss()}
-  .pill.added { color: #4caf50; background: rgba(76,175,80,0.16); }
-  .pill.removed { color: #f44336; background: rgba(244,67,54,0.16); }
-  .pill.changed { color: #ff9800; background: rgba(255,152,0,0.16); }
-  .pill.unchanged { color: var(--k-muted); background: rgba(128,128,128,0.16); }
-</style></head><body><div class="kronos-shell operator-shell">
-  <div class="kronos-header">
-    <div>
-      <h1 class="kronos-title">Kronos Prompt History</h1>
-      <div class="kronos-subtitle">${escapeHtml(diffSummary)}</div>
-    </div>
-  </div>
-  ${actions}
-  <div class="operator-section"><h2>Latest Diff</h2>
-  ${diff ? `<div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Status</th><th>Prompt</th><th>Hash</th><th>Variables</th><th>Path</th></tr>${diffRows}</table></div>` : '<div class="kronos-empty">Create a prompt snapshot to start history tracking.</div>'}</div>
-  <div class="operator-section"><h2>Snapshots</h2>
-  ${snapshots.length === 0 ? '<div class="kronos-empty">No prompt snapshots found.</div>' : `<div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Created</th><th>Scope</th><th>Templates</th><th>ID</th></tr>${snapshotRows}</table></div>`}</div>
-</div>${nonce ? kronosActionPanelScript(nonce) : ''}</body></html>`;
-}
-
 function promptHistoryTemplatesForState(state: KronosState): PromptTemplateInfo[] {
   const byKey = new Map<string, PromptTemplateInfo>();
   for (const template of listPromptTemplates()) {
@@ -3729,31 +3614,6 @@ function promptHistoryTemplatesForState(state: KronosState): PromptTemplateInfo[
     }
   }
   return Array.from(byKey.values()).sort((a, b) => `${a.source}:${a.name}:${a.path}`.localeCompare(`${b.source}:${b.name}:${b.path}`));
-}
-
-function buildPromptSmokeTestsHtml(results: PromptSmokeResult[], nonce?: string): string {
-  const pass = results.filter(result => result.status === 'pass').length;
-  const fail = results.filter(result => result.status === 'fail').length;
-  const rows = results.map(promptSmokeResultRow).join('');
-  const actions = operatorCommandRow([
-    actionButton('promptManager', 'Prompt Manager'),
-    actionButton('snapshotPromptPack', 'Snapshot'),
-    actionButton('promptHistory', 'History'),
-    actionButton('repairPromptPack', 'Repair'),
-  ]);
-  return `<!DOCTYPE html>
-<html><head><style>
-  ${kronosOperatorPanelCss()}
-</style></head><body><div class="kronos-shell operator-shell">
-  <div class="kronos-header">
-    <div>
-      <h1 class="kronos-title">Kronos Prompt Smoke Tests</h1>
-      <div class="kronos-subtitle">${pass} passing, ${fail} failing.</div>
-    </div>
-  </div>
-  ${actions}
-  ${results.length === 0 ? '<div class="kronos-empty">No prompt smoke tests configured.</div>' : `<div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Status</th><th>Test</th><th>Template</th><th>Detail</th></tr>${rows}</table></div>`}
-</div>${nonce ? kronosActionPanelScript(nonce) : ''}</body></html>`;
 }
 
 function buildPromptSmokeTests(
@@ -3784,28 +3644,6 @@ function buildPromptSmokeTests(
     }
   }
   return tests;
-}
-
-function promptSmokeResultRow(result: PromptSmokeResult): string {
-  const detail = result.errors.length > 0
-    ? result.errors.join('; ')
-    : `${result.renderedBytes || 0} bytes rendered${result.renderedHash ? `, hash ${result.renderedHash.substring(0, 12)}` : ''}`;
-  return `<tr>
-    <td><span class="pill ${escapeClass(result.status)}">${escapeHtml(result.status)}</span></td>
-    <td>${escapeHtml(result.id)}${result.source ? `<br><span class="muted">${escapeHtml(result.source)}</span>` : ''}</td>
-    <td>${escapeHtml(result.templateName)}</td>
-    <td>${escapeHtml(detail)}</td>
-  </tr>`;
-}
-
-function promptTemplateRow(template: PromptTemplateInfo): string {
-  return `<tr>
-    <td>${escapeHtml(template.name)}</td>
-    <td><code>${escapeHtml(template.hash.substring(0, 12))}</code></td>
-    <td>${escapeHtml(template.modifiedAt)}</td>
-    <td>${escapeHtml(template.variables.join(', ') || '-')}</td>
-    <td>${escapeHtml(template.path)}</td>
-  </tr>`;
 }
 
 async function openRecoveryCenter(state: KronosState): Promise<void> {
@@ -4039,60 +3877,6 @@ function recoveryActionLabel(action: RecoveryItem['action']): string {
   if (action === 'restoreBackup') { return 'Restore Backup'; }
   if (action === 'openDoctor') { return 'Open Doctor'; }
   return '';
-}
-
-function kronosOperatorPanelCss(): string {
-  return `${kronosWebviewBaseCss()}
-  .operator-shell { max-width: 1280px; }
-  .operator-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; margin: 12px 0 18px; }
-  .summary-card { padding: 12px; border: 1px solid var(--k-border); border-radius: var(--k-radius); background: var(--k-surface-soft); }
-  .summary-card .num { font-size: 24px; line-height: 1.1; font-weight: 700; }
-  .summary-card .lbl { margin-top: 4px; color: var(--k-muted); font-size: 11px; font-weight: 650; text-transform: uppercase; }
-  .table-wrap { overflow: auto; }
-  .detail { white-space: pre-wrap; word-break: break-word; }
-  .pill { display: inline-flex; align-items: center; min-height: 20px; border: 1px solid var(--k-border); border-radius: 999px; padding: 2px 8px; font-weight: 650; font-size: 10px; line-height: 1.2; text-transform: uppercase; }
-  .pill.critical, .pill.fail, .pill.bad, .pill.error { color: #f44336; background: rgba(244,67,54,0.16); }
-  .pill.warning, .pill.warn, .pill.medium, .pill.neutral { color: #ff9800; background: rgba(255,152,0,0.16); }
-  .pill.info, .pill.pass, .pill.good, .pill.ok, .pill.low { color: #4caf50; background: rgba(76,175,80,0.16); }
-  .subtitle { color: var(--k-muted); margin-bottom: 16px; }
-  .muted { color: var(--k-muted); margin-top: 3px; }
-  .empty { color: var(--k-muted); }
-  div.empty { border: 1px dashed var(--k-border); border-radius: var(--k-radius); padding: 18px; background: var(--k-surface-soft); }
-  .operator-section { margin: 20px 0; }
-  .operator-section h2,
-  .operator-section h3 { margin: 0 0 10px; color: var(--k-muted); font-size: 11px; font-weight: 650; letter-spacing: 0; text-transform: uppercase; }
-  .operator-card { border: 1px solid var(--k-border); border-radius: var(--k-radius); padding: 12px; background: var(--k-surface); }
-  .operator-card-header { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
-  .operator-card-title { font-size: 14px; font-weight: 650; line-height: 1.3; }
-  .operator-card-meta { color: var(--k-muted); font-size: 11px; }
-  .operator-card .subtitle { margin-bottom: 10px; }
-  .operator-note { border-left: 3px solid var(--k-accent); padding: 10px 12px; border-radius: var(--k-radius); background: var(--k-surface-soft); }
-  .operator-hero { border: 1px solid var(--k-border); border-left: 3px solid var(--k-accent); border-radius: var(--k-radius); padding: 14px 16px; background: var(--k-surface-soft); }
-  .operator-hero .score { font-size: 34px; line-height: 1; font-weight: 750; }
-  .operator-hero .grade { color: var(--k-muted); font-size: 18px; margin-left: 8px; }
-  .action-cell { min-width: 150px; }
-  .inline-actions { gap: 6px; align-items: flex-start; }
-  .inline-actions .kronos-button { min-height: 24px; padding: 3px 8px; font-size: 10px; }
-  .operator-command-row { margin: 12px 0 18px; gap: 8px; align-items: flex-start; }
-  .operator-command-row .kronos-button { min-height: 28px; }
-  .plan-list { display: grid; gap: 10px; }
-  .plan-card { display: grid; grid-template-columns: 34px 1fr; gap: 10px; }
-  .rank { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border: 1px solid var(--k-border); border-radius: 999px; background: var(--k-surface-soft); font-weight: 700; }
-  .score-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 6px; margin-top: 8px; }
-  .score-part { border: 1px solid var(--k-border); border-radius: var(--k-radius-sm); padding: 7px 8px; font-size: 11px; background: var(--k-surface-soft); }
-  .score-part span { display: block; color: var(--k-muted); font-weight: 650; text-transform: uppercase; }
-  .score-part strong { display: inline-block; margin-right: 6px; font-size: 16px; }
-  .score-part small { color: var(--k-muted); }
-  .message { padding: 9px 10px; margin: 6px 0; border-left: 3px solid var(--k-border); border-radius: var(--k-radius-sm); background: var(--k-surface-soft); font-size: 12px; }
-  .message.pass { border-left-color: #4caf50; }
-  .message.warn { border-left-color: #ff9800; }
-  .message.fail { border-left-color: #f44336; }
-  .hash-detail { display: inline-block; margin-top: 3px; color: var(--k-muted); word-break: break-word; }
-  .path { color: var(--k-muted); font-size: 12px; margin-bottom: 12px; word-break: break-all; }
-  pre { white-space: pre-wrap; word-break: break-word; background: var(--k-surface-soft); border: 1px solid var(--k-border); padding: 12px; border-radius: var(--k-radius); font-size: 12px; }
-  a { color: var(--k-accent); text-decoration: none; }
-  a:hover { text-decoration: underline; }
-  li { margin: 4px 0; }`;
 }
 
 function buildRecoveryHtml(inventory: RecoveryInventory, nonce?: string): string {
