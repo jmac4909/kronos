@@ -14,7 +14,7 @@ export class ReviewTreeProvider implements vscode.TreeDataProvider<ReviewItem> {
   private newReviewKeys = new Set<string>();
 
   constructor(private kronosState: KronosState) {
-    this.refreshReviewKeys();
+    this.seedInitialReviewKeys();
     kronosState.onDidChange(() => this.refresh());
   }
 
@@ -71,6 +71,13 @@ export class ReviewTreeProvider implements vscode.TreeDataProvider<ReviewItem> {
   private refresh(): void {
     this.refreshReviewKeys();
     this._onDidChangeTreeData.fire(undefined);
+  }
+
+  private seedInitialReviewKeys(): void {
+    const initialKeys = new Set(this.reviewEntries().map(([key]) => key));
+    this.currentReviewKeys = initialKeys;
+    this.seenReviewKeys = new Set(initialKeys);
+    this.newReviewKeys.clear();
   }
 
   private refreshReviewKeys(): void {
