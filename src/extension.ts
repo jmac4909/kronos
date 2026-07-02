@@ -11,7 +11,7 @@ import * as os from 'os';
 import * as fs from 'fs';
 import { randomBytes } from 'crypto';
 import { DiscoveredProject, MergeRequestChangedFile } from './state/types';
-import { dispatchClaudeSession, openInClaude, ensureAuth, cleanupStaleWorktrees, listSavedSessions, listSessionStoreIssues, openSavedSession, getAggregateStats, openRunCenter, listRuns, PromptRunMetadata, RunCenterActionRequest } from './runners/sessionDispatcher';
+import { dispatchClaudeSession, openInClaude, ensureAuth, cleanupStaleWorktrees, listSavedSessions, listSessionStoreIssues, openSavedSession, getAggregateStats, openRunCenter, listRuns, type KronosRun, type PromptRunMetadata, type RunCenterActionRequest } from './runners/sessionDispatcher';
 import { PromptHistoryDiff, PromptHistorySnapshot, PromptSmokeResult, PromptSmokeTest, PromptTemplateInfo, buildDefaultPromptSmokeTests, createPromptHistorySnapshot, diffPromptHistorySnapshots, latestPromptHistorySnapshot, listPromptHistorySnapshots, listPromptTemplates, repairRequiredPromptTemplates, runPromptSmokeTests } from './services/promptManager';
 import { KRONOS_DIR, STATE_AUDIT_FILE, StateAuditEvent, listBackups, listStateAuditEvents, restoreBackup } from './services/stateStore';
 import { BacklogTriageReport, PlannedAction, ProjectBatchPlan, ReleaseBatchPlan, actionToLabel, buildBacklogTriageReport, estimatePlanMinutes, overnightCandidatePlans, planByProject, planByRelease, planForMinutes, planNextActions as buildNextActionPlan, planToQueueItem as buildQueueItemFromPlan } from './services/queuePlanner';
@@ -319,7 +319,7 @@ async function openTextFileIfExists(filePath: string, missingMessage: string): P
   await vscode.window.showTextDocument(doc, { preview: false });
 }
 
-async function retryRunFromPrompt(run: any): Promise<void> {
+async function retryRunFromPrompt(run: KronosRun): Promise<void> {
   if (!run?.promptPath || !fs.existsSync(run.promptPath)) {
     vscode.window.showWarningMessage('Run prompt artifact not found.');
     return;
@@ -348,8 +348,8 @@ async function retryRunFromPrompt(run: any): Promise<void> {
   });
 }
 
-function resolveRunWorkspace(run: any): string | null {
-  for (const candidate of [run?.worktreePath, run?.cwd, run?.projectPath]) {
+function resolveRunWorkspace(run: KronosRun): string | null {
+  for (const candidate of [run.worktreePath, run.cwd, run.projectPath]) {
     if (typeof candidate === 'string' && candidate.trim()) {
       try {
         if (fs.existsSync(candidate) && fs.statSync(candidate).isDirectory()) {
@@ -361,11 +361,7 @@ function resolveRunWorkspace(run: any): string | null {
   return null;
 }
 
-async function resumeSelectedRun(state: KronosState, run: any): Promise<void> {
-  if (!run?.id) {
-    vscode.window.showWarningMessage('No run selected.');
-    return;
-  }
+async function resumeSelectedRun(state: KronosState, run: KronosRun): Promise<void> {
   const workspace = resolveRunWorkspace(run);
   if (!workspace) {
     vscode.window.showWarningMessage('Run workspace no longer exists.');
@@ -427,13 +423,8 @@ async function archiveSelectedRun(runId: string): Promise<void> {
   }
 }
 
-async function pauseSelectedRun(run: any): Promise<void> {
-  if (!run?.id) {
-    vscode.window.showWarningMessage('No run selected.');
-    return;
-  }
-  const pid = Number(run.processPid || run.pid);
-  const processPid = Number.isFinite(pid) && pid > 0 ? pid : undefined;
+async function pauseSelectedRun(run: KronosRun): Promise<void> {
+  const processPid = runProcessPid(run);
   const confirm = await vscode.window.showWarningMessage(
     `Pause run ${run.id}? Kronos will send SIGSTOP to its process tree and keep the run visible as paused.`,
     'Pause Run',
@@ -455,13 +446,8 @@ async function pauseSelectedRun(run: any): Promise<void> {
   }
 }
 
-async function continueSelectedRun(run: any): Promise<void> {
-  if (!run?.id) {
-    vscode.window.showWarningMessage('No run selected.');
-    return;
-  }
-  const pid = Number(run.processPid || run.pid);
-  const processPid = Number.isFinite(pid) && pid > 0 ? pid : undefined;
+async function continueSelectedRun(run: KronosRun): Promise<void> {
+  const processPid = runProcessPid(run);
   const confirm = await vscode.window.showWarningMessage(
     `Continue run ${run.id}? Kronos will send SIGCONT to its process tree and mark it running.`,
     'Continue Run',
@@ -483,13 +469,8 @@ async function continueSelectedRun(run: any): Promise<void> {
   }
 }
 
-async function cancelSelectedRun(run: any): Promise<void> {
-  if (!run?.id) {
-    vscode.window.showWarningMessage('No run selected.');
-    return;
-  }
-  const pid = Number(run.processPid || run.pid);
-  const processPid = Number.isFinite(pid) && pid > 0 ? pid : undefined;
+async function cancelSelectedRun(run: KronosRun): Promise<void> {
+  const processPid = runProcessPid(run);
   const status = String(run.status || 'unknown');
   const confirm = await vscode.window.showWarningMessage(
     `Cancel run ${run.id} (currently ${status})? Kronos will mark it cancelled and attempt to stop its process tree.`,
@@ -512,8 +493,8 @@ async function cancelSelectedRun(run: any): Promise<void> {
   }
 }
 
-async function openRunDiffArtifact(run: any): Promise<void> {
-  const cwd = run?.worktreePath || run?.cwd || run?.projectPath;
+async function openRunDiffArtifact(run: KronosRun): Promise<void> {
+  const cwd = run.worktreePath || run.cwd || run.projectPath;
   if (!cwd || !fs.existsSync(cwd)) {
     vscode.window.showWarningMessage('Run workspace no longer exists.');
     return;
@@ -526,11 +507,7 @@ async function openRunDiffArtifact(run: any): Promise<void> {
   }
 }
 
-async function markSelectedRunNeedsHuman(run: any): Promise<void> {
-  if (!run?.id) {
-    vscode.window.showWarningMessage('No run selected.');
-    return;
-  }
+async function markSelectedRunNeedsHuman(run: KronosRun): Promise<void> {
   const reason = await vscode.window.showInputBox({
     prompt: `Why does ${run.id} need human review?`,
     placeHolder: 'e.g., ambiguous product requirement, unsafe worktree, missing credential, manual QA needed',
@@ -544,17 +521,22 @@ async function markSelectedRunNeedsHuman(run: any): Promise<void> {
   }
 }
 
-function runLastEventLabel(run: any): string {
-  const events = Array.isArray(run?.events) ? run.events : [];
+function runLastEventLabel(run: KronosRun): string {
+  const events = Array.isArray(run.events) ? run.events : [];
   const last = events[events.length - 1];
   return typeof last?.label === 'string' ? last.label : '';
 }
 
-function runQuickPickDetail(run: any): string {
-  return `${formatWebviewDateTime(run?.startedAt)} - ${run?.failureReason || runLastEventLabel(run) || run?.cwd || ''}`;
+function runQuickPickDetail(run: KronosRun): string {
+  return `${formatWebviewDateTime(run.startedAt)} - ${run.failureReason || runLastEventLabel(run) || run.cwd || ''}`;
 }
 
-function findRunById(runId: string): any | undefined {
+function runProcessPid(run: KronosRun): number | undefined {
+  const pid = Number(run.processPid ?? Reflect.get(run, 'pid'));
+  return Number.isFinite(pid) && pid > 0 ? pid : undefined;
+}
+
+function findRunById(runId: string): KronosRun | undefined {
   return listRuns().find(run => run.id === runId);
 }
 
@@ -566,19 +548,19 @@ function openInteractiveRunCenter(state: KronosState): void {
 
 async function executeRunCenterAction(state: KronosState, request: RunCenterActionRequest): Promise<void> {
   const run = findRunById(request.runId);
-  if (!run && request.command !== 'openRunRecord') {
-    vscode.window.showWarningMessage('Run record not found.');
-    return;
-  }
-
   if (request.command === 'openRunRecord') {
     await openTextFileIfExists(runRecordPath(request.runId), 'Run record not found.');
+    return;
+  }
+  if (!run) {
+    vscode.window.showWarningMessage('Run record not found.');
+    return;
   } else if (request.command === 'openRunLog') {
-    await openTextFileIfExists(run?.logPath || '', 'Run log not found.');
+    await openTextFileIfExists(run.logPath || '', 'Run log not found.');
   } else if (request.command === 'openRunPrompt') {
-    await openTextFileIfExists(run?.promptPath || '', 'Run prompt artifact not found.');
+    await openTextFileIfExists(run.promptPath || '', 'Run prompt artifact not found.');
   } else if (request.command === 'openRunWorkspace') {
-    const cwd = run?.worktreePath || run?.cwd || run?.projectPath;
+    const cwd = run.worktreePath || run.cwd || run.projectPath;
     if (cwd && fs.existsSync(cwd)) {
       const terminal = vscode.window.createTerminal(kronosTerminalOptions({ name: `Kronos ${run.project || run.id}`, cwd }));
       terminal.show();

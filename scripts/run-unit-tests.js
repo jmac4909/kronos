@@ -3753,6 +3753,40 @@ test('extension webviews use shared UI shell and board filtering affordances', (
   );
 });
 
+test('extension run recovery helpers use typed run records', () => {
+  const source = readSourceFixture('src', 'extension.ts');
+  for (const marker of [
+    'type KronosRun',
+    'async function retryRunFromPrompt(run: KronosRun)',
+    'function resolveRunWorkspace(run: KronosRun)',
+    'async function resumeSelectedRun(state: KronosState, run: KronosRun)',
+    'async function pauseSelectedRun(run: KronosRun)',
+    'async function continueSelectedRun(run: KronosRun)',
+    'async function cancelSelectedRun(run: KronosRun)',
+    'async function openRunDiffArtifact(run: KronosRun)',
+    'async function markSelectedRunNeedsHuman(run: KronosRun)',
+    'function runLastEventLabel(run: KronosRun)',
+    'function runQuickPickDetail(run: KronosRun)',
+    'function runProcessPid(run: KronosRun)',
+    "Reflect.get(run, 'pid')",
+    'function findRunById(runId: string): KronosRun | undefined',
+  ]) {
+    assert.ok(source.includes(marker), marker);
+  }
+  for (const marker of [
+    'retryRunFromPrompt(run: any)',
+    'resumeSelectedRun(state: KronosState, run: any)',
+    'pauseSelectedRun(run: any)',
+    'continueSelectedRun(run: any)',
+    'cancelSelectedRun(run: any)',
+    'openRunDiffArtifact(run: any)',
+    'markSelectedRunNeedsHuman(run: any)',
+    'findRunById(runId: string): any',
+  ]) {
+    assert.equal(source.includes(marker), false, marker);
+  }
+});
+
 test('tree providers share action labels and icons', () => {
   const ticketTree = readSourceFixture('src', 'views', 'TicketTreeProvider.ts');
   const queueTree = readSourceFixture('src', 'views', 'QueueTreeProvider.ts');
