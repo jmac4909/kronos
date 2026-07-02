@@ -574,6 +574,7 @@ for (const marker of [
   'export function readRunRecord',
   'export function listRunStoreIssues',
   'export interface RunStoreIssue',
+  '[key: string]: unknown',
   'function readRequiredRunRecord',
   'Invalid run record',
   'export function markRunNeedsHuman',
@@ -602,6 +603,9 @@ for (const marker of [
   if (!runStore.includes(marker)) {
     fail(`Missing run store marker: ${marker}`);
   }
+}
+if (runStore.includes('[key: string]: any')) {
+  fail('Run store records must keep extension fields unknown, not any.');
 }
 
 for (const marker of [
@@ -649,7 +653,8 @@ for (const marker of [
   'promptPath?: string',
   'writeRunPrompt(id, prompt)',
   'retryOfRunId?: string',
-  'readiness?: any',
+  'readiness?: PostRunReadiness',
+  'type PostRunReadiness',
   'failureKind?: RunFailureKind',
   "'paused'",
   "'waiting_for_review'",
@@ -782,6 +787,7 @@ for (const forbidden of [
   'e?.message',
   'parseStreamEvent(event: any)',
   'value is Record<string, any>',
+  'readiness?: any',
 ]) {
   if (dispatcher.includes(forbidden)) {
     fail(`Dispatcher must normalize unknown errors instead of using ${forbidden}.`);
@@ -1304,6 +1310,7 @@ for (const marker of [
   'REVIEW_READY_ACTIONS',
   'needs_human',
   "status === 'cancelled'",
+  'type HumanReviewRunRecord = HumanReviewRun & Record<string, unknown>',
   'const runs = (Array.isArray(input.runs) ? input.runs : []).filter(isRunRecord)',
   'function runString',
   'function isRunRecord',
@@ -1311,6 +1318,9 @@ for (const marker of [
   if (!humanReviewInbox.includes(marker)) {
     fail(`Missing human review inbox marker: ${marker}`);
   }
+}
+if (humanReviewInbox.includes('type HumanReviewRunRecord = HumanReviewRun & Record<string, any>')) {
+  fail('Human review run records must preserve unknown extension fields.');
 }
 
 for (const marker of [
@@ -1413,6 +1423,7 @@ for (const marker of [
   'Build and review health',
   'Retry discipline',
   'gradeForScore',
+  'type RunQualityRecord = RunRecord & Record<string, unknown>',
   'const runs = (Array.isArray(input.runs) ? input.runs : []).filter(isRunRecord)',
   'function hasRetryMetadata',
   'function runString',
@@ -1421,6 +1432,9 @@ for (const marker of [
   if (!agentQualityScore.includes(marker)) {
     fail(`Missing agent quality score marker: ${marker}`);
   }
+}
+if (agentQualityScore.includes('type RunQualityRecord = RunRecord & Record<string, any>')) {
+  fail('Agent quality run records must preserve unknown extension fields.');
 }
 
 for (const marker of [
@@ -1593,6 +1607,7 @@ for (const marker of [
   'recent_completed',
   'stale_items',
   'evidenceStatusForRun',
+  'type DashboardRunRecord = RunRecord & Record<string, unknown>',
   'const runs = (Array.isArray(input.runs) ? input.runs : []).filter(isRunRecord)',
   "runString(run, 'status')",
   'function runId',
@@ -1602,9 +1617,13 @@ for (const marker of [
     fail(`Missing dashboard worklist marker: ${marker}`);
   }
 }
+if (dashboardWorklist.includes('type DashboardRunRecord = RunRecord & Record<string, any>')) {
+  fail('Dashboard worklist run records must preserve unknown extension fields.');
+}
 
 for (const marker of [
   'export function buildTicketTimeline',
+  'type TimelineRunRecord = TimelineRun & Record<string, unknown>',
   'const runs = (Array.isArray(input.runs) ? input.runs : []).filter(isRunRecord)',
   'const notes = evidenceNotes(ticket)',
   'const checks = evidenceChecks(ticket)',
@@ -1616,6 +1635,9 @@ for (const marker of [
   if (!ticketTimeline.includes(marker)) {
     fail(`Missing ticket timeline marker: ${marker}`);
   }
+}
+if (ticketTimeline.includes('type TimelineRunRecord = TimelineRun & Record<string, any>')) {
+  fail('Ticket timeline run records must preserve unknown extension fields.');
 }
 
 for (const marker of [

@@ -39,7 +39,7 @@ export interface HumanReviewInbox {
 }
 
 const REVIEW_READY_ACTIONS = new Set(['await_review', 'verify', 'deploy_monitor', 'done']);
-type HumanReviewRunRecord = HumanReviewRun & Record<string, any>;
+type HumanReviewRunRecord = HumanReviewRun & Record<string, unknown>;
 
 export function buildHumanReviewInbox(input: HumanReviewInboxInput): HumanReviewInbox {
   const items: HumanReviewItem[] = [];

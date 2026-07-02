@@ -36,7 +36,7 @@ export interface TicketTimelineInput {
   queue?: QueueState | null;
   runs?: TimelineRun[];
 }
-type TimelineRunRecord = TimelineRun & Record<string, any>;
+type TimelineRunRecord = TimelineRun & Record<string, unknown>;
 
 export function buildTicketTimeline(input: TicketTimelineInput): TimelineEvent[] {
   const { ticketKey, ticket } = input;

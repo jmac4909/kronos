@@ -6,7 +6,7 @@ import * as os from 'os';
 import { createHash } from 'crypto';
 import { RUNS_DIR, appendRunLog as appendRunLogFile, markRunCancelled, readRunRecord, readRuns, writeRunPrompt, writeRunRecord } from '../services/runStore';
 import { readStateFile } from '../services/stateStore';
-import { RunFailureKind, classifyRunFailure } from '../services/postRunReadiness';
+import { RunFailureKind, classifyRunFailure, type PostRunReadiness } from '../services/postRunReadiness';
 import { stopProcessTree } from '../services/processTree';
 import { createWebviewNonce, withWebviewCsp } from '../services/webviewSecurity';
 import { currentGitCommit, currentGitRef, inspectTrackedWorktree, prepareManagedWorktree, removeWorktreeSafely } from '../services/gitWorkspace';
@@ -200,8 +200,9 @@ export interface KronosRun {
   events: Array<{ type: string; label: string; detail: string; timestamp: string }>;
   failureReason?: string;
   failureKind?: RunFailureKind;
-  readiness?: any;
+  readiness?: PostRunReadiness;
   recoveryActions?: Array<{ at: string; action: string; reason: string }>;
+  [key: string]: unknown;
 }
 
 export interface RunBranchMetadata {

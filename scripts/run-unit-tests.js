@@ -2432,6 +2432,7 @@ test('run store surfaces invalid records and blocks strict mutations', () => {
   const source = readSourceFixture('src', 'services', 'runStore.ts');
   for (const marker of [
     "import { unknownErrorMessage } from './errorUtils'",
+    '[key: string]: unknown',
     'catch (e: unknown)',
     "unknownErrorMessage(e, 'Unable to parse JSON.')",
   ]) {
@@ -2440,6 +2441,7 @@ test('run store surfaces invalid records and blocks strict mutations', () => {
   for (const marker of [
     'catch (e: any)',
     'e?.message',
+    '[key: string]: any',
   ]) {
     assert.equal(source.includes(marker), false, marker);
   }
@@ -2476,6 +2478,8 @@ test('dispatcher records branch and permission metadata for persisted runs', () 
     'Active worktree registry needs manual review before creating a worktree',
     'registryIssue: registry.issue',
     "from '../services/sessionStore'",
+    "type PostRunReadiness",
+    'readiness?: PostRunReadiness',
     "import { unknownErrorMessage } from '../services/errorUtils'",
     'catch (e: unknown)',
     "unknownErrorMessage(e, 'Could not read Kronos state for base branch.')",
@@ -2581,6 +2585,11 @@ test('dispatcher records branch and permission metadata for persisted runs', () 
     source.includes('value is Record<string, any>'),
     false,
     'dispatcher record guards should preserve unknown field types',
+  );
+  assert.equal(
+    source.includes('readiness?: any'),
+    false,
+    'dispatcher should type run readiness with the post-run readiness contract',
   );
 
   assert.ok(
@@ -2966,6 +2975,10 @@ test('ticket timeline combines queue, runs, evidence, MR, build, and ticket even
   assert.ok(events.some(event => event.source === 'mr' && event.severity === 'failure'));
   assert.ok(events.some(event => event.source === 'build' && event.severity === 'failure'));
   assert.equal(events.some(event => event.id.includes('other-run')), false);
+
+  const source = readSourceFixture('src', 'services', 'ticketTimeline.ts');
+  assert.ok(source.includes('type TimelineRunRecord = TimelineRun & Record<string, unknown>'));
+  assert.equal(source.includes('type TimelineRunRecord = TimelineRun & Record<string, any>'), false);
 });
 
 test('collision detector flags active runs, duplicate queue work, and open MRs', () => {
@@ -3894,6 +3907,10 @@ test('human review inbox aggregates runs, tickets, evidence gaps, integrations, 
   assert.ok(inbox.items.some(item => item.id === 'queue:duplicate:K-3'));
   assert.ok(inbox.items.some(item => item.title.includes('No evidence notes')));
   assert.ok(inbox.items.some(item => item.title.includes('Acceptance criteria not extracted')));
+
+  const source = readSourceFixture('src', 'services', 'humanReviewInbox.ts');
+  assert.ok(source.includes('type HumanReviewRunRecord = HumanReviewRun & Record<string, unknown>'));
+  assert.equal(source.includes('type HumanReviewRunRecord = HumanReviewRun & Record<string, any>'), false);
 });
 
 test('evidence gate fails objective blockers and warns on incomplete proof', () => {
@@ -4633,6 +4650,10 @@ test('dashboard worklist builds command-center lanes from review, run, gate, and
   assert.equal(lane('failing_gates').items[0].ticketKey, 'K-FAIL');
   assert.match(lane('recent_completed').items[0].detail, /evidence gate pass/);
   assert.equal(lane('stale_items').items[0].ticketKey, 'K-OLD');
+
+  const source = readSourceFixture('src', 'services', 'dashboardWorklist.ts');
+  assert.ok(source.includes('type DashboardRunRecord = RunRecord & Record<string, unknown>'));
+  assert.equal(source.includes('type DashboardRunRecord = RunRecord & Record<string, any>'), false);
 });
 
 test('agent quality score combines run outcomes, evidence gates, builds, reviews, and retries', () => {
@@ -4671,4 +4692,8 @@ test('agent quality score combines run outcomes, evidence gates, builds, reviews
   assert.ok(score.components.some(component => component.label === 'Evidence readiness' && component.detail.includes('failing evidence gates')));
   assert.ok(score.metrics.some(metric => metric.label === 'Retries' && metric.value === '1'));
   assert.match(score.summary, /needs-human run/);
+
+  const source = readSourceFixture('src', 'services', 'agentQualityScore.ts');
+  assert.ok(source.includes('type RunQualityRecord = RunRecord & Record<string, unknown>'));
+  assert.equal(source.includes('type RunQualityRecord = RunRecord & Record<string, any>'), false);
 });

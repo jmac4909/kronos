@@ -32,7 +32,7 @@ export interface DashboardWorklistInput {
 
 const ACTIVE_RUN_STATUSES = new Set(['queued', 'preflight', 'running', 'paused']);
 const COMPLETED_RUN_STATUSES = new Set(['completed', 'waiting_for_review']);
-type DashboardRunRecord = RunRecord & Record<string, any>;
+type DashboardRunRecord = RunRecord & Record<string, unknown>;
 
 export function buildDashboardWorklist(input: DashboardWorklistInput, limit = 5): DashboardWorklistLane[] {
   const runs = (Array.isArray(input.runs) ? input.runs : []).filter(isRunRecord);

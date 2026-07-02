@@ -13,7 +13,15 @@ export interface RunRecord {
   logPath?: string;
   promptPath?: string;
   archivedAt?: string;
-  [key: string]: any;
+  endedAt?: string;
+  pausedAt?: string;
+  resumedAt?: string;
+  failureReason?: string;
+  failureKind?: string;
+  recoveryActions?: Array<{ at: string; action: string; reason: string }>;
+  events?: Array<{ type?: string; label?: string; detail?: string; timestamp?: string }>;
+  archiveWarnings?: string[];
+  [key: string]: unknown;
 }
 
 export interface ArchivedRun {

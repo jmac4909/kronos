@@ -23,7 +23,7 @@ export interface AgentQualityScore {
 }
 
 const SUCCESS_RUN_STATUSES = new Set(['completed', 'waiting_for_review']);
-type RunQualityRecord = RunRecord & Record<string, any>;
+type RunQualityRecord = RunRecord & Record<string, unknown>;
 
 export function computeAgentQualityScore(input: {
   runs: RunRecord[];
