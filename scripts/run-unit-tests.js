@@ -60,6 +60,7 @@ const webviewDiagnostics = require('../out/services/webviewDiagnostics.js');
 const webviewSecurity = require('../out/services/webviewSecurity.js');
 const operatorPanel = require('../out/services/operatorPanel.js');
 const promptPanelView = require('../out/services/promptPanelView.js');
+const recoveryPanelView = require('../out/services/recoveryPanelView.js');
 const runStatus = require('../out/services/runStatus.js');
 const runProgress = require('../out/services/runProgress.js');
 const relativeTime = require('../out/services/relativeTime.js');
@@ -3408,6 +3409,46 @@ test('recovery center prioritizes failed runs, unsafe worktrees, doctor failures
   assert.ok(inventory.items.some(item => item.kind === 'backup' && item.action === 'restoreBackup'));
 });
 
+test('recovery panel view renders escaped recovery and state audit rows', () => {
+  const recoveryHtml = recoveryPanelView.buildRecoveryHtml({
+    generatedAt: '2026-07-01T12:00:00.000Z',
+    summary: { critical: 1, warning: 0, info: 0, total: 1 },
+    items: [
+      {
+        id: 'item-1',
+        kind: 'run',
+        severity: 'critical',
+        title: 'Broken <run>',
+        detail: 'Needs & review',
+        action: 'resumeRun',
+        runId: 'run-1',
+        ticketKey: 'K-1',
+      },
+    ],
+  }, 'nonce-1');
+  assert.ok(recoveryHtml.includes('Kronos Recovery Center'));
+  assert.ok(recoveryHtml.includes('Broken &lt;run&gt;'));
+  assert.ok(recoveryHtml.includes('Needs &amp; review'));
+  assert.ok(recoveryHtml.includes('data-action="executeRecoveryItem"'));
+  assert.ok(recoveryHtml.includes('data-item-id="item-1"'));
+  assert.ok(recoveryHtml.includes('Resume Run'));
+
+  const auditHtml = recoveryPanelView.buildStateAuditLogHtml([
+    {
+      at: '2026-07-01T12:00:00.000Z',
+      action: 'restore<backup>',
+      target: 'state.json',
+      backup: null,
+      note: '<unsafe>',
+    },
+  ], '/tmp/audit<log>.jsonl', 'nonce-2');
+  assert.ok(auditHtml.includes('Kronos State Audit Log'));
+  assert.ok(auditHtml.includes('/tmp/audit&lt;log&gt;.jsonl'));
+  assert.ok(auditHtml.includes('restore&lt;backup&gt;'));
+  assert.ok(auditHtml.includes('note: &lt;unsafe&gt;'));
+  assert.ok(auditHtml.includes('none'));
+});
+
 test('recovery center surfaces invalid run store records', () => {
   const inventory = recoveryCenter.buildRecoveryInventory({
     now: new Date('2026-07-01T12:00:00.000Z'),
@@ -5151,6 +5192,7 @@ test('extension webviews use shared UI shell and board filtering affordances', (
   const source = readSourceFixture('src', 'extension.ts');
   const operatorPanelSource = readSourceFixture('src', 'services', 'operatorPanel.ts');
   const promptPanelViewSource = readSourceFixture('src', 'services', 'promptPanelView.ts');
+  const recoveryPanelViewSource = readSourceFixture('src', 'services', 'recoveryPanelView.ts');
   const boardHandlerStart = source.indexOf('panel.webview.onDidReceiveMessage(async (msg) => {\n        if (logReady(msg)) { return; }\n        const request = normalizeBoardMessage(msg);');
   const boardHandlerEnd = source.indexOf("    vscode.commands.registerCommand('kronos.viewTicket'", boardHandlerStart);
   assert.ok(boardHandlerStart >= 0 && boardHandlerEnd > boardHandlerStart, 'Jira board message handler should be present');
@@ -5159,6 +5201,7 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     "import { createWebviewNonce, webviewReadyPostScript, webviewScriptCspOptions, webviewVsCodeApiScript, withWebviewCsp } from './services/webviewSecurity'",
     "import { actionButton, actionRow, kronosActionPanelScript, kronosOperatorPanelCss, operatorCommandRow } from './services/operatorPanel'",
     "import { buildPromptHistoryHtml, buildPromptManagerHtml, buildPromptSmokeTestsHtml } from './services/promptPanelView'",
+    "import { buildRecoveryHtml, buildStateAuditLogHtml } from './services/recoveryPanelView'",
     "import { createWebviewReadyMonitor } from './services/webviewDiagnostics'",
     'const nonce = createWebviewNonce()',
     'webviewScriptCspOptions(panel.webview.cspSource, nonce)',
@@ -5358,7 +5401,6 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'function executeBacklogTriageAction',
     'function executeDashboardAction',
     'function buildRecoveryInventoryForState',
-    "actionButton('executeRecoveryItem'",
     "actionButton('startTicket', 'Start Work'",
     "actionButton('evidenceGate', 'Evidence Gate'",
     "from './services/evidenceData'",
@@ -5424,6 +5466,19 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'kronosActionPanelScript(nonce)',
   ]) {
     assert.ok(promptPanelViewSource.includes(marker), marker);
+  }
+  for (const marker of [
+    'export function buildRecoveryHtml',
+    'export function buildStateAuditLogHtml',
+    'StateAuditEvent',
+    'Kronos Recovery Center',
+    'Kronos State Audit Log',
+    "actionButton('executeRecoveryItem'",
+    'recoveryActionLabel',
+    'kronosOperatorPanelCss',
+    'kronosActionPanelScript(nonce)',
+  ]) {
+    assert.ok(recoveryPanelViewSource.includes(marker), marker);
   }
   assert.equal(/^\s*vscode\.window\.withProgress\(/m.test(source), false, 'progress tasks should be awaited by their command handlers');
   assert.equal((source.match(/dispatchClaudeSession\(/g) || []).length, 1, 'command handlers should use startClaudeDispatch for Claude session startup');

@@ -72,6 +72,7 @@ const webviewDiagnostics = readSource('src/services/webviewDiagnostics.ts');
 const webviewSecurity = readSource('src/services/webviewSecurity.ts');
 const operatorPanel = readSource('src/services/operatorPanel.ts');
 const promptPanelView = readSource('src/services/promptPanelView.ts');
+const recoveryPanelView = readSource('src/services/recoveryPanelView.ts');
 const cliProbes = readSource('src/services/cliProbes.ts');
 const combinedVerification = readSource('src/services/combinedVerification.ts');
 const changedFiles = readSource('src/services/changedFiles.ts');
@@ -976,6 +977,22 @@ for (const marker of [
 ]) {
   if (!recoveryCenter.includes(marker)) {
     fail(`Missing recovery center marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  'export function buildRecoveryHtml',
+  'export function buildStateAuditLogHtml',
+  'StateAuditEvent',
+  'Kronos Recovery Center',
+  'Kronos State Audit Log',
+  "actionButton('executeRecoveryItem'",
+  'recoveryActionLabel',
+  'kronosOperatorPanelCss',
+  'kronosActionPanelScript(nonce)',
+]) {
+  if (!recoveryPanelView.includes(marker)) {
+    fail(`Missing recovery panel view marker: ${marker}`);
   }
 }
 
