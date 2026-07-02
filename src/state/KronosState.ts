@@ -27,6 +27,7 @@ export class KronosState {
   private _watchedFiles = new Set<string>();
   private _suppressWatch = false;
   private _watchDebounce: NodeJS.Timeout | undefined;
+  private _suppressWatchTimer: NodeJS.Timeout | undefined;
 
   constructor() {
     this.load();
@@ -111,12 +112,16 @@ export class KronosState {
 
   private async runAndReload<T>(operation: () => T): Promise<T> {
     this._suppressWatch = true;
+    clearTimeout(this._suppressWatchTimer);
     try {
       const result = operation();
       this.reloadAndNotify();
       return result;
     } finally {
-      setTimeout(() => { this._suppressWatch = false; }, 300);
+      this._suppressWatchTimer = setTimeout(() => {
+        this._suppressWatch = false;
+        this._suppressWatchTimer = undefined;
+      }, 300);
     }
   }
 
@@ -127,7 +132,8 @@ export class KronosState {
   renderPrompt(name: string, vars: Record<string, string> = {}, projectPath?: string): RenderedPrompt | null {
     try {
       return renderPrompt(name, vars, { projectPath });
-    } catch {
+    } catch (e: unknown) {
+      console.warn(unknownErrorMessage(e, `Failed to render Kronos prompt ${name}.`));
       return null;
     }
   }
@@ -158,6 +164,7 @@ export class KronosState {
 
   dispose(): void {
     clearTimeout(this._watchDebounce);
+    clearTimeout(this._suppressWatchTimer);
     this._watchers.forEach(w => w.close());
     this._onDidChange.dispose();
     this._onDidSessionChange.dispose();

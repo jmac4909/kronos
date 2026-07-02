@@ -1939,6 +1939,11 @@ for (const marker of [
   "unknownErrorMessage(e, 'Failed to load state.json')",
   "unknownErrorMessage(e, 'Failed to load queue.json')",
   'console.warn(unknownErrorMessage(e, `Kronos file watcher failed for ${filepath}.`))',
+  'private _suppressWatchTimer: NodeJS.Timeout | undefined',
+  'clearTimeout(this._suppressWatchTimer)',
+  'this._suppressWatchTimer = setTimeout(() =>',
+  'this._suppressWatchTimer = undefined',
+  'console.warn(unknownErrorMessage(e, `Failed to render Kronos prompt ${name}.`))',
   "target: 'state.json'",
   "target: 'queue.json'",
 ]) {
