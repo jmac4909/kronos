@@ -1,0 +1,42 @@
+import { Ticket } from '../state/types';
+
+export type EvidenceRecord = Record<string, any>;
+
+export function evidenceNotes(ticket: Ticket): EvidenceRecord[] {
+  return arrayRecords(ticket.evidence?.notes);
+}
+
+export function evidenceAcceptanceCriteria(ticket: Ticket): EvidenceRecord[] {
+  return arrayRecords(ticket.evidence?.acceptance_criteria);
+}
+
+export function evidenceChecks(ticket: Ticket): EvidenceRecord[] {
+  return arrayRecords(ticket.evidence?.checks);
+}
+
+export function evidenceRiskNotes(ticket: Ticket): EvidenceRecord[] {
+  return arrayRecords(ticket.evidence?.risk_notes);
+}
+
+export function evidenceEnvironmentResults(ticket: Ticket): EvidenceRecord[] {
+  const value = ticket.evidence?.environment_results;
+  if (!isEvidenceRecord(value)) { return []; }
+  return Object.values(value).filter(isEvidenceRecord);
+}
+
+export function evidenceString(record: EvidenceRecord | null | undefined, key: string, fallback = ''): string {
+  const value = record?.[key];
+  return typeof value === 'string' ? value.trim() : fallback;
+}
+
+export function evidenceChecked(record: EvidenceRecord): boolean {
+  return record.checked === true;
+}
+
+function arrayRecords(value: unknown): EvidenceRecord[] {
+  return Array.isArray(value) ? value.filter(isEvidenceRecord) : [];
+}
+
+function isEvidenceRecord(value: unknown): value is EvidenceRecord {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}

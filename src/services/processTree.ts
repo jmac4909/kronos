@@ -1,0 +1,112 @@
+import { execFileSync } from 'child_process';
+
+export type ProcessTreeSignal = 'SIGSTOP' | 'SIGCONT' | 'SIGTERM' | 'SIGKILL';
+
+export interface ProcessTreeCommandOptions {
+  windowsHide: boolean;
+  timeout: number;
+}
+
+export type ProcessTreeCommandRunner = (command: string, args: string[], options: ProcessTreeCommandOptions) => void;
+export type ProcessKillRunner = (pid: number, signal?: ProcessTreeSignal) => void;
+export type ProcessTreeScheduler = (callback: () => void, ms: number) => unknown;
+
+export interface ProcessTreeOptions {
+  platform?: NodeJS.Platform | string;
+  commandRunner?: ProcessTreeCommandRunner;
+  kill?: ProcessKillRunner;
+  schedule?: ProcessTreeScheduler;
+  sigkillDelayMs?: number;
+}
+
+export interface ProcessTreeResult {
+  attempted: boolean;
+  signalled: boolean;
+  method: 'none' | 'taskkill' | 'process-group' | 'process' | 'unsupported';
+  fallbackUsed: boolean;
+  error?: string;
+}
+
+export function stopProcessTree(pid: number | undefined, options: ProcessTreeOptions = {}): ProcessTreeResult {
+  const processPid = normalizePid(pid);
+  if (!processPid) { return result(false, false, 'none', false); }
+
+  const platform = options.platform || process.platform;
+  const kill = options.kill || defaultKill;
+  if (platform === 'win32') {
+    try {
+      const commandRunner = options.commandRunner || defaultCommandRunner;
+      commandRunner('taskkill', ['/PID', String(processPid), '/T', '/F'], { windowsHide: true, timeout: 5000 });
+      return result(true, true, 'taskkill', false);
+    } catch (e: any) {
+      return fallbackKill(processPid, kill, e);
+    }
+  }
+
+  try {
+    kill(-processPid, 'SIGTERM');
+    const schedule = options.schedule || setTimeout;
+    schedule(() => {
+      try { kill(-processPid, 'SIGKILL'); } catch {}
+    }, options.sigkillDelayMs ?? 2500);
+    return result(true, true, 'process-group', false);
+  } catch (e: any) {
+    return fallbackKill(processPid, kill, e);
+  }
+}
+
+export function signalProcessTree(
+  pid: number | undefined,
+  signal: Extract<ProcessTreeSignal, 'SIGSTOP' | 'SIGCONT'>,
+  options: ProcessTreeOptions = {},
+): ProcessTreeResult {
+  const processPid = normalizePid(pid);
+  if (!processPid) { return result(false, false, 'none', false); }
+  if ((options.platform || process.platform) === 'win32') {
+    return result(true, false, 'unsupported', false, `${signal} is not supported on Windows.`);
+  }
+
+  const kill = options.kill || defaultKill;
+  try {
+    kill(-processPid, signal);
+    return result(true, true, 'process-group', false);
+  } catch (e: any) {
+    try {
+      kill(processPid, signal);
+      return result(true, true, 'process', true);
+    } catch (fallbackError: any) {
+      return result(true, false, 'process', true, fallbackError?.message || e?.message || 'process signal failed');
+    }
+  }
+}
+
+function fallbackKill(pid: number, kill: ProcessKillRunner, cause: any): ProcessTreeResult {
+  try {
+    kill(pid);
+    return result(true, true, 'process', true);
+  } catch (fallbackError: any) {
+    return result(true, false, 'process', true, fallbackError?.message || cause?.message || 'process stop failed');
+  }
+}
+
+function normalizePid(pid: number | undefined): number | undefined {
+  return typeof pid === 'number' && Number.isFinite(pid) && pid > 0 ? pid : undefined;
+}
+
+function result(
+  attempted: boolean,
+  signalled: boolean,
+  method: ProcessTreeResult['method'],
+  fallbackUsed: boolean,
+  error?: string,
+): ProcessTreeResult {
+  return { attempted, signalled, method, fallbackUsed, error };
+}
+
+function defaultCommandRunner(command: string, args: string[], options: ProcessTreeCommandOptions): void {
+  execFileSync(command, args, options);
+}
+
+function defaultKill(pid: number, signal?: ProcessTreeSignal): void {
+  process.kill(pid, signal);
+}

@@ -1,0 +1,1440 @@
+const fs = require('fs');
+
+const files = [
+  'src/extension.ts',
+  'src/runners/sessionDispatcher.ts',
+  'src/state/KronosState.ts',
+  'src/services/scriptClient.ts',
+  'src/views/ProjectTreeProvider.ts',
+  'src/views/TicketTreeProvider.ts',
+];
+
+const sources = Object.fromEntries(files.map((file) => [file, fs.readFileSync(file, 'utf8')]));
+const allSource = Object.values(sources).join('\n');
+const nonScriptClientSource = [
+  sources['src/extension.ts'],
+  sources['src/runners/sessionDispatcher.ts'],
+  sources['src/state/KronosState.ts'],
+].join('\n');
+const stateStore = fs.readFileSync('src/services/stateStore.ts', 'utf8');
+const runStore = fs.readFileSync('src/services/runStore.ts', 'utf8');
+const fileNames = fs.readFileSync('src/services/fileNames.ts', 'utf8');
+const sessionStore = fs.readFileSync('src/services/sessionStore.ts', 'utf8');
+const worktreeRegistry = fs.readFileSync('src/services/worktreeRegistry.ts', 'utf8');
+const dispatcher = sources['src/runners/sessionDispatcher.ts'];
+const scriptClient = sources['src/services/scriptClient.ts'];
+const acceptanceCriteria = fs.readFileSync('src/services/acceptanceCriteria.ts', 'utf8');
+const evidenceStore = fs.readFileSync('src/services/evidenceStore.ts', 'utf8');
+const evidenceData = fs.readFileSync('src/services/evidenceData.ts', 'utf8');
+const evidenceHandoff = fs.readFileSync('src/services/evidenceHandoff.ts', 'utf8');
+const evidencePublisher = fs.readFileSync('src/services/evidencePublisher.ts', 'utf8');
+const humanReviewInbox = fs.readFileSync('src/services/humanReviewInbox.ts', 'utf8');
+const recoveryCenter = fs.readFileSync('src/services/recoveryCenter.ts', 'utf8');
+const evidenceGate = fs.readFileSync('src/services/evidenceGate.ts', 'utf8');
+const evidenceGatePolicy = fs.readFileSync('src/services/evidenceGatePolicy.ts', 'utf8');
+const collisionDetector = fs.readFileSync('src/services/collisionDetector.ts', 'utf8');
+const queuePlanner = fs.readFileSync('src/services/queuePlanner.ts', 'utf8');
+const agentQualityScore = fs.readFileSync('src/services/agentQualityScore.ts', 'utf8');
+const integrationManifest = fs.readFileSync('src/services/integrationManifest.ts', 'utf8');
+const profileManager = fs.readFileSync('src/services/profileManager.ts', 'utf8');
+const agingAnalyzer = fs.readFileSync('src/services/agingAnalyzer.ts', 'utf8');
+const safetyGate = fs.readFileSync('src/services/safetyGate.ts', 'utf8');
+const trendMetrics = fs.readFileSync('src/services/trendMetrics.ts', 'utf8');
+const dashboardWorklist = fs.readFileSync('src/services/dashboardWorklist.ts', 'utf8');
+const ticketTimeline = fs.readFileSync('src/services/ticketTimeline.ts', 'utf8');
+const integrationAdapters = fs.readFileSync('src/services/integrationAdapters.ts', 'utf8');
+const postRunReadiness = fs.readFileSync('src/services/postRunReadiness.ts', 'utf8');
+const ticketFilters = fs.readFileSync('src/services/ticketFilters.ts', 'utf8');
+const promptManager = fs.readFileSync('src/services/promptManager.ts', 'utf8');
+const runRecovery = fs.readFileSync('src/services/runRecovery.ts', 'utf8');
+const providerReachability = fs.readFileSync('src/services/providerReachability.ts', 'utf8');
+const ticketMutations = fs.readFileSync('src/services/ticketMutations.ts', 'utf8');
+const queueMutations = fs.readFileSync('src/services/queueMutations.ts', 'utf8');
+const projectMutations = fs.readFileSync('src/services/projectMutations.ts', 'utf8');
+const doctorChecks = fs.readFileSync('src/services/doctorChecks.ts', 'utf8');
+const stateScriptAdapter = fs.readFileSync('src/services/stateScriptAdapter.ts', 'utf8');
+const nextActionContext = fs.readFileSync('src/services/nextActionContext.ts', 'utf8');
+const gitWorkspace = fs.readFileSync('src/services/gitWorkspace.ts', 'utf8');
+const processTree = fs.readFileSync('src/services/processTree.ts', 'utf8');
+const webviewSecurity = fs.readFileSync('src/services/webviewSecurity.ts', 'utf8');
+const cliProbes = fs.readFileSync('src/services/cliProbes.ts', 'utf8');
+const combinedVerification = fs.readFileSync('src/services/combinedVerification.ts', 'utf8');
+const changedFiles = fs.readFileSync('src/services/changedFiles.ts', 'utf8');
+const sonarReportView = fs.readFileSync('src/services/sonarReportView.ts', 'utf8');
+const agingReportView = fs.readFileSync('src/services/agingReportView.ts', 'utf8');
+const webviewHtml = fs.readFileSync('src/services/webviewHtml.ts', 'utf8');
+const vscodeIgnore = fs.readFileSync('.vscodeignore', 'utf8');
+const extension = sources['src/extension.ts'];
+
+function fail(message) {
+  console.error(message);
+  process.exitCode = 1;
+}
+
+function assertAbsent(pattern, message) {
+  if (pattern.test(allSource)) {
+    fail(message);
+  }
+}
+
+assertAbsent(/\bexecSync\b/, 'Use execFileSync instead of execSync.');
+assertAbsent(/\bexec\s*\(/, 'Use execFile instead of shell-string exec.');
+assertAbsent(/onclick\s*=/, 'Inline webview onclick handlers are not allowed.');
+assertAbsent(/\.innerHTML\s*=/, 'Use DOM text APIs instead of assigning innerHTML.');
+assertAbsent(/vscode\.env\.openExternal\s*\(\s*vscode\.Uri\.parse/, 'Open external URLs through openExternalHttpUrl.');
+assertAbsent(/command:\s*['"]vscode\.open['"]/, 'Tree views must route external links through kronos.openExternalUrl.');
+assertAbsent(/worktree\s+remove[^;\n]*--force/, 'Forced git worktree removal is not allowed.');
+assertAbsent(/--untracked-files=no/, 'Worktree cleanliness checks must include untracked files.');
+assertAbsent(/git checkout develop/, 'Dispatch must not checkout develop in the main worktree.');
+assertAbsent(/opts\.worktreeBranch\s*&&\s*opts\.worktreeBranch\s*!==\s*['"]origin\/develop['"]/, 'Worktree branch handling must not special-case origin/develop.');
+assertAbsent(/const\s+KRONOS_DIR\s*=\s*path\.join\(os\.homedir\(\),\s*['"]\.claude['"],\s*['"]kronos['"]\)/, 'Use the shared stateStore KRONOS_DIR.');
+assertAbsent(/source ~\/\.bashrc/, 'Dispatched Claude sessions must not use shell startup files.');
+assertAbsent(/function shellQuote/, 'Dispatched Claude sessions must use argv spawning instead of shell quoting.');
+assertAbsent(/spawn\(BASH_PATH,\s*\[\s*['"]--login['"],\s*['"]-c['"]/, 'Dispatched Claude sessions must not run through bash -c.');
+if (/execFile(?:Sync)?\(\s*['"]python['"]/.test(nonScriptClientSource)) {
+  fail('External Python scripts must be invoked through scriptClient.');
+}
+if (/writeJsonFileAtomic\(STATE_FILE/.test(extension)) {
+  fail('Ticket state mutations must go through ticketMutations service helpers.');
+}
+if (/writeJsonFileAtomic/.test(extension)) {
+  fail('Extension commands must route JSON file writes through service helpers.');
+}
+if (/saveQueueState/.test(extension)) {
+  fail('Queue state writes must go through queueMutations service helpers.');
+}
+if (/execFileSync\(\s*['"]git['"]/.test(extension)) {
+  fail('Extension commands must use gitWorkspace service instead of direct git execFileSync calls.');
+}
+if (/execFileSync\(\s*['"]git['"]/.test(dispatcher)) {
+  fail('Dispatcher must use gitWorkspace service instead of direct git execFileSync calls.');
+}
+if (/execFileSync\s*\(/.test(extension)) {
+  fail('Extension commands must use services instead of direct execFileSync calls.');
+}
+if (/execFileSync\s*\(/.test(sources['src/state/KronosState.ts'])) {
+  fail('KronosState must use cliProbes/stateScriptAdapter instead of direct execFileSync calls.');
+}
+if (/execFileSync\s*\(/.test(dispatcher)) {
+  fail('Dispatcher must use service helpers instead of direct execFileSync calls.');
+}
+if (/git merge origin\/\$\{b\}/.test(extension)) {
+  fail('Combined verification must use combinedVerification branch planning instead of ticket-key merge guesses.');
+}
+for (const forbidden of ['--refresh-all', '--refresh', '--discover', '--register', '--adhoc-add', '--adhoc-done', '--morning-brief']) {
+  if (sources['src/state/KronosState.ts'].includes(forbidden)) {
+    fail(`KronosState must use stateScriptAdapter instead of raw script flag ${forbidden}.`);
+  }
+}
+for (const forbidden of ['--ticket-comments', '--mr-diff', '--mr-branch', '--sonar-branches', '--sonar-gate', '--sonar-measures', '--sonar-issues', '--find-sonar-key', '--project-id']) {
+  if (extension.includes(forbidden)) {
+    fail(`Extension must use integrationAdapters instead of raw script flag ${forbidden}.`);
+  }
+}
+for (const forbidden of ['--add-to-queue', '--remove-from-queue', '--link', '--unlink', '--next']) {
+  if (extension.includes(forbidden)) {
+    fail(`Extension must use queueMutations instead of raw queue/link script flag ${forbidden}.`);
+  }
+}
+for (const forbidden of ['--set-project-config', '--unregister', '--set-setting']) {
+  if (extension.includes(forbidden)) {
+    fail(`Extension must use projectMutations instead of raw project/settings script flag ${forbidden}.`);
+  }
+}
+
+for (const requiredIgnore of ['.git/**', '.claude/**', 'node_modules/**', 'scripts/**', 'CLAUDE.md', '*.zip', '*.tgz', '*.log', '.env*', 'GOOD_TO_GREAT_REVIEW.md']) {
+  if (!vscodeIgnore.split(/\r?\n/).includes(requiredIgnore)) {
+    fail(`.vscodeignore must exclude ${requiredIgnore}`);
+  }
+}
+
+const enableScriptsTrue = [...extension.matchAll(/enableScripts:\s*true/g)].length;
+if (enableScriptsTrue !== 2) {
+  fail(`Expected exactly 2 script-enabled webviews, found ${enableScriptsTrue}.`);
+}
+for (const [file, source] of Object.entries({ 'src/extension.ts': extension, 'src/runners/sessionDispatcher.ts': dispatcher })) {
+  for (const [idx, line] of source.split(/\r?\n/).entries()) {
+    if (/panel\.webview\.html\s*=/.test(line) && !line.includes('withWebviewCsp(')) {
+      fail(`${file}:${idx + 1} must assign webview HTML through withWebviewCsp.`);
+    }
+  }
+}
+
+const runCreateIndex = dispatcher.indexOf('const run = createRun');
+const authPreflightIndex = dispatcher.indexOf('const authed = await ensureAuth()');
+if (runCreateIndex < 0 || authPreflightIndex < 0 || runCreateIndex > authPreflightIndex) {
+  fail('Dispatch must create a persisted run record before auth preflight.');
+}
+if (dispatcher.includes("fs.readFileSync(path.join(KRONOS_DIR, 'state.json')")) {
+  fail('Dispatch must load project config through validated stateStore reads.');
+}
+for (const marker of [
+  "import { readStateFile } from '../services/stateStore'",
+  'function configuredProjectExtraDirs',
+  'const state = readStateFile()',
+  'Could not read project extra_dirs',
+]) {
+  if (!dispatcher.includes(marker)) {
+    fail(`Missing dispatcher state config marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  'buildJiraBoardHtml(state, nonce)',
+  'Content-Security-Policy',
+  'script nonce="${nonce}"',
+  'BOARD_MESSAGE_COMMANDS',
+  'function normalizeWebviewCommand',
+  'function normalizeBoardMessage',
+  'const request = normalizeBoardMessage(msg)',
+  'const command = normalizeWebviewCommand(msg, sonarCommands)',
+  'function openExternalHttpUrl',
+  "from './services/webviewHtml'",
+  'kronos.openExternalUrl',
+  'async function confirmSafetyGate',
+  'async function removeTicketFromQueue',
+  'stayed in queue because it has no evidence notes',
+  'async function retryRunFromPrompt',
+  'async function resumeSelectedRun',
+  'function resolveRunWorkspace',
+  'async function archiveSelectedRun',
+  'async function openRunDiffArtifact',
+  'async function markSelectedRunNeedsHuman',
+  'async function cancelSelectedRun',
+  'stopProcessTree(processPid)',
+  'Open Workspace Diff',
+  'Mark Needs Human',
+  'Cancel Run',
+  'Resume Run',
+  'async function openRecoveryCenter',
+  'buildRecoveryInventory',
+  'function executeRecoveryAction',
+  'function openRecoveryPanel',
+  'buildTicketTimeline',
+  'function buildTicketTimelineHtml',
+  'confirmDispatchCollisions',
+  'detectDispatchCollisions',
+  'kronos.extractAcceptanceCriteria',
+  'extractAcceptanceCriteria',
+  'kronos.updateAcceptanceCriteria',
+  "from './services/evidenceData'",
+  'const existingCriteria = evidenceAcceptanceCriteria(ticket)',
+  'const criteria = evidenceAcceptanceCriteria(ticket)',
+  'const notes = evidenceNotes(ticket)',
+  'const checks = evidenceChecks(ticket)',
+  'const environmentResults = evidenceEnvironmentResults(ticket)',
+  'return evidenceNotes(ticket).length + evidenceChecks(ticket).length + evidenceEnvironmentResults(ticket).length',
+  'function ticketStringArray',
+  'function ticketAttachments',
+  'const linkedProjects = ticketStringArray(t.projects)',
+  'const attachments = ticketAttachments(t.attachments)',
+  'const projectList = ticketStringArray(ticket.projects)',
+  'const mr = ticketRecord(ticket.mr) ? ticket.mr : null',
+  'kronos.addEvidenceCheck',
+  'kronos.recordEnvironmentResult',
+  'addTicketEvidenceNote',
+  'addTicketEvidenceCheck',
+  'recordTicketEnvironmentResult',
+  'replaceTicketAcceptanceCriteria',
+  'updateTicketAcceptanceCriteria',
+  'kronos.humanReviewInbox',
+  'openHumanReviewInbox',
+  'kronos.evidenceGate',
+  'openEvidenceGatePanel',
+  'kronos.evidenceHandoff',
+  'openEvidenceHandoffPanel',
+  'Kronos did not call a posting API',
+  'kronos.publishEvidence',
+  'openEvidencePublishPanel',
+  'Publish Evidence Comment',
+  "risks: ['external-publish']",
+  'stayed in queue because its evidence gate is failing',
+  'Gate Fails',
+  'kronos.nextBestAction',
+  'buildNextActionContext',
+  'kronos.queuePlanner',
+  'openQueuePlannerPanel',
+  'kronos.backlogTriage',
+  'openBacklogTriagePanel',
+  'buildBacklogTriageHtml',
+  'kronos.projectBatchPlan',
+  'openProjectBatchPlanPanel',
+  'buildProjectBatchPlanHtml',
+  'Project Batch Plan',
+  'kronos.releaseBatchPlan',
+  'openReleaseBatchPlanPanel',
+  'buildReleaseBatchPlanHtml',
+  'Release Batch Plan',
+  'kronos.filterTickets',
+  'promptTicketView',
+  'kronos.ticketSavedView',
+  'kronos.clearTicketFilters',
+  'kronos.filterReviews',
+  'kronos.clearReviewFilters',
+  'kronos.collisionReport',
+  'openCollisionReportPanel',
+  'loadMrFileHints',
+  'LIVE_MR_DIFF_TIMEOUT_MS',
+  'kronos.planNextTwoHours',
+  'openQueuePlanWindowPanel',
+  'kronos.overnightCandidates',
+  'openOvernightCandidatesPanel',
+  'addPlanToQueue',
+  'recordPlanDecision',
+  'kronos.agentQualityScore',
+  'openAgentQualityScorePanel',
+  'Agent Quality',
+  'buildDashboardWorklist',
+  'buildDashboardWorklistHtml',
+  'Command Center',
+  'kronos.trendMetrics',
+  'openTrendMetricsPanel',
+  'Rework Rate',
+  'kronos.agingReport',
+  'openAgingReportPanel',
+  'Stale Critical',
+  'kronos.integrationManifest',
+  'openIntegrationManifestPanel',
+  'Integration manifest',
+  'Hash Status',
+  'manifestPillClass',
+  'kronos.snapshotIntegrationManifest',
+  'snapshotIntegrationManifest',
+  'kronos.profiles',
+  'openProfilesPanel',
+  'getActiveProfile',
+  'kronos.promptSmokeTests',
+  'openPromptSmokeTestsPanel',
+  'buildPromptSmokeTests',
+  'kronos.snapshotPromptPack',
+  'snapshotPromptPack',
+  'kronos.promptHistory',
+  'openPromptHistoryPanel',
+  'kronos.repairPromptPack',
+  'repairPromptPack',
+  'Repair Prompt Pack',
+  'doctorChecksInput',
+  'runDoctorReachabilityChecks',
+  "from './services/doctorChecks'",
+  "from './services/cliProbes'",
+  "from './services/combinedVerification'",
+  "from './services/changedFiles'",
+  "from './services/sonarReportView'",
+  'Retry Saved Prompt',
+  'kronos.resumeRun',
+  'async function pauseSelectedRun',
+  'async function continueSelectedRun',
+  'signalProcessTree(processPid',
+  'Pause Run',
+  'Continue Run',
+  'kronos.pauseRun',
+  'kronos.continueRun',
+  'Archive Run',
+  'kronos.cancelRun',
+  'runRecordPath(picked.run.id)',
+  'evaluatePostRunReadiness',
+  'writeRunRecord(run)',
+  'kronos.recoveryCenter',
+  'kronos.stateAuditLog',
+  'openStateAuditLogPanel',
+  'buildStateAuditLogHtml',
+  'linkMrToTicket',
+  'confirmSafetyGate({',
+  'kronos.cleanupWorktrees',
+  'kronos.restoreBackup',
+  'kronos.resolveConflicts',
+  'kronos.verifyCombined',
+  "from './services/stateStore'",
+  "from './services/integrationAdapters'",
+  "from './services/projectMutations'",
+]) {
+  if (!extension.includes(marker)) {
+    fail(`Missing safety marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  'merge_request',
+  'linkMrToTicket',
+  'RecoveryTicket',
+  'runStoreIssues',
+  'recoveryItemForRunStoreIssue',
+  'Invalid ${scopeLabel} run record',
+  'registryIssue',
+  'recoveryItemForWorktreeRegistryIssue',
+  'Active worktree registry needs manual review',
+  'recoveryItemForOrphanMergeRequest',
+  'Link MR to Ticket',
+]) {
+  if (!recoveryCenter.includes(marker)) {
+    fail(`Missing recovery center marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  'export function kronosWebviewBaseCss',
+  '--k-bg: var(--vscode-editor-background)',
+  '.kronos-header',
+  '.kronos-table',
+  '.kronos-empty',
+  '.kronos-stat-grid',
+  '.kronos-pill.pass',
+  '.kronos-input',
+  '.kronos-toolbar',
+  '.kronos-card',
+  '.kronos-empty.compact',
+]) {
+  if (!webviewHtml.includes(marker)) {
+    fail(`Missing shared webview design marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  'kronosWebviewBaseCss',
+  'id="board-filter"',
+  'id="board-filter-summary"',
+  'function applyBoardFilter',
+  'let lastFocusedEl = null',
+  'function formatWebviewDateTime',
+  'escapeClass',
+  'data-search="${attr(searchText)}"',
+  "'To Do': [], 'Queued': [], 'In Progress': [], 'Review': [], 'Blocked': [], 'Done': []",
+  "done: 'Done'",
+  'data-empty',
+  "empty.textContent = query ? 'No matching tickets.' : 'No tickets.'",
+  'isQueued,',
+  "makeButton(t.isQueued ? 'Remove from Queue' : 'Add to Queue'",
+  'function normalizeCommentsPayload',
+  "post(t.isQueued ? 'removeFromQueue' : 'addToQueueFromModal'",
+  "linkTicketToProject(ticket, project);\n            state.reloadAndNotify();\n            renderBoard();",
+  "unlinkTicketFromProject(ticket, project);\n            state.reloadAndNotify();\n            renderBoard();",
+  "const result = addTicketToQueue(ticket);\n            state.reloadAndNotify();\n            renderBoard();",
+  "await removeTicketFromQueue(state, ticket, true);\n          renderBoard();",
+  'class="kronos-shell board-shell"',
+  'class="kronos-shell dashboard-shell"',
+  'class="kronos-shell ticket-shell"',
+  'class="kronos-shell diff-shell"',
+  'function dashboardBriefRecord',
+  'function dashboardBriefItems',
+  'function dashboardBriefCount',
+  'function kronosOperatorPanelCss',
+  'class="kronos-shell operator-shell"',
+  'operator-summary',
+  'summary-card',
+  'table-wrap kronos-panel',
+  'operator-card',
+  'operator-hero',
+  'plan-list',
+  '.file-link.add',
+  'Kronos Prompt Manager',
+  'Kronos Doctor',
+]) {
+  if (!extension.includes(marker)) {
+    fail(`Missing UI/UX marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  'export function archiveRun',
+  'export function readRunRecord',
+  'export function listRunStoreIssues',
+  'export interface RunStoreIssue',
+  'function readRequiredRunRecord',
+  'Invalid run record',
+  'export function markRunNeedsHuman',
+  'export function markRunCancelled',
+  'export function markRunPaused',
+  'export function markRunContinued',
+  'mark-needs-human',
+  'cancel-run',
+  'pause-run',
+  'continue-run',
+  "run.failureKind = run.failureKind || 'unknown'",
+  "run.failureKind = 'cancelled'",
+  'export function readArchivedRuns',
+  'writeTextAtomic(promptPath, prompt)',
+  'ARCHIVED_RUNS_DIR',
+  "safeFileStem(runId, { fallback: 'run' })",
+  'Refusing to append run log outside active runs directory',
+  'function moveRunArtifactIfExists',
+  'function isPathInside',
+  'outside active runs directory',
+  'run.archiveWarnings = warnings',
+]) {
+  if (!runStore.includes(marker)) {
+    fail(`Missing run store marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  'export function safeFileStem',
+  'export function safePromptFileName',
+  'Invalid prompt template name',
+  "createHash('sha256')",
+  'hashLength',
+  'maxLength',
+  "replace(/[^a-zA-Z0-9_.-]/g, '-')",
+]) {
+  if (!fileNames.includes(marker)) {
+    fail(`Missing file name sanitizer marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  "safeFileStem(ticketKey, { fallback: 'ticket' })",
+]) {
+  if (!evidenceStore.includes(marker)) {
+    fail(`Missing evidence store safe filename marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  'const fileName = safePromptFileName(name)',
+  "safeFileStem(value, { fallback: 'prompt-snapshot', maxLength: 120 })",
+]) {
+  if (!promptManager.includes(marker)) {
+    fail(`Missing prompt manager safe filename marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  'safePromptFileName(promptName)',
+  'invalid prompt name',
+  'path.join(promptDir, safePromptFileName(name))',
+]) {
+  if (!integrationManifest.includes(marker)) {
+    fail(`Missing manifest prompt filename marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  'promptPath?: string',
+  'writeRunPrompt(id, prompt)',
+  'retryOfRunId?: string',
+  'readiness?: any',
+  'failureKind?: RunFailureKind',
+  "'paused'",
+  "'waiting_for_review'",
+  'processPid?: number',
+  'branch?: RunBranchMetadata',
+  'permissions?: RunPermissionMetadata',
+  'export interface RunBranchMetadata',
+  'export interface RunPermissionMetadata',
+  'readRunRecord(run.id)',
+  'markRunCancelled(run.id',
+  'const CLAUDE_PATH',
+  'CLAUDE_PERMISSION_MODE',
+  'CLAUDE_ALLOWED_TOOL_PATTERNS',
+  'function buildClaudeArgs',
+  'function buildRunPermissionMetadata',
+  'function buildRunBranchMetadata',
+  "from '../services/gitWorkspace'",
+  'currentRef: currentGitRef(input.cwd)',
+  'currentCommit: currentGitCommit(input.cwd)',
+  'function resolveCliPath',
+  'spawn(CLAUDE_PATH, claudeArgs',
+  "permissions: buildRunPermissionMetadata(['~/.claude'])",
+  'const permissions = buildRunPermissionMetadata(addDirs)',
+  'const branch = buildRunBranchMetadata({',
+  'requestedWorktreeBranch',
+  'resolvedWorktreeRef',
+  'checkoutRef',
+  'permissionSummary',
+  'branchSummary',
+  'Failed to launch Claude CLI',
+  'GCP auth expired or missing.',
+  'Authenticate and retry the saved prompt from Run Center.',
+  'classifyRunFailure({ ...run',
+  'spawnErrorHandled',
+  'workspaceCwd?: string',
+  'projectNameOverride?: string',
+  'managedWorktreePath',
+  'onComplete?: (code: number, run: KronosRun) => void',
+  'Readiness',
+  'function resolveBaseRef',
+  'function configuredStateBaseBranch',
+  'function configuredProjectJsonBaseBranch',
+  'resolveDefaultBaseBranch',
+  'projectBaseSource',
+  'projectBaseWarning',
+  'Could not fully resolve project base branch config',
+  "from '../services/sessionStore'",
+  'writeSavedSession(session)',
+  'export { getAggregateStats, listSavedSessions, listSessionStoreIssues }',
+  'const id = safeSessionId',
+  'function toValidDate',
+  'function progressDateOr',
+  'function progressEventTimeLabel',
+  'function progressDurationSeconds',
+  'function progressDateTimeLabel',
+  'function stringOrDefault',
+  'const sessionStart = progressDateOr(session.startedAt, new Date())',
+  'timestamp: progressDateOr(e.timestamp, sessionStart)',
+  'const durationSec = progressDurationSeconds(events)',
+  'Duration: ${progressDurationSeconds(events)}s',
+  'const statusClass = escapeClass(status)',
+  'const started = progressDateTimeLabel(run.startedAt)',
+  'const runEvents = Array.isArray(run.events) ? run.events : []',
+  'const promptMeta = isRecord(run.promptMetadata) ? run.promptMetadata : undefined',
+  '${escapeClass(readinessStatus)}',
+  "stringOrDefault(run.worktreePath || run.cwd, 'unknown workspace')",
+  "const id = safeFileStem(`${project}-${skill}-${ticket || 'no-ticket'}-${Date.now().toString(36)}`, { fallback: 'run', maxLength: 160 })",
+  "safeFileStem(ticket || skill, { fallback: 'worktree', maxLength: 80 })",
+]) {
+  if (!dispatcher.includes(marker)) {
+    fail(`Missing run recovery marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  'export interface SessionStoreIssue',
+  'export function listSessionStoreIssues',
+  'export function listSavedSessions',
+  'export function writeSavedSession',
+  'export interface SavedSessionEvent',
+  'export interface AggregateStats',
+  'export function normalizeSavedSessionEvents',
+  'function normalizeSavedSessionEvent',
+  'export function normalizeAggregateSessions',
+  'function normalizeAggregateSession',
+  'function finiteNumber',
+  'function readSavedSessionFileResult',
+  'function readAggregateStatsResult',
+  'invalid_session_stats',
+  'function listSessionJsonFiles',
+  'function compareSessionsNewestFirst',
+  'function safeSessionId',
+  "safeFileStem(sessionId, { fallback: `session-${Date.now().toString(36)}`, maxLength: 180 })",
+]) {
+  if (!sessionStore.includes(marker)) {
+    fail(`Missing session store marker: ${marker}`);
+  }
+}
+if (dispatcher.includes("const id = `${project}-${skill}-${ticket || 'no-ticket'}-${Date.now().toString(36)}`;")) {
+  fail('Saved session filenames must be sanitized before writing to disk.');
+}
+if (dispatcher.includes('const statusClass = escapeHtml(run.status)')) {
+  fail('Run Center status classes must use escapeClass, not escapeHtml.');
+}
+if (dispatcher.includes('new Date(run.startedAt).toLocaleString()')) {
+  fail('Run Center timestamps must render through safe date fallback helpers.');
+}
+if (dispatcher.includes('run.events[run.events.length - 1]')) {
+  fail('Run Center must tolerate missing or malformed run.events.');
+}
+
+for (const marker of [
+  'export function readRunLogTail',
+  'export function buildRunResumePrompt',
+  'Resume Kronos run',
+  'Recent run log tail',
+]) {
+  if (!runRecovery.includes(marker)) {
+    fail(`Missing run recovery marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  'export function addTicketEvidenceNote',
+  'export function addTicketEvidenceCheck',
+  'export function recordTicketEnvironmentResult',
+  'export function replaceTicketAcceptanceCriteria',
+  'export function updateTicketAcceptanceCriteria',
+  'export function linkMergeRequestToTicket',
+  'export function previewLinkMergeRequestToTicket',
+  'reviewReady',
+  'decideEvidenceHandoff',
+  'allowReviewHandoffWithWarnings',
+  'add-evidence-check',
+  'record-environment-result',
+  'setAcceptanceCriteriaChecked',
+  'function mutateState',
+  "writeJsonFileAtomic(STATE_FILE, state, action)",
+  'validateStateFileShape(state)',
+]) {
+  if (!ticketMutations.includes(marker)) {
+    fail(`Missing ticket mutation marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  'export function addTicketToQueue',
+  'export function selectNextQueueItem',
+  'export function addPlanToQueue',
+  'export function recordPlanQueueDecision',
+  'export function reorderQueueItem',
+  'export function removeTicketFromQueue',
+  'export function linkTicketToProject',
+  'export function unlinkTicketFromProject',
+  'writeJsonFileAtomic(QUEUE_FILE',
+  'writeJsonFileAtomic(STATE_FILE',
+  'queue-add-plan',
+  'queue-pin-plan',
+  'queue-plan-snoozed',
+  'queue-plan-rejected',
+  'queue-reorder',
+  'queue-add-ticket',
+  'ticket-link-project',
+]) {
+  if (!queueMutations.includes(marker)) {
+    fail(`Missing queue mutation marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  'export function setProjectConfigValue',
+  'export function setProjectIntegrationConfig',
+  'export function writeProjectSetupConfig',
+  'export function removeProject',
+  'export function setScanDirs',
+  'writeJsonFileAtomic(STATE_FILE',
+  'project-setup-config',
+  'project-integration-config-update',
+  'validateStateFileShape(state)',
+  'project-config-update',
+  'project-remove',
+  'settings-scan-dirs',
+  'upsertDiscoveredProject',
+]) {
+  if (!projectMutations.includes(marker)) {
+    fail(`Missing project mutation marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  'export async function probeProviderReachability',
+  'ProviderReachabilityTarget',
+  'Unsupported URL scheme',
+  'No base URL configured for this enabled provider',
+  'safeUrlLabel',
+  "'User-Agent': 'kronos-doctor'",
+]) {
+  if (!providerReachability.includes(marker)) {
+    fail(`Missing provider reachability marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  'export function runKronosStateScript',
+  'export function runGitlabJson',
+  'export function runPipelineJson',
+  'export function requiredScripts',
+  'Invalid JSON from',
+  'Kronos script missing',
+]) {
+  if (!scriptClient.includes(marker)) {
+    fail(`Missing script client marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  'export function runStateScript',
+  'export function refreshKronosState',
+  'export function discoverProjects',
+  'export function discoverProjectsJson',
+  'export function normalizeDiscoveredProjects',
+  'function normalizeDiscoveredProject',
+  'normalizeDiscoveredProjects(data.candidates)',
+  'export function registerProject',
+  'export function addAdhocTask',
+  'export function completeAdhocTask',
+  'export function readMorningBrief',
+  'export function readMorningBriefJson',
+  'function arrayOrEmpty',
+  'function finiteNumberOrZero',
+  'function stringOrNull',
+  'completed: arrayOrEmpty(parsed.completed)',
+  'ready_to_go: arrayOrEmpty(parsed.ready_to_go)',
+  'function parseStateScriptJson',
+  'kronos_state.py --discover',
+  'kronos_state.py --morning-brief',
+  'runKronosStateScript',
+]) {
+  if (!stateScriptAdapter.includes(marker)) {
+    fail(`Missing state script adapter marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  'export function buildNextActionContext',
+  'export function buildNextActionStartDecision',
+  'export function skillForAction',
+  'commandLabel',
+  'risks',
+  'preflight',
+  'blockers',
+  'Cannot start',
+  'Claude auth preflight must pass before dispatch.',
+  'Collision detector checks active runs',
+  'evidenceNotes(ticket).length',
+  'evidenceChecks(ticket).length',
+  'evidenceEnvironmentResults(ticket).length',
+]) {
+  if (!nextActionContext.includes(marker)) {
+    fail(`Missing next action context marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  'export function originProjectPath',
+  'export function firstRemoteBranchMatching',
+  'export function currentGitRef',
+  'export function currentGitCommit',
+  'export function prepareManagedWorktree',
+  'export function inspectTrackedWorktree',
+  'export function removeWorktreeSafely',
+  'export function createWorkspaceDiffArtifact',
+  'const scpLike = remoteRaw.match',
+  'new URL(remoteRaw)',
+  'function stripGitRemotePath',
+  "safeFileStem(String(run.id || 'run'), { fallback: 'run' })",
+  "runner(['status', '--short']",
+  "runner(['status', '--porcelain']",
+  "runner(['worktree', 'add'",
+  "runner(['worktree', 'remove'",
+  "runner(['diff', '--cached', '--']",
+]) {
+  if (!gitWorkspace.includes(marker)) {
+    fail(`Missing git workspace marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  'export function stopProcessTree',
+  'export function signalProcessTree',
+  "'taskkill'",
+  "'SIGTERM'",
+  "'SIGKILL'",
+  "'SIGSTOP'",
+  "'SIGCONT'",
+  'fallbackKill',
+]) {
+  if (!processTree.includes(marker)) {
+    fail(`Missing process tree marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  'export function webviewCspMeta',
+  'export function withWebviewCsp',
+  "default-src 'none'",
+  "script-src ${scriptSrc}",
+  'Content-Security-Policy',
+]) {
+  if (!webviewSecurity.includes(marker)) {
+    fail(`Missing webview security marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  'export function defaultCliProbeCommandRunner',
+  'export function runCliProbe',
+  'export function readClaudeAgents',
+  'export function checkGcloudApplicationDefaultAuth',
+  'export function checkClaudeModelAccess',
+  "execFileSync(command, args",
+  "['agents', '--json']",
+  "['auth', 'application-default', 'print-access-token']",
+  "['-p', 'ok', '--model', model, '--permission-mode', 'auto']",
+]) {
+  if (!cliProbes.includes(marker)) {
+    fail(`Missing CLI probes marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  'export function sanitizeGitBranchRef',
+  'export function resolveReviewBranch',
+  'export function mergeRefsForBranch',
+  'export function buildCombinedVerificationPlan',
+  'export function buildCombinedVerificationPromptVars',
+  'mr.source_branch',
+  'mr.sourceBranch',
+  'mr.head_branch',
+  'git merge ${ref} --no-edit',
+]) {
+  if (!combinedVerification.includes(marker)) {
+    fail(`Missing combined verification marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  'export function normalizeChangedFilePath',
+  'export function changedFilePaths',
+  'export function primaryChangedFilePath',
+  'export function normalizeChangedFile',
+  'export function normalizeChangedFiles',
+  'file.new_path',
+  'file.old_path',
+  'file.newPath',
+  'file.oldPath',
+  'file.filename',
+  "typeof file.diff === 'string'",
+]) {
+  if (!changedFiles.includes(marker)) {
+    fail(`Missing changed files marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  'export function buildSonarDashboardUrl',
+  'const base = new URL(host)',
+  "base.protocol !== 'http:' && base.protocol !== 'https:'",
+  'export function formatSonarMetricName',
+  'export function sonarGateStatus',
+  'export function sonarConditionList',
+  'export function sonarMeasureList',
+  'export function sonarIssueList',
+  'export function buildSonarReport',
+  'SonarReportRenderInput',
+  'gate: unknown',
+  'measures: unknown',
+  'issues: unknown',
+  'kronosWebviewBaseCss',
+  'class="kronos-shell sonar-shell"',
+  'class="kronos-button primary"',
+  'script nonce="${input.nonce}"',
+  "vscode.postMessage({ command: 'fixSonar' })",
+  "vscode.postMessage({ command: 'openSonar' })",
+  'issueList.slice(0, 50)',
+]) {
+  if (!sonarReportView.includes(marker)) {
+    fail(`Missing Sonar report view marker: ${marker}`);
+  }
+}
+
+for (const [file, source, marker] of [
+  ['src/state/KronosState.ts', sources['src/state/KronosState.ts'], "from '../services/cliProbes'"],
+  ['src/runners/sessionDispatcher.ts', dispatcher, "from '../services/cliProbes'"],
+  ['src/extension.ts', extension, "from './services/cliProbes'"],
+]) {
+  if (!source.includes(marker)) {
+    fail(`${file} must route CLI readiness checks through cliProbes.`);
+  }
+}
+
+for (const marker of [
+  'export function runDoctorChecks',
+  'export function buildDoctorReachabilityTargets',
+  'export async function runDoctorReachabilityChecks',
+  'export function projectConfigGaps',
+  'credentialCheck',
+  'Claude CLI compatible version',
+  'Project config completeness',
+  'Manifest artifact hashes',
+  'Provider network reachability',
+  'GitHub Actions credentials',
+  'GitHub API network reachability',
+  'github_repository',
+  'probeProviderReachability',
+  'Values are not displayed',
+  'DoctorCommandRunner',
+]) {
+  if (!doctorChecks.includes(marker)) {
+    fail(`Missing doctor checks marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  "if (options.remove) {\n        untrackWorktree(entry.worktreePath);",
+  "r.status === 'removable' || r.status === 'missing'",
+  "from '../services/worktreeRegistry'",
+  'trackActiveWorktree(projectPath, worktreePath, ticket)',
+  'untrackActiveWorktree(worktreePath)',
+  'Active worktree registry needs manual review before creating a worktree',
+  'registryIssue: registry.issue',
+]) {
+  if (!dispatcher.includes(marker)) {
+    fail(`Missing worktree cleanup safety marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  'export const ACTIVE_WORKTREES_FILE',
+  'export interface ActiveWorktreeRegistry',
+  'export function loadActiveWorktreeRegistry',
+  'export function trackActiveWorktree',
+  'export function untrackActiveWorktree',
+  'active-worktrees.json must be an array',
+  'assertMutableRegistry',
+  'needs manual review before it can be changed',
+]) {
+  if (!worktreeRegistry.includes(marker)) {
+    fail(`Missing worktree registry marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  'export function writeJsonFileAtomic',
+  'export function validateQueueState',
+  'export function validateStateFileShape',
+  'export function listBackups',
+  'export function restoreBackup',
+  'export function listStateAuditEvents',
+  'STATE_AUDIT_FILE',
+  'VALID_TICKET_ACTIONS',
+  'VALID_QUEUE_ACTIONS',
+  'function validateProjectRecord',
+  'function validateProjectConfig',
+  'function validateMergeRequest',
+  'function validateBuildStatus',
+  'function validateEvidenceNote',
+  'function isPlainObject',
+  'function requireFiniteNumber',
+  'validateActionValue(t.next_action',
+  'validateActionValue(item.action',
+  'export function migrateStateFileShape',
+  'export function migrateQueueFileShape',
+  'function migrateQueueItemShape',
+  'export function readStateFile',
+  'export function readQueueFile',
+  'STATE_WRITE_LOCK_FILE',
+  'acquireStateWriteLock',
+  'clearStaleWriteLock',
+  'DEFAULT_OVERNIGHT',
+]) {
+  if (!stateStore.includes(marker)) {
+    fail(`Missing state store marker: ${marker}`);
+  }
+}
+
+if (!sources['src/state/KronosState.ts'].includes('this._state = readStateFile()')) {
+  fail('KronosState must load state through readStateFile.');
+}
+for (const marker of [
+  'export interface KronosStateLoadIssue',
+  'private _loadIssues',
+  'get loadIssues()',
+  "target: 'state.json'",
+  "target: 'queue.json'",
+]) {
+  if (!sources['src/state/KronosState.ts'].includes(marker)) {
+    fail(`Missing KronosState load issue marker: ${marker}`);
+  }
+}
+for (const marker of [
+  'stateLoadErrors?:',
+  'sessionStoreIssues?:',
+  "add('state.json parse', 'fail'",
+  "add('queue.json parse', 'fail'",
+  "add('Session store integrity', 'warn'",
+  "add('Session store integrity', 'pass'",
+  'state.json could not be parsed or validated',
+]) {
+  if (!doctorChecks.includes(marker)) {
+    fail(`Missing doctor load issue marker: ${marker}`);
+  }
+}
+for (const marker of [
+  'stateLoadErrors: state.loadIssues',
+  'sessionStoreIssues: listSessionStoreIssues()',
+  'No readable saved sessions',
+  'No readable session stats',
+  "statusBarItem.text = '$(error) Kronos: state error'",
+]) {
+  if (!extension.includes(marker)) {
+    fail(`Missing extension load issue marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  'export function extractAcceptanceCriteria',
+  'export function extractCriterionTexts',
+  'Given|When|Then|And|But',
+  'criterionId',
+  'setAcceptanceCriteriaChecked',
+]) {
+  if (!acceptanceCriteria.includes(marker)) {
+    fail(`Missing acceptance criteria marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  'export function evidenceNotes',
+  'export function evidenceChecks',
+  'export function evidenceRiskNotes',
+  'export function evidenceEnvironmentResults',
+  'export function evidenceString',
+  'function arrayRecords',
+]) {
+  if (!evidenceData.includes(marker)) {
+    fail(`Missing evidence data marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  '## Evidence Checks',
+  '## Environment Results',
+  'evidenceRiskNotes(ticket)',
+  'evidenceNotes(ticket)',
+  'evidenceChecks(ticket)',
+  'evidenceEnvironmentResults(ticket)',
+  'evidenceString',
+]) {
+  if (!evidenceStore.includes(marker)) {
+    fail(`Missing evidence store marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  'export function buildEvidenceHandoffPlan',
+  'Jira ticket comment',
+  'Merge request comment',
+  'manualSteps',
+  'Paste the comment',
+]) {
+  if (!evidenceHandoff.includes(marker)) {
+    fail(`Missing evidence handoff marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  'export function buildHumanReviewInbox',
+  'duplicateQueuedTickets',
+  'REVIEW_READY_ACTIONS',
+  'needs_human',
+  "status === 'cancelled'",
+  'const runs = (Array.isArray(input.runs) ? input.runs : []).filter(isRunRecord)',
+  'function runString',
+  'function isRunRecord',
+]) {
+  if (!humanReviewInbox.includes(marker)) {
+    fail(`Missing human review inbox marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  'export function evaluateEvidenceGate',
+  'export function evaluateEvidenceGates',
+  'REVIEW_READY_ACTIONS',
+  'No evidence notes',
+  'Build #',
+  'changes requested',
+  'environment',
+  'evidence check',
+  'evidenceNotes(ticket)',
+  'evidenceChecks(ticket)',
+  'evidenceEnvironmentResults(ticket)',
+  'evidenceString',
+]) {
+  if (!evidenceGate.includes(marker)) {
+    fail(`Missing evidence gate marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  'export function decideEvidenceHandoff',
+  'requiresConfirmation',
+  'blockingChecks',
+  'not ready for review handoff',
+  'review handoff warnings',
+]) {
+  if (!evidenceGatePolicy.includes(marker)) {
+    fail(`Missing evidence gate policy marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  'recent_file',
+  "ACTIVE_RUN_STATUSES = new Set(['preflight', 'running', 'paused'])",
+  'ticket_area',
+  'mr_file',
+  'editedFilesForRun',
+  'const events = Array.isArray(run.events) ? run.events : []',
+  'changedFilesForTicket',
+  'ticketAreaTokens',
+  'isRecentRun',
+  'sharedFilePaths',
+]) {
+  if (!collisionDetector.includes(marker)) {
+    fail(`Missing collision detector marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  'export interface TicketFilter',
+  'TICKET_FILTER_PRESETS',
+  'filterTickets',
+  'ticketMatchesFilter',
+  'groupTicketEntries',
+  'staleDays',
+]) {
+  if (!ticketFilters.includes(marker)) {
+    fail(`Missing ticket filter marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  'export interface ScoreBreakdownItem',
+  'scoreBreakdown',
+  'Queue position',
+  'Project link',
+  'sumBreakdown',
+  'recordQueueDecision',
+  'clearQueueDecision',
+  'planForMinutes',
+  'overnightCandidatePlans',
+  'isPlanSuppressed',
+  'export interface BacklogTriageReport',
+  'buildBacklogTriageReport',
+  'ready_to_plan',
+  'evidence_gap',
+  'export interface ProjectBatchPlan',
+  'planByProject',
+  'export interface ReleaseBatchPlan',
+  'planByRelease',
+  'releaseFromLabel',
+  'summarizePlanActions',
+  'evidenceNotes(ticket).length',
+  'evidenceChecks(ticket).length',
+  'evidenceEnvironmentResults(ticket).length',
+]) {
+  if (!queuePlanner.includes(marker)) {
+    fail(`Missing queue planner marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  'export function computeAgentQualityScore',
+  'SUCCESS_RUN_STATUSES',
+  'waiting_for_review',
+  'Run completion',
+  'Evidence readiness',
+  'Build and review health',
+  'Retry discipline',
+  'gradeForScore',
+  'const runs = (Array.isArray(input.runs) ? input.runs : []).filter(isRunRecord)',
+  'function hasRetryMetadata',
+  'function runString',
+  'function isRunRecord',
+]) {
+  if (!agentQualityScore.includes(marker)) {
+    fail(`Missing agent quality score marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  'export function readIntegrationManifest',
+  'export function validateIntegrationManifest',
+  'export function auditIntegrationManifest',
+  'export function writeIntegrationManifestSnapshot',
+  'export function buildIntegrationManifestSnapshot',
+  'ManifestArtifactAudit',
+  'sha256File',
+  'PromptManifestSmokeTest',
+  'smoke_tests',
+  'INTEGRATION_MANIFEST_FILE',
+  'Required script not listed in manifest',
+  'Unknown script in manifest',
+]) {
+  if (!integrationManifest.includes(marker)) {
+    fail(`Missing integration manifest marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  'export interface PromptSmokeTest',
+  'export interface PromptSmokeResult',
+  'export interface PromptHistorySnapshot',
+  'PROMPT_HISTORY_DIR',
+  'buildDefaultPromptSmokeTests',
+  'runPromptSmokeTests',
+  'createPromptHistorySnapshot',
+  'diffPromptHistorySnapshots',
+  'latestPromptHistorySnapshot',
+  'repairRequiredPromptTemplates',
+  'STARTER_PROMPT_VARIABLES',
+  'Rendered prompt still contains unresolved',
+]) {
+  if (!promptManager.includes(marker)) {
+    fail(`Missing prompt manager marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  'export const BUILTIN_PROFILES',
+  'enterprise-gitlab-jira',
+  'personal-local',
+  'github-actions',
+  'no-sonar',
+  'resolveDefaultBaseBranch',
+]) {
+  if (!profileManager.includes(marker)) {
+    fail(`Missing profile manager marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  'export function analyzeAging',
+  'DEFAULT_AGING_THRESHOLDS',
+  'buildFailureDays',
+  'verificationDays',
+  'has been waiting for review',
+]) {
+  if (!agingAnalyzer.includes(marker)) {
+    fail(`Missing aging analyzer marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  'export function buildAgingReportHtml',
+  "from './webviewHtml'",
+  'safeHttpHref(item.url)',
+  'kronosWebviewBaseCss',
+  'class="kronos-shell aging-shell"',
+  'kronos-stat-grid',
+  'Kronos Aging Report',
+]) {
+  if (!agingReportView.includes(marker)) {
+    fail(`Missing aging report view marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  'export function escapeHtml',
+  'export function escapeAttr',
+  'export function escapeClass',
+  'export function safeHttpHref',
+  "parsed.protocol !== 'http:'",
+  "parsed.protocol !== 'https:'",
+]) {
+  if (!webviewHtml.includes(marker)) {
+    fail(`Missing webview HTML helper marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  'export function assessSafetyGate',
+  'Kronos Safety Gate',
+  'destructive',
+  'branch-switch',
+  'external-publish',
+  'requiresConfirmation',
+]) {
+  if (!safetyGate.includes(marker)) {
+    fail(`Missing safety gate marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  'export function buildEvidencePublishPlan',
+  'export async function publishEvidencePlan',
+  'export function readyPublishDestinations',
+  '/rest/api/3/issue/',
+  '/api/v4/projects/',
+  'const urlIid = parsed.pathname.slice(markerIndex + marker.length)',
+  'const targetIid = urlIid || String(iid)',
+  'function isHttpUrl',
+  'function isHttpProtocol',
+  'Evidence publish endpoint must use HTTP or HTTPS.',
+  "e?.message || 'Evidence publish request failed.'",
+  'JIRA_API_TOKEN',
+  'GITLAB_TOKEN',
+  'Evidence publish request timed out',
+]) {
+  if (!evidencePublisher.includes(marker)) {
+    fail(`Missing evidence publisher marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  'export function computeTrendMetrics',
+  'SUCCESS_RUN_STATUSES',
+  'FINISHED_RUN_STATUSES',
+  'Rework rate',
+  'Build pass rate',
+  'Verification pass rate',
+  'Average cycle time',
+  'Review health',
+  'const rawRuns = Array.isArray(input.runs) ? input.runs : []',
+  '.filter(isRecord)',
+  'evidenceChecks(ticket)',
+  'evidenceEnvironmentResults(ticket)',
+  "evidenceString(check, 'result')",
+  'function hasRetryMetadata',
+  'function runString',
+  'function isRecord',
+]) {
+  if (!trendMetrics.includes(marker)) {
+    fail(`Missing trend metrics marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  'export function buildDashboardWorklist',
+  'needs_human',
+  'active_runs',
+  'failing_gates',
+  'recent_completed',
+  'stale_items',
+  'evidenceStatusForRun',
+  'const runs = (Array.isArray(input.runs) ? input.runs : []).filter(isRunRecord)',
+  "runString(run, 'status')",
+  'function runId',
+  'function isRunRecord',
+]) {
+  if (!dashboardWorklist.includes(marker)) {
+    fail(`Missing dashboard worklist marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  'export function buildTicketTimeline',
+  'const runs = (Array.isArray(input.runs) ? input.runs : []).filter(isRunRecord)',
+  'const notes = evidenceNotes(ticket)',
+  'const checks = evidenceChecks(ticket)',
+  'const environmentResults = evidenceEnvironmentResults(ticket)',
+  "runString(run, 'promptHash')",
+  'function runDetail',
+  'function isRunRecord',
+]) {
+  if (!ticketTimeline.includes(marker)) {
+    fail(`Missing ticket timeline marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  'export function evaluatePostRunReadiness',
+  'export function classifyRunFailure',
+  'HANDOFF_ACTIONS',
+  'SUCCESS_RUN_STATUSES',
+  'claude cli',
+  'exitCode === 124',
+  "skill.includes('sonar')",
+  "skill.includes('verify')",
+  'evidence gate is failing',
+  'Run completed, but ticket next action',
+]) {
+  if (!postRunReadiness.includes(marker)) {
+    fail(`Missing post-run readiness marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  'export const jiraAdapter',
+  'export const gitlabAdapter',
+  'export const sonarAdapter',
+  'export interface JiraComment',
+  'export function normalizeJiraComments',
+  'function normalizeJiraComment',
+  'mergeRequestDiff',
+  'normalizeChangedFiles(data.files)',
+  'isRecord(data.mr)',
+  'export function normalizeSonarBranches',
+  'function normalizeSonarBranch',
+  'normalizeSonarBranches(data.branches)',
+  'runPipelineJson<unknown>',
+  'ticketComments',
+  'Jira comments for ${ticketKey}',
+  'projectKey',
+]) {
+  if (!integrationAdapters.includes(marker)) {
+    fail(`Missing integration adapter marker: ${marker}`);
+  }
+}
+
+if (process.exitCode) {
+  process.exit(process.exitCode);
+}
+
+console.log('Security invariants OK.');

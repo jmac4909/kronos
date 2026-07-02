@@ -1,0 +1,160 @@
+import * as vscode from 'vscode';
+import * as fs from 'fs';
+import { KronosState as KronosStateType, QueueState, ClaudeSession } from './types';
+import { RenderedPrompt, renderPrompt } from '../services/promptManager';
+import { STATE_FILE, QUEUE_FILE, readQueueFile, readStateFile } from '../services/stateStore';
+import { ScriptRunOptions } from '../services/scriptClient';
+import { DiscoverProjectsResult, MorningBriefResult, addAdhocTask, completeAdhocTask, discoverProjectsJson, readMorningBriefJson, refreshKronosState, registerProject, runStateScript } from '../services/stateScriptAdapter';
+import { readClaudeAgents } from '../services/cliProbes';
+
+export interface KronosStateLoadIssue {
+  target: 'state.json' | 'queue.json';
+  filePath: string;
+  detail: string;
+}
+
+export class KronosState {
+  private _state: KronosStateType | null = null;
+  private _queue: QueueState | null = null;
+  private _sessions: ClaudeSession[] = [];
+  private _loadIssues: KronosStateLoadIssue[] = [];
+  private _onDidChange = new vscode.EventEmitter<void>();
+  readonly onDidChange = this._onDidChange.event;
+  private _onDidSessionChange = new vscode.EventEmitter<void>();
+  readonly onDidSessionChange = this._onDidSessionChange.event;
+  private _watchers: fs.FSWatcher[] = [];
+  private _watchedFiles = new Set<string>();
+  private _suppressWatch = false;
+  private _watchDebounce: NodeJS.Timeout | undefined;
+
+  constructor() {
+    this.load();
+    this.startWatching();
+  }
+
+  get state(): KronosStateType | null { return this._state; }
+  get queue(): QueueState | null { return this._queue; }
+  get sessions(): ClaudeSession[] { return this._sessions; }
+  get loadIssues(): KronosStateLoadIssue[] { return [...this._loadIssues]; }
+
+  load(): void {
+    const issues: KronosStateLoadIssue[] = [];
+    try {
+      this._state = readStateFile();
+    } catch (e: any) {
+      this._state = null;
+      issues.push({
+        target: 'state.json',
+        filePath: STATE_FILE,
+        detail: e?.message || 'Failed to load state.json',
+      });
+    }
+    try {
+      this._queue = readQueueFile();
+    } catch (e: any) {
+      this._queue = null;
+      issues.push({
+        target: 'queue.json',
+        filePath: QUEUE_FILE,
+        detail: e?.message || 'Failed to load queue.json',
+      });
+    }
+    this._loadIssues = issues;
+  }
+
+  private startWatching(): void {
+    this.watchFile(STATE_FILE);
+    this.watchFile(QUEUE_FILE);
+  }
+
+  private watchFile(filepath: string): void {
+    if (this._watchedFiles.has(filepath)) { return; }
+    if (!fs.existsSync(filepath)) { return; }
+    try {
+      const watcher = fs.watch(filepath, () => {
+        if (this._suppressWatch) { return; }
+        clearTimeout(this._watchDebounce);
+        this._watchDebounce = setTimeout(() => {
+          this.load();
+          this._onDidChange.fire();
+        }, 150);
+      });
+      this._watchers.push(watcher);
+      this._watchedFiles.add(filepath);
+    } catch {}
+  }
+
+  ensureWatchers(): void {
+    this.watchFile(STATE_FILE);
+    this.watchFile(QUEUE_FILE);
+  }
+
+  async refreshSessions(): Promise<void> {
+    this._sessions = readClaudeAgents<ClaudeSession>();
+    this._onDidSessionChange.fire();
+  }
+
+  async runScript(args: string[], options: ScriptRunOptions = {}): Promise<string> {
+    return runStateScript(args, { scriptOptions: options });
+  }
+
+  reloadAndNotify(): void {
+    this.load();
+    this.ensureWatchers();
+    this._onDidChange.fire();
+  }
+
+  private async runAndReload<T>(operation: () => T): Promise<T> {
+    this._suppressWatch = true;
+    try {
+      const result = operation();
+      this.reloadAndNotify();
+      return result;
+    } finally {
+      setTimeout(() => { this._suppressWatch = false; }, 300);
+    }
+  }
+
+  async refresh(project?: string): Promise<void> {
+    await this.runAndReload(() => refreshKronosState(project));
+  }
+
+  renderPrompt(name: string, vars: Record<string, string> = {}, projectPath?: string): RenderedPrompt | null {
+    try {
+      return renderPrompt(name, vars, { projectPath });
+    } catch {
+      return null;
+    }
+  }
+
+  loadPrompt(name: string, vars: Record<string, string> = {}, projectPath?: string): string {
+    return this.renderPrompt(name, vars, projectPath)?.text || '';
+  }
+
+  async discover(): Promise<DiscoverProjectsResult> {
+    return this.runAndReload(() => discoverProjectsJson());
+  }
+
+  async register(projectPath: string): Promise<string> {
+    return this.runAndReload(() => registerProject(projectPath));
+  }
+
+  async addTask(title: string, description?: string): Promise<void> {
+    await this.runAndReload(() => addAdhocTask(title, description));
+  }
+
+  async completeTask(taskId: string): Promise<void> {
+    await this.runAndReload(() => completeAdhocTask(taskId));
+  }
+
+  async morningBrief(): Promise<MorningBriefResult> {
+    return readMorningBriefJson();
+  }
+
+  dispose(): void {
+    clearTimeout(this._watchDebounce);
+    this._watchers.forEach(w => w.close());
+    this._onDidChange.dispose();
+    this._onDidSessionChange.dispose();
+  }
+}
