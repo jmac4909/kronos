@@ -4392,7 +4392,36 @@ test('post-run readiness distinguishes process completion from handoff readiness
     run: { id: 'run-1', skill: 'verify-local', status: 'completed' },
     ticket: ticket({ next_action: 'await_review', projects: ['app'] }),
   }), false);
-  assert.match(postRunReadiness.buildRunCompletionEvidenceText({ id: 'run-1' }), /run-1 completed/);
+  const completionEvidence = postRunReadiness.buildRunCompletionEvidenceText({
+    id: 'run-1',
+    status: 'completed',
+    exitCode: 0,
+    testCount: 105,
+    startedAt: '2026-07-01T00:00:00.000Z',
+    endedAt: '2026-07-01T00:01:00.000Z',
+    events: [
+      { type: 'tool', label: 'Editing src/app.ts', detail: '', timestamp: '2026-07-01T00:00:10.000Z' },
+    ],
+  }, ticket({
+    next_action: 'await_review',
+    projects: ['app'],
+    sonar_status: 'OK',
+    mr: {
+      iid: 1,
+      state: 'opened',
+      review_status: 'approved',
+      url: 'https://gitlab.example/1',
+      changed_files: [{ path: 'src/app.ts' }],
+    },
+    build: { number: 12, status: 'SUCCESS', url: 'https://jenkins.example/12' },
+  }));
+  assert.match(completionEvidence, /run-1 completed/);
+  assert.match(completionEvidence, /Progress: 1 tool \| 1 changed \| 1m/);
+  assert.match(completionEvidence, /Files changed: 1 from run events; 1 in MR/);
+  assert.match(completionEvidence, /Test count: 105/);
+  assert.match(completionEvidence, /SonarQube: OK/);
+  assert.match(completionEvidence, /MR: !1 opened\/approved - https:\/\/gitlab\.example\/1/);
+  assert.match(completionEvidence, /Build: SUCCESS #12 - https:\/\/jenkins\.example\/12/);
 
   const notReady = postRunReadiness.evaluatePostRunReadiness({
     run: { status: 'completed' },
@@ -4429,6 +4458,7 @@ test('post-run readiness distinguishes process completion from handoff readiness
   const source = readSourceFixture('src', 'services', 'postRunReadiness.ts');
   for (const marker of [
     'run: unknown',
+    "import { runProgressSummary } from './runProgress'",
     "import { evidenceNotes } from './evidenceData'",
     'export function shouldRecordRunCompletionEvidence',
     "runString(record.skill) === 'implement'",
@@ -4440,6 +4470,9 @@ test('post-run readiness distinguishes process completion from handoff readiness
     'function runString(value: unknown): string',
     'function runText(value: unknown): string | undefined',
     'function runEventDetails(value: unknown): unknown[]',
+    'function mergeRequestChangedFileCount(ticket?: Ticket): number | undefined',
+    'function firstStringField(record: Record<string, unknown>, keys: string[]): string | undefined',
+    'function firstNumberField(record: Record<string, unknown>, keys: string[]): number | undefined',
   ]) {
     assert.ok(source.includes(marker), marker);
   }
@@ -4702,7 +4735,7 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'shouldRecordRunCompletionEvidence({ run, ticket })',
     'addTicketEvidenceNote(resolvedTicketKey, {',
     "kind: 'note'",
-    'buildRunCompletionEvidenceText(run)',
+    'buildRunCompletionEvidenceText(run, ticket)',
     "unknownErrorMessage(e, 'Failed to add run completion evidence.')",
     'const resolvedTicketKey = ticketKey || run.ticket || undefined',
     'await showRunCompletionToast(resolvedTicketKey, ticket, run)',

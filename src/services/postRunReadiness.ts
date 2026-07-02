@@ -1,6 +1,7 @@
 import { Ticket } from '../state/types';
 import { EvidenceGateResult, evaluateEvidenceGate } from './evidenceGate';
 import { evidenceNotes } from './evidenceData';
+import { runProgressSummary } from './runProgress';
 
 export type PostRunReadinessStatus = 'ready' | 'needs_human' | 'blocked' | 'not_ready' | 'unknown';
 export type RunFailureKind = 'none' | 'auth' | 'model' | 'script' | 'git' | 'build' | 'test' | 'sonar' | 'timeout' | 'cancelled' | 'unknown';
@@ -32,10 +33,37 @@ export function shouldRecordRunCompletionEvidence(input: { run: unknown; ticket?
     && evidenceNotes(input.ticket).length === 0;
 }
 
-export function buildRunCompletionEvidenceText(run: unknown): string {
+export function buildRunCompletionEvidenceText(run: unknown, ticket?: Ticket): string {
   const record = runRecord(run);
   const runId = runString(record.id) || 'unknown run';
-  return `Kronos implement run ${runId} completed; add detailed verification evidence during review.`;
+  const status = runString(record.status) || 'unknown';
+  const exitCode = Number.isFinite(Number(record.exitCode)) ? `, exit ${Number(record.exitCode)}` : '';
+  const progress = runProgressSummary(run);
+  const mr = ticket?.mr || undefined;
+  const build = ticket?.build || undefined;
+  const mrChangedFiles = mergeRequestChangedFileCount(ticket);
+  const sonarStatus = firstStringField(runRecord(ticket), [
+    'sonar_status',
+    'sonarStatus',
+    'sonar_quality_gate',
+    'sonarQualityGate',
+    'quality_gate',
+    'qualityGate',
+    'quality_gate_status',
+    'qualityGateStatus',
+  ]);
+  const testCount = firstNumberField(record, ['testCount', 'tests', 'testsPassed', 'passedTests']);
+  const lines = [
+    `Kronos implement run ${runId} completed.`,
+    `Run result: ${status}${exitCode}.`,
+    `Progress: ${progress.label}.`,
+    `Files changed: ${progress.filesChanged} from run events; ${mrChangedFiles === undefined ? 'MR file list not captured' : `${mrChangedFiles} in MR`}.`,
+    `Test count: ${testCount === undefined ? 'not captured in run metadata' : testCount}.`,
+    `SonarQube: ${sonarStatus || 'not captured in ticket state'}.`,
+    mr ? `MR: !${mr.iid} ${mr.state}/${mr.review_status}${mr.url ? ` - ${mr.url}` : ''}.` : 'MR: not linked at completion time.',
+    build ? `Build: ${build.status} #${build.number}${build.url ? ` - ${build.url}` : ''}.` : 'Build: not captured in ticket state.',
+  ];
+  return lines.join('\n');
 }
 
 export function evaluatePostRunReadiness(input: {
@@ -178,4 +206,35 @@ function runEventDetails(value: unknown): unknown[] {
     const record = runRecord(event);
     return [record.label, record.detail];
   });
+}
+
+function mergeRequestChangedFileCount(ticket?: Ticket): number | undefined {
+  const files = ticket?.mr?.changed_files || ticket?.mr?.files;
+  return Array.isArray(files) ? files.length : undefined;
+}
+
+function firstStringField(record: Record<string, unknown>, keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === 'string' && value.trim()) {
+      return value.trim();
+    }
+  }
+  return undefined;
+}
+
+function firstNumberField(record: Record<string, unknown>, keys: string[]): number | undefined {
+  for (const key of keys) {
+    const raw = record[key];
+    if (typeof raw === 'number' && Number.isFinite(raw)) {
+      return raw;
+    }
+    if (typeof raw === 'string' && raw.trim()) {
+      const parsed = Number(raw);
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+  }
+  return undefined;
 }

@@ -485,7 +485,7 @@ for (const marker of [
   'shouldRecordRunCompletionEvidence({ run, ticket })',
   'addTicketEvidenceNote(resolvedTicketKey, {',
   "kind: 'note'",
-  'buildRunCompletionEvidenceText(run)',
+  'buildRunCompletionEvidenceText(run, ticket)',
   "unknownErrorMessage(e, 'Failed to add run completion evidence.')",
   'writeRunRecord(run)',
   'await showRunCompletionToast(resolvedTicketKey, ticket, run)',
@@ -2000,6 +2000,7 @@ if (ticketTimeline.includes('type TimelineRunRecord = TimelineRun & Record<strin
 for (const marker of [
   'export function evaluatePostRunReadiness',
   'run: unknown',
+  "import { runProgressSummary } from './runProgress'",
   "import { evidenceNotes } from './evidenceData'",
   'export function shouldRecordRunCompletionEvidence',
   "runString(record.skill) === 'implement'",
@@ -2017,6 +2018,9 @@ for (const marker of [
   'function runString(value: unknown): string',
   'function runText(value: unknown): string | undefined',
   'function runEventDetails(value: unknown): unknown[]',
+  'function mergeRequestChangedFileCount(ticket?: Ticket): number | undefined',
+  'function firstStringField(record: Record<string, unknown>, keys: string[]): string | undefined',
+  'function firstNumberField(record: Record<string, unknown>, keys: string[]): number | undefined',
   'evidence gate is failing',
   'Run completed, but ticket next action',
 ]) {

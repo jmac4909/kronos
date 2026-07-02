@@ -5559,7 +5559,7 @@ function refreshAfterDispatch(state: KronosState, projectName?: string, ticketKe
         try {
           addTicketEvidenceNote(resolvedTicketKey, {
             kind: 'note',
-            text: buildRunCompletionEvidenceText(run),
+            text: buildRunCompletionEvidenceText(run, ticket),
           });
           state.reloadAndNotify();
           ticket = state.state?.tickets[resolvedTicketKey];
