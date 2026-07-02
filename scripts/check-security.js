@@ -696,7 +696,15 @@ for (const forbidden of [
   "vscode.commands.registerCommand('kronos.implement', async (item: any)",
   "vscode.commands.registerCommand('kronos.deployMonitor', async (item: any)",
   "vscode.commands.registerCommand('kronos.verifyFix', async (item: any)",
+  "vscode.commands.registerCommand('kronos.completeTask', async (item: any)",
+  "vscode.commands.registerCommand('kronos.openProject', async (item: any)",
+  "vscode.commands.registerCommand('kronos.openInClaude', async (item: any)",
+  "vscode.commands.registerCommand('kronos.removeProject', async (item: any)",
   "await startClaudeDispatch(projectPath, 'verify-fix', item?.ticketKey,",
+  'if (item?.taskId)',
+  'const projectPath = getProjectPath(state, item?.projectName);',
+  'name: item.projectName,',
+  'const name = item?.projectName;',
   'item?.sourceBranch ||',
   'function planToQueueItem(state: KronosState, plan: PlannedAction): any',
   'function resolveProjectName(state: KronosState, item: any)',
@@ -713,6 +721,11 @@ for (const marker of [
   "vscode.commands.registerCommand('kronos.implement', async (item: unknown)",
   "vscode.commands.registerCommand('kronos.deployMonitor', async (item: unknown)",
   "vscode.commands.registerCommand('kronos.verifyFix', async (item: unknown)",
+  "vscode.commands.registerCommand('kronos.completeTask', async (item: unknown)",
+  "vscode.commands.registerCommand('kronos.openProject', async (item: unknown)",
+  "vscode.commands.registerCommand('kronos.openInClaude', async (item: unknown)",
+  "vscode.commands.registerCommand('kronos.removeProject', async (item: unknown)",
+  'function resolveTaskId(item: unknown): string | undefined',
 ]) {
   if (!extension.includes(marker)) {
     fail(`Extension dispatch command must keep tree payloads unknown: ${marker}`);

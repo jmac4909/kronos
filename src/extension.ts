@@ -1427,25 +1427,28 @@ export function activate(context: vscode.ExtensionContext) {
       }
     }),
 
-    vscode.commands.registerCommand('kronos.completeTask', async (item: any) => {
-      if (item?.taskId) {
-        await state.completeTask(item.taskId);
+    vscode.commands.registerCommand('kronos.completeTask', async (item: unknown) => {
+      const taskId = resolveTaskId(item);
+      if (taskId) {
+        await state.completeTask(taskId);
       }
     }),
 
-    vscode.commands.registerCommand('kronos.openProject', async (item: any) => {
-      const projectPath = getProjectPath(state, item?.projectName);
-      if (projectPath) {
+    vscode.commands.registerCommand('kronos.openProject', async (item: unknown) => {
+      const projectName = resolveProjectName(state, item);
+      const projectPath = getProjectPath(state, projectName);
+      if (projectName && projectPath) {
         const terminal = vscode.window.createTerminal(kronosTerminalOptions({
-          name: item.projectName,
+          name: projectName,
           cwd: projectPath,
         }));
         terminal.show();
       }
     }),
 
-    vscode.commands.registerCommand('kronos.openInClaude', async (item: any) => {
-      const projectPath = getProjectPath(state, item?.projectName);
+    vscode.commands.registerCommand('kronos.openInClaude', async (item: unknown) => {
+      const projectName = resolveProjectName(state, item);
+      const projectPath = getProjectPath(state, projectName);
       if (projectPath) {
         openInClaude(projectPath);
       }
@@ -1972,8 +1975,8 @@ export function activate(context: vscode.ExtensionContext) {
       await removeTicketFromQueue(state, ticketKey, true);
     }),
 
-    vscode.commands.registerCommand('kronos.removeProject', async (item: any) => {
-      const name = item?.projectName;
+    vscode.commands.registerCommand('kronos.removeProject', async (item: unknown) => {
+      const name = resolveProjectName(state, item);
       if (!name) { return; }
       const canRemove = await confirmSafetyGate({
         command: 'kronos.removeProject',
@@ -5821,6 +5824,11 @@ function resolveTicketKey(item: unknown): string | undefined {
   if (typeof nestedItem.ticket === 'string') { return nestedItem.ticket; }
   if (typeof record.ticket === 'string') { return record.ticket; }
   return undefined;
+}
+
+function resolveTaskId(item: unknown): string | undefined {
+  const taskId = recordFromUnknown(item).taskId;
+  return typeof taskId === 'string' && taskId.trim() ? taskId : undefined;
 }
 
 function startReviewAutomation(context: vscode.ExtensionContext, state: KronosState): void {
