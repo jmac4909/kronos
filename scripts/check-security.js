@@ -826,6 +826,8 @@ for (const marker of [
 }
 
 for (const marker of [
+  'export function createWebviewNonce',
+  "toString('hex')",
   'export function webviewCspMeta',
   'export function withWebviewCsp',
   "default-src 'none'",

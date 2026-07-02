@@ -1312,6 +1312,12 @@ test('webview security injects CSP and preserves existing nonce policies', () =>
   assert.match(scriptable, /script-src 'nonce-abc123'/);
   assert.match(scriptable, /img-src data: https:/);
 
+  const nonce = webviewSecurity.createWebviewNonce();
+  assert.match(nonce, /^[a-f0-9]{32}$/);
+  assert.doesNotMatch(nonce, /[+/=]/);
+  const nonceSource = webviewSecurity.webviewCspMeta({ allowScripts: true, nonce });
+  assert.match(nonceSource, new RegExp(`script-src 'nonce-${nonce}'`));
+
   const existing = '<html><head><meta http-equiv="Content-Security-Policy" content="default-src test"></head><body></body></html>';
   assert.equal(webviewSecurity.withWebviewCsp(existing), existing);
 });
@@ -2327,6 +2333,9 @@ test('dispatcher records branch and permission metadata for persisted runs', () 
     'writeSavedSession(session)',
     'export { getAggregateStats, listSavedSessions, listSessionStoreIssues }',
     'const id = safeSessionId',
+    "from '../services/webviewSecurity'",
+    'createWebviewNonce',
+    "const nonce = interactive ? createWebviewNonce() : ''",
     'function toValidDate',
     'function progressDateOr',
     'function progressEventTimeLabel',
@@ -2383,6 +2392,11 @@ test('dispatcher records branch and permission metadata for persisted runs', () 
     source.includes('new Date(run.startedAt).toLocaleString()'),
     false,
     'run center should render invalid timestamps with a safe fallback',
+  );
+  assert.equal(
+    source.includes("randomBytes(16).toString('base64')"),
+    false,
+    'Run Center webview nonce should use hex helper, not base64',
   );
   assert.equal(
     source.includes('run.events[run.events.length - 1]'),
@@ -3873,6 +3887,9 @@ test('webview html helpers centralize escaping and safe HTTP links', () => {
 test('extension webviews use shared UI shell and board filtering affordances', () => {
   const source = readSourceFixture('src', 'extension.ts');
   for (const marker of [
+    "import { createWebviewNonce, withWebviewCsp } from './services/webviewSecurity'",
+    'function createNonce(): string',
+    'return createWebviewNonce()',
     'kronosWebviewBaseCss',
     'class="kronos-shell dashboard-shell"',
     'class="kronos-shell board-shell"',
@@ -3964,6 +3981,11 @@ test('extension webviews use shared UI shell and board filtering affordances', (
   ]) {
     assert.ok(source.includes(marker), marker);
   }
+  assert.equal(
+    source.includes("randomBytes(16).toString('base64')"),
+    false,
+    'webview nonces should use hex helper, not base64',
+  );
   assert.equal(
     source.includes('run.events[run.events.length - 1]'),
     false,

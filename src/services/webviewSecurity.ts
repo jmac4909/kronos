@@ -1,7 +1,13 @@
+import { randomBytes } from 'crypto';
+
 export interface WebviewCspOptions {
   nonce?: string;
   allowScripts?: boolean;
   imgSrc?: string[];
+}
+
+export function createWebviewNonce(): string {
+  return randomBytes(16).toString('hex');
 }
 
 export function webviewCspMeta(options: WebviewCspOptions = {}): string {

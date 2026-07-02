@@ -3,12 +3,12 @@ import { spawn } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
-import { createHash, randomBytes } from 'crypto';
+import { createHash } from 'crypto';
 import { RUNS_DIR, appendRunLog as appendRunLogFile, markRunCancelled, readRunRecord, readRuns, writeRunPrompt, writeRunRecord } from '../services/runStore';
 import { readStateFile } from '../services/stateStore';
 import { RunFailureKind, classifyRunFailure } from '../services/postRunReadiness';
 import { stopProcessTree } from '../services/processTree';
-import { withWebviewCsp } from '../services/webviewSecurity';
+import { createWebviewNonce, withWebviewCsp } from '../services/webviewSecurity';
 import { currentGitCommit, currentGitRef, inspectTrackedWorktree, prepareManagedWorktree, removeWorktreeSafely } from '../services/gitWorkspace';
 import { checkGcloudApplicationDefaultAuth } from '../services/cliProbes';
 import { escapeAttr, escapeClass, escapeHtml, kronosWebviewBaseCss } from '../services/webviewHtml';
@@ -478,7 +478,7 @@ export function cleanupStaleWorktrees(options: { remove?: boolean } = {}): Workt
 
 export function openRunCenter(options: RunCenterOptions = {}): void {
   const interactive = Boolean(options.onAction);
-  const nonce = interactive ? randomBytes(16).toString('base64') : '';
+  const nonce = interactive ? createWebviewNonce() : '';
   const panel = vscode.window.createWebviewPanel(
     'kronosRunCenter',
     'Kronos Run Center',

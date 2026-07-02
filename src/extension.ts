@@ -9,7 +9,6 @@ import { TicketTreeProvider } from './views/TicketTreeProvider';
 import * as path from 'path';
 import * as os from 'os';
 import * as fs from 'fs';
-import { randomBytes } from 'crypto';
 import type { DiscoveredProject, MergeRequestChangedFile, Ticket } from './state/types';
 import { dispatchClaudeSession, openInClaude, ensureAuth, cleanupStaleWorktrees, listSavedSessions, listSessionStoreIssues, openSavedSession, getAggregateStats, openRunCenter, listRuns, type KronosRun, type PromptRunMetadata, type RunCenterActionRequest } from './runners/sessionDispatcher';
 import { PromptHistoryDiff, PromptHistorySnapshot, PromptSmokeResult, PromptSmokeTest, PromptTemplateInfo, buildDefaultPromptSmokeTests, createPromptHistorySnapshot, diffPromptHistorySnapshots, latestPromptHistorySnapshot, listPromptHistorySnapshots, listPromptTemplates, repairRequiredPromptTemplates, runPromptSmokeTests } from './services/promptManager';
@@ -52,7 +51,7 @@ import { buildAgingReportHtml } from './services/agingReportView';
 import { buildNextActionContext, buildNextActionStartDecision, skillForAction } from './services/nextActionContext';
 import { createWorkspaceDiffArtifact, firstRemoteBranchMatching, originProjectPath } from './services/gitWorkspace';
 import { signalProcessTree, stopProcessTree } from './services/processTree';
-import { withWebviewCsp } from './services/webviewSecurity';
+import { createWebviewNonce, withWebviewCsp } from './services/webviewSecurity';
 import { escapeAttr, escapeClass, escapeHtml, kronosWebviewBaseCss, safeHttpHref } from './services/webviewHtml';
 import { kronosTerminalOptions } from './services/terminalProfiles';
 
@@ -75,7 +74,7 @@ const LIVE_MR_DIFF_LIMIT = 4;
 const LIVE_MR_DIFF_TIMEOUT_MS = 8000;
 
 function createNonce(): string {
-  return randomBytes(16).toString('base64');
+  return createWebviewNonce();
 }
 
 function jsonForScript(value: unknown): string {
