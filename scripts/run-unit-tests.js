@@ -4663,6 +4663,7 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'type DispatchOptions',
     'await dispatchClaudeSession(projectPath, skill, ticket, onCompleteOrOpts, customPrompt)',
     'unknownErrorMessage(e, `Failed to start ${skill} session.`)',
+    'console.warn(unknownErrorMessage(e, `Failed to load MR diff hints for ${ticketKey}.`))',
     "await startClaudeDispatch(projectPath, 'deploy-monitor', ticketKey",
     'projectNameOverride: projectName',
     'hasActiveDeployMonitorRun(projectName, projectPath, ticketKey)',

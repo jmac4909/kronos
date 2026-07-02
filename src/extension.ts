@@ -4869,7 +4869,9 @@ async function loadMrFileHints(state: KronosState, targets: Array<{ ticketKey?: 
       if (files.length > 0) {
         hints[ticketKey] = files;
       }
-    } catch {}
+    } catch (e: unknown) {
+      console.warn(unknownErrorMessage(e, `Failed to load MR diff hints for ${ticketKey}.`));
+    }
   }
   return hints;
 }

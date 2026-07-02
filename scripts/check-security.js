@@ -397,6 +397,7 @@ for (const marker of [
   'openCollisionReportPanel',
   'loadMrFileHints',
   'LIVE_MR_DIFF_TIMEOUT_MS',
+  'console.warn(unknownErrorMessage(e, `Failed to load MR diff hints for ${ticketKey}.`))',
   'kronos.planNextTwoHours',
   'openQueuePlanWindowPanel',
   'kronos.overnightCandidates',
