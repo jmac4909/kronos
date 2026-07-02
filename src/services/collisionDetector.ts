@@ -39,6 +39,7 @@ export interface DispatchCollision {
 }
 
 const CODE_ACTIONS = new Set(['implement', 'in_progress', 'fix_build']);
+const STALEABLE_ACTIVE_RUN_STATUSES = new Set(['queued', 'preflight', 'running']);
 
 export function detectDispatchCollisions(input: DispatchCollisionInput): DispatchCollision[] {
   const targetProjects = new Set((input.projects || []).filter(Boolean));
@@ -244,7 +245,7 @@ function isCollisionActiveRun(run: CollisionRun, now: Date, staleActiveRunHours:
 }
 
 function isStaleActiveRun(run: CollisionRun, now: Date, staleActiveRunHours: number): boolean {
-  if (run.status !== 'running' && run.status !== 'preflight') { return false; }
+  if (!STALEABLE_ACTIVE_RUN_STATUSES.has(run.status || '')) { return false; }
   if (staleActiveRunHours <= 0 || !run.startedAt) { return false; }
   const started = new Date(run.startedAt).getTime();
   if (!Number.isFinite(started)) { return false; }

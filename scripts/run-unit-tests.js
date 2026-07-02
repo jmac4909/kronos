@@ -3587,7 +3587,9 @@ test('collision detector flags active runs, duplicate queue work, and open MRs',
     runs: [
       { id: 'run-ticket', ticket: 'K-1', project: 'app', status: 'running', skill: 'implement' },
       { id: 'run-project', ticket: 'K-4', project: 'app', status: 'preflight', skill: 'implement' },
-      { id: 'paused-run', ticket: 'K-7', project: 'app', status: 'paused', skill: 'implement' },
+      { id: 'queued-ticket', ticket: 'K-1', project: 'app', status: 'queued', skill: 'implement' },
+      { id: 'paused-run', ticket: 'K-7', project: 'app', status: 'paused', skill: 'implement', startedAt: '2026-06-30T23:00:00.000Z' },
+      { id: 'stale-queued', ticket: 'K-1', project: 'app', status: 'queued', skill: 'implement', startedAt: '2026-06-30T23:00:00.000Z' },
       { id: 'stale-running', ticket: 'K-1', project: 'app', status: 'running', skill: 'implement', startedAt: '2026-06-30T23:00:00.000Z' },
       { id: 'terminal-running', ticket: 'K-1', project: 'app', status: 'running', skill: 'implement', endedAt: '2026-07-01T11:45:00.000Z' },
       {
@@ -3610,8 +3612,10 @@ test('collision detector flags active runs, duplicate queue work, and open MRs',
 
   assert.equal(collisions[0].severity, 'high');
   assert.ok(collisions.some(c => c.kind === 'active_run' && c.id.includes('run-ticket')));
+  assert.ok(collisions.some(c => c.kind === 'active_run' && c.id.includes('queued-ticket')));
   assert.ok(collisions.some(c => c.kind === 'active_run' && c.id.includes('paused-run')));
   assert.equal(collisions.some(c => c.id.includes('stale-running')), false);
+  assert.equal(collisions.some(c => c.id.includes('stale-queued')), false);
   assert.ok(collisions.some(c => c.kind === 'queued_ticket'));
   assert.ok(collisions.some(c => c.kind === 'queued_project'));
   assert.ok(collisions.some(c => c.kind === 'open_mr'));
@@ -3637,15 +3641,20 @@ test('collision detector flags active runs, duplicate queue work, and open MRs',
     ticketKey: 'K-1',
     projects: ['app'],
     action: 'implement',
-    runs: [{ id: 'stale-running', ticket: 'K-1', project: 'app', status: 'running', skill: 'implement', startedAt: '2026-06-30T23:00:00.000Z' }],
+    runs: [
+      { id: 'stale-running', ticket: 'K-1', project: 'app', status: 'running', skill: 'implement', startedAt: '2026-06-30T23:00:00.000Z' },
+      { id: 'stale-queued', ticket: 'K-1', project: 'app', status: 'queued', skill: 'implement', startedAt: '2026-06-30T23:00:00.000Z' },
+    ],
     tickets,
     now: new Date('2026-07-01T12:00:00.000Z'),
     staleActiveRunHours: 0,
   });
   assert.ok(staleThresholdDisabled.some(c => c.id.includes('stale-running')));
+  assert.ok(staleThresholdDisabled.some(c => c.id.includes('stale-queued')));
 
   const source = readSourceFixture('src', 'services', 'collisionDetector.ts');
   for (const marker of [
+    "STALEABLE_ACTIVE_RUN_STATUSES = new Set(['queued', 'preflight', 'running'])",
     'staleActiveRunHours?: number',
     'const staleActiveRunHours = input.staleActiveRunHours ?? 12',
     'const isActive = isCollisionActiveRun(run, now, staleActiveRunHours)',

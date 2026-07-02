@@ -2074,6 +2074,7 @@ for (const marker of [
   "import { isActiveRun } from './runStatus'",
   'ticket_area',
   'mr_file',
+  "STALEABLE_ACTIVE_RUN_STATUSES = new Set(['queued', 'preflight', 'running'])",
   'staleActiveRunHours?: number',
   'const staleActiveRunHours = input.staleActiveRunHours ?? 12',
   'const isActive = isCollisionActiveRun(run, now, staleActiveRunHours)',
