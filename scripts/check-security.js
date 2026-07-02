@@ -496,6 +496,7 @@ for (const marker of [
   'await runCommandProgress(',
   'await vscode.window.withProgress(',
   'unknownErrorMessage(e, failureFallback)',
+  "unknownErrorMessage(e, 'Kronos auto-refresh failed.')",
   "'Failed to refresh Kronos projects.'",
   "'Failed to discover Kronos projects.'",
   "'Failed to open merge request diff.'",
@@ -531,6 +532,9 @@ for (const marker of [
   if (!extension.includes(marker)) {
     fail(`Missing safety marker: ${marker}`);
   }
+}
+if (extension.includes('try { await state.refresh(); } catch {}')) {
+  fail('Background Kronos refresh failures must be logged with a normalized warning.');
 }
 if (extension.includes('function webviewScriptCsp(') || dispatcher.includes('function webviewScriptCsp(')) {
   fail('Webview CSP option construction must stay centralized in webviewSecurity.');

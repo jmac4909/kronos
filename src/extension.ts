@@ -898,7 +898,13 @@ export function activate(context: vscode.ExtensionContext) {
     if (refreshing || Date.now() - lastRefreshTime < 60000) { return; }
     refreshing = true;
     lastRefreshTime = Date.now();
-    try { await state.refresh(); } catch {} finally { refreshing = false; }
+    try {
+      await state.refresh();
+    } catch (e: unknown) {
+      console.warn(unknownErrorMessage(e, 'Kronos auto-refresh failed.'));
+    } finally {
+      refreshing = false;
+    }
   };
 
   // Tree views with auto-refresh on focus
