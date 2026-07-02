@@ -872,7 +872,7 @@ function progressDurationSeconds(events: Array<{ timestamp?: unknown }>): number
   return Math.max(0, Math.round((dates[dates.length - 1].getTime() - dates[0].getTime()) / 1000));
 }
 
-function isRecord(value: unknown): value is Record<string, any> {
+function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value));
 }
 
@@ -882,55 +882,76 @@ function stringOrDefault(value: unknown, fallback: string): string {
   return trimmed || fallback;
 }
 
-export function parseStreamEvent(event: any): ProgressEvent | null {
+function recordField(record: Record<string, unknown>, key: string): Record<string, unknown> {
+  const value = record[key];
+  return isRecord(value) ? value : {};
+}
+
+function arrayField(record: Record<string, unknown>, key: string): unknown[] {
+  const value = record[key];
+  return Array.isArray(value) ? value : [];
+}
+
+function streamString(value: unknown): string {
+  return typeof value === 'string' || typeof value === 'number' ? String(value) : '';
+}
+
+export function parseStreamEvent(event: unknown): ProgressEvent | null {
   const now = new Date();
-  if (event.type === 'assistant' && event.message?.content) {
-    for (const block of event.message.content) {
-      if (block.type === 'tool_use') {
-        const name = block.name || '';
-        const input = block.input || {};
+  const payload = isRecord(event) ? event : {};
+  if (payload.type === 'assistant') {
+    const message = recordField(payload, 'message');
+    for (const rawBlock of arrayField(message, 'content')) {
+      const block = isRecord(rawBlock) ? rawBlock : {};
+      const blockType = streamString(block.type);
+      if (blockType === 'tool_use') {
+        const name = streamString(block.name);
+        const input = recordField(block, 'input');
         let label = '';
         let detail = '';
         if (name === 'Read') {
-          label = `Reading ${shortenPath(input.file_path || '')}`;
+          label = `Reading ${shortenPath(streamString(input.file_path))}`;
         } else if (name === 'Edit') {
-          label = `Editing ${shortenPath(input.file_path || '')}`;
-          detail = input.old_string ? `replacing: ${input.old_string.substring(0, 60)}...` : '';
+          label = `Editing ${shortenPath(streamString(input.file_path))}`;
+          const oldString = streamString(input.old_string);
+          detail = oldString ? `replacing: ${oldString.substring(0, 60)}...` : '';
         } else if (name === 'Write') {
-          label = `Writing ${shortenPath(input.file_path || '')}`;
+          label = `Writing ${shortenPath(streamString(input.file_path))}`;
         } else if (name === 'Bash' || name === 'PowerShell') {
-          label = `Running: ${(input.command || '').substring(0, 80)}`;
-          detail = input.description || '';
+          label = `Running: ${streamString(input.command).substring(0, 80)}`;
+          detail = streamString(input.description);
         } else if (name === 'Grep') {
-          label = `Searching for "${input.pattern || ''}"`;
-          detail = input.path ? `in ${shortenPath(input.path)}` : '';
+          label = `Searching for "${streamString(input.pattern)}"`;
+          const pathValue = streamString(input.path);
+          detail = pathValue ? `in ${shortenPath(pathValue)}` : '';
         } else if (name === 'Glob') {
-          label = `Finding files: ${input.pattern || ''}`;
+          label = `Finding files: ${streamString(input.pattern)}`;
         } else if (name === 'Skill') {
-          label = `Invoking /${input.skill || ''}`;
+          label = `Invoking /${streamString(input.skill)}`;
         } else {
           label = `${name}`;
           detail = JSON.stringify(input).substring(0, 80);
         }
         return { type: 'tool', label, detail, timestamp: now };
       }
-      if (block.type === 'thinking') {
-        const text = (block.thinking || '').substring(0, 120);
+      if (blockType === 'thinking') {
+        const text = streamString(block.thinking).substring(0, 120);
         if (text.length > 10) {
           return { type: 'thinking', label: text, detail: '', timestamp: now };
         }
       }
-      if (block.type === 'text') {
-        const text = (block.text || '').trim();
+      if (blockType === 'text') {
+        const text = streamString(block.text).trim();
         if (text.length > 5) {
           return { type: 'text', label: text.substring(0, 150), detail: '', timestamp: now };
         }
       }
     }
   }
-  if (event.type === 'result') {
-    const result = event.result || '';
-    const duration = event.duration_ms ? `${(event.duration_ms / 1000).toFixed(1)}s` : '';
+  if (payload.type === 'result') {
+    const result = streamString(payload.result);
+    const rawDurationMs = typeof payload.duration_ms === 'number' ? payload.duration_ms : Number.NaN;
+    const duration = Number.isFinite(rawDurationMs) ? `${(rawDurationMs / 1000).toFixed(1)}s` : '';
     return { type: 'done', label: `Complete — ${duration}`, detail: result, timestamp: now };
   }
   return null;

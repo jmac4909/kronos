@@ -2494,6 +2494,13 @@ test('dispatcher records branch and permission metadata for persisted runs', () 
     'function progressDurationSeconds',
     'function progressDateTimeLabel',
     'function stringOrDefault',
+    'function isRecord(value: unknown): value is Record<string, unknown>',
+    'function recordField(record: Record<string, unknown>, key: string): Record<string, unknown>',
+    'function arrayField(record: Record<string, unknown>, key: string): unknown[]',
+    'function streamString(value: unknown): string',
+    'export function parseStreamEvent(event: unknown): ProgressEvent | null',
+    'const payload = isRecord(event) ? event : {}',
+    "for (const rawBlock of arrayField(message, 'content'))",
     'const sessionStart = progressDateOr(session.startedAt, new Date())',
     'timestamp: progressDateOr(e.timestamp, sessionStart)',
     'const durationSec = progressDurationSeconds(events)',
@@ -2564,6 +2571,16 @@ test('dispatcher records branch and permission metadata for persisted runs', () 
     source.includes('e?.message'),
     false,
     'dispatcher should normalize unknown error messages through errorUtils',
+  );
+  assert.equal(
+    source.includes('parseStreamEvent(event: any)'),
+    false,
+    'dispatcher should parse stream events from unknown payloads',
+  );
+  assert.equal(
+    source.includes('value is Record<string, any>'),
+    false,
+    'dispatcher record guards should preserve unknown field types',
   );
 
   assert.ok(

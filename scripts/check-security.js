@@ -712,6 +712,13 @@ for (const marker of [
   'function progressDurationSeconds',
   'function progressDateTimeLabel',
   'function stringOrDefault',
+  'function isRecord(value: unknown): value is Record<string, unknown>',
+  'function recordField(record: Record<string, unknown>, key: string): Record<string, unknown>',
+  'function arrayField(record: Record<string, unknown>, key: string): unknown[]',
+  'function streamString(value: unknown): string',
+  'export function parseStreamEvent(event: unknown): ProgressEvent | null',
+  'const payload = isRecord(event) ? event : {}',
+  "for (const rawBlock of arrayField(message, 'content'))",
   'const sessionStart = progressDateOr(session.startedAt, new Date())',
   'timestamp: progressDateOr(e.timestamp, sessionStart)',
   'const durationSec = progressDurationSeconds(events)',
@@ -773,6 +780,8 @@ if (dispatcher.includes('run.events[run.events.length - 1]')) {
 for (const forbidden of [
   'catch (e: any)',
   'e?.message',
+  'parseStreamEvent(event: any)',
+  'value is Record<string, any>',
 ]) {
   if (dispatcher.includes(forbidden)) {
     fail(`Dispatcher must normalize unknown errors instead of using ${forbidden}.`);
