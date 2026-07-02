@@ -1152,6 +1152,40 @@ test('git workspace service owns branch metadata and safe worktree lifecycle com
 
   const missing = gitWorkspace.inspectTrackedWorktree(entry, { exists: () => false });
   assert.equal(missing.status, 'missing');
+
+  const inspectError = gitWorkspace.inspectTrackedWorktree(entry, {
+    exists: () => true,
+    runner: () => { throw 'git status failed'; },
+  });
+  assert.equal(inspectError.status, 'error');
+  assert.equal(inspectError.reason, 'git status failed');
+
+  const removeError = gitWorkspace.removeWorktreeSafely(projectPath, '/tmp/wt', {
+    exists: () => true,
+    runner: args => {
+      const joined = args.join(' ');
+      if (joined === 'status --porcelain' || joined === 'branch --show-current') { return ''; }
+      if (joined === 'worktree remove /tmp/wt') { throw { message: '   ' }; }
+      throw new Error(`unexpected git call: ${joined}`);
+    },
+  });
+  assert.equal(removeError, 'Could not remove worktree safely');
+
+  const source = readSourceFixture('src', 'services', 'gitWorkspace.ts');
+  for (const marker of [
+    "import { unknownErrorMessage } from './errorUtils'",
+    'catch (e: unknown)',
+    "unknownErrorMessage(e, 'Could not remove worktree safely')",
+    "unknownErrorMessage(e, 'Could not inspect worktree.')",
+  ]) {
+    assert.ok(source.includes(marker), marker);
+  }
+  for (const marker of [
+    'catch (e: any)',
+    'e?.message',
+  ]) {
+    assert.equal(source.includes(marker), false, marker);
+  }
 });
 
 test('worktree registry tracks, deduplicates, and untracks entries safely', () => {

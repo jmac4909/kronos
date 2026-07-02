@@ -2,6 +2,7 @@ import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { safeFileStem } from './fileNames';
+import { unknownErrorMessage } from './errorUtils';
 
 export interface GitCommandOptions {
   cwd: string;
@@ -132,8 +133,8 @@ export function removeWorktreeSafely(
     runner(['worktree', 'remove', worktreePath], { cwd: projectPath, timeoutMs: 10000 });
     options.onRemoved?.();
     return null;
-  } catch (e: any) {
-    return e?.message || 'Could not remove worktree safely';
+  } catch (e: unknown) {
+    return unknownErrorMessage(e, 'Could not remove worktree safely');
   }
 }
 
@@ -164,8 +165,8 @@ export function inspectTrackedWorktree(
       }
     }
     return { entry, status: 'removable', reason: 'Clean worktree with no unpushed branch state detected.' };
-  } catch (e: any) {
-    return { entry, status: 'error', reason: e?.message || 'Could not inspect worktree.' };
+  } catch (e: unknown) {
+    return { entry, status: 'error', reason: unknownErrorMessage(e, 'Could not inspect worktree.') };
   }
 }
 
