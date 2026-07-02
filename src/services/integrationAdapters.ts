@@ -161,13 +161,18 @@ function normalizeSonarBranchStatus(value: Record<string, unknown>): SonarBranch
 function parseJson(raw: string, label: string): unknown {
   try {
     return JSON.parse(raw);
-  } catch (e: any) {
-    throw new Error(`Invalid JSON from ${label}: ${e?.message || 'parse failed'}`);
+  } catch (e: unknown) {
+    throw new Error(`Invalid JSON from ${label}: ${unknownErrorMessage(e, 'parse failed')}`);
   }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value));
+}
+
+function unknownErrorMessage(error: unknown, fallback: string): string {
+  const message = error && typeof error === 'object' ? Reflect.get(error, 'message') : undefined;
+  return typeof message === 'string' && message.trim() ? message : fallback;
 }
 
 function stringField(value: unknown): string | undefined {

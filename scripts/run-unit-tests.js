@@ -2994,7 +2994,9 @@ test('integration adapters keep raw provider payloads unknown until normalized',
     'issues(sonarKey: string, branch: string): Promise<unknown>',
     'return runPipelineJson<unknown>',
     'function parseJson(raw: string, label: string): unknown',
+    'catch (e: unknown)',
     'function isRecord(value: unknown): value is Record<string, unknown>',
+    'function unknownErrorMessage(error: unknown, fallback: string): string',
   ]) {
     assert.ok(source.includes(marker), marker);
   }
@@ -3002,6 +3004,8 @@ test('integration adapters keep raw provider payloads unknown until normalized',
     'Promise<any>',
     'runPipelineJson<any>',
     'function parseJson(raw: string, label: string): any',
+    'catch (e: any)',
+    'e?.message',
     'value is Record<string, any>',
   ]) {
     assert.equal(source.includes(marker), false, marker);
