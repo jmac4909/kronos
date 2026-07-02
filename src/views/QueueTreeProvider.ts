@@ -1,12 +1,16 @@
 import * as vscode from 'vscode';
 import { KronosState } from '../state/KronosState';
 import { QueueItem } from '../state/types';
+import { KronosRun, listRuns } from '../runners/sessionDispatcher';
 import { actionToLabel } from '../services/actionLabels';
+import { formatRunProgress } from '../services/runProgress';
+import { isActiveRun } from '../services/runStatus';
 import { queueActionIcon, themeIcon } from './actionIcons';
 
 export class QueueTreeProvider implements vscode.TreeDataProvider<QueueTreeItem> {
   private _onDidChangeTreeData = new vscode.EventEmitter<QueueTreeItem | undefined>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
+  private _timer: NodeJS.Timeout | undefined;
 
   constructor(private kronosState: KronosState) {
     kronosState.onDidChange(() => this._onDidChangeTreeData.fire(undefined));
@@ -30,7 +34,28 @@ export class QueueTreeProvider implements vscode.TreeDataProvider<QueueTreeItem>
       return [empty];
     }
 
-    return queue.items.map((item, idx) => new QueueTreeItem(item, idx));
+    const activeRuns = listRuns().filter(isActiveRun);
+    return queue.items.map((item, idx) => new QueueTreeItem(item, idx, activeRunForQueueItem(item, activeRuns)));
+  }
+
+  startPolling(intervalMs: number): void {
+    this.stopPolling();
+    this._timer = setInterval(() => {
+      if (listRuns().some(isActiveRun)) {
+        this._onDidChangeTreeData.fire(undefined);
+      }
+    }, intervalMs);
+  }
+
+  stopPolling(): void {
+    if (this._timer) {
+      clearInterval(this._timer);
+      this._timer = undefined;
+    }
+  }
+
+  dispose(): void {
+    this.stopPolling();
   }
 }
 
@@ -38,7 +63,7 @@ export class QueueTreeItem extends vscode.TreeItem {
   public readonly item: QueueItem;
   public readonly index: number;
 
-  constructor(item: QueueItem, index: number) {
+  constructor(item: QueueItem, index: number, activeRun?: KronosRun) {
     const ticketPart = item.ticket || 'refresh';
     const summaryPart = item.ticket_summary ? ` — ${item.ticket_summary}` : '';
     super(item.action ? `${ticketPart}${summaryPart}` : '', vscode.TreeItemCollapsibleState.None);
@@ -51,12 +76,16 @@ export class QueueTreeItem extends vscode.TreeItem {
     this.contextValue = 'queue_item';
     const actionLabel = actionToLabel(item.action);
     const projs = (item.projects || []).join(', ') || 'unlinked';
-    this.description = `${projs} · [${actionLabel}] ${item.priority_score}`;
+    const progress = activeRun ? formatRunProgress(activeRun) : '';
+    this.description = activeRun
+      ? `$(sync~spin) ${projs} · [${actionLabel}] ${item.priority_score} · ${progress}`
+      : `${projs} · [${actionLabel}] ${item.priority_score}`;
 
     this.tooltip = new vscode.MarkdownString(
       `**${(item.projects || []).join(', ')} / ${item.ticket || 'refresh'}**${summaryPart}\n\n` +
       `Action: ${actionLabel}\n\n` +
       `Score: ${item.priority_score}\n\n` +
+      (activeRun ? `Active run: ${activeRun.id}\n\nProgress: ${progress}\n\n` : '') +
       `${item.reason}\n\n` +
       `_Click to start · Right-click to reorder_`
     );
@@ -67,6 +96,25 @@ export class QueueTreeItem extends vscode.TreeItem {
       arguments: [item],
     };
 
-    this.iconPath = themeIcon(queueActionIcon(item.action));
+    this.iconPath = activeRun
+      ? new vscode.ThemeIcon('sync~spin', new vscode.ThemeColor('charts.blue'))
+      : themeIcon(queueActionIcon(item.action));
   }
+}
+
+function activeRunForQueueItem(item: QueueItem, activeRuns: KronosRun[]): KronosRun | undefined {
+  return activeRuns.find(run => runMatchesQueueTicket(run, item))
+    || activeRuns.find(run => runMatchesQueueProject(run, item) && runMatchesQueueAction(run, item));
+}
+
+function runMatchesQueueTicket(run: KronosRun, item: QueueItem): boolean {
+  return Boolean(item.ticket && run.ticket === item.ticket);
+}
+
+function runMatchesQueueProject(run: KronosRun, item: QueueItem): boolean {
+  return Boolean((run.project && item.projects.includes(run.project)) || (run.projectPath && run.projectPath === item.project_path));
+}
+
+function runMatchesQueueAction(run: KronosRun, item: QueueItem): boolean {
+  return !item.action || run.skill === item.action;
 }

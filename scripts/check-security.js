@@ -26,6 +26,7 @@ const fileNames = readSource('src/services/fileNames.ts');
 const sessionStore = readSource('src/services/sessionStore.ts');
 const worktreeRegistry = readSource('src/services/worktreeRegistry.ts');
 const sessionTreeProvider = readSource('src/views/SessionTreeProvider.ts');
+const queueTreeProvider = readSource('src/views/QueueTreeProvider.ts');
 const reviewTreeProvider = readSource('src/views/ReviewTreeProvider.ts');
 const dispatcher = sources['src/runners/sessionDispatcher.ts'];
 const scriptClient = sources['src/services/scriptClient.ts'];
@@ -1265,6 +1266,28 @@ for (const marker of [
 ]) {
   if (!sessionTreeProvider.includes(marker)) {
     fail(`Missing session tree active-run marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  "import { KronosRun, listRuns } from '../runners/sessionDispatcher'",
+  "import { isActiveRun } from '../services/runStatus'",
+  "import { formatRunProgress } from '../services/runProgress'",
+  'const activeRuns = listRuns().filter(isActiveRun)',
+  'new QueueTreeItem(item, idx, activeRunForQueueItem(item, activeRuns))',
+  'startPolling(intervalMs: number): void',
+  'queueTree.startPolling(sessionPollMs)',
+  'queueTree.dispose()',
+  'const progress = activeRun ? formatRunProgress(activeRun) :',
+  'Active run: ${activeRun.id}',
+  "new vscode.ThemeIcon('sync~spin'",
+  'function activeRunForQueueItem(item: QueueItem, activeRuns: KronosRun[]): KronosRun | undefined',
+  'function runMatchesQueueTicket(run: KronosRun, item: QueueItem): boolean',
+  'function runMatchesQueueProject(run: KronosRun, item: QueueItem): boolean',
+  'function runMatchesQueueAction(run: KronosRun, item: QueueItem): boolean',
+]) {
+  if (!queueTreeProvider.includes(marker) && !extension.includes(marker)) {
+    fail(`Missing queue tree active-run marker: ${marker}`);
   }
 }
 

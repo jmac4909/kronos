@@ -1012,6 +1012,7 @@ export function activate(context: vscode.ExtensionContext) {
   const config = vscode.workspace.getConfiguration('kronos');
   const sessionPollMs = config.get<number>('sessionPollIntervalMs', 5000);
   sessionTree.startPolling(sessionPollMs);
+  queueTree.startPolling(sessionPollMs);
 
   // Background poll (uses same throttle — won't double-refresh)
   const pollSec = config.get<number>('pollIntervalSec', 300);
@@ -3255,7 +3256,7 @@ export function activate(context: vscode.ExtensionContext) {
     );
   }
 
-  context.subscriptions.push({ dispose: () => { state.dispose(); sessionTree.dispose(); } });
+  context.subscriptions.push({ dispose: () => { state.dispose(); sessionTree.dispose(); queueTree.dispose(); } });
 }
 
 async function runSetupWizard(): Promise<void> {

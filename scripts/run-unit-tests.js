@@ -4747,6 +4747,8 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     "statusBarItem.command = 'kronos.runCenter'",
     "statusBarItem.command = 'kronos.openDashboard'",
     '$(sync~spin) Kronos: ${activeRuns.length} running',
+    'queueTree.startPolling(sessionPollMs)',
+    'queueTree.dispose()',
     'shouldRecordRunCompletionEvidence({ run, ticket })',
     'addTicketEvidenceNote(resolvedTicketKey, {',
     "kind: 'note'",
@@ -5145,6 +5147,19 @@ test('tree providers share action labels and icons', () => {
     "import { actionToLabel } from '../services/actionLabels'",
     "import { queueActionIcon, themeIcon } from './actionIcons'",
     'themeIcon(queueActionIcon(item.action))',
+    "import { KronosRun, listRuns } from '../runners/sessionDispatcher'",
+    "import { isActiveRun } from '../services/runStatus'",
+    "import { formatRunProgress } from '../services/runProgress'",
+    'const activeRuns = listRuns().filter(isActiveRun)',
+    'new QueueTreeItem(item, idx, activeRunForQueueItem(item, activeRuns))',
+    'startPolling(intervalMs: number): void',
+    'const progress = activeRun ? formatRunProgress(activeRun) :',
+    'Active run: ${activeRun.id}',
+    "new vscode.ThemeIcon('sync~spin'",
+    'function activeRunForQueueItem(item: QueueItem, activeRuns: KronosRun[]): KronosRun | undefined',
+    'function runMatchesQueueTicket(run: KronosRun, item: QueueItem): boolean',
+    'function runMatchesQueueProject(run: KronosRun, item: QueueItem): boolean',
+    'function runMatchesQueueAction(run: KronosRun, item: QueueItem): boolean',
   ]) {
     assert.ok(queueTree.includes(marker), marker);
   }
