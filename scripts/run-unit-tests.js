@@ -3462,6 +3462,7 @@ test('collision detector flags active runs, duplicate queue work, and open MRs',
       { id: 'run-ticket', ticket: 'K-1', project: 'app', status: 'running', skill: 'implement' },
       { id: 'run-project', ticket: 'K-4', project: 'app', status: 'preflight', skill: 'implement' },
       { id: 'paused-run', ticket: 'K-7', project: 'app', status: 'paused', skill: 'implement' },
+      { id: 'stale-running', ticket: 'K-1', project: 'app', status: 'running', skill: 'implement', startedAt: '2026-06-30T23:00:00.000Z' },
       { id: 'terminal-running', ticket: 'K-1', project: 'app', status: 'running', skill: 'implement', endedAt: '2026-07-01T11:45:00.000Z' },
       {
         id: 'recent-run',
@@ -3484,6 +3485,7 @@ test('collision detector flags active runs, duplicate queue work, and open MRs',
   assert.equal(collisions[0].severity, 'high');
   assert.ok(collisions.some(c => c.kind === 'active_run' && c.id.includes('run-ticket')));
   assert.ok(collisions.some(c => c.kind === 'active_run' && c.id.includes('paused-run')));
+  assert.equal(collisions.some(c => c.id.includes('stale-running')), false);
   assert.ok(collisions.some(c => c.kind === 'queued_ticket'));
   assert.ok(collisions.some(c => c.kind === 'queued_project'));
   assert.ok(collisions.some(c => c.kind === 'open_mr'));
@@ -3504,6 +3506,28 @@ test('collision detector flags active runs, duplicate queue work, and open MRs',
     excludeQueueItemId: 'same-ticket',
   });
   assert.equal(excluded.some(c => c.kind === 'queued_ticket'), false);
+
+  const staleThresholdDisabled = collisionDetector.detectDispatchCollisions({
+    ticketKey: 'K-1',
+    projects: ['app'],
+    action: 'implement',
+    runs: [{ id: 'stale-running', ticket: 'K-1', project: 'app', status: 'running', skill: 'implement', startedAt: '2026-06-30T23:00:00.000Z' }],
+    tickets,
+    now: new Date('2026-07-01T12:00:00.000Z'),
+    staleActiveRunHours: 0,
+  });
+  assert.ok(staleThresholdDisabled.some(c => c.id.includes('stale-running')));
+
+  const source = readSourceFixture('src', 'services', 'collisionDetector.ts');
+  for (const marker of [
+    'staleActiveRunHours?: number',
+    'const staleActiveRunHours = input.staleActiveRunHours ?? 12',
+    'const isActive = isCollisionActiveRun(run, now, staleActiveRunHours)',
+    'function isCollisionActiveRun(run: CollisionRun, now: Date, staleActiveRunHours: number): boolean',
+    'function isStaleActiveRun(run: CollisionRun, now: Date, staleActiveRunHours: number): boolean',
+  ]) {
+    assert.ok(source.includes(marker), marker);
+  }
 });
 
 test('script client reports required scripts and wraps Python JSON contracts', async () => {
@@ -4941,6 +4965,19 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     false,
     'extension run pickers should tolerate missing or malformed run.events',
   );
+  assert.ok(source.includes('function startActiveRunPanelRefresh('), 'webview panels should share active-run auto-refresh');
+  assert.ok(source.includes("unknownErrorMessage(e, 'Kronos panel auto-refresh failed.')"), 'panel auto-refresh errors should be normalized');
+  for (const [label, startMarker, endMarker] of [
+    ['Dashboard', "vscode.commands.registerCommand('kronos.openDashboard'", "    vscode.commands.registerCommand('kronos.queueMoveUp'"],
+    ['Human Review Inbox', 'function openHumanReviewInbox', 'function buildHumanReviewInboxHtml'],
+    ['Evidence Gate', 'function openEvidenceGatePanel', 'function evidenceGatePanelGatesForState'],
+    ['Aging Report', 'function openAgingReportPanel', 'function openIntegrationManifestPanel'],
+  ]) {
+    const start = source.indexOf(startMarker);
+    const end = source.indexOf(endMarker, start);
+    assert.ok(start >= 0 && end > start, `${label} panel block should be present`);
+    assert.ok(source.slice(start, end).includes('startActiveRunPanelRefresh(panel, state, render)'), `${label} should auto-refresh while runs are active`);
+  }
   const evidenceGateHandlerStart = source.indexOf('const request = normalizeActionPanelMessage(msg, EVIDENCE_GATE_MESSAGE_COMMANDS);');
   const evidenceGateHandlerEnd = source.indexOf('function openEvidenceHandoffPanel', evidenceGateHandlerStart);
   assert.ok(evidenceGateHandlerStart >= 0 && evidenceGateHandlerEnd > evidenceGateHandlerStart, 'Evidence Gate message handler should be present');
@@ -5403,6 +5440,7 @@ test('tree providers share action labels and icons', () => {
 
   for (const marker of [
     "import { actionToLabel } from '../services/actionLabels'",
+    "import { skillForAction } from '../services/nextActionContext'",
     "import { queueActionIcon, themeIcon } from './actionIcons'",
     'themeIcon(queueActionIcon(item.action))',
     "import { KronosRun, listRuns } from '../runners/sessionDispatcher'",
@@ -5418,6 +5456,7 @@ test('tree providers share action labels and icons', () => {
     'function runMatchesQueueTicket(run: KronosRun, item: QueueItem): boolean',
     'function runMatchesQueueProject(run: KronosRun, item: QueueItem): boolean',
     'function runMatchesQueueAction(run: KronosRun, item: QueueItem): boolean',
+    'run.skill === skillForAction(item.action)',
   ]) {
     assert.ok(queueTree.includes(marker), marker);
   }

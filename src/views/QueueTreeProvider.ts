@@ -3,6 +3,7 @@ import { KronosState } from '../state/KronosState';
 import { QueueItem } from '../state/types';
 import { KronosRun, listRuns } from '../runners/sessionDispatcher';
 import { actionToLabel } from '../services/actionLabels';
+import { skillForAction } from '../services/nextActionContext';
 import { formatRunProgress } from '../services/runProgress';
 import { isActiveRun } from '../services/runStatus';
 import { queueActionIcon, themeIcon } from './actionIcons';
@@ -116,5 +117,5 @@ function runMatchesQueueProject(run: KronosRun, item: QueueItem): boolean {
 }
 
 function runMatchesQueueAction(run: KronosRun, item: QueueItem): boolean {
-  return !item.action || run.skill === item.action;
+  return !item.action || run.skill === skillForAction(item.action);
 }

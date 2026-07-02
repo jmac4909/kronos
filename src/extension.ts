@@ -183,6 +183,31 @@ async function runCommandProgress(
   }
 }
 
+function startActiveRunPanelRefresh(
+  panel: vscode.WebviewPanel,
+  state: KronosState,
+  render: () => void | Promise<void>,
+): void {
+  const pollIntervalMs = Math.max(1000, vscode.workspace.getConfiguration('kronos').get<number>('sessionPollIntervalMs', 5000));
+  let wasActive = listRuns().some(isActiveRun);
+  let rendering = false;
+  const pollTimer = setInterval(() => {
+    const hasActive = listRuns().some(isActiveRun);
+    if (!hasActive && !wasActive) { return; }
+    if (rendering) { return; }
+    rendering = true;
+    state.reloadAndNotify();
+    void Promise.resolve()
+      .then(render)
+      .catch((e: unknown) => console.warn(unknownErrorMessage(e, 'Kronos panel auto-refresh failed.')))
+      .finally(() => {
+        wasActive = hasActive;
+        rendering = false;
+      });
+  }, pollIntervalMs);
+  panel.onDidDispose(() => clearInterval(pollTimer));
+}
+
 async function startClaudeDispatch(
   projectPath: string,
   skill: string,
@@ -2144,6 +2169,7 @@ export function activate(context: vscode.ExtensionContext) {
           panel.webview.html = withWebviewCsp(buildDashboardHtml(state, data, nonce), webviewScriptCspOptions(panel.webview.cspSource, nonce));
         };
         await render();
+        startActiveRunPanelRefresh(panel, state, render);
         panel.webview.onDidReceiveMessage(async msg => {
           const request = normalizeActionPanelMessage(msg, DASHBOARD_MESSAGE_COMMANDS);
           if (!request) {
@@ -4064,6 +4090,7 @@ function openHumanReviewInbox(state: KronosState): void {
     panel.webview.html = withWebviewCsp(buildHumanReviewInboxHtml(inbox, state, nonce), webviewScriptCspOptions(panel.webview.cspSource, nonce));
   };
   render();
+  startActiveRunPanelRefresh(panel, state, render);
   panel.webview.onDidReceiveMessage(async msg => {
     const request = normalizeActionPanelMessage(msg, HUMAN_REVIEW_MESSAGE_COMMANDS);
     if (!request) {
@@ -4238,6 +4265,7 @@ function openEvidenceGatePanel(
     panel.webview.html = withWebviewCsp(buildEvidenceGateHtml(freshGates, title, nonce), webviewScriptCspOptions(panel.webview.cspSource, nonce));
   };
   render();
+  startActiveRunPanelRefresh(panel, state, render);
   panel.webview.onDidReceiveMessage(async msg => {
     const request = normalizeActionPanelMessage(msg, EVIDENCE_GATE_MESSAGE_COMMANDS);
     if (!request) {
@@ -5180,6 +5208,7 @@ function openAgingReportPanel(state: KronosState): void {
     }), webviewScriptCspOptions(panel.webview.cspSource, nonce));
   };
   render();
+  startActiveRunPanelRefresh(panel, state, render);
   panel.webview.onDidReceiveMessage(async msg => {
     const request = normalizeActionPanelMessage(msg, AGING_REPORT_MESSAGE_COMMANDS);
     if (!request) {

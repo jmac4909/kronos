@@ -588,6 +588,27 @@ if (extension.includes(".filter(([_, t]) => t.next_action === 'await_review' && 
 if (extension.includes('mr: ticket.mr!')) {
   fail('Review branch helper should not need non-null assertions.');
 }
+if (!extension.includes('function startActiveRunPanelRefresh(')) {
+  fail('Missing shared active-run webview panel refresh helper.');
+}
+if (!extension.includes("unknownErrorMessage(e, 'Kronos panel auto-refresh failed.')")) {
+  fail('Panel auto-refresh errors should be normalized.');
+}
+for (const [label, startMarker, endMarker] of [
+  ['Dashboard', "vscode.commands.registerCommand('kronos.openDashboard'", "    vscode.commands.registerCommand('kronos.queueMoveUp'"],
+  ['Human Review Inbox', 'function openHumanReviewInbox', 'function buildHumanReviewInboxHtml'],
+  ['Evidence Gate', 'function openEvidenceGatePanel', 'function evidenceGatePanelGatesForState'],
+  ['Aging Report', 'function openAgingReportPanel', 'function openIntegrationManifestPanel'],
+]) {
+  const start = extension.indexOf(startMarker);
+  const end = extension.indexOf(endMarker, start);
+  if (start < 0 || end <= start) {
+    fail(`Missing ${label} panel block.`);
+  }
+  if (!extension.slice(start, end).includes('startActiveRunPanelRefresh(panel, state, render)')) {
+    fail(`${label} should auto-refresh while runs are active.`);
+  }
+}
 const evidenceGateHandlerStart = extension.indexOf('const request = normalizeActionPanelMessage(msg, EVIDENCE_GATE_MESSAGE_COMMANDS);');
 const evidenceGateHandlerEnd = extension.indexOf('function openEvidenceHandoffPanel', evidenceGateHandlerStart);
 if (evidenceGateHandlerStart < 0 || evidenceGateHandlerEnd <= evidenceGateHandlerStart) {
@@ -1457,6 +1478,7 @@ for (const marker of [
 for (const marker of [
   "import { KronosRun, listRuns } from '../runners/sessionDispatcher'",
   "import { isActiveRun } from '../services/runStatus'",
+  "import { skillForAction } from '../services/nextActionContext'",
   "import { formatRunProgress } from '../services/runProgress'",
   'const activeRuns = listRuns().filter(isActiveRun)',
   'new QueueTreeItem(item, idx, activeRunForQueueItem(item, activeRuns))',
@@ -1470,6 +1492,7 @@ for (const marker of [
   'function runMatchesQueueTicket(run: KronosRun, item: QueueItem): boolean',
   'function runMatchesQueueProject(run: KronosRun, item: QueueItem): boolean',
   'function runMatchesQueueAction(run: KronosRun, item: QueueItem): boolean',
+  'run.skill === skillForAction(item.action)',
 ]) {
   if (!queueTreeProvider.includes(marker) && !extension.includes(marker)) {
     fail(`Missing queue tree active-run marker: ${marker}`);
@@ -1989,14 +2012,18 @@ for (const marker of [
 for (const marker of [
   'recent_file',
   "import { isActiveRun } from './runStatus'",
-  'const isActive = isActiveRun(run)',
   'ticket_area',
   'mr_file',
+  'staleActiveRunHours?: number',
+  'const staleActiveRunHours = input.staleActiveRunHours ?? 12',
+  'const isActive = isCollisionActiveRun(run, now, staleActiveRunHours)',
   'editedFilesForRun',
   'const events = Array.isArray(run.events) ? run.events : []',
   'changedFilesForTicket',
   'ticketAreaTokens',
   'isRecentRun',
+  'function isCollisionActiveRun(run: CollisionRun, now: Date, staleActiveRunHours: number): boolean',
+  'function isStaleActiveRun(run: CollisionRun, now: Date, staleActiveRunHours: number): boolean',
   'sharedFilePaths',
 ]) {
   if (!collisionDetector.includes(marker)) {

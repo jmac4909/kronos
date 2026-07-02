@@ -27,6 +27,7 @@ export interface DispatchCollisionInput {
   excludeQueueItemId?: string;
   now?: Date;
   recentRunHours?: number;
+  staleActiveRunHours?: number;
 }
 
 export interface DispatchCollision {
@@ -45,13 +46,14 @@ export function detectDispatchCollisions(input: DispatchCollisionInput): Dispatc
   const isCodeAction = CODE_ACTIONS.has(input.action);
   const now = input.now || new Date();
   const recentRunHours = input.recentRunHours || 48;
+  const staleActiveRunHours = input.staleActiveRunHours ?? 12;
   const targetTicket = ticketKey ? input.tickets?.[ticketKey] : undefined;
   const targetArea = targetTicket ? ticketAreaTokens(targetTicket) : new Set<string>();
   const targetMrFiles = ticketKey ? changedFilesForTicket(ticketKey, targetTicket, input.mrFiles) : [];
   const collisions: DispatchCollision[] = [];
 
   for (const run of input.runs || []) {
-    const isActive = isActiveRun(run);
+    const isActive = isCollisionActiveRun(run, now, staleActiveRunHours);
     if (isActive && ticketKey && run.ticket === ticketKey) {
       collisions.push({
         id: `run-ticket:${run.id}`,
@@ -235,6 +237,18 @@ function isRecentRun(run: CollisionRun, now: Date, recentRunHours: number): bool
   const parsed = new Date(value);
   if (!Number.isFinite(parsed.getTime())) { return false; }
   return now.getTime() - parsed.getTime() <= recentRunHours * 60 * 60 * 1000;
+}
+
+function isCollisionActiveRun(run: CollisionRun, now: Date, staleActiveRunHours: number): boolean {
+  return isActiveRun(run) && !isStaleActiveRun(run, now, staleActiveRunHours);
+}
+
+function isStaleActiveRun(run: CollisionRun, now: Date, staleActiveRunHours: number): boolean {
+  if (run.status !== 'running' && run.status !== 'preflight') { return false; }
+  if (staleActiveRunHours <= 0 || !run.startedAt) { return false; }
+  const started = new Date(run.startedAt).getTime();
+  if (!Number.isFinite(started)) { return false; }
+  return now.getTime() - started >= staleActiveRunHours * 60 * 60 * 1000;
 }
 
 function ticketAreaTokens(ticket: Ticket): Set<string> {
