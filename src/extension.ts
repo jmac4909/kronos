@@ -6766,7 +6766,8 @@ function normalizeCommentsPayload(raw) {
   if (typeof comments === 'string') {
     try {
       comments = JSON.parse(comments || '[]');
-    } catch {
+    } catch (error) {
+      console.warn('Kronos Jira Board could not parse comments payload', error);
       return null;
     }
   }

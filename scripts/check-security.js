@@ -989,6 +989,7 @@ for (const marker of [
   'isQueued,',
   "makeButton(t.isQueued ? 'Remove from Queue' : 'Add to Queue'",
   'function normalizeCommentsPayload',
+  "console.warn('Kronos Jira Board could not parse comments payload', error)",
   "post(t.isQueued ? 'removeFromQueue' : 'addToQueueFromModal'",
   "linkTicketToProject(ticket, project);\n            state.reloadAndNotify();\n            renderBoard();",
   "unlinkTicketFromProject(ticket, project);\n            state.reloadAndNotify();\n            renderBoard();",
