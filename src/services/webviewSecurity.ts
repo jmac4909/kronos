@@ -52,11 +52,18 @@ export function webviewVsCodeApiScript(webviewName = 'Kronos webview'): string {
 }
 
 export function webviewCspMeta(options: WebviewCspOptions = {}): string {
-  const cspSource = options.cspSource ? `${options.cspSource} ` : '';
-  const scriptSrc = options.allowScripts
-    ? options.nonce ? `'nonce-${options.nonce}'` : cspSource.trim() || "'none'"
+  const cspSource = options.cspSource?.trim();
+  const scriptSources = [
+    cspSource,
+    options.nonce ? `'nonce-${options.nonce}'` : undefined,
+  ].filter((source): source is string => Boolean(source));
+  const scriptSrc = options.allowScripts && scriptSources.length > 0
+    ? scriptSources.join(' ')
     : "'none'";
-  const styleSrc = `${cspSource}'unsafe-inline'`.trim();
+  const styleSrc = [
+    cspSource,
+    "'unsafe-inline'",
+  ].filter((source): source is string => Boolean(source)).join(' ');
   const imgSrc = options.imgSrc?.length ? ` img-src ${options.imgSrc.join(' ')};` : '';
   return `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${styleSrc}; script-src ${scriptSrc};${imgSrc}">`;
 }
