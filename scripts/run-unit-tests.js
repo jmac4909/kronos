@@ -2292,11 +2292,27 @@ test('run store surfaces invalid records and blocks strict mutations', () => {
   assert.ok(runs.some(r => r.id === valid.id));
   assert.equal(runs.some(r => r.id === 'run-bad-json'), false);
   assert.ok(issues.some(issue => issue.filePath === invalidJsonPath && issue.scope === 'active' && issue.kind === 'invalid_run_record'));
+  assert.ok(issues.some(issue => issue.filePath === invalidJsonPath && /Unexpected token|Expected property name/.test(issue.detail)));
   assert.ok(issues.some(issue => issue.filePath === missingIdPath && /id/.test(issue.detail)));
   assert.throws(
     () => runStore.markRunCancelled('run-bad-json', 'operator stopped it'),
     /Invalid run record/,
   );
+
+  const source = readSourceFixture('src', 'services', 'runStore.ts');
+  for (const marker of [
+    "import { unknownErrorMessage } from './errorUtils'",
+    'catch (e: unknown)',
+    "unknownErrorMessage(e, 'Unable to parse JSON.')",
+  ]) {
+    assert.ok(source.includes(marker), marker);
+  }
+  for (const marker of [
+    'catch (e: any)',
+    'e?.message',
+  ]) {
+    assert.equal(source.includes(marker), false, marker);
+  }
 });
 
 test('dispatcher records branch and permission metadata for persisted runs', () => {

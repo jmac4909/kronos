@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { safeFileStem } from './fileNames';
 import { KRONOS_DIR } from './stateStore';
+import { unknownErrorMessage } from './errorUtils';
 
 export const RUNS_DIR = path.join(KRONOS_DIR, 'runs');
 export const ARCHIVED_RUNS_DIR = path.join(RUNS_DIR, 'archive');
@@ -191,8 +192,8 @@ function readRunFileResult(filePath: string, scope: RunStoreIssue['scope']): { r
       return { issue: invalidRunRecordIssue(scope, filePath, 'Run record id must be a non-empty string.') };
     }
     return { run: parsed as RunRecord };
-  } catch (e: any) {
-    return { issue: invalidRunRecordIssue(scope, filePath, e?.message || 'Unable to parse JSON.') };
+  } catch (e: unknown) {
+    return { issue: invalidRunRecordIssue(scope, filePath, unknownErrorMessage(e, 'Unable to parse JSON.')) };
   }
 }
 
