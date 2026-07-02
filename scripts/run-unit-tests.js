@@ -1915,6 +1915,7 @@ test('queue planner groups recommendations into project batch plans', () => {
 });
 
 test('queue planner groups recommendations into release batch plans', () => {
+  const queuePlannerSource = readSourceFixture('src', 'services', 'queuePlanner.ts');
   const state = baseState({
     'K-1': ticket({
       next_action: 'fix_build',
@@ -1955,6 +1956,20 @@ test('queue planner groups recommendations into release batch plans', () => {
   assert.deepEqual(milestone.plans.map(plan => plan.ticketKey), ['K-3']);
   assert.deepEqual(sprint.plans.map(plan => plan.ticketKey), ['K-3']);
   assert.deepEqual(unassigned.plans.map(plan => plan.ticketKey), ['K-4']);
+
+  for (const marker of [
+    'QueueItem, QueueState, Ticket',
+    'queueItem?: QueueItem',
+    'export function planToQueueItem(input: PlannerInput, plan: PlannedAction): QueueItem',
+    'function evidenceItemCount(ticket: Ticket): number',
+    'function releaseKeysForPlan(ticket?: Ticket, queueItem?: unknown): string[]',
+    'function releaseField(source: unknown, field: string): unknown',
+    'function collectReleaseValues(target: string[], value: unknown): void',
+    'function releaseFromLabel(label: unknown): string | undefined',
+  ]) {
+    assert.ok(queuePlannerSource.includes(marker), marker);
+  }
+  assert.equal(/\bany\b/.test(queuePlannerSource), false, 'queuePlanner should keep planner payloads typed without any');
 });
 
 test('ticket filters match operator search facets and grouped views', () => {

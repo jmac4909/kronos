@@ -1,4 +1,4 @@
-import { KronosState as KronosStateType, QueueDecision, QueueState } from '../state/types';
+import { KronosState as KronosStateType, QueueDecision, QueueItem, QueueState, Ticket } from '../state/types';
 import { actionToLabel } from './actionLabels';
 import { evidenceChecks, evidenceEnvironmentResults, evidenceNotes } from './evidenceData';
 
@@ -22,7 +22,7 @@ export interface PlannedAction {
   reason: string;
   source: 'queue' | 'ticket';
   ticketSummary?: string;
-  queueItem?: any;
+  queueItem?: QueueItem;
 }
 
 export interface ScoreBreakdownItem {
@@ -255,7 +255,7 @@ function sumBreakdown(items: ScoreBreakdownItem[]): number {
   return items.reduce((sum, item) => sum + item.value, 0);
 }
 
-export function planToQueueItem(input: PlannerInput, plan: PlannedAction): any {
+export function planToQueueItem(input: PlannerInput, plan: PlannedAction): QueueItem {
   if (plan.queueItem) { return plan.queueItem; }
   const firstProject = plan.projects[0];
   return {
@@ -270,13 +270,14 @@ export function planToQueueItem(input: PlannerInput, plan: PlannedAction): any {
   };
 }
 
-function evidenceItemCount(ticket: any): number {
+function evidenceItemCount(ticket: Ticket): number {
   return evidenceNotes(ticket).length + evidenceChecks(ticket).length + evidenceEnvironmentResults(ticket).length;
 }
 
-function ticketAgeDays(ticket: any, now: Date): number | undefined {
-  const candidates = [ticket.updated, ticket.last_action_at, ticket.evidence?.updated_at].filter(Boolean);
+function ticketAgeDays(ticket: Ticket, now: Date): number | undefined {
+  const candidates = [ticket.updated, ticket.last_action_at, ticket.evidence?.updated_at];
   for (const raw of candidates) {
+    if (typeof raw !== 'string') { continue; }
     const parsed = new Date(raw);
     if (Number.isFinite(parsed.getTime())) {
       return Math.max(0, Math.floor((now.getTime() - parsed.getTime()) / (24 * 60 * 60 * 1000)));
@@ -287,7 +288,7 @@ function ticketAgeDays(ticket: any, now: Date): number | undefined {
 
 function triageItem(
   ticketKey: string,
-  ticket: any,
+  ticket: Ticket,
   kind: BacklogTriageKind,
   severity: BacklogTriageItem['severity'],
   action: string,
@@ -344,27 +345,39 @@ function summarizePlanActions(plans: PlannedAction[]): Record<string, number> {
   return counts;
 }
 
-function releaseKeysForPlan(ticket?: any, queueItem?: any): string[] {
+function releaseKeysForPlan(ticket?: Ticket, queueItem?: unknown): string[] {
   const values: string[] = [];
-  collectReleaseValues(values, queueItem?.release);
-  collectReleaseValues(values, queueItem?.fixVersion);
-  collectReleaseValues(values, queueItem?.fixVersions);
-  collectReleaseValues(values, queueItem?.milestone);
-  collectReleaseValues(values, queueItem?.sprint);
+  collectReleaseValues(values, releaseField(queueItem, 'release'));
+  collectReleaseValues(values, releaseField(queueItem, 'fixVersion'));
+  collectReleaseValues(values, releaseField(queueItem, 'fixVersions'));
+  collectReleaseValues(values, releaseField(queueItem, 'milestone'));
+  collectReleaseValues(values, releaseField(queueItem, 'sprint'));
   collectReleaseValues(values, ticket?.release);
   collectReleaseValues(values, ticket?.fixVersion);
   collectReleaseValues(values, ticket?.fixVersions);
   collectReleaseValues(values, ticket?.milestone);
   collectReleaseValues(values, ticket?.sprint);
-  for (const label of [...(queueItem?.labels || []), ...(ticket?.labels || [])]) {
+  for (const label of [...unknownArray(releaseField(queueItem, 'labels')), ...(ticket?.labels || [])]) {
     const release = releaseFromLabel(label);
     if (release) { values.push(release); }
   }
-  const normalized = values.map(normalizeReleaseKey).filter(Boolean) as string[];
+  const normalized = values.map(normalizeReleaseKey).filter((value): value is string => Boolean(value));
   return Array.from(new Set(normalized)).sort((a, b) => a.localeCompare(b));
 }
 
-function collectReleaseValues(target: string[], value: any): void {
+function releaseField(source: unknown, field: string): unknown {
+  return isObjectRecord(source) ? Reflect.get(source, field) : undefined;
+}
+
+function unknownArray(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function isObjectRecord(value: unknown): value is object {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
+}
+
+function collectReleaseValues(target: string[], value: unknown): void {
   if (value === undefined || value === null) { return; }
   if (Array.isArray(value)) {
     for (const entry of value) {
@@ -372,14 +385,14 @@ function collectReleaseValues(target: string[], value: any): void {
     }
     return;
   }
-  if (typeof value === 'object') {
-    collectReleaseValues(target, value.name || value.value || value.title);
+  if (isObjectRecord(value)) {
+    collectReleaseValues(target, Reflect.get(value, 'name') || Reflect.get(value, 'value') || Reflect.get(value, 'title'));
     return;
   }
   target.push(String(value));
 }
 
-function releaseFromLabel(label: any): string | undefined {
+function releaseFromLabel(label: unknown): string | undefined {
   const text = String(label || '').trim();
   const match = /^(?:release|fixversion|fix-version|milestone|target-release)[:=/](.+)$/i.exec(text);
   return match ? match[1] : undefined;

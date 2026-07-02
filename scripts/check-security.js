@@ -1420,6 +1420,15 @@ for (const marker of [
   'planForMinutes',
   'overnightCandidatePlans',
   'isPlanSuppressed',
+  'QueueItem, QueueState, Ticket',
+  'queueItem?: QueueItem',
+  'export function planToQueueItem(input: PlannerInput, plan: PlannedAction): QueueItem',
+  'function evidenceItemCount(ticket: Ticket): number',
+  'function releaseKeysForPlan(ticket?: Ticket, queueItem?: unknown): string[]',
+  'function releaseField(source: unknown, field: string): unknown',
+  'function unknownArray(value: unknown): unknown[]',
+  'function collectReleaseValues(target: string[], value: unknown): void',
+  'function releaseFromLabel(label: unknown): string | undefined',
   'export interface BacklogTriageReport',
   'buildBacklogTriageReport',
   'ready_to_plan',
@@ -1437,6 +1446,9 @@ for (const marker of [
   if (!queuePlanner.includes(marker)) {
     fail(`Missing queue planner marker: ${marker}`);
   }
+}
+if (/\bany\b/.test(queuePlanner)) {
+  fail('Queue planner should not use any for planner payload normalization.');
 }
 
 for (const marker of [
