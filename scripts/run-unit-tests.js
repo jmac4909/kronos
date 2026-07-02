@@ -5876,6 +5876,7 @@ test('tree providers share action labels and icons', () => {
   const sessionTree = readSourceFixture('src', 'views', 'SessionTreeProvider.ts');
   const reviewTree = readSourceFixture('src', 'views', 'ReviewTreeProvider.ts');
   const extensionSource = readSourceFixture('src', 'extension.ts');
+  const nextActionContext = readSourceFixture('src', 'services', 'nextActionContext.ts');
   const actionIcons = readSourceFixture('src', 'views', 'actionIcons.ts');
   const actionLabels = readSourceFixture('src', 'services', 'actionLabels.ts');
   const queuePlanner = readSourceFixture('src', 'services', 'queuePlanner.ts');
@@ -5979,6 +5980,8 @@ test('tree providers share action labels and icons', () => {
   assert.equal(reviewTree.includes("ticket.mr.state === 'merged'"), false, 'review tree should not keep merged MRs in the active review inbox');
   assert.ok(actionLabels.includes('export function actionToLabel'), 'action labels should live outside queue planning');
   assert.ok(queuePlanner.includes("export { actionToLabel } from './actionLabels'"), 'queuePlanner should keep a compatibility re-export');
+  assert.ok(extensionSource.includes("import { actionToLabel } from './services/actionLabels'"), 'extension should import action labels directly');
+  assert.ok(nextActionContext.includes("import { actionToLabel } from './actionLabels'"), 'next action context should import action labels directly');
   assert.equal(ticketTree.includes('function actionToLabel'), false, 'ticket tree should not duplicate action labels');
   assert.equal(queueTree.includes('function actionIcon'), false, 'queue tree should not duplicate action icons');
 });

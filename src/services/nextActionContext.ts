@@ -1,6 +1,7 @@
 import { KronosState, QueueState, Ticket } from '../state/types';
+import { actionToLabel } from './actionLabels';
 import { evidenceChecks, evidenceEnvironmentResults, evidenceNotes } from './evidenceData';
-import { PlannedAction, actionToLabel } from './queuePlanner';
+import { PlannedAction } from './queuePlanner';
 import { SafetyPlan, SafetyRisk } from './safetyGate';
 
 export interface NextActionContextInput {
