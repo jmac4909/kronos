@@ -4375,6 +4375,30 @@ test('extension command handlers normalize remaining unknown errors', () => {
   }
 });
 
+test('extension Sonar commands normalize webview and issue payloads', () => {
+  const source = readSourceFixture('src', 'extension.ts');
+  for (const marker of [
+    "import { buildSonarReport, type SonarIssue }",
+    'function recordFromUnknown(value: unknown): Record<string, unknown>',
+    'panel.webview.onDidReceiveMessage(async (msg: unknown) =>',
+    'function normalizeSonarIssueCommandList(value: unknown): SonarIssue[]',
+    'function normalizeSonarIssueCommandValue(value: unknown): SonarIssue | null',
+    'function formatSonarIssuePromptLine(issue: SonarIssue): string',
+    'const commandArg = recordFromUnknown(item)',
+    'const issuesData = normalizeSonarIssueCommandList(commandArg.issuesData)',
+    'const lines = issuesData.map(formatSonarIssuePromptLine)',
+  ]) {
+    assert.ok(source.includes(marker), marker);
+  }
+  for (const marker of [
+    'panel.webview.onDidReceiveMessage(async (msg: any)',
+    'issuesData.map((iss: any)',
+    'item?.sourceBranch ||',
+  ]) {
+    assert.equal(source.includes(marker), false, marker);
+  }
+});
+
 test('ticket detail rendering uses typed tickets and evidence records', () => {
   const extensionSource = readSourceFixture('src', 'extension.ts');
   const evidenceData = readSourceFixture('src', 'services', 'evidenceData.ts');

@@ -382,6 +382,13 @@ for (const marker of [
   "unknownErrorMessage(e, 'Failed to update scan dirs.')",
   "unknownErrorMessage(e, 'Failed to restore backup.')",
   "unknownErrorMessage(e, 'Failed to snapshot integration manifest.')",
+  "import { buildSonarReport, type SonarIssue }",
+  'function recordFromUnknown(value: unknown): Record<string, unknown>',
+  'panel.webview.onDidReceiveMessage(async (msg: unknown) =>',
+  'function normalizeSonarIssueCommandList(value: unknown): SonarIssue[]',
+  'function formatSonarIssuePromptLine(issue: SonarIssue): string',
+  'const issuesData = normalizeSonarIssueCommandList(commandArg.issuesData)',
+  'const lines = issuesData.map(formatSonarIssuePromptLine)',
   "from './services/stateStore'",
   "from './services/integrationAdapters'",
   "from './services/projectMutations'",
@@ -469,6 +476,9 @@ for (const forbidden of [
 for (const forbidden of [
   'catch (e: any)',
   'e?.message',
+  'panel.webview.onDidReceiveMessage(async (msg: any)',
+  'issuesData.map((iss: any)',
+  'item?.sourceBranch ||',
 ]) {
   if (extension.includes(forbidden)) {
     fail(`Extension command handlers must normalize unknown errors instead of using ${forbidden}.`);

@@ -46,7 +46,7 @@ import { DoctorCheck, runDoctorChecks as collectDoctorChecks, runDoctorReachabil
 import { checkClaudeModelAccess } from './services/cliProbes';
 import { buildCombinedVerificationPlan, buildCombinedVerificationPromptVars } from './services/combinedVerification';
 import { primaryChangedFilePath } from './services/changedFiles';
-import { buildSonarReport } from './services/sonarReportView';
+import { buildSonarReport, type SonarIssue } from './services/sonarReportView';
 import { buildAgingReportHtml } from './services/agingReportView';
 import { buildNextActionContext, buildNextActionStartDecision, skillForAction } from './services/nextActionContext';
 import { createWorkspaceDiffArtifact, firstRemoteBranchMatching, originProjectPath } from './services/gitWorkspace';
@@ -92,6 +92,10 @@ function jsonForScript(value: unknown): string {
     '\u2029': '\\u2029',
   };
   return json.replace(/[<>&\u2028\u2029]/g, c => replacements[c]);
+}
+
+function recordFromUnknown(value: unknown): Record<string, unknown> {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value)) ? value as Record<string, unknown> : {};
 }
 
 function formatWebviewDateTime(value: unknown, fallback = 'N/A'): string {
@@ -248,16 +252,15 @@ const TICKET_SCOPED_OPERATOR_COMMANDS = new Set([
 ]);
 
 function normalizeWebviewCommand(raw: unknown, allowed: Set<string>): string | null {
-  if (!raw || typeof raw !== 'object') { return null; }
-  const command = (raw as { command?: unknown }).command;
+  const command = recordFromUnknown(raw).command;
   if (typeof command !== 'string' || !allowed.has(command)) { return null; }
   return command;
 }
 
 function normalizeBoardMessage(raw: unknown): { command: string; ticket: string; project: string } | null {
   const command = normalizeWebviewCommand(raw, BOARD_MESSAGE_COMMANDS);
-  if (!command || !raw || typeof raw !== 'object') { return null; }
-  const message = raw as { ticket?: unknown; project?: unknown };
+  if (!command) { return null; }
+  const message = recordFromUnknown(raw);
   return {
     command,
     ticket: typeof message.ticket === 'string' ? message.ticket : '',
@@ -267,8 +270,8 @@ function normalizeBoardMessage(raw: unknown): { command: string; ticket: string;
 
 function normalizeActionPanelMessage(raw: unknown, allowed: Set<string>): { command: string; ticket: string; runId: string; planId: string; itemId: string } | null {
   const command = normalizeWebviewCommand(raw, allowed);
-  if (!command || !raw || typeof raw !== 'object') { return null; }
-  const message = raw as { ticket?: unknown; runId?: unknown; planId?: unknown; itemId?: unknown };
+  if (!command) { return null; }
+  const message = recordFromUnknown(raw);
   return {
     command,
     ticket: typeof message.ticket === 'string' ? message.ticket : '',
@@ -276,6 +279,32 @@ function normalizeActionPanelMessage(raw: unknown, allowed: Set<string>): { comm
     planId: typeof message.planId === 'string' ? message.planId : '',
     itemId: typeof message.itemId === 'string' ? message.itemId : '',
   };
+}
+
+function normalizeSonarIssueCommandList(value: unknown): SonarIssue[] {
+  if (!Array.isArray(value)) { return []; }
+  return value
+    .map(normalizeSonarIssueCommandValue)
+    .filter((issue): issue is SonarIssue => Boolean(issue));
+}
+
+function normalizeSonarIssueCommandValue(value: unknown): SonarIssue | null {
+  const record = recordFromUnknown(value);
+  const issue: SonarIssue = {
+    severity: typeof record.severity === 'string' ? record.severity : undefined,
+    rule: typeof record.rule === 'string' ? record.rule : undefined,
+    component: typeof record.component === 'string' ? record.component : undefined,
+    line: record.line,
+    message: typeof record.message === 'string' ? record.message : undefined,
+  };
+  return issue.severity || issue.rule || issue.component || issue.message || issue.line !== undefined ? issue : null;
+}
+
+function formatSonarIssuePromptLine(issue: SonarIssue): string {
+  const file = String(issue.component || '').replace(/^[^:]+:/, '') || '?';
+  const rule = String(issue.rule || '').replace(/^[^:]+:/, '') || '-';
+  const line = issue.line === undefined || issue.line === null || issue.line === '' ? '?' : String(issue.line);
+  return `- [${issue.severity || '-'}] ${rule}: ${file}:${line} — ${issue.message || ''}`;
 }
 
 function agingThresholdsFromConfig(): Partial<AgingThresholds> {
@@ -2113,7 +2142,7 @@ export function activate(context: vscode.ExtensionContext) {
         panel.webview.html = withWebviewCsp(report.html, webviewScriptCsp(panel.webview, nonce));
 
         const sonarCommands = new Set(['fixSonar', 'openSonar']);
-        panel.webview.onDidReceiveMessage(async (msg: any) => {
+        panel.webview.onDidReceiveMessage(async (msg: unknown) => {
           const command = normalizeWebviewCommand(msg, sonarCommands);
           if (command === 'fixSonar') {
             panel.dispose();
@@ -2143,7 +2172,8 @@ export function activate(context: vscode.ExtensionContext) {
       });
       if (customInstructions === undefined) { return; }
 
-      const sourceBranch = item?.sourceBranch || '';
+      const commandArg = recordFromUnknown(item);
+      const sourceBranch = typeof commandArg.sourceBranch === 'string' ? commandArg.sourceBranch : '';
       const isProtected = !sourceBranch || sourceBranch === 'develop' || sourceBranch === 'main' || sourceBranch === 'master';
       const branchStrategy = isProtected
         ? `You are fixing issues from the ${sourceBranch || 'develop'} branch. Create a NEW branch: bugfix/sonar-${projectName.toLowerCase()} from ${sourceBranch || 'develop'}. After fixing and pushing, create a GitLab MR from your branch into ${sourceBranch || 'develop'} using: python ~/.claude/scripts/gitlab_api.py --create-mr`
@@ -2151,13 +2181,9 @@ export function activate(context: vscode.ExtensionContext) {
 
       // Format pre-fetched issues if available
       let issuesBlock = '';
-      const issuesData = item?.issuesData;
-      if (issuesData && issuesData.length > 0) {
-        const lines = issuesData.map((iss: any) => {
-          const file = (iss.component || '').replace(/^[^:]+:/, '');
-          const rule = (iss.rule || '').replace(/^[^:]+:/, '');
-          return `- [${iss.severity}] ${rule}: ${file}:${iss.line || '?'} — ${iss.message}`;
-        });
+      const issuesData = normalizeSonarIssueCommandList(commandArg.issuesData);
+      if (issuesData.length > 0) {
+        const lines = issuesData.map(formatSonarIssuePromptLine);
         issuesBlock = `KNOWN ISSUES (already fetched — do NOT re-query SonarQube for the issue list):\n${lines.join('\n')}`;
       }
 
