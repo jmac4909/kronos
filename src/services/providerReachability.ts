@@ -23,6 +23,10 @@ export interface ProviderReachabilityOptions {
 }
 
 const DEFAULT_TIMEOUT_MS = 5000;
+type TlsCaCertificateSet = 'bundled' | 'system';
+type TlsWithCaCertificates = typeof tls & {
+  getCACertificates?: (set: TlsCaCertificateSet) => string[];
+};
 
 export async function probeProviderReachability(
   targets: ProviderReachabilityTarget[],
@@ -114,7 +118,7 @@ function safeUrlLabel(url: URL): string {
 }
 
 export function systemCaCertificatesForHttps(): string[] | undefined {
-  const getCACertificates = (tls as any).getCACertificates;
+  const getCACertificates = (tls as TlsWithCaCertificates).getCACertificates;
   if (typeof getCACertificates !== 'function') {
     return undefined;
   }

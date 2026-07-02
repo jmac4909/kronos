@@ -1,6 +1,8 @@
 import * as vscode from 'vscode';
 import { KronosState } from '../state/KronosState';
 import { QueueItem } from '../state/types';
+import { actionToLabel } from '../services/actionLabels';
+import { queueActionIcon, themeIcon } from './actionIcons';
 
 export class QueueTreeProvider implements vscode.TreeDataProvider<QueueTreeItem> {
   private _onDidChangeTreeData = new vscode.EventEmitter<QueueTreeItem | undefined>();
@@ -47,7 +49,7 @@ export class QueueTreeItem extends vscode.TreeItem {
     if (!item.action) { return; }
 
     this.contextValue = 'queue_item';
-    const actionLabel = item.action.replace(/_/g, ' ');
+    const actionLabel = actionToLabel(item.action);
     const projs = (item.projects || []).join(', ') || 'unlinked';
     this.description = `${projs} · [${actionLabel}] ${item.priority_score}`;
 
@@ -65,21 +67,6 @@ export class QueueTreeItem extends vscode.TreeItem {
       arguments: [item],
     };
 
-    const icon = actionIcon(item.action);
-    if (icon) {
-      this.iconPath = new vscode.ThemeIcon(icon.id, icon.color);
-    }
-  }
-}
-
-function actionIcon(action: string): { id: string; color?: vscode.ThemeColor } | undefined {
-  switch (action) {
-    case 'implement': return { id: 'play-circle', color: new vscode.ThemeColor('charts.green') };
-    case 'in_progress': return { id: 'tools', color: new vscode.ThemeColor('charts.blue') };
-    case 'deploy_monitor': return { id: 'rocket', color: new vscode.ThemeColor('charts.blue') };
-    case 'verify': return { id: 'beaker', color: new vscode.ThemeColor('charts.purple') };
-    case 'fix_build': return { id: 'flame', color: new vscode.ThemeColor('testing.iconFailed') };
-    case 'refresh': return { id: 'refresh' };
-    default: return { id: 'circle-outline' };
+    this.iconPath = themeIcon(queueActionIcon(item.action));
   }
 }

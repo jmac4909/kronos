@@ -1,6 +1,13 @@
 import { TicketAcceptanceCriterion } from '../state/types';
 
-export function extractAcceptanceCriteria(description: string | undefined, existing: TicketAcceptanceCriterion[] = []): TicketAcceptanceCriterion[] {
+export interface ExistingAcceptanceCriterion {
+  id?: string;
+  text: string;
+  checked?: boolean;
+  source?: TicketAcceptanceCriterion['source'];
+}
+
+export function extractAcceptanceCriteria(description: string | undefined, existing: ExistingAcceptanceCriterion[] = []): TicketAcceptanceCriterion[] {
   const texts = extractCriterionTexts(description || '');
   const existingByText = new Map(existing.map(item => [normalizeText(item.text), item]));
   return texts.map((text, index) => {

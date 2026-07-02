@@ -3753,6 +3753,37 @@ test('extension webviews use shared UI shell and board filtering affordances', (
   );
 });
 
+test('tree providers share action labels and icons', () => {
+  const ticketTree = readSourceFixture('src', 'views', 'TicketTreeProvider.ts');
+  const queueTree = readSourceFixture('src', 'views', 'QueueTreeProvider.ts');
+  const actionIcons = readSourceFixture('src', 'views', 'actionIcons.ts');
+  const actionLabels = readSourceFixture('src', 'services', 'actionLabels.ts');
+  const queuePlanner = readSourceFixture('src', 'services', 'queuePlanner.ts');
+
+  for (const marker of [
+    "import { actionToLabel } from '../services/actionLabels'",
+    "import { themeIcon, ticketActionIcon } from './actionIcons'",
+    'themeIcon(ticketActionIcon(action))',
+  ]) {
+    assert.ok(ticketTree.includes(marker), marker);
+  }
+
+  for (const marker of [
+    "import { actionToLabel } from '../services/actionLabels'",
+    "import { queueActionIcon, themeIcon } from './actionIcons'",
+    'themeIcon(queueActionIcon(item.action))',
+  ]) {
+    assert.ok(queueTree.includes(marker), marker);
+  }
+
+  assert.ok(actionIcons.includes("case 'in_progress': return { id: 'tools'"), 'shared icons should use the valid tools codicon');
+  assert.equal(actionIcons.includes("'wrench'"), false, 'shared action icons should not use the invalid wrench codicon');
+  assert.ok(actionLabels.includes('export function actionToLabel'), 'action labels should live outside queue planning');
+  assert.ok(queuePlanner.includes("export { actionToLabel } from './actionLabels'"), 'queuePlanner should keep a compatibility re-export');
+  assert.equal(ticketTree.includes('function actionToLabel'), false, 'ticket tree should not duplicate action labels');
+  assert.equal(queueTree.includes('function actionIcon'), false, 'queue tree should not duplicate action icons');
+});
+
 test('trend metrics report rework, build pass, verification pass, and cycle time', () => {
   const tickets = {
     'K-1': ticket({

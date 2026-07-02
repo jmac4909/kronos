@@ -1,7 +1,9 @@
 import * as vscode from 'vscode';
 import { KronosState } from '../state/KronosState';
 import { Ticket } from '../state/types';
+import { actionToLabel } from '../services/actionLabels';
 import { TicketFilter, TicketGroupBy, describeTicketFilter, filterTickets, groupTicketEntries, hasTicketFilter } from '../services/ticketFilters';
+import { themeIcon, ticketActionIcon } from './actionIcons';
 
 type TicketElement = TicketGroupItem | TicketItem | TicketDetailItem | EmptyTicketItem;
 
@@ -179,8 +181,7 @@ class TicketItem extends vscode.TreeItem {
     if (!linked) {
       this.iconPath = new vscode.ThemeIcon('circle-outline', new vscode.ThemeColor('disabledForeground'));
     } else {
-      const { icon, color } = actionIcon(action);
-      this.iconPath = new vscode.ThemeIcon(icon, color);
+      this.iconPath = themeIcon(ticketActionIcon(action));
     }
   }
 }
@@ -208,34 +209,6 @@ class TicketDetailItem extends vscode.TreeItem {
       this.tooltip = url;
       this.command = { command: 'kronos.openExternalUrl', title: 'Open', arguments: [url] };
     }
-  }
-}
-
-function actionIcon(action: string): { icon: string; color: vscode.ThemeColor } {
-  switch (action) {
-    case 'implement': return { icon: 'circle-outline', color: new vscode.ThemeColor('disabledForeground') };
-    case 'in_progress': return { icon: 'tools', color: new vscode.ThemeColor('charts.blue') };
-    case 'await_review': return { icon: 'git-pull-request', color: new vscode.ThemeColor('charts.yellow') };
-    case 'deploy_monitor': return { icon: 'rocket', color: new vscode.ThemeColor('charts.blue') };
-    case 'fix_build': return { icon: 'flame', color: new vscode.ThemeColor('testing.iconFailed') };
-    case 'verify': return { icon: 'beaker', color: new vscode.ThemeColor('charts.purple') };
-    case 'blocked': return { icon: 'lock', color: new vscode.ThemeColor('testing.iconFailed') };
-    case 'done': return { icon: 'pass', color: new vscode.ThemeColor('testing.iconPassed') };
-    default: return { icon: 'circle-outline', color: new vscode.ThemeColor('disabledForeground') };
-  }
-}
-
-function actionToLabel(action: string): string {
-  switch (action) {
-    case 'implement': return 'To Do';
-    case 'in_progress': return 'In Progress';
-    case 'await_review': return 'Review';
-    case 'deploy_monitor': return 'Deploying';
-    case 'verify': return 'QA';
-    case 'fix_build': return 'Build Failed';
-    case 'blocked': return 'Blocked';
-    case 'done': return 'Done';
-    default: return action;
   }
 }
 

@@ -27,6 +27,7 @@ import { requiredScripts } from './services/scriptClient';
 import { gitlabAdapter, jiraAdapter, sonarAdapter } from './services/integrationAdapters';
 import { evaluatePostRunReadiness } from './services/postRunReadiness';
 import { extractAcceptanceCriteria } from './services/acceptanceCriteria';
+import type { ExistingAcceptanceCriterion } from './services/acceptanceCriteria';
 import { HumanReviewInbox, buildHumanReviewInbox } from './services/humanReviewInbox';
 import { EvidenceGateResult, evaluateEvidenceGate, evaluateEvidenceGates } from './services/evidenceGate';
 import { decideEvidenceHandoff } from './services/evidenceGatePolicy';
@@ -1569,8 +1570,10 @@ export function activate(context: vscode.ExtensionContext) {
         return;
       }
 
-      const existingCriteria = evidenceAcceptanceCriteria(ticket).filter(criterion => evidenceString(criterion, 'text').length > 0);
-      const extracted = extractAcceptanceCriteria(ticket.description, existingCriteria as any);
+      const existingCriteria = evidenceAcceptanceCriteria(ticket)
+        .map(existingAcceptanceCriterion)
+        .filter((criterion): criterion is ExistingAcceptanceCriterion => Boolean(criterion));
+      const extracted = extractAcceptanceCriteria(ticket.description, existingCriteria);
       if (extracted.length === 0) {
         vscode.window.showWarningMessage(`${ticketKey} has no obvious acceptance criteria in its description.`);
         return;
@@ -5278,8 +5281,8 @@ function ticketEvidenceItemCount(ticket: any): number {
   return evidenceNotes(ticket).length + evidenceChecks(ticket).length + evidenceEnvironmentResults(ticket).length;
 }
 
-function ticketStringField(record: any, key: string, fallback = ''): string {
-  const value = record?.[key];
+function ticketStringField(record: object | null | undefined, key: string, fallback = ''): string {
+  const value = record ? Reflect.get(record, key) : undefined;
   return value === undefined || value === null ? fallback : String(value);
 }
 
@@ -5289,8 +5292,20 @@ function ticketStringArray(value: unknown): string[] {
     : [];
 }
 
-function ticketRecord(value: unknown): value is Record<string, any> {
+function ticketRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function existingAcceptanceCriterion(record: Record<string, unknown>): ExistingAcceptanceCriterion | undefined {
+  const text = evidenceString(record, 'text');
+  if (!text) { return undefined; }
+  const source = evidenceString(record, 'source');
+  return {
+    id: evidenceString(record, 'id') || undefined,
+    text,
+    checked: evidenceChecked(record),
+    source: source === 'description' || source === 'manual' ? source : undefined,
+  };
 }
 
 function ticketAttachments(value: unknown): Array<{ filename: string; size: number; mimeType: string }> {

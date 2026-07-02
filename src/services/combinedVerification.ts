@@ -31,7 +31,7 @@ export function sanitizeGitBranchRef(value: string | undefined): string | null {
 }
 
 function branchCandidates(ticket: CombinedVerificationTicket): Array<string | undefined> {
-  const mr = ticket.mr as any;
+  const mr = ticket.mr;
   return [
     mr.source_branch,
     mr.sourceBranch,
