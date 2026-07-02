@@ -2114,8 +2114,8 @@ export function activate(context: vscode.ExtensionContext) {
               vscode.ViewColumn.One, { enableScripts: false }
             );
             panel.webview.html = withWebviewCsp(buildDiffHtml(data));
-          } catch {
-            vscode.window.showErrorMessage('Failed to load MR diff.');
+          } catch (e: unknown) {
+            vscode.window.showErrorMessage(unknownErrorMessage(e, 'Failed to load MR diff.'));
           }
         },
         'Failed to open merge request diff.'

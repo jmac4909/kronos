@@ -4692,6 +4692,7 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     "unknownErrorMessage(e, 'Kronos auto-refresh failed.')",
     'unknownErrorMessage(e, `Failed to register ${s.label || s.detail}.`)',
     "unknownErrorMessage(e, 'Failed to parse discovery results.')",
+    "unknownErrorMessage(e, 'Failed to load MR diff.')",
     "'Failed to refresh Kronos projects.'",
     "'Failed to discover Kronos projects.'",
     "'Failed to open merge request diff.'",
