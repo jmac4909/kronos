@@ -5218,13 +5218,23 @@ test('extension publish and project command handlers normalize unknown errors', 
   }
 });
 
-test('extension MR and ticket link handlers normalize unknown errors', () => {
+test('extension MR and ticket link handlers normalize payloads and unknown errors', () => {
   const source = readSourceFixture('src', 'extension.ts');
-  const commandStart = source.indexOf("vscode.commands.registerCommand('kronos.linkMrToTicket'");
+  const commandStart = source.indexOf("vscode.commands.registerCommand('kronos.rejectReview'");
   const commandEnd = source.indexOf("    vscode.commands.registerCommand('kronos.sessionHistory'", commandStart);
   assert.ok(commandStart >= 0 && commandEnd > commandStart, 'MR and ticket link command block should be present');
   const commandSource = source.slice(commandStart, commandEnd);
   for (const marker of [
+    "vscode.commands.registerCommand('kronos.rejectReview', async (treeItem: unknown)",
+    "vscode.commands.registerCommand('kronos.linkMrToTicket', async (treeItem: unknown)",
+    "vscode.commands.registerCommand('kronos.openMrInGitlab', async (treeItem: unknown)",
+    "vscode.commands.registerCommand('kronos.linkTicket', async (ticketKeyOrItem: unknown)",
+    "vscode.commands.registerCommand('kronos.unlinkTicket', async (item: unknown)",
+    'const ticketKey = resolveTicketKey(treeItem);',
+    'const orphanKey = resolveTicketKey(treeItem);',
+    'const url = resolveMergeRequestUrl(treeItem);',
+    'const ticketKey = resolveTicketKey(ticketKeyOrItem);',
+    'const projectName = stringFromUnknown(recordFromUnknown(item).linkedProject);',
     "unknownErrorMessage(e, 'Failed to preview merge request link.')",
     "unknownErrorMessage(e, 'Failed to link merge request to ticket.')",
     "unknownErrorMessage(e, 'Failed to update ticket project links.')",
@@ -5232,9 +5242,19 @@ test('extension MR and ticket link handlers normalize unknown errors', () => {
   ]) {
     assert.ok(commandSource.includes(marker), marker);
   }
+  assert.ok(source.includes('function resolveMergeRequestUrl(item: unknown): string | undefined'));
   for (const marker of [
     'catch (e: any)',
     'e?.message',
+    "vscode.commands.registerCommand('kronos.rejectReview', async (treeItem: any)",
+    "vscode.commands.registerCommand('kronos.linkMrToTicket', async (treeItem: any)",
+    "vscode.commands.registerCommand('kronos.openMrInGitlab', async (treeItem: any)",
+    "vscode.commands.registerCommand('kronos.linkTicket', async (ticketKeyOrItem: any)",
+    "vscode.commands.registerCommand('kronos.unlinkTicket', async (item: any)",
+    'treeItem?.ticketKey',
+    'treeItem?.ticket?.mr',
+    'ticketKeyOrItem?.ticketKey',
+    'item?.linkedProject',
   ]) {
     assert.equal(commandSource.includes(marker), false, marker);
   }

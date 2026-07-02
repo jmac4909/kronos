@@ -728,6 +728,11 @@ for (const forbidden of [
   "vscode.commands.registerCommand('kronos.fixSonarIssues', async (item: any)",
   "vscode.commands.registerCommand('kronos.fixFinding', async (args: any)",
   "vscode.commands.registerCommand('kronos.verifyDevelop', async (item: any)",
+  "vscode.commands.registerCommand('kronos.rejectReview', async (treeItem: any)",
+  "vscode.commands.registerCommand('kronos.linkMrToTicket', async (treeItem: any)",
+  "vscode.commands.registerCommand('kronos.openMrInGitlab', async (treeItem: any)",
+  "vscode.commands.registerCommand('kronos.linkTicket', async (ticketKeyOrItem: any)",
+  "vscode.commands.registerCommand('kronos.unlinkTicket', async (item: any)",
   "await startClaudeDispatch(projectPath, 'verify-fix', item?.ticketKey,",
   'if (item?.taskId)',
   'const projectPath = getProjectPath(state, item?.projectName);',
@@ -776,6 +781,11 @@ for (const marker of [
   "vscode.commands.registerCommand('kronos.fixSonarIssues', async (item: unknown)",
   "vscode.commands.registerCommand('kronos.fixFinding', async (args: unknown)",
   "vscode.commands.registerCommand('kronos.verifyDevelop', async (item: unknown)",
+  "vscode.commands.registerCommand('kronos.rejectReview', async (treeItem: unknown)",
+  "vscode.commands.registerCommand('kronos.linkMrToTicket', async (treeItem: unknown)",
+  "vscode.commands.registerCommand('kronos.openMrInGitlab', async (treeItem: unknown)",
+  "vscode.commands.registerCommand('kronos.linkTicket', async (ticketKeyOrItem: unknown)",
+  "vscode.commands.registerCommand('kronos.unlinkTicket', async (item: unknown)",
   'const queueData = resolveQueueCommandItem(treeItemOrData);',
   'const idx = resolveQueueIndex(treeItem);',
   'await startClaudeDispatch(projectPath, skill, queueData.ticket || undefined,',
@@ -789,6 +799,11 @@ for (const marker of [
   'const projectName = resolveProjectName(state, args);',
   'const projectPath = stringFromUnknown(commandArg.projectPath) || getProjectPath(state, projectName);',
   'let projectName = resolveProjectName(state, item);',
+  'function resolveMergeRequestUrl(item: unknown): string | undefined',
+  'const orphanKey = resolveTicketKey(treeItem);',
+  'const url = resolveMergeRequestUrl(treeItem);',
+  'const ticketKey = resolveTicketKey(ticketKeyOrItem);',
+  'const projectName = stringFromUnknown(recordFromUnknown(item).linkedProject);',
   'function resolveTaskId(item: unknown): string | undefined',
 ]) {
   if (!extension.includes(marker)) {
@@ -835,6 +850,28 @@ for (const forbidden of [
 ]) {
   if (sonarCommandSource.includes(forbidden)) {
     fail(`Sonar command handlers must normalize payloads before use: ${forbidden}`);
+  }
+}
+
+const mrLinkCommandStart = extension.indexOf("vscode.commands.registerCommand('kronos.rejectReview'");
+const mrLinkCommandEnd = extension.indexOf("    vscode.commands.registerCommand('kronos.sessionHistory'", mrLinkCommandStart);
+if (mrLinkCommandStart < 0 || mrLinkCommandEnd <= mrLinkCommandStart) {
+  fail('Missing MR and ticket link command handler block.');
+}
+const mrLinkCommandSource = extension.slice(mrLinkCommandStart, mrLinkCommandEnd);
+for (const forbidden of [
+  "vscode.commands.registerCommand('kronos.rejectReview', async (treeItem: any)",
+  "vscode.commands.registerCommand('kronos.linkMrToTicket', async (treeItem: any)",
+  "vscode.commands.registerCommand('kronos.openMrInGitlab', async (treeItem: any)",
+  "vscode.commands.registerCommand('kronos.linkTicket', async (ticketKeyOrItem: any)",
+  "vscode.commands.registerCommand('kronos.unlinkTicket', async (item: any)",
+  'treeItem?.ticketKey',
+  'treeItem?.ticket?.mr',
+  'ticketKeyOrItem?.ticketKey',
+  'item?.linkedProject',
+]) {
+  if (mrLinkCommandSource.includes(forbidden)) {
+    fail(`MR and ticket link command handlers must normalize payloads before use: ${forbidden}`);
   }
 }
 

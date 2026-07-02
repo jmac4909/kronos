@@ -2186,10 +2186,8 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('kronos.openMrDiff', async (treeItem: unknown) => {
       const ticketKey = resolveTicketKey(treeItem);
       if (!ticketKey) {
-        const ticket = recordFromUnknown(recordFromUnknown(treeItem).ticket);
-        const mr = recordFromUnknown(ticket.mr);
-        const url = mr.url;
-        if (typeof url === 'string') { openExternalHttpUrl(url); }
+        const url = resolveMergeRequestUrl(treeItem);
+        if (url) { openExternalHttpUrl(url); }
         return;
       }
       await runCommandProgress(
@@ -2712,8 +2710,8 @@ export function activate(context: vscode.ExtensionContext) {
       });
     }),
 
-    vscode.commands.registerCommand('kronos.rejectReview', async (treeItem: any) => {
-      const ticketKey = treeItem?.ticketKey;
+    vscode.commands.registerCommand('kronos.rejectReview', async (treeItem: unknown) => {
+      const ticketKey = resolveTicketKey(treeItem);
       if (!ticketKey || !state.state) { return; }
       const ticket = state.state.tickets[ticketKey];
       const projs = ticket?.projects || [];
@@ -2760,8 +2758,8 @@ export function activate(context: vscode.ExtensionContext) {
       });
     }),
 
-    vscode.commands.registerCommand('kronos.linkMrToTicket', async (treeItem: any) => {
-      const orphanKey = treeItem?.ticketKey;
+    vscode.commands.registerCommand('kronos.linkMrToTicket', async (treeItem: unknown) => {
+      const orphanKey = resolveTicketKey(treeItem);
       if (!orphanKey || !state.state) { return; }
       const orphan = state.state.tickets[orphanKey];
       if (!orphan?.mr) { return; }
@@ -2846,11 +2844,9 @@ export function activate(context: vscode.ExtensionContext) {
       }
     }),
 
-    vscode.commands.registerCommand('kronos.openMrInGitlab', async (treeItem: any) => {
-      const mr = treeItem?.ticket?.mr;
-      if (mr?.url) {
-        openExternalHttpUrl(mr.url);
-      }
+    vscode.commands.registerCommand('kronos.openMrInGitlab', async (treeItem: unknown) => {
+      const url = resolveMergeRequestUrl(treeItem);
+      if (url) { openExternalHttpUrl(url); }
     }),
 
     vscode.commands.registerCommand('kronos.overnightStart', () => {
@@ -2869,8 +2865,8 @@ export function activate(context: vscode.ExtensionContext) {
       await runSettingsMenu(state);
     }),
 
-    vscode.commands.registerCommand('kronos.linkTicket', async (ticketKeyOrItem: any) => {
-      const ticketKey = typeof ticketKeyOrItem === 'string' ? ticketKeyOrItem : ticketKeyOrItem?.ticketKey;
+    vscode.commands.registerCommand('kronos.linkTicket', async (ticketKeyOrItem: unknown) => {
+      const ticketKey = resolveTicketKey(ticketKeyOrItem);
       if (!ticketKey || !state.state) { return; }
       const allProjects = Object.keys(state.state.projects);
       if (allProjects.length === 0) {
@@ -2897,9 +2893,9 @@ export function activate(context: vscode.ExtensionContext) {
       }
     }),
 
-    vscode.commands.registerCommand('kronos.unlinkTicket', async (item: any) => {
-      const ticketKey = item?.ticketKey;
-      const projectName = item?.linkedProject;
+    vscode.commands.registerCommand('kronos.unlinkTicket', async (item: unknown) => {
+      const ticketKey = resolveTicketKey(item);
+      const projectName = stringFromUnknown(recordFromUnknown(item).linkedProject);
       if (ticketKey && projectName) {
         const canUnlink = await confirmSafetyGate({
           command: 'kronos.unlinkTicket',
@@ -5825,6 +5821,12 @@ function resolveTicketKey(item: unknown): string | undefined {
   if (typeof nestedItem.ticket === 'string') { return nestedItem.ticket; }
   if (typeof record.ticket === 'string') { return record.ticket; }
   return undefined;
+}
+
+function resolveMergeRequestUrl(item: unknown): string | undefined {
+  const ticket = recordFromUnknown(recordFromUnknown(item).ticket);
+  const mr = recordFromUnknown(ticket.mr);
+  return stringFromUnknown(mr.url);
 }
 
 interface QueueCommandPayload {
