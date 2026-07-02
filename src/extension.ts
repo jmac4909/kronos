@@ -5624,8 +5624,8 @@ function resolveTicketKey(item: any): string | undefined {
 
 function startReviewAutomation(context: vscode.ExtensionContext, state: KronosState): void {
   const config = vscode.workspace.getConfiguration('kronos');
-  const fallbackSec = config.get<number>('pollIntervalSec', 300);
-  const pollSec = Math.max(60, config.get<number>('reviewPollIntervalSec', fallbackSec));
+  const fallbackSec = positiveConfigNumber(config.get<number>('pollIntervalSec', 300), 300);
+  const pollSec = Math.max(60, positiveConfigNumber(config.get<number>('reviewPollIntervalSec', fallbackSec), fallbackSec));
   let running = false;
   const poll = async () => {
     if (running) { return; }
@@ -5636,8 +5636,13 @@ function startReviewAutomation(context: vscode.ExtensionContext, state: KronosSt
       running = false;
     }
   };
+  void poll();
   const timer = setInterval(() => { void poll(); }, pollSec * 1000);
   context.subscriptions.push({ dispose: () => clearInterval(timer) });
+}
+
+function positiveConfigNumber(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : fallback;
 }
 
 async function pollReviewMergeRequests(state: KronosState): Promise<void> {
