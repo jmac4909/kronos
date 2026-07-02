@@ -505,6 +505,48 @@ async function archiveSelectedRun(runId: string): Promise<void> {
   }
 }
 
+const FINISHED_ARCHIVE_STATUSES = new Set<KronosRun['status']>(['completed', 'failed', 'cancelled']);
+
+function isFinishedArchiveRun(run: KronosRun): boolean {
+  return FINISHED_ARCHIVE_STATUSES.has(run.status);
+}
+
+function runCountLabel(count: number): string {
+  return `${count} finished run${count === 1 ? '' : 's'}`;
+}
+
+async function archiveFinishedRuns(): Promise<void> {
+  const runs = listRuns().filter(isFinishedArchiveRun);
+  if (runs.length === 0) {
+    vscode.window.showInformationMessage('No completed, failed, or cancelled Kronos runs to archive.');
+    return;
+  }
+  const confirm = await vscode.window.showWarningMessage(
+    `Archive ${runCountLabel(runs.length)}? Completed, failed, and cancelled runs will move under the run archive. Active, paused, waiting-for-review, and needs-human runs stay visible.`,
+    'Archive Finished',
+    'Cancel'
+  );
+  if (confirm !== 'Archive Finished') { return; }
+
+  let archived = 0;
+  let failed = 0;
+  for (const run of runs) {
+    try {
+      archiveRun(run.id);
+      archived += 1;
+    } catch (e: unknown) {
+      failed += 1;
+      console.warn(unknownErrorMessage(e, `Failed to archive ${run.id}.`));
+    }
+  }
+
+  if (failed > 0) {
+    vscode.window.showWarningMessage(`Archived ${runCountLabel(archived)}; ${failed} failed. See developer console for details.`);
+    return;
+  }
+  vscode.window.showInformationMessage(`Archived ${runCountLabel(archived)}.`);
+}
+
 async function pauseSelectedRun(run: KronosRun): Promise<void> {
   const processPid = runProcessPid(run);
   const confirm = await vscode.window.showWarningMessage(
@@ -629,6 +671,10 @@ function openInteractiveRunCenter(state: KronosState): void {
 }
 
 async function executeRunCenterAction(state: KronosState, request: RunCenterActionRequest): Promise<void> {
+  if (request.command === 'archiveFinishedRuns') {
+    await archiveFinishedRuns();
+    return;
+  }
   const run = findRunById(request.runId);
   if (request.command === 'openRunRecord') {
     await openTextFileIfExists(runRecordPath(request.runId), 'Run record not found.');

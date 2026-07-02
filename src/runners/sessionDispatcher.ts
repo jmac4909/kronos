@@ -51,6 +51,7 @@ const CLAUDE_ALLOWED_TOOLS = CLAUDE_ALLOWED_TOOL_PATTERNS.join(' ');
 
 const RUN_CENTER_MESSAGE_COMMANDS = new Set([
   'refreshPanel',
+  'archiveFinishedRuns',
   'openRunRecord',
   'openRunLog',
   'openRunPrompt',
@@ -1160,7 +1161,7 @@ function normalizeRunCenterMessage(raw: unknown): RunCenterActionRequest | null 
   if (!raw || typeof raw !== 'object') { return null; }
   const message = raw as { command?: unknown; runId?: unknown };
   if (typeof message.command !== 'string' || !RUN_CENTER_MESSAGE_COMMANDS.has(message.command)) { return null; }
-  if (message.command === 'refreshPanel') {
+  if (message.command === 'refreshPanel' || message.command === 'archiveFinishedRuns') {
     return { command: message.command, runId: '' };
   }
   if (typeof message.runId !== 'string' || message.runId.trim().length === 0) { return null; }
@@ -1275,7 +1276,7 @@ function buildRunCenterHtml(runs: KronosRun[], nonce?: string): string {
   .run-action:hover { background: var(--vscode-list-hoverBackground); }
   .run-action.primary { background: var(--vscode-button-background); color: var(--vscode-button-foreground); border-color: transparent; }` : '';
   const refreshAction = interactive
-    ? `<div class="run-center-toolbar">${runCenterActionButton('refreshPanel', 'Refresh')}</div>`
+    ? `<div class="run-center-toolbar">${runCenterActionButton('refreshPanel', 'Refresh')}${runCenterActionButton('archiveFinishedRuns', 'Archive Finished')}</div>`
     : '';
 
   return `<!DOCTYPE html>
