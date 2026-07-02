@@ -1500,12 +1500,16 @@ for (const marker of [
   'catch (e: unknown)',
   "unknownErrorMessage(e, 'Failed to load state.json')",
   "unknownErrorMessage(e, 'Failed to load queue.json')",
+  'console.warn(unknownErrorMessage(e, `Kronos file watcher failed for ${filepath}.`))',
   "target: 'state.json'",
   "target: 'queue.json'",
 ]) {
   if (!sources['src/state/KronosState.ts'].includes(marker)) {
     fail(`Missing KronosState load issue marker: ${marker}`);
   }
+}
+if (sources['src/state/KronosState.ts'].includes('} catch {}')) {
+  fail('KronosState must not silently swallow state watcher failures.');
 }
 for (const marker of [
   'stateLoadErrors?:',

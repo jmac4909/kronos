@@ -84,7 +84,9 @@ export class KronosState {
       });
       this._watchers.push(watcher);
       this._watchedFiles.add(filepath);
-    } catch {}
+    } catch (e: unknown) {
+      console.warn(unknownErrorMessage(e, `Kronos file watcher failed for ${filepath}.`));
+    }
   }
 
   ensureWatchers(): void {

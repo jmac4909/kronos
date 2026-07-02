@@ -588,12 +588,14 @@ test('KronosState load issues normalize unknown errors', () => {
     'catch (e: unknown)',
     "unknownErrorMessage(e, 'Failed to load state.json')",
     "unknownErrorMessage(e, 'Failed to load queue.json')",
+    'console.warn(unknownErrorMessage(e, `Kronos file watcher failed for ${filepath}.`))',
   ]) {
     assert.ok(source.includes(marker), marker);
   }
   for (const marker of [
     'catch (e: any)',
     'e?.message',
+    '} catch {}',
   ]) {
     assert.equal(source.includes(marker), false, marker);
   }
