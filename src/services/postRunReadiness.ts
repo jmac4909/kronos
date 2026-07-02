@@ -21,6 +21,14 @@ export interface PostRunReadiness {
   failureKind: RunFailureKind;
 }
 
+export interface RunCompletionEvidenceCheck {
+  name: string;
+  result: 'pass' | 'warn';
+  environment: string;
+  summary: string;
+  confidence: 'medium' | 'high';
+}
+
 const HANDOFF_ACTIONS = new Set(['await_review', 'verify', 'deploy_monitor', 'done']);
 const SUCCESS_RUN_STATUSES = new Set(['completed', 'waiting_for_review']);
 
@@ -42,16 +50,7 @@ export function buildRunCompletionEvidenceText(run: unknown, ticket?: Ticket): s
   const mr = ticket?.mr || undefined;
   const build = ticket?.build || undefined;
   const mrChangedFiles = mergeRequestChangedFileCount(ticket);
-  const sonarStatus = firstStringField(runRecord(ticket), [
-    'sonar_status',
-    'sonarStatus',
-    'sonar_quality_gate',
-    'sonarQualityGate',
-    'quality_gate',
-    'qualityGate',
-    'quality_gate_status',
-    'qualityGateStatus',
-  ]);
+  const sonarStatus = ticketSonarStatus(ticket);
   const testCount = firstNumberField(record, ['testCount', 'tests', 'testsPassed', 'passedTests']);
   const lines = [
     `Kronos implement run ${runId} completed.`,
@@ -64,6 +63,35 @@ export function buildRunCompletionEvidenceText(run: unknown, ticket?: Ticket): s
     build ? `Build: ${build.status} #${build.number}${build.url ? ` - ${build.url}` : ''}.` : 'Build: not captured in ticket state.',
   ];
   return lines.join('\n');
+}
+
+export function buildRunCompletionEvidenceCheck(run: unknown, ticket?: Ticket): RunCompletionEvidenceCheck {
+  const record = runRecord(run);
+  const runId = runString(record.id) || 'unknown run';
+  const status = runString(record.status) || 'unknown';
+  const exitCode = Number.isFinite(Number(record.exitCode)) ? Number(record.exitCode) : undefined;
+  const progress = runProgressSummary(run);
+  const testCount = firstNumberField(record, ['testCount', 'tests', 'testsPassed', 'passedTests']);
+  const sonarStatus = ticketSonarStatus(ticket);
+  const mr = ticket?.mr || undefined;
+  const build = ticket?.build || undefined;
+  const strongSignal = testCount !== undefined || isPassingBuild(build) || isPassingSonar(sonarStatus);
+  const cleanRun = SUCCESS_RUN_STATUSES.has(status) && (exitCode === undefined || exitCode === 0);
+  const summaryParts = [
+    `run ${runId} ${status}${exitCode === undefined ? '' : ` exit ${exitCode}`}`,
+    `${progress.filesChanged} changed file${progress.filesChanged === 1 ? '' : 's'} from run events`,
+    testCount === undefined ? 'test count not captured' : `${testCount} test${testCount === 1 ? '' : 's'}`,
+    sonarStatus ? `SonarQube ${sonarStatus}` : 'SonarQube not captured',
+    mr ? `MR !${mr.iid} ${mr.state}/${mr.review_status}` : 'MR not linked',
+    build ? `build ${build.status} #${build.number}` : 'build not captured',
+  ];
+  return {
+    name: 'Kronos implement completion',
+    result: cleanRun && strongSignal ? 'pass' : 'warn',
+    environment: 'kronos',
+    confidence: strongSignal ? 'high' : 'medium',
+    summary: summaryParts.join('; '),
+  };
 }
 
 export function evaluatePostRunReadiness(input: {
@@ -224,6 +252,28 @@ function runEventDetails(value: unknown): unknown[] {
 function mergeRequestChangedFileCount(ticket?: Ticket): number | undefined {
   const files = ticket?.mr?.changed_files || ticket?.mr?.files;
   return Array.isArray(files) ? files.length : undefined;
+}
+
+function ticketSonarStatus(ticket?: Ticket): string | undefined {
+  return firstStringField(runRecord(ticket), [
+    'sonar_status',
+    'sonarStatus',
+    'sonar_quality_gate',
+    'sonarQualityGate',
+    'quality_gate',
+    'qualityGate',
+    'quality_gate_status',
+    'qualityGateStatus',
+  ]);
+}
+
+function isPassingBuild(build: Ticket['build'] | undefined): boolean {
+  const status = String(build?.status || '').trim().toUpperCase();
+  return ['SUCCESS', 'PASSED', 'OK'].includes(status);
+}
+
+function isPassingSonar(status: string | undefined): boolean {
+  return ['OK', 'PASS', 'PASSED', 'SUCCESS'].includes(String(status || '').trim().toUpperCase());
 }
 
 function firstStringField(record: Record<string, unknown>, keys: string[]): string | undefined {

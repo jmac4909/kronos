@@ -4605,6 +4605,41 @@ test('post-run readiness distinguishes process completion from handoff readiness
   assert.match(completionEvidence, /SonarQube: OK/);
   assert.match(completionEvidence, /MR: !1 opened\/approved - https:\/\/gitlab\.example\/1/);
   assert.match(completionEvidence, /Build: SUCCESS #12 - https:\/\/jenkins\.example\/12/);
+  const completionCheck = postRunReadiness.buildRunCompletionEvidenceCheck({
+    id: 'run-1',
+    status: 'completed',
+    exitCode: 0,
+    testCount: 105,
+    startedAt: '2026-07-01T00:00:00.000Z',
+    endedAt: '2026-07-01T00:01:00.000Z',
+    events: [
+      { type: 'tool', label: 'Editing src/app.ts', detail: '', timestamp: '2026-07-01T00:00:10.000Z' },
+    ],
+  }, ticket({
+    next_action: 'await_review',
+    projects: ['app'],
+    sonar_status: 'OK',
+    mr: { iid: 1, state: 'opened', review_status: 'approved', url: 'https://gitlab.example/1' },
+    build: { number: 12, status: 'SUCCESS', url: 'https://jenkins.example/12' },
+  }));
+  assert.equal(completionCheck.name, 'Kronos implement completion');
+  assert.equal(completionCheck.result, 'pass');
+  assert.equal(completionCheck.environment, 'kronos');
+  assert.equal(completionCheck.confidence, 'high');
+  assert.match(completionCheck.summary, /105 tests/);
+  assert.match(completionCheck.summary, /SonarQube OK/);
+  assert.match(completionCheck.summary, /MR !1 opened\/approved/);
+  const weakCompletionCheck = postRunReadiness.buildRunCompletionEvidenceCheck({
+    id: 'run-weak',
+    status: 'completed',
+    exitCode: 0,
+  }, ticket({
+    next_action: 'await_review',
+    projects: ['app'],
+  }));
+  assert.equal(weakCompletionCheck.result, 'warn');
+  assert.equal(weakCompletionCheck.confidence, 'medium');
+  assert.match(weakCompletionCheck.summary, /test count not captured/);
 
   const notReady = postRunReadiness.evaluatePostRunReadiness({
     run: { status: 'completed' },
@@ -4649,6 +4684,11 @@ test('post-run readiness distinguishes process completion from handoff readiness
     "input.ticket.next_action === 'await_review'",
     'evidenceNotes(input.ticket).length === 0',
     'export function buildRunCompletionEvidenceText',
+    'export function buildRunCompletionEvidenceCheck',
+    'interface RunCompletionEvidenceCheck',
+    'function ticketSonarStatus(ticket?: Ticket): string | undefined',
+    'function isPassingBuild',
+    'function isPassingSonar',
     'export function classifyRunFailure(run: unknown): RunFailureKind',
     'function runRecord(value: unknown): Record<string, unknown>',
     'function runString(value: unknown): string',
@@ -4939,6 +4979,7 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'addTicketEvidenceNote(resolvedTicketKey, {',
     "kind: 'note'",
     'buildRunCompletionEvidenceText(run, ticket)',
+    'addTicketEvidenceCheck(resolvedTicketKey, buildRunCompletionEvidenceCheck(run, ticket))',
     "unknownErrorMessage(e, 'Failed to add run completion evidence.')",
     'run.failureReason = run.failureReason || run.readiness.summary',
     'let resolvedTicketKey = resolveDispatchTicketKey(ticketKey, run)',

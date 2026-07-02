@@ -24,7 +24,7 @@ import { TimelineEvent, buildTicketTimeline } from './services/ticketTimeline';
 import { DispatchCollision, detectDispatchCollisions } from './services/collisionDetector';
 import { requiredScripts } from './services/scriptClient';
 import { gitlabAdapter, jiraAdapter, sonarAdapter, type MergeRequestDiffResult } from './services/integrationAdapters';
-import { buildRunCompletionEvidenceText, evaluatePostRunReadiness, shouldRecordRunCompletionEvidence } from './services/postRunReadiness';
+import { buildRunCompletionEvidenceCheck, buildRunCompletionEvidenceText, evaluatePostRunReadiness, shouldRecordRunCompletionEvidence } from './services/postRunReadiness';
 import { extractAcceptanceCriteria } from './services/acceptanceCriteria';
 import type { ExistingAcceptanceCriterion } from './services/acceptanceCriteria';
 import { HumanReviewInbox, buildHumanReviewInbox } from './services/humanReviewInbox';
@@ -5698,6 +5698,7 @@ function refreshAfterDispatch(state: KronosState, projectName?: string, ticketKe
             kind: 'note',
             text: buildRunCompletionEvidenceText(run, ticket),
           });
+          addTicketEvidenceCheck(resolvedTicketKey, buildRunCompletionEvidenceCheck(run, ticket));
           state.reloadAndNotify();
           ticket = state.state?.tickets[resolvedTicketKey];
         } catch (e: unknown) {
