@@ -1,6 +1,7 @@
 import * as http from 'http';
 import * as https from 'https';
 import { Ticket } from '../state/types';
+import { unknownErrorMessage } from './errorUtils';
 
 export type EvidencePublishKind = 'jira' | 'gitlab_mr';
 export type EvidencePublishStatus = 'ready' | 'missing_config' | 'unsupported_url' | 'skipped' | 'posted' | 'failed';
@@ -120,12 +121,12 @@ async function publishDestination(destination: EvidencePublishDestination, trans
       },
       body,
     });
-  } catch (e: any) {
+  } catch (e: unknown) {
     return {
       kind: destination.kind,
       label: destination.label,
       status: 'failed',
-      detail: e?.message || 'Evidence publish request failed.',
+      detail: unknownErrorMessage(e, 'Evidence publish request failed.'),
       endpoint: destination.endpoint,
     };
   }

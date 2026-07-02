@@ -2046,6 +2046,12 @@ test('evidence publisher plans and posts Jira and GitLab comments through inject
   assert.equal(thrown.find(result => result.kind === 'gitlab_mr').status, 'failed');
   assert.match(thrown.find(result => result.kind === 'gitlab_mr').detail, /network is down/);
 
+  const thrownWithoutMessage = await evidencePublisher.publishEvidencePlan(plan, ['gitlab_mr'], async () => {
+    throw { message: '   ' };
+  });
+  assert.equal(thrownWithoutMessage.find(result => result.kind === 'gitlab_mr').status, 'failed');
+  assert.equal(thrownWithoutMessage.find(result => result.kind === 'gitlab_mr').detail, 'Evidence publish request failed.');
+
   const badEndpoint = await evidencePublisher.publishEvidencePlan({
     ticketKey: 'K-BAD-ENDPOINT',
     comment: 'body',
@@ -2081,6 +2087,21 @@ test('evidence publisher plans and posts Jira and GitLab comments through inject
   assert.equal(unsupported.destinations.find(destination => destination.kind === 'jira').status, 'unsupported_url');
   assert.equal(unsupported.destinations.find(destination => destination.kind === 'gitlab_mr').status, 'unsupported_url');
   assert.equal(evidencePublisher.readyPublishDestinations(unsupported).length, 0);
+
+  const source = readSourceFixture('src', 'services', 'evidencePublisher.ts');
+  for (const marker of [
+    "import { unknownErrorMessage } from './errorUtils'",
+    'catch (e: unknown)',
+    "unknownErrorMessage(e, 'Evidence publish request failed.')",
+  ]) {
+    assert.ok(source.includes(marker), marker);
+  }
+  for (const marker of [
+    'catch (e: any)',
+    "e?.message || 'Evidence publish request failed.'",
+  ]) {
+    assert.equal(source.includes(marker), false, marker);
+  }
 });
 
 test('run store archives run record, log, and prompt artifacts', () => {
