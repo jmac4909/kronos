@@ -2669,6 +2669,7 @@ test('dispatcher records branch and permission metadata for persisted runs', () 
     "message.command === 'refreshPanel'",
     'function runCenterActionButtons',
     "runCenterActionButton('refreshPanel', 'Refresh')",
+    "target.closest('[data-action]')",
     "runCenterActionButton('cancelRun', 'Stop'",
     'panel.webview.onDidReceiveMessage(async msg =>',
     'buildRunCenterHtml(runs, interactive ? nonce : undefined)',
@@ -2767,6 +2768,11 @@ test('dispatcher records branch and permission metadata for persisted runs', () 
     source.includes('if (opts.onComplete) { opts.onComplete'),
     false,
     'completion callbacks should be routed through runCompletionCallback',
+  );
+  assert.equal(
+    source.includes("target.closest('[data-action][data-run-id]')"),
+    false,
+    'Run Center script should allow panel-level actions without a run id',
   );
 
   assert.ok(

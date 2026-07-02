@@ -1175,7 +1175,7 @@ function runCenterScript(nonce: string): string {
   return `<script nonce="${escapeAttr(nonce)}">
 ${webviewVsCodeApiScript('Kronos Run Center')}
 document.addEventListener('click', function(event) {
-  const target = event.target instanceof Element ? event.target.closest('[data-action][data-run-id]') : null;
+  const target = event.target instanceof Element ? event.target.closest('[data-action]') : null;
   if (!target) { return; }
   event.preventDefault();
   vscode.postMessage({

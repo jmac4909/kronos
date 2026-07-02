@@ -906,6 +906,7 @@ for (const marker of [
   'panel.onDidDispose(() => clearInterval(pollTimer))',
   "message.command === 'refreshPanel'",
   "runCenterActionButton('refreshPanel', 'Refresh')",
+  "target.closest('[data-action]')",
   'writeSavedSession(session)',
   'export { getAggregateStats, listSavedSessions, listSessionStoreIssues }',
   'const id = safeSessionId',
@@ -941,6 +942,9 @@ for (const marker of [
   if (!dispatcher.includes(marker)) {
     fail(`Missing run recovery marker: ${marker}`);
   }
+}
+if (dispatcher.includes("target.closest('[data-action][data-run-id]')")) {
+  fail('Run Center script must allow panel-level actions without a run id.');
 }
 
 for (const marker of [
