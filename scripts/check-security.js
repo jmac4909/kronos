@@ -214,8 +214,7 @@ for (const marker of [
 
 for (const marker of [
   'buildJiraBoardHtml(state, nonce)',
-  'webviewScriptCsp(panel.webview, nonce)',
-  'cspSource: webview.cspSource',
+  'webviewScriptCspOptions(panel.webview.cspSource, nonce)',
   'script nonce="${escapeAttr(nonce)}"',
   "${webviewVsCodeApiScript('Kronos Jira Board')}",
   'BOARD_MESSAGE_COMMANDS',
@@ -489,6 +488,9 @@ for (const marker of [
   if (!extension.includes(marker)) {
     fail(`Missing safety marker: ${marker}`);
   }
+}
+if (extension.includes('function webviewScriptCsp(') || dispatcher.includes('function webviewScriptCsp(')) {
+  fail('Webview CSP option construction must stay centralized in webviewSecurity.');
 }
 
 const boardHandlerStart = extension.indexOf('panel.webview.onDidReceiveMessage(async (msg) => {\n        const request = normalizeBoardMessage(msg);');
@@ -1198,6 +1200,8 @@ if (reviewTreeProvider.includes("ticket.mr.state === 'merged'")) {
 for (const marker of [
   'export function createWebviewNonce',
   "toString('hex')",
+  'export function webviewScriptCspOptions',
+  'return { allowScripts: true, nonce, cspSource }',
   'export function webviewVsCodeApiScript',
   'const vscode = (function() {',
   "typeof acquireVsCodeApi !== 'function'",

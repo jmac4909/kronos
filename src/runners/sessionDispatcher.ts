@@ -8,7 +8,7 @@ import { RUNS_DIR, appendRunLog as appendRunLogFile, markRunCancelled, readRunRe
 import { readStateFile } from '../services/stateStore';
 import { RunFailureKind, classifyRunFailure, type PostRunReadiness } from '../services/postRunReadiness';
 import { stopProcessTree } from '../services/processTree';
-import { createWebviewNonce, webviewVsCodeApiScript, withWebviewCsp } from '../services/webviewSecurity';
+import { createWebviewNonce, webviewScriptCspOptions, webviewVsCodeApiScript, withWebviewCsp } from '../services/webviewSecurity';
 import { currentGitCommit, currentGitRef, inspectTrackedWorktree, prepareManagedWorktree, removeWorktreeSafely } from '../services/gitWorkspace';
 import { checkGcloudApplicationDefaultAuth } from '../services/cliProbes';
 import { escapeAttr, escapeClass, escapeHtml, kronosWebviewBaseCss } from '../services/webviewHtml';
@@ -48,10 +48,6 @@ const CLAUDE_ALLOWED_TOOL_PATTERNS = [
   'PowerShell(Get-Process *)',
 ];
 const CLAUDE_ALLOWED_TOOLS = CLAUDE_ALLOWED_TOOL_PATTERNS.join(' ');
-
-function webviewScriptCsp(webview: vscode.Webview, nonce: string) {
-  return { allowScripts: true, nonce, cspSource: webview.cspSource };
-}
 
 const RUN_CENTER_MESSAGE_COMMANDS = new Set([
   'refreshPanel',
@@ -500,7 +496,7 @@ export function openRunCenter(options: RunCenterOptions = {}): void {
     const runs = listRuns();
     panel.webview.html = withWebviewCsp(
       buildRunCenterHtml(runs, interactive ? nonce : undefined),
-      interactive ? webviewScriptCsp(panel.webview, nonce) : {},
+      interactive ? webviewScriptCspOptions(panel.webview.cspSource, nonce) : {},
     );
     return runs.some(isActiveRun);
   };

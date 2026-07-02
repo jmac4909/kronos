@@ -1512,6 +1512,11 @@ test('webview security injects CSP and preserves existing nonce policies', () =>
 
   const sourceOnlyScripts = webviewSecurity.webviewCspMeta({ allowScripts: true, cspSource: 'vscode-resource:' });
   assert.match(sourceOnlyScripts, /script-src vscode-resource:/);
+  assert.deepEqual(webviewSecurity.webviewScriptCspOptions('vscode-resource:', 'abc123'), {
+    allowScripts: true,
+    nonce: 'abc123',
+    cspSource: 'vscode-resource:',
+  });
 
   const nonce = webviewSecurity.createWebviewNonce();
   assert.match(nonce, /^[a-f0-9]{32}$/);
@@ -2628,7 +2633,9 @@ test('dispatcher records branch and permission metadata for persisted runs', () 
     "import { isActiveRun } from '../services/runStatus'",
     "import { runProgressSummary } from '../services/runProgress'",
     'createWebviewNonce',
+    'webviewScriptCspOptions',
     'webviewVsCodeApiScript',
+    'webviewScriptCspOptions(panel.webview.cspSource, nonce)',
     "const nonce = interactive ? createWebviewNonce() : ''",
     "${webviewVsCodeApiScript('Kronos Run Center')}",
     "'refreshPanel'",
@@ -2713,6 +2720,11 @@ test('dispatcher records branch and permission metadata for persisted runs', () 
     source.includes("randomBytes(16).toString('base64')"),
     false,
     'Run Center webview nonce should use hex helper, not base64',
+  );
+  assert.equal(
+    source.includes('function webviewScriptCsp('),
+    false,
+    'dispatcher webview CSP options should come from the shared webview security helper',
   );
   assert.equal(
     source.includes('run.events[run.events.length - 1]'),
@@ -4501,12 +4513,10 @@ test('extension webviews use shared UI shell and board filtering affordances', (
   assert.ok(boardHandlerStart >= 0 && boardHandlerEnd > boardHandlerStart, 'Jira board message handler should be present');
   const boardHandlerSource = source.slice(boardHandlerStart, boardHandlerEnd);
   for (const marker of [
-    "import { createWebviewNonce, webviewVsCodeApiScript, withWebviewCsp } from './services/webviewSecurity'",
+    "import { createWebviewNonce, webviewScriptCspOptions, webviewVsCodeApiScript, withWebviewCsp } from './services/webviewSecurity'",
     'function createNonce(): string',
     'return createWebviewNonce()',
-    'function webviewScriptCsp(webview: vscode.Webview, nonce: string)',
-    'cspSource: webview.cspSource',
-    'webviewScriptCsp(panel.webview, nonce)',
+    'webviewScriptCspOptions(panel.webview.cspSource, nonce)',
     'kronosWebviewBaseCss',
     'class="kronos-shell dashboard-shell"',
     'class="kronos-shell board-shell"',
@@ -4670,6 +4680,11 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     source.includes("randomBytes(16).toString('base64')"),
     false,
     'webview nonces should use hex helper, not base64',
+  );
+  assert.equal(
+    source.includes('function webviewScriptCsp('),
+    false,
+    'extension webview CSP options should come from the shared webview security helper',
   );
   assert.equal(
     source.includes('run.events[run.events.length - 1]'),

@@ -11,6 +11,10 @@ export function createWebviewNonce(): string {
   return randomBytes(16).toString('hex');
 }
 
+export function webviewScriptCspOptions(cspSource: string, nonce: string): WebviewCspOptions {
+  return { allowScripts: true, nonce, cspSource };
+}
+
 export function webviewVsCodeApiScript(webviewName = 'Kronos webview'): string {
   const nameLiteral = JSON.stringify(webviewName) || '"Kronos webview"';
   return [
