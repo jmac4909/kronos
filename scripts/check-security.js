@@ -1041,6 +1041,10 @@ for (const marker of [
   'function isPathInside',
   'outside active runs directory',
   'run.archiveWarnings = warnings',
+  "import { effectiveRunStatus, isActiveRunStatus } from './runStatus'",
+  'function normalizeTerminalActiveRun',
+  'const effectiveStatus = effectiveRunStatus(run)',
+  'Run record had terminal metadata while persisted status was ${status}',
 ]) {
   if (!runStore.includes(marker)) {
     fail(`Missing run store marker: ${marker}`);
@@ -2069,7 +2073,12 @@ for (const marker of [
   "ACTIVE_RUN_STATUSES = new Set(['queued', 'preflight', 'running', 'paused'])",
   'export function isActiveRunStatus',
   'export function isActiveRun',
+  'export function effectiveRunStatus',
   'export function hasTerminalRunSignal',
+  'export function terminalRunOutcome',
+  'function isCancellationEvent',
+  'function terminalEventOutcome',
+  'function numericExitCode',
   'hasDateLikeValue(run.endedAt)',
   "label.startsWith('Session exited with code')",
   'export function activeRunSummary',

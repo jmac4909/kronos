@@ -3,6 +3,7 @@ import * as path from 'path';
 import { safeFileStem } from './fileNames';
 import { KRONOS_DIR } from './stateStore';
 import { unknownErrorMessage } from './errorUtils';
+import { effectiveRunStatus, isActiveRunStatus } from './runStatus';
 
 export const RUNS_DIR = path.join(KRONOS_DIR, 'runs');
 export const ARCHIVED_RUNS_DIR = path.join(RUNS_DIR, 'archive');
@@ -179,11 +180,12 @@ function readRequiredRunRecord(runId: string): RunRecord {
   if (result.issue) {
     throw new Error(`Invalid run record ${currentPath}: ${result.issue.detail}`);
   }
-  return result.run!;
+  return normalizeTerminalActiveRun(result.run!);
 }
 
 function readRunFile(filePath: string, scope: RunStoreIssue['scope']): RunRecord | null {
-  return readRunFileResult(filePath, scope).run || null;
+  const run = readRunFileResult(filePath, scope).run;
+  return run ? normalizeTerminalActiveRun(run) : null;
 }
 
 function readRunFileIssue(filePath: string, scope: RunStoreIssue['scope']): RunStoreIssue | null {
@@ -203,6 +205,22 @@ function readRunFileResult(filePath: string, scope: RunStoreIssue['scope']): { r
   } catch (e: unknown) {
     return { issue: invalidRunRecordIssue(scope, filePath, unknownErrorMessage(e, 'Unable to parse JSON.')) };
   }
+}
+
+function normalizeTerminalActiveRun(run: RunRecord): RunRecord {
+  const status = typeof run.status === 'string' ? run.status : '';
+  const effectiveStatus = effectiveRunStatus(run);
+  if (!status || !isActiveRunStatus(status) || !effectiveStatus || effectiveStatus === status) {
+    return run;
+  }
+  const normalized: RunRecord = { ...run, status: effectiveStatus };
+  if (effectiveStatus === 'needs_human' && !normalized.failureReason) {
+    normalized.failureReason = `Run record had terminal metadata while persisted status was ${status}; inspect the run before retrying.`;
+  }
+  if ((effectiveStatus === 'failed' || effectiveStatus === 'cancelled') && !normalized.failureKind) {
+    normalized.failureKind = effectiveStatus === 'cancelled' ? 'cancelled' : 'unknown';
+  }
+  return normalized;
 }
 
 function invalidRunRecordIssue(scope: RunStoreIssue['scope'], filePath: string, detail: string): RunStoreIssue {

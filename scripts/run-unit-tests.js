@@ -2560,6 +2560,51 @@ test('run store archives run record, log, and prompt artifacts', () => {
   assert.equal(runStore.readArchivedRuns().some(r => r.id === run.id), true);
 });
 
+test('run store normalizes terminal active records on read and archive', () => {
+  const completed = {
+    id: 'run-terminal-completed',
+    project: 'app',
+    skill: 'implement',
+    ticket: 'K-DONE',
+    status: 'running',
+    exitCode: 0,
+    endedAt: '2026-07-02T10:00:00.000Z',
+  };
+  const failed = {
+    id: 'run-terminal-failed',
+    project: 'app',
+    skill: 'verify',
+    ticket: 'K-FAIL',
+    status: 'preflight',
+    events: [{ type: 'error', label: 'Session exited with code 1', timestamp: '2026-07-02T10:05:00.000Z' }],
+  };
+  const timestampOnly = {
+    id: 'run-terminal-unknown',
+    project: 'app',
+    skill: 'implement',
+    ticket: 'K-UNKNOWN',
+    status: 'running',
+    endedAt: '2026-07-02T10:10:00.000Z',
+  };
+
+  runStore.writeRunRecord(completed);
+  runStore.writeRunRecord(failed);
+  runStore.writeRunRecord(timestampOnly);
+
+  assert.equal(JSON.parse(fs.readFileSync(runStore.runRecordPath(completed.id), 'utf8')).status, 'running');
+  assert.equal(runStore.readRunRecord(completed.id).status, 'completed');
+  assert.equal(runStore.readRunRecord(failed.id).status, 'failed');
+  assert.equal(runStore.readRunRecord(failed.id).failureKind, 'unknown');
+  assert.equal(runStore.readRunRecord(timestampOnly.id).status, 'needs_human');
+  assert.match(runStore.readRunRecord(timestampOnly.id).failureReason, /terminal metadata/);
+
+  const archived = runStore.archiveRun(failed.id);
+  const archivedRun = JSON.parse(fs.readFileSync(archived.runPath, 'utf8'));
+  assert.equal(archivedRun.status, 'failed');
+  assert.equal(runStore.readRuns().some(run => run.id === failed.id), false);
+  assert.equal(runStore.readArchivedRuns().find(run => run.id === failed.id).status, 'failed');
+});
+
 test('run store archive does not overwrite existing archived records or artifacts', () => {
   fs.mkdirSync(runStore.ARCHIVED_RUNS_DIR, { recursive: true });
   const existingRunPath = runStore.archivedRunRecordPath('run-collision');
@@ -3418,6 +3463,15 @@ test('run status helper centralizes active persisted run semantics', () => {
   assert.equal(runStatus.isActiveRun({ status: 'running', events: [{ type: 'done', label: 'Complete - 1.0s' }] }), false);
   assert.equal(runStatus.isActiveRun({ status: 'running', events: [{ type: 'error', label: 'Session exited with code 1' }] }), false);
   assert.equal(runStatus.isActiveRun({ status: 'waiting_for_review' }), false);
+  assert.equal(runStatus.effectiveRunStatus({ status: 'running' }), 'running');
+  assert.equal(runStatus.effectiveRunStatus({ status: 'running', exitCode: 0 }), 'completed');
+  assert.equal(runStatus.effectiveRunStatus({ status: 'preflight', exitCode: 1 }), 'failed');
+  assert.equal(runStatus.effectiveRunStatus({ status: 'running', endedAt: '2026-07-01T10:00:00.000Z' }), 'needs_human');
+  assert.equal(runStatus.effectiveRunStatus({ status: 'running', events: [{ type: 'error', label: 'Session cancelled' }] }), 'cancelled');
+  assert.equal(runStatus.effectiveRunStatus({ status: 'running', events: [{ type: 'done', label: 'Complete - 1.0s' }] }), 'completed');
+  assert.equal(runStatus.effectiveRunStatus({ status: 'running', exitCode: 1, events: [{ type: 'done', label: 'Complete - 1.0s' }] }), 'failed');
+  assert.equal(runStatus.effectiveRunStatus({ status: 'running', exitCode: 1, events: [{ type: 'error', label: 'Session cancelled' }] }), 'cancelled');
+  assert.equal(runStatus.terminalRunOutcome({ status: 'running', events: [{ label: 'Session exited with code 1' }] }), 'failed');
   assert.equal(runStatus.activeRunSummary([
     { status: 'running' },
     { status: 'running' },
@@ -3434,7 +3488,12 @@ test('run status helper centralizes active persisted run semantics', () => {
     "ACTIVE_RUN_STATUSES = new Set(['queued', 'preflight', 'running', 'paused'])",
     'export function isActiveRunStatus',
     'export function isActiveRun',
+    'export function effectiveRunStatus',
     'export function hasTerminalRunSignal',
+    'export function terminalRunOutcome',
+    'function isCancellationEvent',
+    'function terminalEventOutcome',
+    'function numericExitCode',
     'hasDateLikeValue(run.endedAt)',
     'label.startsWith(\'Session exited with code\')',
     'export function activeRunSummary',
