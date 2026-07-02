@@ -5663,7 +5663,13 @@ test('extension command handlers normalize remaining unknown errors', () => {
     'unknownErrorMessage(e, `Could not load Kronos env file ${envPath}.`)',
     "import { unknownErrorCode, unknownErrorMessage } from './services/errorUtils'",
     "unknownErrorMessage(e, 'Could not inspect project remotes for setup.')",
+    "unknownErrorMessage(e, 'Failed to get next queue item.')",
+    "unknownErrorMessage(e, 'Could not load comments')",
+    "unknownErrorMessage(e, 'Failed to register project.')",
+    "unknownErrorMessage(e, 'Could not load SonarQube branches.')",
+    "'(default; Sonar branches unavailable)'",
     'unknownErrorMessage(e, `Could not resolve MR branch for ${ticket.key}.`)',
+    'unknownErrorMessage(e, `Could not resolve MR branch for ${k}.`)',
     'unknownErrorMessage(e, `Could not find fallback remote branch for ${ticket.key}.`)',
   ]) {
     assert.ok(source.includes(marker), marker);

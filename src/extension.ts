@@ -1390,8 +1390,8 @@ export function activate(context: vscode.ExtensionContext) {
             });
           }
         }
-      } catch {
-        vscode.window.showErrorMessage('Failed to get next queue item.');
+      } catch (e: unknown) {
+        vscode.window.showErrorMessage(unknownErrorMessage(e, 'Failed to get next queue item.'));
       }
     }),
 
@@ -1586,8 +1586,10 @@ export function activate(context: vscode.ExtensionContext) {
           try {
             const result = await jiraAdapter.ticketComments(state, ticket);
             panel.webview.postMessage({ command: 'comments', ticket, data: result });
-          } catch {
-            panel.webview.postMessage({ command: 'comments', ticket, data: [], error: 'Could not load comments' });
+          } catch (e: unknown) {
+            const detail = unknownErrorMessage(e, 'Could not load comments');
+            console.warn(detail);
+            panel.webview.postMessage({ command: 'comments', ticket, data: [], error: detail });
           }
           return;
         } else if (command === 'addToQueueFromModal' && hasTicket(ticket)) {
@@ -2131,8 +2133,8 @@ export function activate(context: vscode.ExtensionContext) {
               noWorktree: true,
             });
           }
-        } catch {
-          vscode.window.showErrorMessage('Failed to register project.');
+        } catch (e: unknown) {
+          vscode.window.showErrorMessage(unknownErrorMessage(e, 'Failed to register project.'));
         }
       }
     }),
@@ -2367,8 +2369,10 @@ export function activate(context: vscode.ExtensionContext) {
           label: b.name,
           description: `${b.isMain ? '(main) ' : ''}${b.status?.qualityGateStatus || ''}`,
         }));
-      } catch {
-        branchItems = [{ label: baseBranch, description: '(default)' }];
+      } catch (e: unknown) {
+        const detail = unknownErrorMessage(e, 'Could not load SonarQube branches.');
+        console.warn(detail);
+        branchItems = [{ label: baseBranch, description: '(default; Sonar branches unavailable)', detail }];
       }
       if (branchItems.length === 0) {
         branchItems = [{ label: baseBranch, description: '(default)' }];
@@ -2705,7 +2709,10 @@ export function activate(context: vscode.ExtensionContext) {
         try {
           const branch = await gitlabAdapter.mergeRequestBranch(state, k);
           return { key: k, branch };
-        } catch { return { key: k, branch: k }; }
+        } catch (e: unknown) {
+          console.warn(unknownErrorMessage(e, `Could not resolve MR branch for ${k}.`));
+          return { key: k, branch: k };
+        }
       }));
 
       const branchOrder = branchLookups.map((b, i) => `${i + 1}. ${b.key} (branch: ${b.branch})`).join('\n');
