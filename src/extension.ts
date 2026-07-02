@@ -52,6 +52,7 @@ import { computeAttentionBadge } from './services/attentionBadge';
 import { buildNextActionContext, buildNextActionStartDecision, skillForAction } from './services/nextActionContext';
 import { createWorkspaceDiffArtifact, firstRemoteBranchMatching, originProjectPath } from './services/gitWorkspace';
 import { signalProcessTree, stopProcessTree } from './services/processTree';
+import { createWebviewReadyMonitor } from './services/webviewDiagnostics';
 import { WEBVIEW_READY_COMMAND, createWebviewNonce, webviewActionPostScript, webviewReadyPostScript, webviewScriptCspOptions, webviewVsCodeApiScript, withWebviewCsp } from './services/webviewSecurity';
 import { escapeAttr, escapeClass, escapeHtml, kronosWebviewBaseCss, safeHttpHref } from './services/webviewHtml';
 import { kronosTerminalOptions } from './services/terminalProfiles';
@@ -363,35 +364,6 @@ function normalizeWebviewCommand(raw: unknown, allowed: Set<string>): string | n
   const command = recordFromUnknown(raw).command;
   if (typeof command !== 'string' || !allowed.has(command)) { return null; }
   return command;
-}
-
-function logWebviewReadyMessage(raw: unknown): boolean {
-  const message = recordFromUnknown(raw);
-  if (message.command !== WEBVIEW_READY_COMMAND) { return false; }
-  const webviewName = typeof message.webviewName === 'string' && message.webviewName.trim()
-    ? message.webviewName.trim()
-    : 'Kronos webview';
-  const readyState = typeof message.readyState === 'string' ? message.readyState : 'unknown';
-  const userAgent = typeof message.userAgent === 'string' && message.userAgent.trim()
-    ? `; ${message.userAgent.trim()}`
-    : '';
-  console.info(`Kronos webview script ready: ${webviewName} (${readyState}${userAgent})`);
-  return true;
-}
-
-function createWebviewReadyMonitor(panel: vscode.WebviewPanel, webviewName: string, timeoutMs = 5000): (raw: unknown) => boolean {
-  let reportedReady = false;
-  const timer = setTimeout(() => {
-    if (reportedReady) { return; }
-    console.warn(`Kronos webview script did not report ready: ${webviewName}. Check VS Code Webview Developer Tools and the Extension Host DevTools console for CSP or sandbox errors.`);
-  }, timeoutMs);
-  panel.onDidDispose(() => clearTimeout(timer));
-  return (raw: unknown): boolean => {
-    if (!logWebviewReadyMessage(raw)) { return false; }
-    reportedReady = true;
-    clearTimeout(timer);
-    return true;
-  };
 }
 
 function normalizeBoardMessage(raw: unknown): { command: string; ticket: string; project: string } | null {

@@ -68,6 +68,7 @@ const stateScriptAdapter = readSource('src/services/stateScriptAdapter.ts');
 const nextActionContext = readSource('src/services/nextActionContext.ts');
 const gitWorkspace = readSource('src/services/gitWorkspace.ts');
 const processTree = readSource('src/services/processTree.ts');
+const webviewDiagnostics = readSource('src/services/webviewDiagnostics.ts');
 const webviewSecurity = readSource('src/services/webviewSecurity.ts');
 const cliProbes = readSource('src/services/cliProbes.ts');
 const combinedVerification = readSource('src/services/combinedVerification.ts');
@@ -233,8 +234,7 @@ for (const marker of [
   'script nonce="${escapeAttr(nonce)}"',
   "${webviewVsCodeApiScript('Kronos Jira Board')}",
   "${webviewReadyPostScript('Kronos Jira Board')}",
-  'function logWebviewReadyMessage',
-  'function createWebviewReadyMonitor',
+  "import { createWebviewReadyMonitor } from './services/webviewDiagnostics'",
   "const logReady = createWebviewReadyMonitor(panel, 'Kronos Jira Board')",
   'if (logReady(msg)) { return; }',
   'BOARD_MESSAGE_COMMANDS',
@@ -1201,11 +1201,9 @@ for (const marker of [
   'pollIntervalMs?: number',
   'const pollTimer = setInterval',
   'panel.onDidDispose(() => clearInterval(pollTimer))',
-  'function logRunCenterWebviewReadyMessage',
-  'function createRunCenterReadyMonitor',
-  'const logReady = createRunCenterReadyMonitor(panel)',
+  "import { createWebviewReadyMonitor } from '../services/webviewDiagnostics'",
+  "const logReady = createWebviewReadyMonitor(panel, 'Kronos Run Center')",
   'if (logReady(msg)) { return; }',
-  'Kronos webview script did not report ready: Kronos Run Center',
   "message.command === 'refreshPanel' || message.command === 'archiveFinishedRuns'",
   "runCenterActionButton('refreshPanel', 'Refresh')",
   "runCenterActionButton('archiveFinishedRuns', 'Archive Finished')",
@@ -1651,6 +1649,32 @@ if (!extension.includes('reviewTree.dispose()')) {
 }
 if (reviewTreeProvider.includes("ticket.mr.state === 'merged'")) {
   fail('Review tree should not keep merged MRs in the active review inbox');
+}
+
+for (const marker of [
+  'export interface WebviewDisposeTarget',
+  'export function createWebviewReadyMonitor',
+  'export function logWebviewReadyMessage',
+  "message.command !== WEBVIEW_READY_COMMAND",
+  'fallbackWebviewName',
+  'Kronos webview script did not report ready:',
+  'Check VS Code Webview Developer Tools and the Extension Host DevTools console for CSP or sandbox errors.',
+  "console.info(`Kronos webview script ready:",
+]) {
+  if (!webviewDiagnostics.includes(marker)) {
+    fail(`Missing webview diagnostics marker: ${marker}`);
+  }
+}
+for (const staleMarker of [
+  'function logRunCenterWebviewReadyMessage',
+  'function createRunCenterReadyMonitor',
+]) {
+  if (dispatcher.includes(staleMarker)) {
+    fail(`Dispatcher should use shared webview diagnostics instead of ${staleMarker}.`);
+  }
+}
+if (extension.includes('function logWebviewReadyMessage') || extension.includes('function createWebviewReadyMonitor')) {
+  fail('Extension should use shared webview diagnostics instead of local ready monitor helpers.');
 }
 
 for (const marker of [

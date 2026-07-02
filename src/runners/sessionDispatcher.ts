@@ -8,6 +8,7 @@ import { RUNS_DIR, appendRunLog as appendRunLogFile, markRunCancelled, readRunRe
 import { readStateFile } from '../services/stateStore';
 import { RunFailureKind, classifyRunFailure, type PostRunReadiness } from '../services/postRunReadiness';
 import { stopProcessTree } from '../services/processTree';
+import { createWebviewReadyMonitor } from '../services/webviewDiagnostics';
 import { WEBVIEW_READY_COMMAND, createWebviewNonce, webviewActionPostScript, webviewScriptCspOptions, withWebviewCsp } from '../services/webviewSecurity';
 import { currentGitCommit, currentGitRef, inspectTrackedWorktree, prepareManagedWorktree, removeWorktreeSafely } from '../services/gitWorkspace';
 import { checkGcloudApplicationDefaultAuth } from '../services/cliProbes';
@@ -536,7 +537,7 @@ export function openRunCenter(options: RunCenterOptions = {}): void {
   let wasActive = false;
   if (interactive && options.onAction) {
     const pollIntervalMs = Math.max(1000, options.pollIntervalMs || 5000);
-    const logReady = createRunCenterReadyMonitor(panel);
+    const logReady = createWebviewReadyMonitor(panel, 'Kronos Run Center');
     const pollTimer = setInterval(() => {
       const hasActive = listRuns().some(isActiveRun);
       if (hasActive || wasActive) {
@@ -1179,36 +1180,6 @@ function normalizeRunCenterMessage(raw: unknown): RunCenterActionRequest | null 
   }
   if (typeof message.runId !== 'string' || message.runId.trim().length === 0) { return null; }
   return { command: message.command, runId: message.runId };
-}
-
-function logRunCenterWebviewReadyMessage(raw: unknown): boolean {
-  if (!raw || typeof raw !== 'object') { return false; }
-  const message = raw as { command?: unknown; webviewName?: unknown; readyState?: unknown; userAgent?: unknown };
-  if (message.command !== WEBVIEW_READY_COMMAND) { return false; }
-  const webviewName = typeof message.webviewName === 'string' && message.webviewName.trim()
-    ? message.webviewName.trim()
-    : 'Kronos Run Center';
-  const readyState = typeof message.readyState === 'string' ? message.readyState : 'unknown';
-  const userAgent = typeof message.userAgent === 'string' && message.userAgent.trim()
-    ? `; ${message.userAgent.trim()}`
-    : '';
-  console.info(`Kronos webview script ready: ${webviewName} (${readyState}${userAgent})`);
-  return true;
-}
-
-function createRunCenterReadyMonitor(panel: vscode.WebviewPanel, timeoutMs = 5000): (raw: unknown) => boolean {
-  let reportedReady = false;
-  const timer = setTimeout(() => {
-    if (reportedReady) { return; }
-    console.warn('Kronos webview script did not report ready: Kronos Run Center. Check VS Code Webview Developer Tools and the Extension Host DevTools console for CSP or sandbox errors.');
-  }, timeoutMs);
-  panel.onDidDispose(() => clearTimeout(timer));
-  return (raw: unknown): boolean => {
-    if (!logRunCenterWebviewReadyMessage(raw)) { return false; }
-    reportedReady = true;
-    clearTimeout(timer);
-    return true;
-  };
 }
 
 function runCenterActionButton(action: string, label: string, runId?: string, primary = false): string {

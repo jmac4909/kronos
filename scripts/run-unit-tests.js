@@ -56,6 +56,7 @@ const stateScriptAdapter = require('../out/services/stateScriptAdapter.js');
 const nextActionContext = require('../out/services/nextActionContext.js');
 const gitWorkspace = require('../out/services/gitWorkspace.js');
 const processTree = require('../out/services/processTree.js');
+const webviewDiagnostics = require('../out/services/webviewDiagnostics.js');
 const webviewSecurity = require('../out/services/webviewSecurity.js');
 const runStatus = require('../out/services/runStatus.js');
 const runProgress = require('../out/services/runProgress.js');
@@ -1739,6 +1740,39 @@ test('webview security injects CSP and preserves existing nonce policies', () =>
   assert.equal(webviewSecurity.withWebviewCsp(existing), existing);
 });
 
+test('webview diagnostics centralize host ready monitoring', () => {
+  const infoMessages = [];
+  const originalInfo = console.info;
+  console.info = (...args) => infoMessages.push(args.join(' '));
+  try {
+    assert.equal(webviewDiagnostics.logWebviewReadyMessage({ command: 'other' }, 'Kronos Test Panel'), false);
+    assert.equal(webviewDiagnostics.logWebviewReadyMessage({
+      command: webviewSecurity.WEBVIEW_READY_COMMAND,
+      readyState: 'complete',
+    }, 'Kronos Test Panel'), true);
+    assert.match(infoMessages.join('\n'), /Kronos Test Panel/);
+
+    let disposeListener;
+    const panel = {
+      onDidDispose(listener) {
+        disposeListener = listener;
+        return { dispose() {} };
+      },
+    };
+    const monitor = webviewDiagnostics.createWebviewReadyMonitor(panel, 'Kronos Monitor Panel', 10000);
+    assert.equal(monitor({ command: 'noop' }), false);
+    assert.equal(monitor({
+      command: webviewSecurity.WEBVIEW_READY_COMMAND,
+      webviewName: 'Kronos Monitor Panel',
+      readyState: 'interactive',
+    }), true);
+    assert.equal(typeof disposeListener, 'function');
+    disposeListener();
+  } finally {
+    console.info = originalInfo;
+  }
+});
+
 test('CLI probes centralize Claude and GCloud argv checks', () => {
   const calls = [];
   const commandRunner = (command, args, options) => {
@@ -2933,11 +2967,9 @@ test('dispatcher records branch and permission metadata for persisted runs', () 
     'export interface RunCenterActionRequest',
     'const RUN_CENTER_MESSAGE_COMMANDS = new Set',
     'function normalizeRunCenterMessage',
-    'function logRunCenterWebviewReadyMessage',
-    'function createRunCenterReadyMonitor',
-    'const logReady = createRunCenterReadyMonitor(panel)',
+    "import { createWebviewReadyMonitor } from '../services/webviewDiagnostics'",
+    "const logReady = createWebviewReadyMonitor(panel, 'Kronos Run Center')",
     'if (logReady(msg)) { return; }',
-    'Kronos webview script did not report ready: Kronos Run Center',
     "message.command === 'refreshPanel' || message.command === 'archiveFinishedRuns'",
     'function runCenterActionButtons',
     "runCenterActionButton('refreshPanel', 'Refresh')",
@@ -5071,6 +5103,7 @@ test('extension webviews use shared UI shell and board filtering affordances', (
   const boardHandlerSource = source.slice(boardHandlerStart, boardHandlerEnd);
   for (const marker of [
     "import { WEBVIEW_READY_COMMAND, createWebviewNonce, webviewActionPostScript, webviewReadyPostScript, webviewScriptCspOptions, webviewVsCodeApiScript, withWebviewCsp } from './services/webviewSecurity'",
+    "import { createWebviewReadyMonitor } from './services/webviewDiagnostics'",
     'const nonce = createWebviewNonce()',
     'webviewScriptCspOptions(panel.webview.cspSource, nonce)',
     'kronosWebviewBaseCss',
@@ -5105,8 +5138,6 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     "unknownErrorMessage(e, 'Failed to add ticket to queue.')",
     "${webviewVsCodeApiScript('Kronos Jira Board')}",
     "${webviewReadyPostScript('Kronos Jira Board')}",
-    'function logWebviewReadyMessage',
-    'function createWebviewReadyMonitor',
     "const logReady = createWebviewReadyMonitor(panel, 'Kronos Jira Board')",
     'if (logReady(msg)) { return; }',
     'function kronosOperatorPanelCss',
