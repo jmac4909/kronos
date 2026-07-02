@@ -5548,7 +5548,7 @@ function existingAcceptanceCriterion(record: object): ExistingAcceptanceCriterio
   };
 }
 
-function ticketAttachments(value: unknown): Array<{ filename: string; size: number; mimeType: string }> {
+function ticketAttachments(value: unknown): TicketAttachmentSummary[] {
   if (!Array.isArray(value)) { return []; }
   return value
     .filter(item => ticketRecord(item))
@@ -5557,6 +5557,28 @@ function ticketAttachments(value: unknown): Array<{ filename: string; size: numb
       size: Number.isFinite(Number(item.size)) ? Number(item.size) : 0,
       mimeType: ticketStringField(item, 'mimeType'),
     }));
+}
+
+interface TicketAttachmentSummary {
+  filename: string;
+  size: number;
+  mimeType: string;
+}
+
+interface JiraBoardTicketPayload {
+  summary: string;
+  type: string;
+  priority: string;
+  status: string;
+  description: string;
+  labels: string[];
+  projects: string[];
+  attachments: TicketAttachmentSummary[];
+  mr: { iid: string; status: string } | null;
+  build: { number: string; status: string } | null;
+  evidenceCount: number;
+  hasJiraUrl: boolean;
+  isQueued: boolean;
 }
 
 async function removeTicketFromQueue(state: KronosState, ticketKey: string, interactive: boolean): Promise<boolean> {
@@ -6245,7 +6267,7 @@ function buildJiraBoardHtml(state: KronosState, nonce: string): string {
     blocked: 'Blocked', done: 'Done', unknown: 'To Do',
   };
 
-  const ticketData: Record<string, any> = {};
+  const ticketData: Record<string, JiraBoardTicketPayload> = {};
 
   for (const [key, t] of Object.entries(tickets)) {
     const isQueued = queuedKeys.has(key);

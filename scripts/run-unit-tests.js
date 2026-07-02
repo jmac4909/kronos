@@ -4816,6 +4816,9 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'return evidenceNotes(ticket).length + evidenceChecks(ticket).length + evidenceEnvironmentResults(ticket).length',
     'function ticketStringArray',
     'function ticketAttachments',
+    'interface TicketAttachmentSummary',
+    'interface JiraBoardTicketPayload',
+    'const ticketData: Record<string, JiraBoardTicketPayload>',
     'const linkedProjects = ticketStringArray(t.projects)',
     'const attachments = ticketAttachments(t.attachments)',
     'const projectList = ticketStringArray(ticket.projects)',
@@ -5116,6 +5119,7 @@ test('ticket detail rendering uses typed tickets and evidence records', () => {
     'checks.slice().reverse().map((check: any)',
     'environmentResults.map((result: any)',
     'export type EvidenceRecord = Record<string, any>',
+    'const ticketData: Record<string, any>',
   ]) {
     assert.equal(extensionSource.includes(marker) || evidenceData.includes(marker), false, marker);
   }

@@ -281,6 +281,9 @@ for (const marker of [
   'return evidenceNotes(ticket).length + evidenceChecks(ticket).length + evidenceEnvironmentResults(ticket).length',
   'function ticketStringArray',
   'function ticketAttachments',
+  'interface TicketAttachmentSummary',
+  'interface JiraBoardTicketPayload',
+  'const ticketData: Record<string, JiraBoardTicketPayload>',
   'const linkedProjects = ticketStringArray(t.projects)',
   'const attachments = ticketAttachments(t.attachments)',
   'const projectList = ticketStringArray(ticket.projects)',
@@ -555,6 +558,9 @@ for (const marker of [
 }
 if (extension.includes('try { await state.refresh(); } catch {}')) {
   fail('Background Kronos refresh failures must be logged with a normalized warning.');
+}
+if (extension.includes('const ticketData: Record<string, any>')) {
+  fail('Jira board ticket data payload must stay typed, not Record<string, any>.');
 }
 if (extension.includes('skip failures silently')) {
   fail('Discovery registration failures must be visible to operators.');
