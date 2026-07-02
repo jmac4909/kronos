@@ -210,6 +210,30 @@ test('prompt manager runs default and manifest-style smoke tests', () => {
   assert.equal(manifestResults[1].status, 'fail');
   assert.ok(manifestResults[1].errors.some(error => error.includes('Missing variables')));
   assert.ok(manifestResults[1].errors.some(error => error.includes('expected text')));
+
+  const missingTemplateResults = promptManager.runPromptSmokeTests([{
+    id: 'manifest:missing-template',
+    templateName: 'missing-template',
+    projectPath: project,
+    source: 'manifest',
+  }]);
+  assert.equal(missingTemplateResults[0].status, 'fail');
+  assert.ok(missingTemplateResults[0].errors.some(error => error.includes('Prompt template not found')));
+
+  const source = readSourceFixture('src', 'services', 'promptManager.ts');
+  for (const marker of [
+    "import { unknownErrorMessage } from './errorUtils'",
+    'catch (e: unknown)',
+    "unknownErrorMessage(e, 'Prompt smoke test failed')",
+  ]) {
+    assert.ok(source.includes(marker), marker);
+  }
+  for (const marker of [
+    'catch (e: any)',
+    "e?.message || 'Prompt smoke test failed'",
+  ]) {
+    assert.equal(source.includes(marker), false, marker);
+  }
 });
 
 test('prompt manager snapshots prompt history and diffs metadata changes', () => {

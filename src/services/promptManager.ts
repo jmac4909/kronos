@@ -3,6 +3,7 @@ import * as path from 'path';
 import { createHash } from 'crypto';
 import { safeFileStem, safePromptFileName } from './fileNames';
 import { KRONOS_DIR } from './stateStore';
+import { unknownErrorMessage } from './errorUtils';
 
 const GLOBAL_PROMPTS_DIR = path.join(KRONOS_DIR, 'prompts');
 export const PROMPT_HISTORY_DIR = path.join(KRONOS_DIR, 'prompt-history');
@@ -217,14 +218,14 @@ export function runPromptSmokeTests(tests: PromptSmokeTest[]): PromptSmokeResult
         missingVariables: rendered.missingVariables,
         errors,
       };
-    } catch (e: any) {
+    } catch (e: unknown) {
       return {
         id: test.id,
         templateName: test.templateName,
         status: 'fail',
         source: test.source,
         missingVariables: [],
-        errors: [e?.message || 'Prompt smoke test failed'],
+        errors: [unknownErrorMessage(e, 'Prompt smoke test failed')],
       };
     }
   });
