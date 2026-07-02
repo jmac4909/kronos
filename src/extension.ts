@@ -1274,16 +1274,16 @@ export function activate(context: vscode.ExtensionContext) {
             linkTicketToProject(ticket, project);
             state.reloadAndNotify();
             renderBoard();
-          } catch (e: any) {
-            vscode.window.showWarningMessage(e?.message || 'Failed to link ticket.');
+          } catch (e: unknown) {
+            vscode.window.showWarningMessage(unknownErrorMessage(e, 'Failed to link ticket.'));
           }
         } else if (command === 'unlink' && hasTicket(ticket) && hasProject(project)) {
           try {
             unlinkTicketFromProject(ticket, project);
             state.reloadAndNotify();
             renderBoard();
-          } catch (e: any) {
-            vscode.window.showWarningMessage(e?.message || 'Failed to unlink ticket.');
+          } catch (e: unknown) {
+            vscode.window.showWarningMessage(unknownErrorMessage(e, 'Failed to unlink ticket.'));
           }
         } else if (command === 'addToQueue' && hasTicket(ticket)) {
           try {
@@ -1291,8 +1291,8 @@ export function activate(context: vscode.ExtensionContext) {
             state.reloadAndNotify();
             renderBoard();
             if (result.alreadyInQueue) { vscode.window.showInformationMessage(`${ticket} is already in the queue.`); }
-          } catch (e: any) {
-            vscode.window.showWarningMessage(e?.message || 'Failed to add ticket to queue.');
+          } catch (e: unknown) {
+            vscode.window.showWarningMessage(unknownErrorMessage(e, 'Failed to add ticket to queue.'));
           }
         } else if (command === 'removeFromQueue' && hasTicket(ticket)) {
           await removeTicketFromQueue(state, ticket, true);
@@ -1319,8 +1319,8 @@ export function activate(context: vscode.ExtensionContext) {
             const result = addTicketToQueue(ticket);
             state.reloadAndNotify();
             if (result.alreadyInQueue) { vscode.window.showInformationMessage(`${ticket} is already in the queue.`); }
-          } catch (e: any) {
-            vscode.window.showWarningMessage(e?.message || 'Failed to add ticket to queue.');
+          } catch (e: unknown) {
+            vscode.window.showWarningMessage(unknownErrorMessage(e, 'Failed to add ticket to queue.'));
           }
           renderBoard();
           return;

@@ -4112,6 +4112,10 @@ test('webview html helpers centralize escaping and safe HTTP links', () => {
 
 test('extension webviews use shared UI shell and board filtering affordances', () => {
   const source = readSourceFixture('src', 'extension.ts');
+  const boardHandlerStart = source.indexOf('panel.webview.onDidReceiveMessage(async (msg) => {\n        const request = normalizeBoardMessage(msg);');
+  const boardHandlerEnd = source.indexOf("    vscode.commands.registerCommand('kronos.viewTicket'", boardHandlerStart);
+  assert.ok(boardHandlerStart >= 0 && boardHandlerEnd > boardHandlerStart, 'Jira board message handler should be present');
+  const boardHandlerSource = source.slice(boardHandlerStart, boardHandlerEnd);
   for (const marker of [
     "import { createWebviewNonce, withWebviewCsp } from './services/webviewSecurity'",
     'function createNonce(): string',
@@ -4145,6 +4149,9 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     "unlinkTicketFromProject(ticket, project);\n            state.reloadAndNotify();\n            renderBoard();",
     "const result = addTicketToQueue(ticket);\n            state.reloadAndNotify();\n            renderBoard();",
     "await removeTicketFromQueue(state, ticket, true);\n          renderBoard();",
+    "unknownErrorMessage(e, 'Failed to link ticket.')",
+    "unknownErrorMessage(e, 'Failed to unlink ticket.')",
+    "unknownErrorMessage(e, 'Failed to add ticket to queue.')",
     'function kronosOperatorPanelCss',
     'const EVIDENCE_GATE_MESSAGE_COMMANDS = new Set',
     'const HUMAN_REVIEW_MESSAGE_COMMANDS = new Set',
@@ -4221,6 +4228,12 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     false,
     'extension run pickers should tolerate missing or malformed run.events',
   );
+  for (const marker of [
+    'catch (e: any)',
+    'e?.message',
+  ]) {
+    assert.equal(boardHandlerSource.includes(marker), false, marker);
+  }
 });
 
 test('extension run recovery helpers use typed run records', () => {

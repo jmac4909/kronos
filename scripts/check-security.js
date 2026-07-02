@@ -373,6 +373,21 @@ for (const marker of [
   }
 }
 
+const boardHandlerStart = extension.indexOf('panel.webview.onDidReceiveMessage(async (msg) => {\n        const request = normalizeBoardMessage(msg);');
+const boardHandlerEnd = extension.indexOf("    vscode.commands.registerCommand('kronos.viewTicket'", boardHandlerStart);
+if (boardHandlerStart < 0 || boardHandlerEnd <= boardHandlerStart) {
+  fail('Missing Jira board message handler block.');
+}
+const boardHandlerSource = extension.slice(boardHandlerStart, boardHandlerEnd);
+for (const forbidden of [
+  'catch (e: any)',
+  'e?.message',
+]) {
+  if (boardHandlerSource.includes(forbidden)) {
+    fail(`Jira board handler must normalize unknown errors instead of using ${forbidden}.`);
+  }
+}
+
 const runActionStart = extension.indexOf('async function resumeSelectedRun');
 const runActionEnd = extension.indexOf('function runLastEventLabel');
 if (runActionStart < 0 || runActionEnd <= runActionStart) {
@@ -445,6 +460,9 @@ for (const marker of [
   "unlinkTicketFromProject(ticket, project);\n            state.reloadAndNotify();\n            renderBoard();",
   "const result = addTicketToQueue(ticket);\n            state.reloadAndNotify();\n            renderBoard();",
   "await removeTicketFromQueue(state, ticket, true);\n          renderBoard();",
+  "unknownErrorMessage(e, 'Failed to link ticket.')",
+  "unknownErrorMessage(e, 'Failed to unlink ticket.')",
+  "unknownErrorMessage(e, 'Failed to add ticket to queue.')",
   'class="kronos-shell board-shell"',
   'class="kronos-shell dashboard-shell"',
   'class="kronos-shell ticket-shell"',
