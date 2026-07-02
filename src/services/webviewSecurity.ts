@@ -107,7 +107,7 @@ export function webviewCspMeta(options: WebviewCspOptions = {}): string {
 }
 
 export function webviewScriptDiagnosticBanner(): string {
-  return '<div class="kronos-script-required" data-kronos-script-required role="status">Kronos webview JavaScript has not started. Check the VS Code Extension Host DevTools console for CSP or sandbox errors.</div>';
+  return '<div class="kronos-script-required" data-kronos-script-required role="status">Kronos webview JavaScript has not started. Check VS Code Webview Developer Tools and the Extension Host DevTools console for CSP or sandbox errors.</div>';
 }
 
 export function withWebviewCsp(html: string, options: WebviewCspOptions = {}): string {

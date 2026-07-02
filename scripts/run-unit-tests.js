@@ -1698,6 +1698,7 @@ test('webview security injects CSP and preserves existing nonce policies', () =>
   assert.doesNotMatch(apiScript, /var vscode =/);
   const diagnosticBanner = webviewSecurity.webviewScriptDiagnosticBanner();
   assert.match(diagnosticBanner, /data-kronos-script-required/);
+  assert.match(diagnosticBanner, /Webview Developer Tools/);
   assert.match(diagnosticBanner, /Extension Host DevTools/);
   const scriptableHtml = webviewSecurity.withWebviewCsp('<!DOCTYPE html><html><head><style>body{}</style></head><body><button>ok</button></body></html>', {
     allowScripts: true,
@@ -5792,6 +5793,7 @@ test('merge request diff rendering uses normalized adapter results', () => {
 
 test('tree providers share action labels and icons', () => {
   const ticketTree = readSourceFixture('src', 'views', 'TicketTreeProvider.ts');
+  const projectTree = readSourceFixture('src', 'views', 'ProjectTreeProvider.ts');
   const queueTree = readSourceFixture('src', 'views', 'QueueTreeProvider.ts');
   const sessionTree = readSourceFixture('src', 'views', 'SessionTreeProvider.ts');
   const reviewTree = readSourceFixture('src', 'views', 'ReviewTreeProvider.ts');
@@ -5806,6 +5808,13 @@ test('tree providers share action labels and icons', () => {
     'themeIcon(ticketActionIcon(action))',
   ]) {
     assert.ok(ticketTree.includes(marker), marker);
+  }
+  for (const marker of [
+    'const timestamp = new Date(isoDate).getTime()',
+    'if (!Number.isFinite(timestamp)) { return isoDate; }',
+    'const diff = Date.now() - timestamp',
+  ]) {
+    assert.ok(projectTree.includes(marker), marker);
   }
 
   for (const marker of [

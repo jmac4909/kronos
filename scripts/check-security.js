@@ -28,6 +28,7 @@ const worktreeRegistry = readSource('src/services/worktreeRegistry.ts');
 const sessionTreeProvider = readSource('src/views/SessionTreeProvider.ts');
 const queueTreeProvider = readSource('src/views/QueueTreeProvider.ts');
 const reviewTreeProvider = readSource('src/views/ReviewTreeProvider.ts');
+const projectTreeProvider = sources['src/views/ProjectTreeProvider.ts'];
 const dispatcher = sources['src/runners/sessionDispatcher.ts'];
 const scriptClient = sources['src/services/scriptClient.ts'];
 const acceptanceCriteria = readSource('src/services/acceptanceCriteria.ts');
@@ -1655,6 +1656,8 @@ for (const marker of [
   "console.error('Kronos webview unhandled rejection', webviewName",
   'export function webviewScriptDiagnosticBanner',
   'data-kronos-script-required',
+  'Webview Developer Tools',
+  'Extension Host DevTools',
   'function injectWebviewScriptDiagnostic(html: string): string',
   'injectWebviewScriptDiagnostic(value)',
   'export function webviewActionPostScript',
@@ -1685,6 +1688,16 @@ for (const marker of [
 ]) {
   if (!webviewSecurity.includes(marker)) {
     fail(`Missing webview security marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  'const timestamp = new Date(isoDate).getTime()',
+  'if (!Number.isFinite(timestamp)) { return isoDate; }',
+  'const diff = Date.now() - timestamp',
+]) {
+  if (!projectTreeProvider.includes(marker)) {
+    fail(`Missing project tree date marker: ${marker}`);
   }
 }
 
