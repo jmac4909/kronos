@@ -142,6 +142,7 @@ const BOARD_MESSAGE_COMMANDS = new Set([
   'publishEvidence',
 ]);
 const EVIDENCE_GATE_MESSAGE_COMMANDS = new Set([
+  'refreshPanel',
   'addEvidence',
   'addEvidenceCheck',
   'recordEnvironmentResult',
@@ -152,6 +153,7 @@ const EVIDENCE_GATE_MESSAGE_COMMANDS = new Set([
   'publishEvidence',
 ]);
 const HUMAN_REVIEW_MESSAGE_COMMANDS = new Set([
+  'refreshPanel',
   'addEvidence',
   'addEvidenceCheck',
   'recordEnvironmentResult',
@@ -167,6 +169,7 @@ const HUMAN_REVIEW_MESSAGE_COMMANDS = new Set([
   'queuePlanner',
 ]);
 const DASHBOARD_MESSAGE_COMMANDS = new Set([
+  'refreshPanel',
   'nextBestAction',
   'queuePlanner',
   'runCenter',
@@ -241,6 +244,10 @@ const OPERATOR_COMMAND_MESSAGE_COMMANDS = new Set([
   'agingReport',
   'recoveryCenter',
   'stateAuditLog',
+]);
+const AGING_REPORT_MESSAGE_COMMANDS = new Set([
+  ...OPERATOR_COMMAND_MESSAGE_COMMANDS,
+  'refreshPanel',
 ]);
 const TICKET_SCOPED_OPERATOR_COMMANDS = new Set([
   'addEvidence',
@@ -1957,6 +1964,10 @@ export function activate(context: vscode.ExtensionContext) {
           const request = normalizeActionPanelMessage(msg, DASHBOARD_MESSAGE_COMMANDS);
           if (!request) {
             vscode.window.showWarningMessage('Ignored invalid Kronos dashboard action.');
+            return;
+          }
+          if (request.command === 'refreshPanel') {
+            await render();
             return;
           }
           await executeDashboardAction(request.command);
@@ -3877,6 +3888,10 @@ function openHumanReviewInbox(state: KronosState): void {
       vscode.window.showWarningMessage('Ignored invalid Kronos human review request.');
       return;
     }
+    if (request.command === 'refreshPanel') {
+      render();
+      return;
+    }
     await executeHumanReviewAction(state, request.command, request.ticket);
     render();
   });
@@ -3892,12 +3907,16 @@ function buildHumanReviewInboxHtml(inbox: HumanReviewInbox, state: KronosState, 
     <td class="action-cell">${humanReviewActionButtons(item, state)}</td>
   </tr>`).join('');
   const empty = inbox.items.length === 0 ? '<div class="empty">No human-review items found.</div>' : '';
+  const actions = operatorCommandRow([
+    actionButton('refreshPanel', 'Refresh'),
+  ]);
 
   return `<!DOCTYPE html>
 <html><head><style>
   ${kronosOperatorPanelCss()}
 </style></head><body><div class="kronos-shell operator-shell">
   <div class="kronos-header"><div><h1 class="kronos-title">Kronos Human Review Inbox</h1><div class="kronos-subtitle">Items where an operator decision is safer than automation</div></div></div>
+  ${actions}
   <div class="operator-summary">
     <div class="summary-card"><div class="num">${inbox.summary.critical}</div><div class="lbl">Critical</div></div>
     <div class="summary-card"><div class="num">${inbox.summary.warning}</div><div class="lbl">Warnings</div></div>
@@ -4037,7 +4056,15 @@ function openEvidenceGatePanel(state: KronosState, gates: EvidenceGateResult[], 
   render();
   panel.webview.onDidReceiveMessage(async msg => {
     const request = normalizeActionPanelMessage(msg, EVIDENCE_GATE_MESSAGE_COMMANDS);
-    if (!request || !request.ticket || !state.state?.tickets?.[request.ticket]) {
+    if (!request) {
+      vscode.window.showWarningMessage('Ignored invalid Kronos evidence gate request.');
+      return;
+    }
+    if (request.command === 'refreshPanel') {
+      render();
+      return;
+    }
+    if (!request.ticket || !state.state?.tickets?.[request.ticket]) {
       vscode.window.showWarningMessage('Ignored invalid Kronos evidence gate request.');
       return;
     }
@@ -4158,12 +4185,16 @@ function buildEvidenceGateHtml(gates: EvidenceGateResult[], title: string, nonce
     <td class="action-cell">${evidenceGateActionButtons(gate, check)}</td>
   </tr>`)).join('');
   const empty = gates.length === 0 ? '<div class="empty">No evidence gate items found.</div>' : '';
+  const actions = operatorCommandRow([
+    actionButton('refreshPanel', 'Refresh'),
+  ]);
 
   return `<!DOCTYPE html>
 <html><head><style>
   ${kronosOperatorPanelCss()}
 </style></head><body><div class="kronos-shell operator-shell">
   <div class="kronos-header"><div><h1 class="kronos-title">${escapeHtml(title)}</h1><div class="kronos-subtitle">Evidence readiness by ticket and check</div></div></div>
+  ${actions}
   <div class="operator-summary">
     <div class="summary-card"><div class="num">${summary.fail}</div><div class="lbl">Failing</div></div>
     <div class="summary-card"><div class="num">${summary.warn}</div><div class="lbl">Warnings</div></div>
@@ -4934,10 +4965,6 @@ function buildTrendMetricsHtml(report: TrendMetricsReport, nonce?: string): stri
 }
 
 function openAgingReportPanel(state: KronosState): void {
-  const report = analyzeAging({
-    tickets: state.state?.tickets || {},
-    thresholds: agingThresholdsFromConfig(),
-  });
   const panel = vscode.window.createWebviewPanel(
     'kronosAgingReport',
     'Kronos Aging Report',
@@ -4945,16 +4972,35 @@ function openAgingReportPanel(state: KronosState): void {
     { enableScripts: true }
   );
   const nonce = createNonce();
-  panel.webview.html = withWebviewCsp(buildAgingReportHtml(report, {
-    actionsHtml: operatorCommandRow([
-      actionButton('queuePlanner', 'Queue Planner'),
-      actionButton('humanReviewInbox', 'Human Review'),
-      actionButton('trendMetrics', 'Trend Metrics'),
-      actionButton('evidenceGate', 'Evidence Gate'),
-    ]),
-    scriptHtml: kronosActionPanelScript(nonce),
-  }), webviewScriptCsp(panel.webview, nonce));
-  attachOperatorCommandHandler(panel);
+  const render = () => {
+    const report = analyzeAging({
+      tickets: state.state?.tickets || {},
+      thresholds: agingThresholdsFromConfig(),
+    });
+    panel.webview.html = withWebviewCsp(buildAgingReportHtml(report, {
+      actionsHtml: operatorCommandRow([
+        actionButton('refreshPanel', 'Refresh'),
+        actionButton('queuePlanner', 'Queue Planner'),
+        actionButton('humanReviewInbox', 'Human Review'),
+        actionButton('trendMetrics', 'Trend Metrics'),
+        actionButton('evidenceGate', 'Evidence Gate'),
+      ]),
+      scriptHtml: kronosActionPanelScript(nonce),
+    }), webviewScriptCsp(panel.webview, nonce));
+  };
+  render();
+  panel.webview.onDidReceiveMessage(async msg => {
+    const request = normalizeActionPanelMessage(msg, AGING_REPORT_MESSAGE_COMMANDS);
+    if (!request) {
+      vscode.window.showWarningMessage('Ignored invalid Kronos aging report action.');
+      return;
+    }
+    if (request.command === 'refreshPanel') {
+      render();
+      return;
+    }
+    await executeOperatorCommandAction(request.command, request.ticket);
+  });
 }
 
 function openIntegrationManifestPanel(): void {
@@ -5634,6 +5680,7 @@ function buildDashboardHtml(state: KronosState, brief: unknown, nonce?: string):
   const nextContext = nextPlan ? buildNextActionContext(nextPlan, { state: state.state, queue: state.queue }) : undefined;
   const dashboardActions = actionRow([
     actionButton('nextBestAction', 'Next Best Action', { primary: true }),
+    actionButton('refreshPanel', 'Refresh'),
     actionButton('queuePlanner', 'Queue Planner'),
     actionButton('runCenter', 'Run Center'),
     actionButton('humanReviewInbox', 'Human Review'),

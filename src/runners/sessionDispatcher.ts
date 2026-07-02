@@ -18,6 +18,7 @@ import { SavedSession, SessionStats, safeSessionId, writeSavedSession } from '..
 import { ACTIVE_WORKTREES_FILE, ActiveWorktreeEntry, loadActiveWorktreeRegistry, trackActiveWorktree, untrackActiveWorktree } from '../services/worktreeRegistry';
 import { gcloudApplicationDefaultLoginCommand, kronosLoginShellTerminalOptions, kronosTerminalOptions } from '../services/terminalProfiles';
 import { unknownErrorMessage } from '../services/errorUtils';
+import { isActiveRun } from '../services/runStatus';
 export { getAggregateStats, listSavedSessions, listSessionStoreIssues } from '../services/sessionStore';
 
 const CLAUDE_PATH = process.env.CLAUDE_PATH || 'claude';
@@ -52,6 +53,7 @@ function webviewScriptCsp(webview: vscode.Webview, nonce: string) {
 }
 
 const RUN_CENTER_MESSAGE_COMMANDS = new Set([
+  'refreshPanel',
   'openRunRecord',
   'openRunLog',
   'openRunPrompt',
@@ -73,6 +75,7 @@ export interface RunCenterActionRequest {
 
 export interface RunCenterOptions {
   onAction?: (request: RunCenterActionRequest) => Promise<void> | void;
+  pollIntervalMs?: number;
 }
 
 function ensureDir(dir: string): void {
@@ -492,23 +495,36 @@ export function openRunCenter(options: RunCenterOptions = {}): void {
     vscode.ViewColumn.One,
     { enableScripts: interactive }
   );
-  const render = () => {
+  const render = (): boolean => {
     const runs = listRuns();
     panel.webview.html = withWebviewCsp(
       buildRunCenterHtml(runs, interactive ? nonce : undefined),
       interactive ? webviewScriptCsp(panel.webview, nonce) : {},
     );
+    return runs.some(isActiveRun);
   };
-  render();
+  let wasActive = render();
   if (interactive && options.onAction) {
+    const pollIntervalMs = Math.max(1000, options.pollIntervalMs || 5000);
+    const pollTimer = setInterval(() => {
+      const hasActive = listRuns().some(isActiveRun);
+      if (hasActive || wasActive) {
+        wasActive = render();
+      }
+    }, pollIntervalMs);
+    panel.onDidDispose(() => clearInterval(pollTimer));
     panel.webview.onDidReceiveMessage(async msg => {
       const request = normalizeRunCenterMessage(msg);
       if (!request) {
         vscode.window.showWarningMessage('Ignored invalid Kronos Run Center action.');
         return;
       }
+      if (request.command === 'refreshPanel') {
+        wasActive = render();
+        return;
+      }
       await options.onAction!(request);
-      render();
+      wasActive = render();
     });
   }
 }
@@ -1080,13 +1096,17 @@ function normalizeRunCenterMessage(raw: unknown): RunCenterActionRequest | null 
   if (!raw || typeof raw !== 'object') { return null; }
   const message = raw as { command?: unknown; runId?: unknown };
   if (typeof message.command !== 'string' || !RUN_CENTER_MESSAGE_COMMANDS.has(message.command)) { return null; }
+  if (message.command === 'refreshPanel') {
+    return { command: message.command, runId: '' };
+  }
   if (typeof message.runId !== 'string' || message.runId.trim().length === 0) { return null; }
   return { command: message.command, runId: message.runId };
 }
 
-function runCenterActionButton(action: string, label: string, runId: string, primary = false): string {
+function runCenterActionButton(action: string, label: string, runId?: string, primary = false): string {
   const classes = `run-action${primary ? ' primary' : ''}`;
-  return `<button type="button" class="${classes}" data-action="${escapeAttr(action)}" data-run-id="${escapeAttr(runId)}">${escapeHtml(label)}</button>`;
+  const runAttr = runId ? ` data-run-id="${escapeAttr(runId)}"` : '';
+  return `<button type="button" class="${classes}" data-action="${escapeAttr(action)}"${runAttr}>${escapeHtml(label)}</button>`;
 }
 
 function runCenterActionButtons(run: KronosRun): string {
@@ -1183,9 +1203,13 @@ function buildRunCenterHtml(runs: KronosRun[], nonce?: string): string {
   const actionStyles = interactive ? `
   .action-cell { min-width: 210px; }
   .run-actions { display: flex; flex-wrap: wrap; gap: 5px; align-items: flex-start; }
+  .run-center-toolbar { display: flex; gap: 8px; align-items: center; }
   .run-action { min-height: 24px; padding: 3px 8px; border: 1px solid var(--k-border); border-radius: var(--k-radius-sm); background: var(--k-surface); color: var(--k-fg); font: inherit; font-size: 10px; font-weight: 600; cursor: pointer; }
   .run-action:hover { background: var(--vscode-list-hoverBackground); }
   .run-action.primary { background: var(--vscode-button-background); color: var(--vscode-button-foreground); border-color: transparent; }` : '';
+  const refreshAction = interactive
+    ? `<div class="run-center-toolbar">${runCenterActionButton('refreshPanel', 'Refresh')}</div>`
+    : '';
 
   return `<!DOCTYPE html>
 <html><head><style>
@@ -1209,6 +1233,7 @@ function buildRunCenterHtml(runs: KronosRun[], nonce?: string): string {
       <h1 class="kronos-title">Kronos Run Center</h1>
       <div class="kronos-subtitle">${runs.length} persisted run${runs.length === 1 ? '' : 's'} sorted newest first</div>
     </div>
+    ${refreshAction}
   </div>
   ${runs.length === 0 ? '<div class="kronos-empty">No persisted runs yet.</div>' : `<div class="run-table-wrap kronos-panel"><table class="kronos-table">
     <tr><th>Status</th><th>Run</th><th>Time</th><th>Model</th><th>Readiness</th><th>Workspace</th><th>Last event</th>${actionHeader}</tr>
