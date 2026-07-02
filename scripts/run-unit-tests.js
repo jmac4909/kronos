@@ -1316,6 +1316,29 @@ test('process tree service centralizes stop and pause signaling behavior', () =>
   assert.equal(signalFallback.fallbackUsed, true);
   assert.deepEqual(signalCalls, [[-88, 'SIGSTOP'], [88, 'SIGSTOP']]);
 
+  const failedSignalFallback = processTree.signalProcessTree(89, 'SIGSTOP', {
+    platform: 'linux',
+    kill: (pid) => {
+      if (pid < 0) { throw new Error('no group signal'); }
+      throw new Error('no process signal');
+    },
+  });
+  assert.equal(failedSignalFallback.signalled, false);
+  assert.equal(failedSignalFallback.fallbackUsed, true);
+  assert.equal(failedSignalFallback.error, 'no process signal');
+
+  const failedStopFallback = processTree.stopProcessTree(78, {
+    platform: 'linux',
+    kill: (pid) => {
+      if (pid < 0) { throw new Error('no group stop'); }
+      throw { message: '   ' };
+    },
+    schedule: () => {},
+  });
+  assert.equal(failedStopFallback.signalled, false);
+  assert.equal(failedStopFallback.fallbackUsed, true);
+  assert.equal(failedStopFallback.error, 'no group stop');
+
   const unsupported = processTree.signalProcessTree(88, 'SIGCONT', { platform: 'win32' });
   assert.equal(unsupported.attempted, true);
   assert.equal(unsupported.signalled, false);
@@ -1324,6 +1347,26 @@ test('process tree service centralizes stop and pause signaling behavior', () =>
 
   assert.equal(processTree.stopProcessTree(undefined).attempted, false);
   assert.equal(processTree.signalProcessTree(-1, 'SIGSTOP').attempted, false);
+
+  const source = readSourceFixture('src', 'services', 'processTree.ts');
+  for (const marker of [
+    "import { unknownErrorMessage } from './errorUtils'",
+    'catch (e: unknown)',
+    'catch (fallbackError: unknown)',
+    "unknownErrorMessage(fallbackError, unknownErrorMessage(e, 'process signal failed'))",
+    "unknownErrorMessage(fallbackError, unknownErrorMessage(cause, 'process stop failed'))",
+  ]) {
+    assert.ok(source.includes(marker), marker);
+  }
+  for (const marker of [
+    'catch (e: any)',
+    'catch (fallbackError: any)',
+    'fallbackError?.message',
+    'cause?.message',
+    'e?.message',
+  ]) {
+    assert.equal(source.includes(marker), false, marker);
+  }
 });
 
 test('webview security injects CSP and preserves existing nonce policies', () => {

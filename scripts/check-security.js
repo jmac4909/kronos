@@ -820,6 +820,11 @@ for (const marker of [
 for (const marker of [
   'export function stopProcessTree',
   'export function signalProcessTree',
+  "import { unknownErrorMessage } from './errorUtils'",
+  'catch (e: unknown)',
+  'catch (fallbackError: unknown)',
+  "unknownErrorMessage(fallbackError, unknownErrorMessage(e, 'process signal failed'))",
+  "unknownErrorMessage(fallbackError, unknownErrorMessage(cause, 'process stop failed'))",
   "'taskkill'",
   "'SIGTERM'",
   "'SIGKILL'",

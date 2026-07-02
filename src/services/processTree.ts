@@ -1,4 +1,5 @@
 import { execFileSync } from 'child_process';
+import { unknownErrorMessage } from './errorUtils';
 
 export type ProcessTreeSignal = 'SIGSTOP' | 'SIGCONT' | 'SIGTERM' | 'SIGKILL';
 
@@ -38,7 +39,7 @@ export function stopProcessTree(pid: number | undefined, options: ProcessTreeOpt
       const commandRunner = options.commandRunner || defaultCommandRunner;
       commandRunner('taskkill', ['/PID', String(processPid), '/T', '/F'], { windowsHide: true, timeout: 5000 });
       return result(true, true, 'taskkill', false);
-    } catch (e: any) {
+    } catch (e: unknown) {
       return fallbackKill(processPid, kill, e);
     }
   }
@@ -50,7 +51,7 @@ export function stopProcessTree(pid: number | undefined, options: ProcessTreeOpt
       try { kill(-processPid, 'SIGKILL'); } catch {}
     }, options.sigkillDelayMs ?? 2500);
     return result(true, true, 'process-group', false);
-  } catch (e: any) {
+  } catch (e: unknown) {
     return fallbackKill(processPid, kill, e);
   }
 }
@@ -70,22 +71,22 @@ export function signalProcessTree(
   try {
     kill(-processPid, signal);
     return result(true, true, 'process-group', false);
-  } catch (e: any) {
+  } catch (e: unknown) {
     try {
       kill(processPid, signal);
       return result(true, true, 'process', true);
-    } catch (fallbackError: any) {
-      return result(true, false, 'process', true, fallbackError?.message || e?.message || 'process signal failed');
+    } catch (fallbackError: unknown) {
+      return result(true, false, 'process', true, unknownErrorMessage(fallbackError, unknownErrorMessage(e, 'process signal failed')));
     }
   }
 }
 
-function fallbackKill(pid: number, kill: ProcessKillRunner, cause: any): ProcessTreeResult {
+function fallbackKill(pid: number, kill: ProcessKillRunner, cause: unknown): ProcessTreeResult {
   try {
     kill(pid);
     return result(true, true, 'process', true);
-  } catch (fallbackError: any) {
-    return result(true, false, 'process', true, fallbackError?.message || cause?.message || 'process stop failed');
+  } catch (fallbackError: unknown) {
+    return result(true, false, 'process', true, unknownErrorMessage(fallbackError, unknownErrorMessage(cause, 'process stop failed')));
   }
 }
 
