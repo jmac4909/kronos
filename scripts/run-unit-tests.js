@@ -549,6 +549,24 @@ test('state store tolerant read reports bad nested records without blanking vali
   assert.ok(result.issues.some(issue => issue.detail.includes('Skipped ticket K-SKIPPED')));
 });
 
+test('KronosState load issues normalize unknown errors', () => {
+  const source = readSourceFixture('src', 'state', 'KronosState.ts');
+  for (const marker of [
+    "import { unknownErrorMessage } from '../services/errorUtils'",
+    'catch (e: unknown)',
+    "unknownErrorMessage(e, 'Failed to load state.json')",
+    "unknownErrorMessage(e, 'Failed to load queue.json')",
+  ]) {
+    assert.ok(source.includes(marker), marker);
+  }
+  for (const marker of [
+    'catch (e: any)',
+    'e?.message',
+  ]) {
+    assert.equal(source.includes(marker), false, marker);
+  }
+});
+
 test('state store migrates legacy queue shape before validation and reads', () => {
   const legacyQueue = {
     items: [

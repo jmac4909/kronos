@@ -1044,6 +1044,10 @@ for (const marker of [
   'export interface KronosStateLoadIssue',
   'private _loadIssues',
   'get loadIssues()',
+  "import { unknownErrorMessage } from '../services/errorUtils'",
+  'catch (e: unknown)',
+  "unknownErrorMessage(e, 'Failed to load state.json')",
+  "unknownErrorMessage(e, 'Failed to load queue.json')",
   "target: 'state.json'",
   "target: 'queue.json'",
 ]) {

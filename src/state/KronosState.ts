@@ -6,6 +6,7 @@ import { STATE_FILE, QUEUE_FILE, readQueueFile, readStateFileWithIssues } from '
 import { ScriptRunOptions } from '../services/scriptClient';
 import { DiscoverProjectsResult, MorningBriefResult, addAdhocTask, completeAdhocTask, discoverProjectsJson, readMorningBriefJson, refreshKronosState, registerProject, runStateScript } from '../services/stateScriptAdapter';
 import { readClaudeAgents } from '../services/cliProbes';
+import { unknownErrorMessage } from '../services/errorUtils';
 
 export interface KronosStateLoadIssue {
   target: 'state.json' | 'queue.json';
@@ -43,22 +44,22 @@ export class KronosState {
       const result = readStateFileWithIssues();
       this._state = result.state;
       issues.push(...result.issues);
-    } catch (e: any) {
+    } catch (e: unknown) {
       this._state = null;
       issues.push({
         target: 'state.json',
         filePath: STATE_FILE,
-        detail: e?.message || 'Failed to load state.json',
+        detail: unknownErrorMessage(e, 'Failed to load state.json'),
       });
     }
     try {
       this._queue = readQueueFile();
-    } catch (e: any) {
+    } catch (e: unknown) {
       this._queue = null;
       issues.push({
         target: 'queue.json',
         filePath: QUEUE_FILE,
-        detail: e?.message || 'Failed to load queue.json',
+        detail: unknownErrorMessage(e, 'Failed to load queue.json'),
       });
     }
     this._loadIssues = issues;
