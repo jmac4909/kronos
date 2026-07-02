@@ -433,7 +433,7 @@ async function openTextFileIfExists(filePath: string, missingMessage: string): P
   await vscode.window.showTextDocument(doc, { preview: false });
 }
 
-async function retryRunFromPrompt(run: KronosRun): Promise<void> {
+async function retryRunFromPrompt(state: KronosState, run: KronosRun): Promise<void> {
   if (!run?.promptPath || !fs.existsSync(run.promptPath)) {
     vscode.window.showWarningMessage('Run prompt artifact not found.');
     return;
@@ -451,14 +451,18 @@ async function retryRunFromPrompt(run: KronosRun): Promise<void> {
   if (confirm !== 'Retry') { return; }
 
   const prompt = fs.readFileSync(run.promptPath, 'utf-8');
+  const projectName = run.project || path.basename(run.projectPath);
+  const ticketKey = run.ticket || undefined;
   const retryMetadata = {
     ...(run.promptMetadata || {}),
     retryOfRunId: run.id,
   };
-  await startClaudeDispatch(run.projectPath, run.skill, run.ticket || undefined, {
+  await startClaudeDispatch(run.projectPath, run.skill, ticketKey, {
     customPrompt: prompt,
     promptMetadata: retryMetadata,
+    projectNameOverride: projectName,
     noWorktree: true,
+    onComplete: refreshAfterDispatch(state, projectName, ticketKey),
   });
 }
 
@@ -740,7 +744,7 @@ async function executeRunCenterAction(state: KronosState, request: RunCenterActi
   } else if (request.command === 'resumeRun') {
     await resumeSelectedRun(state, run);
   } else if (request.command === 'retryRun') {
-    await retryRunFromPrompt(run);
+    await retryRunFromPrompt(state, run);
   } else if (request.command === 'archiveRun') {
     await archiveSelectedRun(request.runId);
   }
@@ -1288,7 +1292,7 @@ export function activate(context: vscode.ExtensionContext) {
       const projectPath = getProjectPath(state, projectName);
       if (projectPath) {
         await startClaudeDispatch(projectPath, 'verify-fix', ticketKey, {
-          onComplete: refreshAfterDispatch(state, projectName),
+          onComplete: refreshAfterDispatch(state, projectName, ticketKey),
           noWorktree: true,
         });
       } else {
@@ -2239,7 +2243,7 @@ export function activate(context: vscode.ExtensionContext) {
       const verifyPrompt = loadPromptForDispatch(state, 'verify-local', { TICKET_KEY: ticketKey }, projectPath);
 
       await startClaudeDispatch(projectPath, 'verify-local', ticketKey, {
-        onComplete: refreshAfterDispatch(state, projectName),
+        onComplete: refreshAfterDispatch(state, projectName, ticketKey),
         customPrompt: verifyPrompt.text,
         promptMetadata: verifyPrompt.metadata,
         noWorktree: true,
@@ -2750,7 +2754,7 @@ export function activate(context: vscode.ExtensionContext) {
       const continuePrompt = loadPromptForDispatch(state, 'continue-work', { TICKET_KEY: ticketKey, BRANCH: branch || ticketKey, FEEDBACK: feedback }, projectPath);
 
       await startClaudeDispatch(projectPath, 'implement', ticketKey, {
-        onComplete: refreshAfterDispatch(state, projectName),
+        onComplete: refreshAfterDispatch(state, projectName, ticketKey),
         customPrompt: continuePrompt.text,
         promptMetadata: continuePrompt.metadata,
         noWorktree: true,
@@ -3083,7 +3087,7 @@ export function activate(context: vscode.ExtensionContext) {
       } else if (action === 'Resume Run') {
         await resumeSelectedRun(state, picked.run);
       } else if (action === 'Retry Saved Prompt') {
-        await retryRunFromPrompt(picked.run);
+        await retryRunFromPrompt(state, picked.run);
       } else if (action === 'Archive Run') {
         await archiveSelectedRun(picked.run.id);
       }
@@ -3103,7 +3107,7 @@ export function activate(context: vscode.ExtensionContext) {
         run,
       })), { placeHolder: 'Retry which saved Kronos prompt?' });
       if (!picked) { return; }
-      await retryRunFromPrompt(picked.run);
+      await retryRunFromPrompt(state, picked.run);
     }),
 
     vscode.commands.registerCommand('kronos.resumeRun', async () => {
@@ -3846,7 +3850,7 @@ async function executeRecoveryAction(item: RecoveryItem, state: KronosState, bac
       vscode.window.showWarningMessage('Run record not found.');
       return;
     }
-    await retryRunFromPrompt(run);
+    await retryRunFromPrompt(state, run);
     return;
   }
   if (item.action === 'resumeRun') {
