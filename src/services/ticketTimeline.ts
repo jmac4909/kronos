@@ -44,51 +44,46 @@ export function buildTicketTimeline(input: TicketTimelineInput): TimelineEvent[]
   const runs = (Array.isArray(input.runs) ? input.runs : []).filter(isRunRecord);
 
   if (ticket.updated) {
-    events.push({
+    events.push(timelineEvent({
       id: `${ticketKey}:jira-updated`,
-      at: ticket.updated,
       source: 'jira',
       severity: 'info',
       title: `Jira status: ${ticket.jira_status}`,
       detail: ticket.summary,
-      url: ticket.jira_url,
-    });
+    }, { at: ticket.updated, url: ticket.jira_url }));
   }
 
   if (ticket.last_action_at || ticket.last_action) {
-    events.push({
+    events.push(timelineEvent({
       id: `${ticketKey}:last-action`,
-      at: ticket.last_action_at || undefined,
       source: 'ticket',
       severity: severityForAction(ticket.next_action),
       title: `Kronos action: ${ticket.last_action || ticket.next_action}`,
       detail: `Next action is ${ticket.next_action}`,
-    });
+    }, { at: ticket.last_action_at || undefined }));
   }
 
   const queuedItems = (input.queue?.items || []).filter(item => item.ticket === ticketKey);
   for (const item of queuedItems) {
-    events.push({
+    events.push(timelineEvent({
       id: `${ticketKey}:queue:${item.id}`,
-      at: input.queue?.last_computed || undefined,
       source: 'queue',
       severity: 'info',
       title: `Queued: ${item.action}`,
       detail: `${item.reason || 'No reason recorded'} (score ${item.priority_score})`,
-    });
+    }, { at: input.queue?.last_computed || undefined }));
   }
 
   const notes = evidenceNotes(ticket);
   for (const [idx, note] of notes.entries()) {
     const kind = evidenceString(note, 'kind', 'note');
-    events.push({
+    events.push(timelineEvent({
       id: `${ticketKey}:evidence:${idx}`,
-      at: evidenceString(note, 'at') || undefined,
       source: 'evidence',
       severity: kind === 'risk' ? 'warning' : kind === 'test' ? 'success' : 'info',
       title: `${kind} evidence`,
       detail: evidenceString(note, 'text'),
-    });
+    }, { at: evidenceString(note, 'at') || undefined }));
   }
 
   const checks = evidenceChecks(ticket);
@@ -97,9 +92,8 @@ export function buildTicketTimeline(input: TicketTimelineInput): TimelineEvent[]
     const environment = evidenceString(check, 'environment');
     const summary = evidenceString(check, 'summary');
     const command = evidenceString(check, 'command');
-    events.push({
+    events.push(timelineEvent({
       id: `${ticketKey}:evidence-check:${evidenceString(check, 'id') || idx}`,
-      at: evidenceString(check, 'at') || undefined,
       source: 'evidence',
       severity: result === 'fail' ? 'failure' : result === 'pass' ? 'success' : 'warning',
       title: `Evidence check: ${evidenceString(check, 'name', 'Unnamed check')}`,
@@ -109,63 +103,74 @@ export function buildTicketTimeline(input: TicketTimelineInput): TimelineEvent[]
         summary,
         command ? `Command: ${command}` : '',
       ].filter(Boolean).join('\n'),
+    }, {
+      at: evidenceString(check, 'at') || undefined,
       url: evidenceString(check, 'artifact_path') || undefined,
-    });
+    }));
   }
 
   const environmentResults = evidenceEnvironmentResults(ticket);
   for (const result of environmentResults) {
     const environment = evidenceString(result, 'environment', 'environment');
     const status = evidenceString(result, 'status', 'unknown');
-    events.push({
+    events.push(timelineEvent({
       id: `${ticketKey}:environment:${environment}`,
-      at: evidenceString(result, 'checked_at') || undefined,
       source: 'evidence',
       severity: status === 'fail' ? 'failure' : status === 'pass' ? 'success' : 'warning',
       title: `Environment ${environment}: ${status}`,
       detail: evidenceString(result, 'detail'),
+    }, {
+      at: evidenceString(result, 'checked_at') || undefined,
       url: evidenceString(result, 'artifact_path') || undefined,
-    });
+    }));
   }
 
   if (ticket.mr) {
-    events.push({
+    events.push(timelineEvent({
       id: `${ticketKey}:mr:${ticket.mr.iid}`,
-      at: ticket.updated || ticket.last_action_at || undefined,
       source: 'mr',
       severity: ticket.mr.review_status === 'changes_requested' ? 'failure' : ticket.mr.review_status === 'approved' ? 'success' : 'warning',
       title: `MR !${ticket.mr.iid}: ${ticket.mr.state}`,
       detail: ticket.mr.review_status.replace(/_/g, ' '),
-      url: ticket.mr.url,
-    });
+    }, { at: ticket.updated || ticket.last_action_at || undefined, url: ticket.mr.url }));
   }
 
   if (ticket.build) {
-    events.push({
+    events.push(timelineEvent({
       id: `${ticketKey}:build:${ticket.build.number}`,
-      at: ticket.updated || ticket.last_action_at || undefined,
       source: 'build',
       severity: severityForBuild(ticket.build.status),
       title: `Build #${ticket.build.number}: ${ticket.build.status}`,
       detail: ticket.build.url || '',
-      url: ticket.build.url,
-    });
+    }, { at: ticket.updated || ticket.last_action_at || undefined, url: ticket.build.url }));
   }
 
   for (const run of runs.filter(r => runString(r, 'ticket') === ticketKey)) {
     const status = runString(run, 'status') || 'unknown';
-    events.push({
+    events.push(timelineEvent({
       id: `${ticketKey}:run:${runId(run)}`,
-      at: runString(run, 'endedAt') || runString(run, 'startedAt') || undefined,
       source: 'run',
       severity: severityForRun(status),
       title: `Run ${status}: ${runString(run, 'skill') || 'session'}`,
       detail: runDetail(run),
+    }, {
+      at: runString(run, 'endedAt') || runString(run, 'startedAt') || undefined,
       artifactPath: runString(run, 'logPath') || undefined,
-    });
+    }));
   }
 
   return events.sort(compareTimelineEvents);
+}
+
+function timelineEvent(
+  core: Omit<TimelineEvent, 'at' | 'url' | 'artifactPath'>,
+  refs: { at?: string | undefined; url?: string | undefined; artifactPath?: string | undefined } = {},
+): TimelineEvent {
+  const event: TimelineEvent = { ...core };
+  if (refs.at) { event.at = refs.at; }
+  if (refs.url) { event.url = refs.url; }
+  if (refs.artifactPath) { event.artifactPath = refs.artifactPath; }
+  return event;
 }
 
 function compareTimelineEvents(a: TimelineEvent, b: TimelineEvent): number {

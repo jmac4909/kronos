@@ -156,7 +156,7 @@ export function migrateStateFileShape(raw: unknown): KronosState {
   const rawTickets = isPlainObject(raw.tickets) ? raw.tickets : {};
   for (const [key, ticket] of Object.entries(rawTickets)) {
     const t = isPlainObject(ticket) ? ticket : {};
-    migrated.tickets[key] = {
+    const migratedTicket: Ticket = {
       ...(t as Partial<Ticket>),
       summary: String(t.summary || ''),
       type: String(t.type || 'Story'),
@@ -169,8 +169,14 @@ export function migrateStateFileShape(raw: unknown): KronosState {
       next_action: String(t.next_action || 'implement'),
       last_action: (t.last_action || null) as Ticket['last_action'],
       last_action_at: (t.last_action_at || null) as Ticket['last_action_at'],
-      evidence: migrateTicketEvidence(t.evidence),
     };
+    const evidence = migrateTicketEvidence(t.evidence);
+    if (evidence !== undefined) {
+      migratedTicket.evidence = evidence;
+    } else {
+      delete migratedTicket.evidence;
+    }
+    migrated.tickets[key] = migratedTicket;
   }
 
   return migrated;
@@ -179,14 +185,21 @@ export function migrateStateFileShape(raw: unknown): KronosState {
 function migrateTicketEvidence(evidence: unknown): TicketEvidence | undefined {
   if (evidence === undefined || evidence === null) { return undefined; }
   if (!isPlainObject(evidence)) { return evidence as TicketEvidence; }
-  return {
-    ...evidence,
-    notes: evidence.notes === undefined ? undefined : evidence.notes,
-    acceptance_criteria: evidence.acceptance_criteria === undefined ? undefined : evidence.acceptance_criteria,
-    checks: evidence.checks === undefined ? undefined : evidence.checks,
-    environment_results: evidence.environment_results === undefined ? undefined : evidence.environment_results,
-    risk_notes: evidence.risk_notes === undefined ? undefined : evidence.risk_notes,
-  } as TicketEvidence;
+  const migrated: TicketEvidence = { ...(evidence as TicketEvidence) };
+  if (evidence.notes === undefined) { delete migrated.notes; } else { migrated.notes = evidence.notes as NonNullable<TicketEvidence['notes']>; }
+  if (evidence.acceptance_criteria === undefined) {
+    delete migrated.acceptance_criteria;
+  } else {
+    migrated.acceptance_criteria = evidence.acceptance_criteria as NonNullable<TicketEvidence['acceptance_criteria']>;
+  }
+  if (evidence.checks === undefined) { delete migrated.checks; } else { migrated.checks = evidence.checks as NonNullable<TicketEvidence['checks']>; }
+  if (evidence.environment_results === undefined) {
+    delete migrated.environment_results;
+  } else {
+    migrated.environment_results = evidence.environment_results as NonNullable<TicketEvidence['environment_results']>;
+  }
+  if (evidence.risk_notes === undefined) { delete migrated.risk_notes; } else { migrated.risk_notes = evidence.risk_notes as NonNullable<TicketEvidence['risk_notes']>; }
+  return migrated;
 }
 
 export function migrateQueueFileShape(raw: unknown): QueueState {
@@ -900,10 +913,10 @@ function readCurrentWriteLock(): StateWriteLock | null {
   try {
     const lock = readJsonFile(STATE_WRITE_LOCK_FILE);
     if (!isPlainObject(lock)) { return null; }
-    return {
-      pid: typeof lock.pid === 'string' || typeof lock.pid === 'number' ? lock.pid : undefined,
-      action: typeof lock.action === 'string' ? lock.action : undefined,
-    };
+    const current: StateWriteLock = {};
+    if (typeof lock.pid === 'string' || typeof lock.pid === 'number') { current.pid = lock.pid; }
+    if (typeof lock.action === 'string') { current.action = lock.action; }
+    return current;
   } catch {
     return null;
   }
