@@ -2671,23 +2671,51 @@ test('run store normalizes terminal active records on read and archive', () => {
     status: 'running',
     endedAt: '2026-07-02T10:10:00.000Z',
   };
+  const logCompleted = {
+    id: 'run-terminal-log',
+    project: 'app',
+    skill: 'implement',
+    ticket: 'K-LOG',
+    status: 'running',
+    logPath: path.join(runStore.RUNS_DIR, 'run-terminal-log.log'),
+  };
+  const externalLog = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'kronos-external-run-log-')), 'external.log');
+  const unsafeLog = {
+    id: 'run-terminal-external-log',
+    project: 'app',
+    skill: 'implement',
+    ticket: 'K-EXT',
+    status: 'running',
+    logPath: externalLog,
+  };
 
   runStore.writeRunRecord(completed);
   runStore.writeRunRecord(failed);
   runStore.writeRunRecord(timestampOnly);
+  runStore.writeRunRecord(logCompleted);
+  runStore.writeRunRecord(unsafeLog);
+  runStore.appendRunLog(logCompleted.logPath, 'tool output: Session exited with code 1\n{"type":"assistant","message":{"content":[]}}\n{"type":"result","subtype":"success","result":"done"}\n');
+  fs.writeFileSync(externalLog, '{"type":"result","subtype":"success","result":"done"}\n');
 
   assert.equal(JSON.parse(fs.readFileSync(runStore.runRecordPath(completed.id), 'utf8')).status, 'running');
   const completedRead = runStore.readRunRecord(completed.id);
   const failedRead = runStore.readRunRecord(failed.id);
   const timestampOnlyRead = runStore.readRunRecord(timestampOnly.id);
+  const logCompletedRead = runStore.readRunRecord(logCompleted.id);
+  const unsafeLogRead = runStore.readRunRecord(unsafeLog.id);
   assert.equal(completedRead.status, 'completed');
   assert.equal(failedRead.status, 'failed');
   assert.equal(failedRead.failureKind, 'unknown');
   assert.equal(timestampOnlyRead.status, 'needs_human');
   assert.match(timestampOnlyRead.failureReason, /terminal metadata/);
+  assert.equal(logCompletedRead.status, 'completed');
+  assert.ok(logCompletedRead.endedAt);
+  assert.equal(unsafeLogRead.status, 'running');
   assert.equal(JSON.parse(fs.readFileSync(runStore.runRecordPath(completed.id), 'utf8')).status, 'completed');
   assert.equal(JSON.parse(fs.readFileSync(runStore.runRecordPath(failed.id), 'utf8')).status, 'failed');
   assert.equal(JSON.parse(fs.readFileSync(runStore.runRecordPath(timestampOnly.id), 'utf8')).status, 'needs_human');
+  assert.equal(JSON.parse(fs.readFileSync(runStore.runRecordPath(logCompleted.id), 'utf8')).status, 'completed');
+  assert.equal(JSON.parse(fs.readFileSync(runStore.runRecordPath(unsafeLog.id), 'utf8')).status, 'running');
 
   const archived = runStore.archiveRun(failed.id);
   const archivedRun = JSON.parse(fs.readFileSync(archived.runPath, 'utf8'));

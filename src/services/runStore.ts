@@ -210,17 +210,99 @@ function readRunFileResult(filePath: string, scope: RunStoreIssue['scope']): { r
 function normalizeTerminalActiveRun(run: RunRecord): RunRecord {
   const status = typeof run.status === 'string' ? run.status : '';
   const effectiveStatus = effectiveRunStatus(run);
-  if (!status || !isActiveRunStatus(status) || !effectiveStatus || effectiveStatus === status) {
+  const repairedStatus = effectiveStatus === status && isActiveRunStatus(status)
+    ? terminalRunOutcomeFromActiveLog(run)
+    : undefined;
+  const nextStatus = repairedStatus || effectiveStatus;
+  if (!status || !isActiveRunStatus(status) || !nextStatus || nextStatus === status) {
     return run;
   }
-  const normalized: RunRecord = { ...run, status: effectiveStatus };
-  if (effectiveStatus === 'needs_human' && !normalized.failureReason) {
+  const normalized: RunRecord = { ...run, status: nextStatus };
+  if (nextStatus === 'needs_human' && !normalized.failureReason) {
     normalized.failureReason = `Run record had terminal metadata while persisted status was ${status}; inspect the run before retrying.`;
   }
-  if ((effectiveStatus === 'failed' || effectiveStatus === 'cancelled') && !normalized.failureKind) {
-    normalized.failureKind = effectiveStatus === 'cancelled' ? 'cancelled' : 'unknown';
+  if (repairedStatus && !normalized.endedAt) {
+    normalized.endedAt = logModifiedAt(run.logPath);
+  }
+  if (repairedStatus === 'failed' && !normalized.failureReason) {
+    normalized.failureReason = `Run log indicates the session exited unsuccessfully while persisted status was ${status}.`;
+  } else if (repairedStatus === 'cancelled' && !normalized.failureReason) {
+    normalized.failureReason = `Run log indicates the session was cancelled while persisted status was ${status}.`;
+  }
+  if ((nextStatus === 'failed' || nextStatus === 'cancelled') && !normalized.failureKind) {
+    normalized.failureKind = nextStatus === 'cancelled' ? 'cancelled' : 'unknown';
   }
   return normalized;
+}
+
+function terminalRunOutcomeFromActiveLog(run: RunRecord): string | undefined {
+  const logPath = typeof run.logPath === 'string' ? run.logPath : '';
+  if (!isReadableActiveRunLog(logPath)) { return undefined; }
+  const tail = readLogTail(logPath);
+  for (const line of tail.split(/\r?\n/).reverse()) {
+    const trimmed = line.trim();
+    const explicitOutcome = explicitLogTerminalLineOutcome(trimmed);
+    if (explicitOutcome) { return explicitOutcome; }
+    if (!trimmed.startsWith('{')) { continue; }
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (isRecord(parsed) && parsed.type === 'result') {
+        const subtype = stringField(parsed.subtype).toLowerCase();
+        return parsed.is_error === true || subtype.includes('error') || subtype.includes('fail')
+          ? 'failed'
+          : 'completed';
+      }
+    } catch {
+      // Ignore non-JSON log lines and keep scanning for the last terminal stream event.
+    }
+  }
+  return undefined;
+}
+
+function explicitLogTerminalLineOutcome(line: string): string | undefined {
+  if (/Session cancelled/i.test(line)) { return 'cancelled'; }
+  const exited = /Session exited with code\s+(\d+)/i.exec(line);
+  if (exited) {
+    return Number(exited[1]) === 0 ? 'completed' : 'failed';
+  }
+  return /Session complete/i.test(line) ? 'completed' : undefined;
+}
+
+function isReadableActiveRunLog(logPath: string): boolean {
+  if (!logPath || !isPathInside(logPath, RUNS_DIR) || isPathInside(logPath, ARCHIVED_RUNS_DIR)) {
+    return false;
+  }
+  try {
+    return fs.statSync(logPath).isFile();
+  } catch {
+    return false;
+  }
+}
+
+function readLogTail(logPath: string, maxBytes = 64 * 1024): string {
+  const stat = fs.statSync(logPath);
+  const start = Math.max(0, stat.size - maxBytes);
+  const fd = fs.openSync(logPath, 'r');
+  try {
+    const buffer = Buffer.alloc(stat.size - start);
+    fs.readSync(fd, buffer, 0, buffer.length, start);
+    return buffer.toString('utf8');
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+function logModifiedAt(logPath: unknown): string | undefined {
+  if (typeof logPath !== 'string' || !isReadableActiveRunLog(logPath)) { return undefined; }
+  return fs.statSync(logPath).mtime.toISOString();
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
+}
+
+function stringField(value: unknown): string {
+  return typeof value === 'string' || typeof value === 'number' ? String(value) : '';
 }
 
 function normalizeRunFile(run: RunRecord, filePath: string, scope: RunStoreIssue['scope']): RunRecord {
