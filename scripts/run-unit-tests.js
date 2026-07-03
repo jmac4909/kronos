@@ -5297,7 +5297,7 @@ test('integration adapters wrap selected Jira, GitLab, and Sonar script contract
       if (args[0] === '--ticket-comments') {
         return '[{"body":"ok"}]';
       }
-      if (args[0] === '--mr-diff') {
+      if (args[0] === '--mr-diff' || args[0] === '--mr-status') {
         return JSON.stringify({
           mr: {
             title: 'Fix it',
@@ -5347,8 +5347,57 @@ test('integration adapters wrap selected Jira, GitLab, and Sonar script contract
     ['--ticket-comments', 'K-7'],
     ['--mr-diff', 'K-7'],
     ['--mr-branch', 'K-7'],
-    ['--mr-diff', 'K-7'],
+    ['--mr-status', 'K-7'],
   ]);
+  const fallbackCalls = [];
+  const fallbackStatus = await integrationAdapters.gitlabAdapter.mergeRequestStatus({
+    async runScript(args) {
+      fallbackCalls.push(args);
+      if (args[0] === '--mr-status') {
+        throw new Error('gitlab_api.py --mr-status K-8 failed: unrecognized arguments: --mr-status');
+      }
+      return JSON.stringify({ mr: { state: 'closed', review_status: 'changes_requested', web_url: 'https://gitlab.example/mr/8' } });
+    },
+  }, 'K-8');
+  assert.equal(fallbackStatus.state, 'closed');
+  assert.equal(fallbackStatus.review_status, 'changes_requested');
+  assert.deepEqual(fallbackCalls, [
+    ['--mr-status', 'K-8'],
+    ['--mr-diff', 'K-8'],
+  ]);
+  const stdoutFallbackCalls = [];
+  const stdoutFallbackStatus = await integrationAdapters.gitlabAdapter.mergeRequestStatus({
+    async runScript(args) {
+      stdoutFallbackCalls.push(args);
+      if (args[0] === '--mr-status') {
+        return 'usage: gitlab_api.py [-h]\nerror: unrecognized arguments: --mr-status K-9';
+      }
+      return JSON.stringify({ mr: { state: 'merged', approved: true } });
+    },
+  }, 'K-9');
+  assert.equal(stdoutFallbackStatus.state, 'merged');
+  assert.equal(stdoutFallbackStatus.review_status, 'approved');
+  assert.deepEqual(stdoutFallbackCalls, [
+    ['--mr-status', 'K-9'],
+    ['--mr-diff', 'K-9'],
+  ]);
+  await assert.rejects(
+    () => integrationAdapters.gitlabAdapter.mergeRequestStatus({
+      runScript: async () => JSON.stringify({ error: 'not found' }),
+    }, 'K-404'),
+    /not found/
+  );
+  await assert.rejects(
+    () => integrationAdapters.gitlabAdapter.mergeRequestStatus({
+      async runScript(args) {
+        if (args[0] === '--mr-status') {
+          throw new Error('gitlab_api.py --mr-status K-500 failed: upstream timeout');
+        }
+        return JSON.stringify({ mr: { state: 'merged' } });
+      },
+    }, 'K-500'),
+    /upstream timeout/
+  );
   assert.deepEqual(integrationAdapters.normalizeJiraComments({
     comments: [
       'plain text',
@@ -5507,6 +5556,11 @@ test('integration adapters keep raw provider payloads unknown until normalized',
     'catch (e: unknown)',
     'function isRecord(value: unknown): value is Record<string, unknown>',
     "import { unknownErrorMessage } from './errorUtils'",
+    'async function runMergeRequestStatusJson',
+    "runner.runScript(['--mr-status', ticketKey], options)",
+    "runner.runScript(['--mr-diff', ticketKey], options)",
+    'function isUnsupportedMergeRequestStatusCommand',
+    'function isUnsupportedMergeRequestStatusText',
   ]) {
     assert.ok(source.includes(marker), marker);
   }

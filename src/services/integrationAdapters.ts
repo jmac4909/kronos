@@ -97,7 +97,7 @@ export const gitlabAdapter = {
   },
 
   async mergeRequestStatus(runner: KronosScriptRunner, ticketKey: string, options: ScriptRunOptions = {}): Promise<MergeRequestStatusResult> {
-    const parsed = parseJson(await runner.runScript(['--mr-diff', ticketKey], options), `MR status for ${ticketKey}`);
+    const parsed = await runMergeRequestStatusJson(runner, ticketKey, options);
     const data = isRecord(parsed) ? parsed : {};
     if (data['error']) {
       throw new Error(String(data['error']));
@@ -266,6 +266,32 @@ export function normalizeMergeRequestStatus(value: unknown): MergeRequestStatusR
     }
   }
   return status;
+}
+
+async function runMergeRequestStatusJson(runner: KronosScriptRunner, ticketKey: string, options: ScriptRunOptions): Promise<unknown> {
+  try {
+    const raw = await runner.runScript(['--mr-status', ticketKey], options);
+    const trimmed = raw.trim();
+    if (trimmed && !/^[{\[]/.test(trimmed) && isUnsupportedMergeRequestStatusText(trimmed)) {
+      throw new Error(trimmed);
+    }
+    return parseJson(raw, `MR status for ${ticketKey}`);
+  } catch (e: unknown) {
+    if (!isUnsupportedMergeRequestStatusCommand(e)) {
+      throw e;
+    }
+  }
+  return parseJson(await runner.runScript(['--mr-diff', ticketKey], options), `MR status fallback for ${ticketKey}`);
+}
+
+function isUnsupportedMergeRequestStatusCommand(error: unknown): boolean {
+  return isUnsupportedMergeRequestStatusText(unknownErrorMessage(error, ''));
+}
+
+function isUnsupportedMergeRequestStatusText(value: string): boolean {
+  const message = value.toLowerCase();
+  return message.includes('--mr-status')
+    && /(unrecognized|unknown|unsupported|not implemented|no such option|invalid choice)/.test(message);
 }
 
 export function normalizeMergeRequestComments(value: unknown): MergeRequestComment[] {
