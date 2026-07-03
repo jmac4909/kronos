@@ -22,6 +22,70 @@ function mockCommandLine(command, args) {
   return [mockCommandName(command), ...args].join(' ');
 }
 
+function createVscodeTestModule() {
+  class EventEmitter {
+    constructor() {
+      this.listeners = [];
+      this.event = (listener) => {
+        this.listeners.push(listener);
+        return { dispose: () => { this.listeners = this.listeners.filter(item => item !== listener); } };
+      };
+    }
+    fire(value) { this.listeners.forEach(listener => listener(value)); }
+    dispose() { this.listeners = []; }
+  }
+  class TreeItem {
+    constructor(label, collapsibleState) {
+      this.label = label;
+      this.collapsibleState = collapsibleState;
+    }
+  }
+  class ThemeColor {
+    constructor(id) { this.id = id; }
+  }
+  class ThemeIcon {
+    constructor(id, color) {
+      this.id = id;
+      this.color = color;
+    }
+  }
+  class MarkdownString {
+    constructor(value) { this.value = value; }
+  }
+  return {
+    vscode: {
+      EventEmitter,
+      TreeItem,
+      ThemeColor,
+      ThemeIcon,
+      MarkdownString,
+      TreeItemCollapsibleState: { None: 0 },
+    },
+    EventEmitter,
+    TreeItem,
+    ThemeColor,
+    ThemeIcon,
+    MarkdownString,
+  };
+}
+
+async function withPatchedModuleLoad(resolveReplacement, callback) {
+  const Module = require('node:module');
+  const originalLoad = Module._load;
+  Module._load = function patchedLoad(request, parent, isMain) {
+    const replacement = resolveReplacement(request);
+    if (replacement !== undefined) {
+      return replacement;
+    }
+    return originalLoad.call(this, request, parent, isMain);
+  };
+  try {
+    return await callback();
+  } finally {
+    Module._load = originalLoad;
+  }
+}
+
 const promptManager = require('../out/services/promptManager.js');
 const stateStore = require('../out/services/stateStore.js');
 const queuePlanner = require('../out/services/queuePlanner.js');
@@ -6866,8 +6930,6 @@ test('tree providers share action labels and icons', () => {
 });
 
 test('queue tree polling clears active-run decorations after runs finish', async () => {
-  const Module = require('node:module');
-  const originalLoad = Module._load;
   let runs = [{
     id: 'run-1',
     status: 'running',
@@ -6876,52 +6938,16 @@ test('queue tree polling clears active-run decorations after runs finish', async
     skill: 'implement',
     startedAt: '2026-07-01T00:00:00.000Z',
   }];
-  class EventEmitter {
-    constructor() {
-      this.listeners = [];
-      this.event = (listener) => {
-        this.listeners.push(listener);
-        return { dispose: () => { this.listeners = this.listeners.filter(item => item !== listener); } };
-      };
-    }
-    fire(value) { this.listeners.forEach(listener => listener(value)); }
-    dispose() { this.listeners = []; }
-  }
-  class TreeItem {
-    constructor(label, collapsibleState) {
-      this.label = label;
-      this.collapsibleState = collapsibleState;
-    }
-  }
-  class ThemeColor {
-    constructor(id) { this.id = id; }
-  }
-  class ThemeIcon {
-    constructor(id, color) {
-      this.id = id;
-      this.color = color;
-    }
-  }
-  class MarkdownString {
-    constructor(value) { this.value = value; }
-  }
-  Module._load = function patchedLoad(request, parent, isMain) {
+  const vscodeStub = createVscodeTestModule();
+  await withPatchedModuleLoad(request => {
     if (request === 'vscode') {
-      return {
-        EventEmitter,
-        TreeItem,
-        ThemeColor,
-        ThemeIcon,
-        MarkdownString,
-        TreeItemCollapsibleState: { None: 0 },
-      };
+      return vscodeStub.vscode;
     }
     if (request.endsWith('/runners/sessionDispatcher') || request.endsWith('\\runners\\sessionDispatcher') || request === '../runners/sessionDispatcher') {
       return { listRuns: () => runs };
     }
-    return originalLoad.call(this, request, parent, isMain);
-  };
-  try {
+    return undefined;
+  }, async () => {
     const queueTreePath = require.resolve('../out/views/QueueTreeProvider.js');
     delete require.cache[queueTreePath];
     const { QueueTreeProvider } = require(queueTreePath);
@@ -6949,30 +6975,18 @@ test('queue tree polling clears active-run decorations after runs finish', async
     eventSubscription.dispose();
     provider.dispose();
     assert.equal(fired > 0, true, 'queue tree should refresh once after the last active run disappears');
-  } finally {
-    Module._load = originalLoad;
-  }
+  });
 });
 
-test('action icon helpers preserve ticket and queue icon semantics', () => {
-  const Module = require('node:module');
-  const originalLoad = Module._load;
-  class ThemeColor {
-    constructor(id) { this.id = id; }
-  }
-  class ThemeIcon {
-    constructor(id, color) {
-      this.id = id;
-      this.color = color;
-    }
-  }
-  Module._load = function patchedLoad(request, parent, isMain) {
+test('action icon helpers preserve ticket and queue icon semantics', async () => {
+  const vscodeStub = createVscodeTestModule();
+  const { ThemeColor, ThemeIcon } = vscodeStub;
+  await withPatchedModuleLoad(request => {
     if (request === 'vscode') {
-      return { ThemeColor, ThemeIcon };
+      return vscodeStub.vscode;
     }
-    return originalLoad.call(this, request, parent, isMain);
-  };
-  try {
+    return undefined;
+  }, async () => {
     const actionIconsPath = require.resolve('../out/views/actionIcons.js');
     delete require.cache[actionIconsPath];
     const actionIcons = require(actionIconsPath);
@@ -7002,9 +7016,7 @@ test('action icon helpers preserve ticket and queue icon semantics', () => {
       actionIcons.themeIcon({ id: 'rocket', color: new ThemeColor('charts.blue') }),
       new ThemeIcon('rocket', new ThemeColor('charts.blue')),
     );
-  } finally {
-    Module._load = originalLoad;
-  }
+  });
 });
 
 test('trend metrics report rework, build pass, verification pass, and cycle time', () => {
