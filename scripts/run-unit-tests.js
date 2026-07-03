@@ -89,6 +89,7 @@ async function withPatchedModuleLoad(resolveReplacement, callback) {
 const promptManager = require('../out/services/promptManager.js');
 const stateStore = require('../out/services/stateStore.js');
 const queuePlanner = require('../out/services/queuePlanner.js');
+const actionSemantics = require('../out/services/actionSemantics.js');
 const evidenceStore = require('../out/services/evidenceStore.js');
 const evidenceHandoff = require('../out/services/evidenceHandoff.js');
 const evidencePublisher = require('../out/services/evidencePublisher.js');
@@ -2456,6 +2457,18 @@ test('queue planner records decisions, filters suppressed plans, and selects pla
   const overnight = queuePlanner.overnightCandidatePlans(initialPlans);
   assert.ok(overnight.every(plan => ['implement', 'in_progress', 'fix_build'].includes(plan.action)));
   assert.ok(overnight.every(plan => plan.projects.length > 0));
+});
+
+test('action semantics centralize code and handoff action groups', () => {
+  assert.equal(actionSemantics.isCodeAction('implement'), true);
+  assert.equal(actionSemantics.isCodeAction('in_progress'), true);
+  assert.equal(actionSemantics.isCodeAction('fix_build'), true);
+  assert.equal(actionSemantics.isCodeAction('verify'), false);
+  assert.equal(actionSemantics.isProofSensitiveAction('await_review'), true);
+  assert.equal(actionSemantics.isProofSensitiveAction('done'), true);
+  assert.equal(actionSemantics.isReviewReadyAction('deploy_monitor'), true);
+  assert.equal(actionSemantics.isHandoffAction('done'), true);
+  assert.equal(actionSemantics.isHandoffAction(undefined), false);
 });
 
 test('queue planner builds backlog triage report for grooming lanes', () => {
@@ -5896,6 +5909,7 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     "import { describeMergeRequestStatusChange } from './services/mergeRequestNotifications'",
     "import { buildEvidenceGateHtml, buildEvidenceHandoffHtml, buildEvidencePublishHtml } from './services/evidencePanelView'",
     "import { buildBacklogTriageHtml, buildCollisionReportHtml, buildProjectBatchPlanHtml, buildQueuePlanModeHtml, buildQueuePlannerHtml, buildReleaseBatchPlanHtml } from './services/queuePlannerPanelView'",
+    "import { isCodeAction, isProofSensitiveAction } from './services/actionSemantics'",
     "import { createWebviewReadyMonitor } from './services/webviewDiagnostics'",
     'const nonce = createWebviewNonce()',
     'webviewScriptCspOptions(panel.webview.cspSource, nonce)',
@@ -5961,7 +5975,8 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     "openEvidenceGatePanel(state, evidenceGatePanelGatesForState(state), 'Kronos Evidence Gate', { refreshAllEvidenceGates: true })",
     'options.refreshAllEvidenceGates',
     'function evidenceGatePanelGatesForState(state: KronosState): EvidenceGateResult[]',
-    'function isProofSensitiveAction',
+    'isProofSensitiveAction(currentState.tickets[gate.ticketKey]?.next_action)',
+    'isCodeAction(target.action)',
     'function openInteractiveRunCenter',
     'function executeRunCenterAction',
     'async function archiveFinishedRuns',

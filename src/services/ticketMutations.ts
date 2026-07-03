@@ -10,6 +10,7 @@ import {
   TicketEnvironmentResult,
 } from '../state/types';
 import { STATE_FILE, readStateFile, validateStateFileShape, writeJsonFileAtomic } from './stateStore';
+import { isReviewReadyAction } from './actionSemantics';
 import { setAcceptanceCriteriaChecked } from './acceptanceCriteria';
 import { decideEvidenceHandoff } from './evidenceGatePolicy';
 
@@ -253,7 +254,7 @@ export function previewLinkMergeRequestToTicket(state: KronosState, input: LinkM
     targetTicketKey: input.targetTicketKey,
     ticket,
     removesOrphan: input.orphanKey !== input.targetTicketKey,
-    reviewReady: ['await_review', 'verify', 'deploy_monitor', 'done'].includes(ticket.next_action),
+    reviewReady: isReviewReadyAction(ticket.next_action),
   };
 }
 

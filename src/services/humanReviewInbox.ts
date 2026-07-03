@@ -1,4 +1,5 @@
 import { KronosState, QueueState } from '../state/types';
+import { isReviewReadyAction } from './actionSemantics';
 import { RecoveryCheck, RecoveryWorktreeReport } from './recoveryCenter';
 import { evaluateEvidenceGate } from './evidenceGate';
 import { runAttentionDetail } from './runAttention';
@@ -39,7 +40,6 @@ export interface HumanReviewInbox {
   items: HumanReviewItem[];
 }
 
-const REVIEW_READY_ACTIONS = new Set(['await_review', 'verify', 'deploy_monitor', 'done']);
 type HumanReviewRunRecord = HumanReviewRun & Record<string, unknown>;
 
 export function buildHumanReviewInbox(input: HumanReviewInboxInput): HumanReviewInbox {
@@ -68,7 +68,7 @@ export function buildHumanReviewInbox(input: HumanReviewInboxInput): HumanReview
     if (ticket.next_action === 'blocked') {
       items.push(ticketItem(ticketKey, 'ticket', 'critical', `${ticketKey} is blocked`, ticket.last_action || ticket.summary));
     }
-    if (REVIEW_READY_ACTIONS.has(ticket.next_action)) {
+    if (isReviewReadyAction(ticket.next_action)) {
       const gate = evaluateEvidenceGate(ticketKey, ticket);
       for (const check of gate.checks.filter(check => check.status !== 'pass')) {
         items.push(ticketItem(

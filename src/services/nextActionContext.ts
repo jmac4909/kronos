@@ -1,5 +1,6 @@
 import { KronosState, QueueState, Ticket } from '../state/types';
 import { actionToLabel } from './actionLabels';
+import { isCodeAction, isProofSensitiveAction } from './actionSemantics';
 import { evidenceRecordCount } from './evidenceData';
 import { PlannedAction } from './queuePlanner';
 import { SafetyPlan, SafetyRisk } from './safetyGate';
@@ -26,9 +27,6 @@ export interface NextActionStartDecision {
   safetyPlan?: SafetyPlan;
   refreshProjects: string[];
 }
-
-const CODE_ACTIONS = new Set(['implement', 'in_progress', 'fix_build']);
-const PROOF_SENSITIVE_ACTIONS = new Set(['verify', 'await_review', 'deploy_monitor', 'done']);
 
 export function buildNextActionContext(plan: PlannedAction, input: NextActionContextInput): NextActionOperationalContext {
   const ticket = plan.ticketKey ? input.state?.tickets?.[plan.ticketKey] : undefined;
@@ -121,7 +119,7 @@ function risksForPlan(plan: PlannedAction): SafetyRisk[] {
   if (plan.action === 'refresh') {
     return ['read-only'];
   }
-  if (CODE_ACTIONS.has(plan.action)) {
+  if (isCodeAction(plan.action)) {
     return ['repo-write'];
   }
   if (plan.action === 'deploy_monitor') {
@@ -144,10 +142,10 @@ function preflightForPlan(plan: PlannedAction, ticket: Ticket | undefined): stri
   if (plan.projects.length > 0) {
     checks.push(`Project link resolved: ${plan.projects.join(', ')}.`);
   }
-  if (CODE_ACTIONS.has(plan.action)) {
+  if (isCodeAction(plan.action)) {
     checks.push('Collision detector checks active runs, queued work, open MRs, and likely touched files.');
   }
-  if (PROOF_SENSITIVE_ACTIONS.has(plan.action)) {
+  if (isProofSensitiveAction(plan.action)) {
     const evidenceCount = evidenceRecordCount(ticket);
     checks.push(evidenceCount > 0
       ? `Evidence ledger has ${evidenceCount} item(s).`

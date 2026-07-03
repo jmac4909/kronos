@@ -49,6 +49,7 @@ const runProgress = readSource('src/services/runProgress.ts');
 const runCenterSort = readSource('src/services/runCenterSort.ts');
 const attentionBadge = readSource('src/services/attentionBadge.ts');
 const queuePlanner = readSource('src/services/queuePlanner.ts');
+const actionSemantics = readSource('src/services/actionSemantics.ts');
 const queuePlannerPanelView = sources['src/services/queuePlannerPanelView.ts'];
 const operationsReportPanelView = sources['src/services/operationsReportPanelView.ts'];
 const agentQualityScore = readSource('src/services/agentQualityScore.ts');
@@ -247,6 +248,7 @@ for (const marker of [
   "${webviewVsCodeApiScript('Kronos Jira Board')}",
   "${webviewReadyPostScript('Kronos Jira Board')}",
   "import { createWebviewReadyMonitor } from './services/webviewDiagnostics'",
+  "import { isCodeAction, isProofSensitiveAction } from './services/actionSemantics'",
   "const logReady = createWebviewReadyMonitor(panel, 'Kronos Jira Board')",
   'if (logReady(msg)) { return; }',
   'BOARD_MESSAGE_COMMANDS',
@@ -361,7 +363,8 @@ for (const marker of [
   "openEvidenceGatePanel(state, evidenceGatePanelGatesForState(state), 'Kronos Evidence Gate', { refreshAllEvidenceGates: true })",
   'options.refreshAllEvidenceGates',
   'function evidenceGatePanelGatesForState(state: KronosState): EvidenceGateResult[]',
-  'function isProofSensitiveAction',
+  'isProofSensitiveAction(currentState.tickets[gate.ticketKey]?.next_action)',
+  'isCodeAction(target.action)',
   'kronos.evidenceHandoff',
   'openEvidenceHandoffPanel',
   'kronos.publishEvidence',
@@ -1570,6 +1573,38 @@ if (scriptClient.includes('} catch {}')) {
 }
 
 for (const marker of [
+  "const CODE_ACTIONS = new Set(['implement', 'in_progress', 'fix_build'])",
+  "const PROOF_SENSITIVE_ACTIONS = new Set(['await_review', 'verify', 'deploy_monitor', 'done'])",
+  'export function isCodeAction',
+  'export function isProofSensitiveAction',
+  'export function isReviewReadyAction',
+  'export function isHandoffAction',
+]) {
+  if (!actionSemantics.includes(marker)) {
+    fail(`Missing action semantics marker: ${marker}`);
+  }
+}
+
+for (const [name, source, marker] of [
+  ['src/extension.ts', extension, 'const CODE_COLLISION_ACTIONS'],
+  ['src/extension.ts', extension, "['implement', 'in_progress', 'fix_build'].includes"],
+  ['src/extension.ts', extension, 'function isProofSensitiveAction'],
+  ['src/services/collisionDetector.ts', collisionDetector, "const CODE_ACTIONS = new Set(['implement'"],
+  ['src/services/nextActionContext.ts', nextActionContext, "const CODE_ACTIONS = new Set(['implement'"],
+  ['src/services/nextActionContext.ts', nextActionContext, 'const PROOF_SENSITIVE_ACTIONS = new Set'],
+  ['src/services/evidenceGate.ts', evidenceGate, 'const REVIEW_READY_ACTIONS'],
+  ['src/services/humanReviewInbox.ts', humanReviewInbox, 'const REVIEW_READY_ACTIONS'],
+  ['src/services/postRunReadiness.ts', postRunReadiness, 'const HANDOFF_ACTIONS'],
+  ['src/services/queuePlanner.ts', queuePlanner, 'const overnightActions'],
+  ['src/services/ticketMutations.ts', ticketMutations, "['await_review', 'verify', 'deploy_monitor', 'done'].includes"],
+  ['src/services/agentQualityScore.ts', agentQualityScore, "['await_review', 'verify', 'deploy_monitor', 'done'].includes"],
+]) {
+  if (source.includes(marker)) {
+    fail(`${name} must use actionSemantics instead of local action set marker: ${marker}`);
+  }
+}
+
+for (const marker of [
   'export function runStateScript',
   'export function refreshKronosState',
   'export function discoverProjects',
@@ -1601,6 +1636,7 @@ for (const marker of [
   'export function buildNextActionContext',
   'export function buildNextActionStartDecision',
   'export function skillForAction',
+  "import { isCodeAction, isProofSensitiveAction } from './actionSemantics'",
   'commandLabel',
   'risks',
   'preflight',
@@ -2248,7 +2284,8 @@ for (const marker of [
 for (const marker of [
   'export function buildHumanReviewInbox',
   'duplicateQueuedTickets',
-  'REVIEW_READY_ACTIONS',
+  "import { isReviewReadyAction } from './actionSemantics'",
+  'isReviewReadyAction(ticket.next_action)',
   'needs_human',
   "status === 'cancelled'",
   'type HumanReviewRunRecord = HumanReviewRun & Record<string, unknown>',
@@ -2267,7 +2304,8 @@ if (humanReviewInbox.includes('type HumanReviewRunRecord = HumanReviewRun & Reco
 for (const marker of [
   'export function evaluateEvidenceGate',
   'export function evaluateEvidenceGates',
-  'REVIEW_READY_ACTIONS',
+  "import { isReviewReadyAction } from './actionSemantics'",
+  'const reviewReady = isReviewReadyAction(ticket.next_action)',
   'No evidence records',
   'evidenceRecordCount, evidenceString',
   'const evidenceCount = evidenceRecordCount(ticket)',
@@ -2349,9 +2387,11 @@ for (const marker of [
 
 for (const marker of [
   'recent_file',
+  "import { isCodeAction } from './actionSemantics'",
   "import { isActiveRun } from './runStatus'",
   'ticket_area',
   'mr_file',
+  'const codeAction = isCodeAction(input.action)',
   "STALEABLE_ACTIVE_RUN_STATUSES = new Set(['queued', 'preflight', 'running'])",
   'staleActiveRunHours?: number',
   'const staleActiveRunHours = input.staleActiveRunHours ?? 12',
@@ -2412,6 +2452,8 @@ for (const marker of [
   'planByRelease',
   'releaseFromLabel',
   'summarizePlanActions',
+  "import { isCodeAction } from './actionSemantics'",
+  'isCodeAction(plan.action)',
   "import { evidenceRecordCount } from './evidenceData'",
   'evidenceRecordCount(ticket)',
 ]) {
@@ -2725,7 +2767,8 @@ for (const marker of [
   'function isPassingBuild',
   'function isPassingSonar',
   'export function classifyRunFailure(run: unknown): RunFailureKind',
-  'HANDOFF_ACTIONS',
+  "import { isHandoffAction } from './actionSemantics'",
+  'isHandoffAction(input.ticket.next_action)',
   'SUCCESS_RUN_STATUSES',
   'claude cli',
   'exitCode === 124',

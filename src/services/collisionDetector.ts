@@ -1,4 +1,5 @@
 import { MergeRequestChangedFile, QueueState, Ticket } from '../state/types';
+import { isCodeAction } from './actionSemantics';
 import { changedFilePaths } from './changedFiles';
 import { isActiveRun } from './runStatus';
 
@@ -38,13 +39,12 @@ export interface DispatchCollision {
   detail: string;
 }
 
-const CODE_ACTIONS = new Set(['implement', 'in_progress', 'fix_build']);
 const STALEABLE_ACTIVE_RUN_STATUSES = new Set(['queued', 'preflight', 'running']);
 
 export function detectDispatchCollisions(input: DispatchCollisionInput): DispatchCollision[] {
   const targetProjects = new Set((input.projects || []).filter(Boolean));
   const ticketKey = input.ticketKey || '';
-  const isCodeAction = CODE_ACTIONS.has(input.action);
+  const codeAction = isCodeAction(input.action);
   const now = input.now || new Date();
   const recentRunHours = input.recentRunHours || 48;
   const staleActiveRunHours = input.staleActiveRunHours ?? 12;
@@ -65,7 +65,7 @@ export function detectDispatchCollisions(input: DispatchCollisionInput): Dispatc
       });
       continue;
     }
-    if (isActive && run.project && targetProjects.has(run.project) && isCodeAction) {
+    if (isActive && run.project && targetProjects.has(run.project) && codeAction) {
       collisions.push({
         id: `run-project:${run.id}`,
         kind: 'active_run',
@@ -76,7 +76,7 @@ export function detectDispatchCollisions(input: DispatchCollisionInput): Dispatc
     }
     const editedFiles = editedFilesForRun(run);
     if (
-      isCodeAction &&
+      codeAction &&
       run.project &&
       targetProjects.has(run.project) &&
       run.ticket !== ticketKey &&
@@ -105,7 +105,7 @@ export function detectDispatchCollisions(input: DispatchCollisionInput): Dispatc
       });
       continue;
     }
-    if (isCodeAction && item.projects?.some(project => targetProjects.has(project)) && CODE_ACTIONS.has(item.action)) {
+    if (codeAction && item.projects?.some(project => targetProjects.has(project)) && isCodeAction(item.action)) {
       collisions.push({
         id: `queue-project:${item.id}`,
         kind: 'queued_project',
@@ -115,7 +115,7 @@ export function detectDispatchCollisions(input: DispatchCollisionInput): Dispatc
       });
     }
     const queuedTicket = item.ticket ? input.tickets?.[item.ticket] : undefined;
-    if (isCodeAction && item.ticket && item.ticket !== ticketKey && queuedTicket) {
+    if (codeAction && item.ticket && item.ticket !== ticketKey && queuedTicket) {
       const overlap = sharedAreaTokens(targetArea, ticketAreaTokens(queuedTicket));
       if (overlap.length > 0 && item.projects?.some(project => targetProjects.has(project))) {
         collisions.push({
@@ -129,7 +129,7 @@ export function detectDispatchCollisions(input: DispatchCollisionInput): Dispatc
     }
   }
 
-  if (isCodeAction) {
+  if (codeAction) {
     for (const [otherKey, ticket] of Object.entries(input.tickets || {})) {
       if (otherKey === ticketKey || !ticket.mr || ticket.mr.state !== 'opened') { continue; }
       if (!ticket.projects?.some(project => targetProjects.has(project))) { continue; }

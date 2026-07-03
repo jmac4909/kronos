@@ -1,4 +1,5 @@
 import { Ticket } from '../state/types';
+import { isReviewReadyAction } from './actionSemantics';
 import { RunRecord } from './runStore';
 import { evaluateEvidenceGates } from './evidenceGate';
 import { isActiveRun } from './runStatus';
@@ -42,7 +43,7 @@ export function computeAgentQualityScore(input: {
   const gates = evaluateEvidenceGates(tickets);
   const reviewRelevantGates = gates.filter(gate => {
     const action = tickets[gate.ticketKey]?.next_action;
-    return typeof action === 'string' && ['await_review', 'verify', 'deploy_monitor', 'done'].includes(action);
+    return isReviewReadyAction(action);
   });
   const gatePasses = reviewRelevantGates.filter(gate => gate.status === 'pass').length;
   const gateFailures = reviewRelevantGates.filter(gate => gate.status === 'fail').length;

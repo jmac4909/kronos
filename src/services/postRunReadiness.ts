@@ -1,4 +1,5 @@
 import { Ticket } from '../state/types';
+import { isHandoffAction } from './actionSemantics';
 import { EvidenceGateResult, evaluateEvidenceGate } from './evidenceGate';
 import { evidenceNotes } from './evidenceData';
 import { runProgressSummary } from './runProgress';
@@ -35,7 +36,6 @@ export interface PostRunTicketResolution {
   ticket?: Ticket;
 }
 
-const HANDOFF_ACTIONS = new Set(['await_review', 'verify', 'deploy_monitor', 'done']);
 const SUCCESS_RUN_STATUSES = new Set(['completed', 'waiting_for_review']);
 
 export function resolvePostRunTicket(input: {
@@ -185,7 +185,7 @@ export function evaluatePostRunReadiness(input: {
     };
   }
 
-  if (!HANDOFF_ACTIONS.has(input.ticket.next_action)) {
+  if (!isHandoffAction(input.ticket.next_action)) {
     return {
       evaluatedAt: now.toISOString(),
       ticketKey: input.ticketKey,

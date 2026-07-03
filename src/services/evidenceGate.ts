@@ -1,5 +1,6 @@
 import { Ticket } from '../state/types';
 import { extractCriterionTexts } from './acceptanceCriteria';
+import { isReviewReadyAction } from './actionSemantics';
 import { evidenceAcceptanceCriteria, evidenceChecked, evidenceChecks, evidenceEnvironmentResults, evidenceNotes, evidenceRecordCount, evidenceString } from './evidenceData';
 
 export type EvidenceGateStatus = 'pass' | 'warn' | 'fail';
@@ -20,11 +21,9 @@ export interface EvidenceGateResult {
   summary: string;
 }
 
-const REVIEW_READY_ACTIONS = new Set(['await_review', 'verify', 'deploy_monitor', 'done']);
-
 export function evaluateEvidenceGate(ticketKey: string, ticket: Ticket): EvidenceGateResult {
   const checks: EvidenceGateCheck[] = [];
-  const reviewReady = REVIEW_READY_ACTIONS.has(ticket.next_action);
+  const reviewReady = isReviewReadyAction(ticket.next_action);
   const notes = evidenceNotes(ticket);
   const structuredChecks = evidenceChecks(ticket);
   const environmentResults = evidenceEnvironmentResults(ticket);

@@ -1,5 +1,6 @@
 import { KronosState as KronosStateType, QueueDecision, QueueItem, QueueState, Ticket } from '../state/types';
 import { actionToLabel } from './actionLabels';
+import { isCodeAction } from './actionSemantics';
 import { evidenceRecordCount } from './evidenceData';
 
 export { actionToLabel } from './actionLabels';
@@ -483,10 +484,9 @@ export function planForMinutes(plans: PlannedAction[], minutes: number): { plans
 }
 
 export function overnightCandidatePlans(plans: PlannedAction[], limit = 10): PlannedAction[] {
-  const overnightActions = new Set(['implement', 'in_progress', 'fix_build']);
   return plans
     .filter(plan => plan.source === 'ticket')
-    .filter(plan => overnightActions.has(plan.action))
+    .filter(plan => isCodeAction(plan.action))
     .filter(plan => plan.projects.length > 0)
     .slice(0, limit);
 }

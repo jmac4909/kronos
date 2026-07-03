@@ -15,6 +15,7 @@ import { PromptHistoryDiff, PromptSmokeTest, PromptTemplateInfo, buildDefaultPro
 import { KRONOS_DIR, STATE_AUDIT_FILE, listBackups, listStateAuditEvents, restoreBackup } from './services/stateStore';
 import { PlannedAction, buildBacklogTriageReport, overnightCandidatePlans, planByProject, planByRelease, planForMinutes, planNextActions as buildNextActionPlan, planToQueueItem as buildQueueItemFromPlan } from './services/queuePlanner';
 import { actionToLabel } from './services/actionLabels';
+import { isCodeAction, isProofSensitiveAction } from './services/actionSemantics';
 import { writeEvidenceExport } from './services/evidenceStore';
 import { evidenceAcceptanceCriteria, evidenceChecked, evidenceChecks, evidenceEnvironmentResults, evidenceNotes, evidenceRecordCount, evidenceString } from './services/evidenceData';
 import { EvidenceHandoffPlan, buildEvidenceHandoffPlan } from './services/evidenceHandoff';
@@ -86,7 +87,6 @@ const REQUIRED_PROMPTS = [
   'verify-combined',
   'continue-work',
 ];
-const CODE_COLLISION_ACTIONS = new Set(['implement', 'in_progress', 'fix_build']);
 const LIVE_MR_DIFF_LIMIT = 4;
 const LIVE_MR_DIFF_TIMEOUT_MS = 8000;
 const REVIEW_POLL_FAILURE_NOTIFICATION_MS = 15 * 60 * 1000;
@@ -1422,13 +1422,13 @@ export function activate(context: vscode.ExtensionContext) {
             const projectPath = getProjectPath(state, projName);
             if (!projectPath) { continue; }
             const skill = skillForAction(item.action);
-            const isCodeAction = ['implement', 'in_progress', 'fix_build'].includes(item.action);
+            const codeAction = isCodeAction(item.action);
             const ticketKey = item.ticket || undefined;
             const dispatchOptions: DispatchOptions = {
               onComplete: refreshAfterDispatch(state, projName, ticketKey),
-              parallel: isCodeAction,
+              parallel: codeAction,
             };
-            if (isCodeAction) { dispatchOptions.appendSystemPrompt = getImplementPrompt(state); }
+            if (codeAction) { dispatchOptions.appendSystemPrompt = getImplementPrompt(state); }
             await startClaudeDispatch(projectPath, skill, ticketKey, dispatchOptions);
           }
         }
@@ -2214,7 +2214,7 @@ export function activate(context: vscode.ExtensionContext) {
       if (extra === undefined) { return; }
 
       const skill = skillForAction(queueData.action);
-      const isCodeAction = ['implement', 'in_progress', 'fix_build'].includes(queueData.action);
+      const codeAction = isCodeAction(queueData.action);
       const extraPrompt = extra ? `\n\nADDITIONAL CONTEXT FROM USER: ${extra}` : '';
 
       if (projs.length === 0) {
@@ -2238,9 +2238,9 @@ export function activate(context: vscode.ExtensionContext) {
         const scopeHint = otherProjects.length > 0 ? `\nYou are working in ${projName}. Focus ONLY on this codebase. Other projects: ${otherProjects.join(', ')}.` : '';
         const dispatchOptions: DispatchOptions = {
           onComplete: refreshAfterDispatch(state, projName, queueData.ticket),
-          parallel: isCodeAction,
+          parallel: codeAction,
         };
-        const appendSystemPrompt = isCodeAction ? getImplementPrompt(state) + scopeHint + extraPrompt : extraPrompt || undefined;
+        const appendSystemPrompt = codeAction ? getImplementPrompt(state) + scopeHint + extraPrompt : extraPrompt || undefined;
         if (appendSystemPrompt) { dispatchOptions.appendSystemPrompt = appendSystemPrompt; }
         await startClaudeDispatch(projectPath, skill, queueData.ticket || undefined, dispatchOptions);
       }
@@ -4075,10 +4075,6 @@ function evidenceGatePanelGatesForState(state: KronosState): EvidenceGateResult[
     .filter(gate => gate.status !== 'pass' || isProofSensitiveAction(currentState.tickets[gate.ticketKey]?.next_action));
 }
 
-function isProofSensitiveAction(action: string | undefined): boolean {
-  return action === 'await_review' || action === 'verify' || action === 'deploy_monitor' || action === 'done';
-}
-
 function openEvidenceHandoffPanel(plan: EvidenceHandoffPlan): void {
   const panel = vscode.window.createWebviewPanel(
     'kronosEvidenceHandoff',
@@ -4371,7 +4367,7 @@ async function loadMrFileHints(state: KronosState, targets: Array<{ ticketKey?: 
   const candidateKeys = new Set<string>();
 
   for (const target of targets) {
-    if (!CODE_COLLISION_ACTIONS.has(target.action)) { continue; }
+    if (!isCodeAction(target.action)) { continue; }
     for (const project of target.projects || []) {
       if (project) { projectTargets.add(project); }
     }
