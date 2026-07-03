@@ -23,6 +23,7 @@ export interface WebviewActionScriptTagOptions extends WebviewActionPostOptions 
 
 export const WEBVIEW_READY_COMMAND = '__kronosWebviewReady';
 export const WEBVIEW_ACTION_PANEL_SCRIPT = 'kronos-action-panel.js';
+export const WEBVIEW_JIRA_BOARD_SCRIPT = 'kronos-jira-board.js';
 
 export function createWebviewNonce(): string {
   return randomBytes(16).toString('hex');

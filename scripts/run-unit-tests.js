@@ -2116,6 +2116,7 @@ test('webview security injects CSP and preserves existing nonce policies', () =>
   assert.match(diagnosticActionScript, /__kronosWebviewReady/);
   assert.match(diagnosticActionScript, /Kronos webview could not post script readiness/);
   assert.equal(webviewSecurity.WEBVIEW_ACTION_PANEL_SCRIPT, 'kronos-action-panel.js');
+  assert.equal(webviewSecurity.WEBVIEW_JIRA_BOARD_SCRIPT, 'kronos-jira-board.js');
   const externalScriptTag = webviewSecurity.webviewActionScriptTag('nonce<1>', 'Kronos External', [
     { messageKey: 'runId', dataAttribute: 'data-run-id' },
   ], { readyCommand: webviewSecurity.WEBVIEW_READY_COMMAND, scriptUri: 'vscode-resource://kronos/action.js?x=1&y=<2>' });
@@ -2175,6 +2176,14 @@ test('webview security injects CSP and preserves existing nonce policies', () =>
   assert.equal(externalPostedMessages[1].ticket, 'K-1');
   assert.equal(externalPostedMessages[1].runId, 'run-1');
   assert.equal(externalAcquireCalls, 1);
+
+  const jiraBoardScript = readSourceFixture('media', webviewSecurity.WEBVIEW_JIRA_BOARD_SCRIPT);
+  assert.match(jiraBoardScript, /document\.currentScript/);
+  assert.match(jiraBoardScript, /function initKronosJiraBoard/);
+  assert.match(jiraBoardScript, /kronos-jira-ticket-data/);
+  assert.match(jiraBoardScript, /data-kronos-actions-ready/);
+  assert.match(jiraBoardScript, /Kronos webview script ready/);
+  assert.doesNotMatch(jiraBoardScript, /const vscode =/);
 
   const button = operatorPanel.actionButton('open<Thing>', 'Open & Check', {
     ticket: 'T-1',
@@ -6442,13 +6451,14 @@ test('extension webviews use shared UI shell and board filtering affordances', (
   const evidencePanelViewSource = readSourceFixture('src', 'services', 'evidencePanelView.ts');
   const queuePlannerPanelViewSource = readSourceFixture('src', 'services', 'queuePlannerPanelView.ts');
   const operationsReportPanelViewSource = readSourceFixture('src', 'services', 'operationsReportPanelView.ts');
-  const uiSource = `${source}\n${queuePlannerPanelViewSource}\n${operationsReportPanelViewSource}`;
+  const jiraBoardSource = readSourceFixture('media', 'kronos-jira-board.js');
+  const uiSource = `${source}\n${queuePlannerPanelViewSource}\n${operationsReportPanelViewSource}\n${jiraBoardSource}`;
   const boardHandlerStart = source.indexOf('panel.webview.onDidReceiveMessage(async (msg) => {\n        if (logReady(msg)) { return; }\n        const request = normalizeBoardMessage(msg);');
   const boardHandlerEnd = source.indexOf("    vscode.commands.registerCommand('kronos.viewTicket'", boardHandlerStart);
   assert.ok(boardHandlerStart >= 0 && boardHandlerEnd > boardHandlerStart, 'Jira board message handler should be present');
   const boardHandlerSource = source.slice(boardHandlerStart, boardHandlerEnd);
   for (const marker of [
-    "import { WEBVIEW_ACTION_PANEL_SCRIPT, createWebviewNonce, webviewReadyPostScript, webviewScriptCspOptions, webviewVsCodeApiScript, withWebviewCsp } from './services/webviewSecurity'",
+    "import { WEBVIEW_ACTION_PANEL_SCRIPT, WEBVIEW_JIRA_BOARD_SCRIPT, WEBVIEW_READY_COMMAND, createWebviewNonce, webviewScriptCspOptions, withWebviewCsp } from './services/webviewSecurity'",
     "import { actionButton, actionRow, kronosActionPanelScript, kronosOperatorPanelCss, normalizeActionPanelMessage, operatorCommandRow } from './services/operatorPanel'",
     "import { buildPromptHistoryHtml, buildPromptManagerHtml, buildPromptSmokeTestsHtml } from './services/promptPanelView'",
     "import { buildRecoveryHtml, buildStateAuditLogHtml } from './services/recoveryPanelView'",
@@ -6473,6 +6483,14 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'class="kronos-shell diff-shell"',
     'id="board-filter"',
     'id="board-filter-summary"',
+    'id="kronos-jira-ticket-data"',
+    'class="kronos-data-payload"',
+    'WEBVIEW_JIRA_BOARD_SCRIPT',
+    'function kronosJiraBoardScriptUri',
+    "vscode.Uri.joinPath(extensionUri, 'media', scriptFile)",
+    'buildJiraBoardHtml(state, nonce, scriptUri)',
+    'defer src="${escapeAttr(scriptUri)}"',
+    'data-kronos-ready-command="${escapeAttr(WEBVIEW_READY_COMMAND)}"',
     'function initKronosJiraBoard',
     "document.addEventListener('DOMContentLoaded', initKronosJiraBoard)",
     "document.documentElement.setAttribute('data-kronos-actions-ready', 'true')",
@@ -6497,8 +6515,6 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     "unknownErrorMessage(e, 'Failed to link ticket.')",
     "unknownErrorMessage(e, 'Failed to unlink ticket.')",
     "unknownErrorMessage(e, 'Failed to add ticket to queue.')",
-    "${webviewVsCodeApiScript('Kronos Jira Board')}",
-    "${webviewReadyPostScript('Kronos Jira Board')}",
     "const logReady = createWebviewReadyMonitor(panel, 'Kronos Jira Board')",
     'if (logReady(msg)) { return; }',
     'const EVIDENCE_GATE_MESSAGE_COMMANDS = new Set',
@@ -6538,7 +6554,8 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'function openInteractiveRunCenter',
     'function kronosScriptableWebviewOptions',
     'function kronosActionPanelScriptUri',
-    "vscode.Uri.joinPath(extensionUri, 'media', WEBVIEW_ACTION_PANEL_SCRIPT)",
+    'function kronosMediaScriptUri',
+    "vscode.Uri.joinPath(extensionUri, 'media', scriptFile)",
     'function executeRunCenterAction',
     'async function archiveFinishedRuns',
     "const FINISHED_ARCHIVE_STATUSES = new Set<KronosRun['status']>(['completed', 'waiting_for_review', 'failed', 'cancelled'])",

@@ -183,7 +183,8 @@ for (const requiredIgnore of ['.git/**', '.claude/**', 'node_modules/**', 'scrip
     fail(`.vscodeignore must exclude ${requiredIgnore}`);
   }
 }
-const extensionUiSource = `${extension}\n${queuePlannerPanelView}\n${operationsReportPanelView}`;
+const jiraBoardScript = readSource('media/kronos-jira-board.js');
+const extensionUiSource = `${extension}\n${queuePlannerPanelView}\n${operationsReportPanelView}\n${jiraBoardScript}`;
 for (const marker of [
   'function mockCommandName(command)',
   'function mockCommandLine(command, args)',
@@ -200,8 +201,8 @@ if (unitTests.includes("const joined = [command, ...args].join(' ');")) {
 }
 
 const enableScriptsTrue = [...extension.matchAll(/enableScripts:\s*true/g)].length;
-if (enableScriptsTrue !== 28) {
-  fail(`Expected exactly 28 script-enabled webviews, found ${enableScriptsTrue}.`);
+if (enableScriptsTrue !== 27) {
+  fail(`Expected exactly 27 literal script-enabled webviews, found ${enableScriptsTrue}.`);
 }
 for (const [file, source] of Object.entries({ 'src/extension.ts': extension, 'src/runners/sessionDispatcher.ts': dispatcher })) {
   for (const [idx, line] of source.split(/\r?\n/).entries()) {
@@ -252,12 +253,14 @@ for (const marker of [
 }
 
 for (const marker of [
-  'buildJiraBoardHtml(state, nonce)',
+  'buildJiraBoardHtml(state, nonce, scriptUri)',
   'webviewScriptCspOptions(panel.webview.cspSource, nonce)',
-  'script nonce="${escapeAttr(nonce)}"',
-  "${webviewVsCodeApiScript('Kronos Jira Board')}",
-  "${webviewReadyPostScript('Kronos Jira Board')}",
-  "document.documentElement.setAttribute('data-kronos-actions-ready', 'true')",
+  'WEBVIEW_JIRA_BOARD_SCRIPT',
+  'function kronosJiraBoardScriptUri',
+  "vscode.Uri.joinPath(extensionUri, 'media', scriptFile)",
+  'defer src="${escapeAttr(scriptUri)}"',
+  'id="kronos-jira-ticket-data"',
+  'class="kronos-data-payload"',
   "import { createWebviewReadyMonitor } from './services/webviewDiagnostics'",
   "import { isCodeAction, isProofSensitiveAction } from './services/actionSemantics'",
   "const logReady = createWebviewReadyMonitor(panel, 'Kronos Jira Board')",
@@ -1999,6 +2002,8 @@ for (const marker of [
   'return { allowScripts: true, nonce, cspSource }',
   'export const WEBVIEW_ACTION_PANEL_SCRIPT',
   "'kronos-action-panel.js'",
+  'export const WEBVIEW_JIRA_BOARD_SCRIPT',
+  "'kronos-jira-board.js'",
   'export function webviewVsCodeApiScript',
   'function kronosVsCodeApi() {',
   "Symbol.for('kronos.vscodeApi')",

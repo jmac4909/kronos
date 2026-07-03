@@ -55,7 +55,7 @@ import { buildNextActionContext, buildNextActionStartDecision, skillForAction } 
 import { createWorkspaceDiffArtifact, firstRemoteBranchMatching, originProjectPath } from './services/gitWorkspace';
 import { signalProcessTree, stopProcessTree } from './services/processTree';
 import { createWebviewReadyMonitor } from './services/webviewDiagnostics';
-import { WEBVIEW_ACTION_PANEL_SCRIPT, createWebviewNonce, webviewReadyPostScript, webviewScriptCspOptions, webviewVsCodeApiScript, withWebviewCsp } from './services/webviewSecurity';
+import { WEBVIEW_ACTION_PANEL_SCRIPT, WEBVIEW_JIRA_BOARD_SCRIPT, WEBVIEW_READY_COMMAND, createWebviewNonce, webviewScriptCspOptions, withWebviewCsp } from './services/webviewSecurity';
 import { escapeAttr, escapeClass, escapeHtml, kronosWebviewBaseCss, safeHttpHref } from './services/webviewHtml';
 import { kronosTerminalOptions } from './services/terminalProfiles';
 import { unknownErrorCode, unknownErrorMessage } from './services/errorUtils';
@@ -97,18 +97,6 @@ const REVIEW_POLL_FAILURE_NOTIFICATION_MS = 15 * 60 * 1000;
 const REVIEW_SEEN_KEYS_STORAGE_KEY = 'kronos.review.seenKeys.v1';
 const reviewPollFailureNotifications = new Map<string, number>();
 const OPTIONAL_SCRIPT_PANEL_WARNING = 'Kronos integration scripts are not installed. Run Kronos: Doctor for setup details.';
-
-function jsonForScript(value: unknown): string {
-  const json = JSON.stringify(value) ?? 'null';
-  const replacements: Record<string, string> = {
-    '<': '\\u003c',
-    '>': '\\u003e',
-    '&': '\\u0026',
-    '\u2028': '\\u2028',
-    '\u2029': '\\u2029',
-  };
-  return json.replace(/[<>&\u2028\u2029]/g, c => replacements[c] ?? c);
-}
 
 function recordFromUnknown(value: unknown): Record<string, unknown> {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value)) ? value as Record<string, unknown> : {};
@@ -906,8 +894,20 @@ function kronosScriptableWebviewOptions(extensionUri?: vscode.Uri): vscode.Webvi
 }
 
 function kronosActionPanelScriptUri(panel: vscode.WebviewPanel, extensionUri?: vscode.Uri): string | undefined {
+  return kronosMediaScriptUri(panel, extensionUri, WEBVIEW_ACTION_PANEL_SCRIPT);
+}
+
+function kronosJiraBoardScriptUri(panel: vscode.WebviewPanel, extensionUri?: vscode.Uri): string {
+  const scriptUri = kronosMediaScriptUri(panel, extensionUri, WEBVIEW_JIRA_BOARD_SCRIPT);
+  if (!scriptUri) {
+    throw new Error('Kronos Jira Board requires a packaged webview script URI.');
+  }
+  return scriptUri;
+}
+
+function kronosMediaScriptUri(panel: vscode.WebviewPanel, extensionUri: vscode.Uri | undefined, scriptFile: string): string | undefined {
   return extensionUri
-    ? panel.webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', WEBVIEW_ACTION_PANEL_SCRIPT)).toString()
+    ? panel.webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', scriptFile)).toString()
     : undefined;
 }
 
@@ -1703,11 +1703,12 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('kronos.jiraBoard', async () => {
       const panel = vscode.window.createWebviewPanel(
         'kronosJiraBoard', 'Kronos: Jira Board',
-        vscode.ViewColumn.One, { enableScripts: true }
+        vscode.ViewColumn.One, kronosScriptableWebviewOptions(context.extensionUri)
       );
       const nonce = createWebviewNonce();
       const renderBoard = () => {
-        panel.webview.html = withWebviewCsp(buildJiraBoardHtml(state, nonce), webviewScriptCspOptions(panel.webview.cspSource, nonce));
+        const scriptUri = kronosJiraBoardScriptUri(panel, context.extensionUri);
+        panel.webview.html = withWebviewCsp(buildJiraBoardHtml(state, nonce, scriptUri), webviewScriptCspOptions(panel.webview.cspSource, nonce));
       };
       const logReady = createWebviewReadyMonitor(panel, 'Kronos Jira Board');
       const hasTicket = (ticketKey: string) => Boolean(state.state?.tickets?.[ticketKey]);
@@ -5693,7 +5694,7 @@ function buildDiffHtml(data: MergeRequestDiffResult): string {
 </div></body></html>`;
 }
 
-function buildJiraBoardHtml(state: KronosState, nonce: string): string {
+function buildJiraBoardHtml(state: KronosState, nonce: string, scriptUri: string): string {
   const esc = escapeHtml;
   const attr = escapeAttr;
   const tickets = state.state?.tickets || {};
@@ -5801,7 +5802,7 @@ function buildJiraBoardHtml(state: KronosState, nonce: string): string {
     return `<div class="${colClass}" role="region" aria-label="${attr(name)} tickets"><div class="col-header">${name} <span class="count" data-count>${cards.length}</span></div><div class="column-cards">${cards.join('')}<div class="empty-column" data-empty>No tickets.</div></div></div>`;
   }).join('');
 
-  const ticketJsonRaw = jsonForScript(ticketData);
+  const ticketJsonRaw = escapeHtml(JSON.stringify(ticketData));
 
   return `<!DOCTYPE html>
 <html><head>
@@ -5885,238 +5886,9 @@ function buildJiraBoardHtml(state: KronosState, nonce: string): string {
     .modal .modal-actions .jira-action { margin-left: 0; }
   }
 </style>
-<script nonce="${escapeAttr(nonce)}">
-function initKronosJiraBoard() {
-${webviewVsCodeApiScript('Kronos Jira Board')}
-${webviewReadyPostScript('Kronos Jira Board')}
-const ticketData = ${ticketJsonRaw};
-let currentModalKey = '';
-let lastFocusedEl = null;
-
-function byId(id) { return document.getElementById(id); }
-function clearNode(el) {
-  while (el.firstChild) { el.removeChild(el.firstChild); }
-}
-function makeEl(tag, className, text) {
-  const el = document.createElement(tag);
-  if (className) { el.className = className; }
-  if (text !== undefined) { el.textContent = String(text); }
-  return el;
-}
-function makeButton(text, className, onClick) {
-  const btn = document.createElement('button');
-  btn.className = ['kronos-button', className || ''].join(' ').trim();
-  btn.type = 'button';
-  btn.textContent = text;
-  btn.addEventListener('click', onClick);
-  return btn;
-}
-function setText(id, value) {
-  const el = byId(id);
-  if (el) { el.textContent = value === undefined || value === null || value === '' ? '' : String(value); }
-}
-function post(command, payload) {
-  kronosVsCodeApi().postMessage(Object.assign({ command: command }, payload || {}));
-}
-function showPlaceholder(el, text) {
-  clearNode(el);
-  el.appendChild(makeEl('div', 'muted', text));
-}
-function formatStatus(value) {
-  return String(value || '').replace(/_/g, ' ');
-}
-function formatAttachment(a) {
-  const filename = String(a.filename || 'attachment');
-  const size = Number(a.size || 0);
-  const sizeLabel = size > 1024 ? Math.round(size / 1024) + 'KB' : size + 'B';
-  return filename + ' (' + sizeLabel + ')';
-}
-function showModal(key) {
-  const t = ticketData[key]; if (!t) return;
-  lastFocusedEl = document.activeElement && typeof document.activeElement.focus === 'function' ? document.activeElement : null;
-  currentModalKey = key;
-  setText('modal-key', key);
-  setText('modal-summary', t.summary);
-  setText('modal-meta', t.type + ' - ' + t.priority + ' - ' + t.status);
-  setText('modal-desc', t.description || 'No description');
-  setText('modal-projects', t.projects.length > 0 ? t.projects.join(', ') : 'Not linked');
-  setText('modal-labels', t.labels.join(', ') || 'None');
-  setText('modal-evidence', t.evidenceCount > 0 ? t.evidenceCount + ' item' + (t.evidenceCount === 1 ? '' : 's') : 'None');
-  const mrEl = byId('modal-mr');
-  clearNode(mrEl);
-  if (t.mr) {
-    mrEl.appendChild(makeEl('span', '', 'MR !' + t.mr.iid + ' - ' + formatStatus(t.mr.status) + ' '));
-    const mrLink = makeEl('button', 'text-button clickable', 'Open in GitLab');
-    mrLink.addEventListener('click', function() { post('openMr', { ticket: currentModalKey }); });
-    mrEl.appendChild(mrLink);
-  } else {
-    mrEl.textContent = 'No MR';
-  }
-  setText('modal-build', t.build ? 'Build #' + t.build.number + ' - ' + t.build.status : 'No build');
-  var attEl = byId('modal-attachments');
-  clearNode(attEl);
-  if (t.attachments && t.attachments.length > 0) {
-    t.attachments.forEach(function(a) {
-      attEl.appendChild(makeEl('span', 'attachment-item', formatAttachment(a)));
-    });
-  } else {
-    attEl.textContent = 'None';
-  }
-  var actionsEl = byId('modal-actions');
-  var hasProjects = t.projects.length > 0;
-  clearNode(actionsEl);
-  if (hasProjects) {
-    actionsEl.appendChild(makeButton('Start Work', 'primary', function() { post('start', { ticket: currentModalKey }); closeModal(); }));
-    actionsEl.appendChild(makeButton(t.isQueued ? 'Remove from Queue' : 'Add to Queue', '', function() {
-      post(t.isQueued ? 'removeFromQueue' : 'addToQueueFromModal', { ticket: currentModalKey });
-      closeModal();
-    }));
-  } else {
-    actionsEl.appendChild(makeEl('span', 'modal-blocked-hint', 'Link to a project first to start or queue.'));
-  }
-  actionsEl.appendChild(makeButton('Add Evidence', '', function() { post('addEvidence', { ticket: currentModalKey }); closeModal(); }));
-  actionsEl.appendChild(makeButton('Add Check', '', function() { post('addEvidenceCheck', { ticket: currentModalKey }); closeModal(); }));
-  actionsEl.appendChild(makeButton('Environment Result', '', function() { post('recordEnvironmentResult', { ticket: currentModalKey }); closeModal(); }));
-  actionsEl.appendChild(makeButton('Export Evidence', '', function() { post('exportEvidence', { ticket: currentModalKey }); closeModal(); }));
-  actionsEl.appendChild(makeButton('Handoff', '', function() { post('evidenceHandoff', { ticket: currentModalKey }); closeModal(); }));
-  actionsEl.appendChild(makeButton('Publish Evidence', '', function() { post('publishEvidence', { ticket: currentModalKey }); closeModal(); }));
-  if (t.hasJiraUrl) {
-    var jiraBtn = makeEl('button', 'kronos-button jira-action clickable', 'Open in Jira');
-    jiraBtn.type = 'button';
-    jiraBtn.addEventListener('click', function() { post('openJira', { ticket: currentModalKey }); });
-    actionsEl.appendChild(jiraBtn);
-  }
-  showPlaceholder(byId('modal-comments'), 'Loading comments...');
-  post('getComments', { ticket: key });
-  byId('modal-overlay').classList.add('show');
-  byId('modal-close').focus();
-}
-function closeModal() {
-  byId('modal-overlay').classList.remove('show');
-  if (lastFocusedEl && typeof lastFocusedEl.focus === 'function' && document.contains(lastFocusedEl)) {
-    lastFocusedEl.focus();
-  }
-  lastFocusedEl = null;
-}
-function applyBoardFilter() {
-  const input = byId('board-filter');
-  const query = input ? String(input.value || '').trim().toLowerCase() : '';
-  var totalVisible = 0;
-  var totalCards = 0;
-  document.querySelectorAll('.column').forEach(function(column) {
-    var visible = 0;
-    column.querySelectorAll('.card[data-ticket]').forEach(function(card) {
-      totalCards += 1;
-      const search = String(card.getAttribute('data-search') || '');
-      const match = !query || search.indexOf(query) >= 0;
-      card.hidden = !match;
-      if (match) { visible += 1; }
-    });
-    totalVisible += visible;
-    const count = column.querySelector('[data-count]');
-    if (count) { count.textContent = String(visible); }
-    const empty = column.querySelector('[data-empty]');
-    if (empty) { empty.textContent = query ? 'No matching tickets.' : 'No tickets.'; }
-    column.classList.toggle('filtered-empty', visible === 0);
-  });
-  const summary = byId('board-filter-summary');
-  if (summary) {
-    summary.textContent = query ? totalVisible + ' of ' + totalCards + ' visible' : totalCards + ' total';
-  }
-}
-function handleBoardClick(e) {
-  const target = e.target && typeof e.target.closest === 'function' ? e.target : null;
-  if (!target) { return; }
-  const actionEl = target.closest('[data-action]');
-  if (actionEl) {
-    e.stopPropagation();
-    const ticket = actionEl.getAttribute('data-ticket') || currentModalKey;
-    const project = actionEl.getAttribute('data-project') || '';
-    const action = actionEl.getAttribute('data-action');
-    if (action === 'link' || action === 'unlink') {
-      post(action, { ticket: ticket, project: project });
-    } else if (action === 'addToQueue' || action === 'removeFromQueue' || action === 'start' || action === 'openJira' || action === 'openMr') {
-      post(action, { ticket: ticket });
-    }
-    return;
-  }
-  const card = target.closest('.card[data-ticket]');
-  if (card) {
-    showModal(card.getAttribute('data-ticket'));
-  }
-}
-document.querySelector('.board').addEventListener('click', handleBoardClick);
-document.querySelector('.board').addEventListener('keydown', function(e) {
-  const target = e.target && typeof e.target.matches === 'function' ? e.target : null;
-  if (!target || !target.matches('.card[data-ticket]')) { return; }
-  if (e.key === 'Enter' || e.key === ' ') {
-    e.preventDefault();
-    showModal(target.getAttribute('data-ticket'));
-  }
-});
-byId('board-filter').addEventListener('input', applyBoardFilter);
-applyBoardFilter();
-byId('modal-overlay').addEventListener('click', function(e) {
-  if (e.target === this) { closeModal(); }
-});
-byId('modal-close').addEventListener('click', closeModal);
-document.addEventListener('keydown', function(e) {
-  if (e.key === 'Escape' && byId('modal-overlay').classList.contains('show')) {
-    closeModal();
-  }
-});
-document.documentElement.setAttribute('data-kronos-actions-ready', 'true');
-function normalizeCommentsPayload(raw) {
-  var comments = raw;
-  if (typeof comments === 'string') {
-    try {
-      comments = JSON.parse(comments || '[]');
-    } catch (error) {
-      console.warn('Kronos Jira Board could not parse comments payload', error);
-      return null;
-    }
-  }
-  if (!Array.isArray(comments)) { return null; }
-  return comments.slice(0, 100).map(function(comment) {
-    if (comment && typeof comment === 'object') { return comment; }
-    return { body: String(comment || '') };
-  });
-}
-window.addEventListener('message', function(e) {
-  const msg = e.data && typeof e.data === 'object' ? e.data : {};
-  if (msg.command === 'comments' && msg.ticket === currentModalKey) {
-    const el = byId('modal-comments');
-    if (msg.error) {
-      showPlaceholder(el, String(msg.error));
-      return;
-    }
-    const comments = normalizeCommentsPayload(msg.data);
-    if (!comments) {
-      showPlaceholder(el, 'Could not load comments');
-      return;
-    }
-    if (comments.length === 0) {
-      showPlaceholder(el, 'No comments');
-      return;
-    }
-    clearNode(el);
-    comments.forEach(function(c) {
-      const row = makeEl('div', 'comment');
-      row.appendChild(makeEl('span', 'author', c.author || c.authorName || 'Unknown'));
-      row.appendChild(makeEl('span', 'date', c.created || ''));
-      row.appendChild(makeEl('div', 'comment-body', c.body || ''));
-      el.appendChild(row);
-    });
-  }
-});
-}
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initKronosJiraBoard);
-} else {
-  initKronosJiraBoard();
-}
-</script>
+<script nonce="${escapeAttr(nonce)}" defer src="${escapeAttr(scriptUri)}" data-kronos-webview-name="Kronos Jira Board" data-kronos-ready-command="${escapeAttr(WEBVIEW_READY_COMMAND)}"></script>
 </head><body><div class="kronos-shell board-shell">
+  <textarea id="kronos-jira-ticket-data" class="kronos-data-payload" hidden aria-hidden="true">${ticketJsonRaw}</textarea>
   <div class="kronos-header">
     <div>
       <h1 class="kronos-title">Jira Board</h1>
