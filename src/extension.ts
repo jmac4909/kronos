@@ -5086,8 +5086,16 @@ function reviewBranchTickets(state: KronosState): ReviewBranchTicket[] {
 
 async function startDeployMonitorForMergedTicket(state: KronosState, ticketKey: string, ticket: Ticket): Promise<void> {
   const projectName = ticket.projects?.[0];
+  if (!projectName) {
+    void vscode.window.showWarningMessage(`${ticketKey} MR merged, but no linked project was found for deploy monitoring.`);
+    return;
+  }
   const projectPath = getProjectPath(state, projectName);
-  if (!projectName || !projectPath || hasActiveDeployMonitorRun(projectName, projectPath, ticketKey)) { return; }
+  if (!projectPath) {
+    void vscode.window.showWarningMessage(`${ticketKey} MR merged, but ${projectName} has no registered path for deploy monitoring.`);
+    return;
+  }
+  if (hasActiveDeployMonitorRun(projectName, projectPath, ticketKey)) { return; }
   await startClaudeDispatch(projectPath, 'deploy-monitor', ticketKey, {
     onComplete: refreshAfterDispatch(state, projectName, ticketKey),
     noWorktree: true,

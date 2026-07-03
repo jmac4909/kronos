@@ -5770,6 +5770,8 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     "await startClaudeDispatch(projectPath, 'deploy-monitor', ticketKey",
     'projectNameOverride: projectName',
     'hasActiveDeployMonitorRun(projectName, projectPath, ticketKey)',
+    'MR merged, but no linked project was found for deploy monitoring.',
+    'has no registered path for deploy monitoring.',
     'run.project === projectName || run.projectPath === projectPath',
     "import { activeRunSummary, isActiveRun } from './services/runStatus'",
     'const activeRuns = listRuns().filter(isActiveRun)',
