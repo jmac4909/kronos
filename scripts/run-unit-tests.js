@@ -6783,7 +6783,7 @@ test('tree providers share action labels and icons', () => {
     'queue active-run matching should not mark a row active from ticket-only or project-only fallbacks',
   );
 
-  assert.ok(actionIcons.includes("case 'in_progress': return { id: 'tools'"), 'shared icons should use the valid tools codicon');
+  assert.ok(actionIcons.includes("in_progress: { id: 'tools'"), 'shared icons should use the valid tools codicon');
   assert.equal(actionIcons.includes("'wrench'"), false, 'shared action icons should not use the invalid wrench codicon');
   for (const marker of [
     "import { KronosRun, listRuns } from '../runners/sessionDispatcher'",
@@ -6858,6 +6858,59 @@ test('tree providers share action labels and icons', () => {
   assert.ok(nextActionContext.includes("import { actionToLabel } from './actionLabels'"), 'next action context should import action labels directly');
   assert.equal(ticketTree.includes('function actionToLabel'), false, 'ticket tree should not duplicate action labels');
   assert.equal(queueTree.includes('function actionIcon'), false, 'queue tree should not duplicate action icons');
+});
+
+test('action icon helpers preserve ticket and queue icon semantics', () => {
+  const Module = require('node:module');
+  const originalLoad = Module._load;
+  class ThemeColor {
+    constructor(id) { this.id = id; }
+  }
+  class ThemeIcon {
+    constructor(id, color) {
+      this.id = id;
+      this.color = color;
+    }
+  }
+  Module._load = function patchedLoad(request, parent, isMain) {
+    if (request === 'vscode') {
+      return { ThemeColor, ThemeIcon };
+    }
+    return originalLoad.call(this, request, parent, isMain);
+  };
+  try {
+    const actionIconsPath = require.resolve('../out/views/actionIcons.js');
+    delete require.cache[actionIconsPath];
+    const actionIcons = require(actionIconsPath);
+    assert.deepEqual(actionIcons.ticketActionIcon('implement'), {
+      id: 'circle-outline',
+      color: new ThemeColor('disabledForeground'),
+    });
+    assert.deepEqual(actionIcons.queueActionIcon('implement'), {
+      id: 'play-circle',
+      color: new ThemeColor('charts.green'),
+    });
+    assert.deepEqual(actionIcons.ticketActionIcon('await_review'), {
+      id: 'git-pull-request',
+      color: new ThemeColor('charts.yellow'),
+    });
+    assert.deepEqual(actionIcons.queueActionIcon('await_review'), {
+      id: 'git-pull-request',
+      color: new ThemeColor('charts.yellow'),
+    });
+    assert.deepEqual(actionIcons.queueActionIcon('refresh'), { id: 'refresh' });
+    assert.deepEqual(actionIcons.ticketActionIcon('unknown'), {
+      id: 'circle-outline',
+      color: new ThemeColor('disabledForeground'),
+    });
+    assert.deepEqual(actionIcons.queueActionIcon('unknown'), { id: 'circle-outline' });
+    assert.deepEqual(
+      actionIcons.themeIcon({ id: 'rocket', color: new ThemeColor('charts.blue') }),
+      new ThemeIcon('rocket', new ThemeColor('charts.blue')),
+    );
+  } finally {
+    Module._load = originalLoad;
+  }
 });
 
 test('trend metrics report rework, build pass, verification pass, and cycle time', () => {

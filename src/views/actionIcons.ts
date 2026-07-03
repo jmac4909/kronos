@@ -5,35 +5,44 @@ interface ActionThemeIcon {
   color?: vscode.ThemeColor;
 }
 
+interface ActionIconSpec {
+  id: string;
+  color?: string;
+}
+
+const SHARED_ACTION_ICON_SPECS: Record<string, ActionIconSpec> = {
+  in_progress: { id: 'tools', color: 'charts.blue' },
+  await_review: { id: 'git-pull-request', color: 'charts.yellow' },
+  deploy_monitor: { id: 'rocket', color: 'charts.blue' },
+  fix_build: { id: 'flame', color: 'testing.iconFailed' },
+  verify: { id: 'beaker', color: 'charts.purple' },
+  blocked: { id: 'lock', color: 'testing.iconFailed' },
+  done: { id: 'pass', color: 'testing.iconPassed' },
+};
+
 export function ticketActionIcon(action: string): ActionThemeIcon {
-  switch (action) {
-    case 'implement': return { id: 'circle-outline', color: new vscode.ThemeColor('disabledForeground') };
-    case 'in_progress': return { id: 'tools', color: new vscode.ThemeColor('charts.blue') };
-    case 'await_review': return { id: 'git-pull-request', color: new vscode.ThemeColor('charts.yellow') };
-    case 'deploy_monitor': return { id: 'rocket', color: new vscode.ThemeColor('charts.blue') };
-    case 'fix_build': return { id: 'flame', color: new vscode.ThemeColor('testing.iconFailed') };
-    case 'verify': return { id: 'beaker', color: new vscode.ThemeColor('charts.purple') };
-    case 'blocked': return { id: 'lock', color: new vscode.ThemeColor('testing.iconFailed') };
-    case 'done': return { id: 'pass', color: new vscode.ThemeColor('testing.iconPassed') };
-    default: return { id: 'circle-outline', color: new vscode.ThemeColor('disabledForeground') };
+  if (action === 'implement') {
+    return actionIcon({ id: 'circle-outline', color: 'disabledForeground' });
   }
+  return actionIcon(SHARED_ACTION_ICON_SPECS[action] || { id: 'circle-outline', color: 'disabledForeground' });
 }
 
 export function queueActionIcon(action: string): ActionThemeIcon {
-  switch (action) {
-    case 'implement': return { id: 'play-circle', color: new vscode.ThemeColor('charts.green') };
-    case 'in_progress': return { id: 'tools', color: new vscode.ThemeColor('charts.blue') };
-    case 'await_review': return { id: 'git-pull-request', color: new vscode.ThemeColor('charts.yellow') };
-    case 'deploy_monitor': return { id: 'rocket', color: new vscode.ThemeColor('charts.blue') };
-    case 'verify': return { id: 'beaker', color: new vscode.ThemeColor('charts.purple') };
-    case 'fix_build': return { id: 'flame', color: new vscode.ThemeColor('testing.iconFailed') };
-    case 'blocked': return { id: 'lock', color: new vscode.ThemeColor('testing.iconFailed') };
-    case 'done': return { id: 'pass', color: new vscode.ThemeColor('testing.iconPassed') };
-    case 'refresh': return { id: 'refresh' };
-    default: return { id: 'circle-outline' };
+  if (action === 'implement') {
+    return actionIcon({ id: 'play-circle', color: 'charts.green' });
   }
+  if (action === 'refresh') {
+    return actionIcon({ id: 'refresh' });
+  }
+  return actionIcon(SHARED_ACTION_ICON_SPECS[action] || { id: 'circle-outline' });
 }
 
 export function themeIcon(icon: ActionThemeIcon): vscode.ThemeIcon {
   return new vscode.ThemeIcon(icon.id, icon.color);
+}
+
+function actionIcon(spec: ActionIconSpec): ActionThemeIcon {
+  return spec.color
+    ? { id: spec.id, color: new vscode.ThemeColor(spec.color) }
+    : { id: spec.id };
 }
