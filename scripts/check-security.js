@@ -172,7 +172,7 @@ for (const forbidden of ['--set-project-config', '--unregister', '--set-setting'
   }
 }
 
-for (const requiredIgnore of ['.git/**', '.claude/**', 'node_modules/**', 'scripts/**', 'CLAUDE.md', '*.zip', '*.tgz', '*.log', '.env*', 'GOOD_TO_GREAT_REVIEW.md', 'WINDOWS_FEEDBACK_*.md']) {
+for (const requiredIgnore of ['.git/**', '.claude/**', 'node_modules/**', 'scripts/**', 'vscode-user-*/**', 'CLAUDE.md', '*.zip', '*.tgz', '*.log', '.env*', 'GOOD_TO_GREAT_REVIEW.md', 'WINDOWS_FEEDBACK_*.md']) {
   if (!vscodeIgnore.split(/\r?\n/).includes(requiredIgnore)) {
     fail(`.vscodeignore must exclude ${requiredIgnore}`);
   }
