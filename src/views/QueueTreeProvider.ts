@@ -41,11 +41,12 @@ export class QueueTreeProvider implements vscode.TreeDataProvider<QueueTreeItem>
 
   startPolling(intervalMs: number): void {
     this.stopPolling();
+    const safeIntervalMs = Number.isFinite(intervalMs) && intervalMs > 0 ? intervalMs : 5000;
     this._timer = setInterval(() => {
       if (listRuns().some(isActiveRun)) {
         this._onDidChangeTreeData.fire(undefined);
       }
-    }, intervalMs);
+    }, safeIntervalMs);
   }
 
   stopPolling(): void {

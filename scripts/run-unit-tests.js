@@ -6398,6 +6398,7 @@ test('tree providers share action labels and icons', () => {
     'const activeRuns = listRuns().filter(isActiveRun)',
     'new QueueTreeItem(item, idx, activeRunForQueueItem(item, activeRuns))',
     'startPolling(intervalMs: number): void',
+    'const safeIntervalMs = Number.isFinite(intervalMs) && intervalMs > 0 ? intervalMs : 5000',
     'const progress = activeRun ? formatRunProgress(activeRun) :',
     'Active run: ${activeRun.id}',
     "new vscode.ThemeIcon('sync~spin'",
