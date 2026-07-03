@@ -6999,6 +6999,13 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'const OPERATOR_COMMAND_TO_VSCODE_COMMAND = new Map<string, string>',
     'const OPERATOR_COMMAND_MESSAGE_COMMANDS = new Set(OPERATOR_COMMAND_TO_VSCODE_COMMAND.keys())',
     'const TICKET_SCOPED_OPERATOR_COMMANDS = new Set',
+    'const EVIDENCE_HANDOFF_OPERATOR_COMMANDS = operatorCommandSet([',
+    'const DOCTOR_OPERATOR_COMMANDS = operatorCommandSet([',
+    'function operatorCommandSet(commands: string[]): ReadonlySet<string>',
+    'function attachOperatorCommandHandler(panel: vscode.WebviewPanel, webviewName: string, allowedCommands: ReadonlySet<string>): void',
+    'normalizeActionPanelMessage(msg, allowedCommands)',
+    "attachOperatorCommandHandler(panel, 'Kronos Evidence Handoff', EVIDENCE_HANDOFF_OPERATOR_COMMANDS)",
+    "attachOperatorCommandHandler(panel, 'Kronos Doctor', DOCTOR_OPERATOR_COMMANDS)",
     'normalizeActionPanelMessage(msg, EVIDENCE_GATE_MESSAGE_COMMANDS)',
     'normalizeActionPanelMessage(msg, DASHBOARD_MESSAGE_COMMANDS)',
     'normalizeActionPanelMessage(msg, AGING_REPORT_MESSAGE_COMMANDS)',
@@ -7435,6 +7442,11 @@ test('extension webviews use shared UI shell and board filtering affordances', (
   assert.ok(
     agingHandlerSource.includes("if (request.command === 'refreshPanel') {\n      state.reloadAndNotify();\n      render();\n      return;\n    }"),
     'Aging Report refresh should reload state before rendering',
+  );
+  assert.equal(
+    source.includes('normalizeActionPanelMessage(msg, OPERATOR_COMMAND_MESSAGE_COMMANDS)'),
+    false,
+    'generic operator panels should pass panel-specific allow-lists',
   );
   assert.equal(
     source.includes(".filter(([_, t]) => t.next_action === 'await_review' && t.mr)"),

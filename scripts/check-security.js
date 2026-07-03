@@ -516,6 +516,13 @@ for (const marker of [
   "request.command === 'refreshPanel'",
   'const OPERATOR_COMMAND_TO_VSCODE_COMMAND = new Map<string, string>',
   'const OPERATOR_COMMAND_MESSAGE_COMMANDS = new Set(OPERATOR_COMMAND_TO_VSCODE_COMMAND.keys())',
+  'const EVIDENCE_HANDOFF_OPERATOR_COMMANDS = operatorCommandSet([',
+  'const DOCTOR_OPERATOR_COMMANDS = operatorCommandSet([',
+  'function operatorCommandSet(commands: string[]): ReadonlySet<string>',
+  'function attachOperatorCommandHandler(panel: vscode.WebviewPanel, webviewName: string, allowedCommands: ReadonlySet<string>): void',
+  'normalizeActionPanelMessage(msg, allowedCommands)',
+  "attachOperatorCommandHandler(panel, 'Kronos Evidence Handoff', EVIDENCE_HANDOFF_OPERATOR_COMMANDS)",
+  "attachOperatorCommandHandler(panel, 'Kronos Doctor', DOCTOR_OPERATOR_COMMANDS)",
   'const commandId = OPERATOR_COMMAND_TO_VSCODE_COMMAND.get(command)',
   "vscode.window.showWarningMessage('Ignored unknown Kronos operator action.')",
   'await executeOperatorCommandAction(command, ticketKey)',
@@ -962,6 +969,9 @@ for (const [label, startMarker, endMarker] of [
   if (!extension.slice(start, end).includes('startActiveRunPanelRefresh(panel, state, render)')) {
     fail(`${label} should auto-refresh while runs are active.`);
   }
+}
+if (extension.includes('normalizeActionPanelMessage(msg, OPERATOR_COMMAND_MESSAGE_COMMANDS)')) {
+  fail('Generic operator panels must pass panel-specific allow-lists.');
 }
 const evidenceGateHandlerStart = extension.indexOf('const request = normalizeActionPanelMessage(msg, EVIDENCE_GATE_MESSAGE_COMMANDS);');
 const evidenceGateHandlerEnd = extension.indexOf('function openEvidenceHandoffPanel', evidenceGateHandlerStart);

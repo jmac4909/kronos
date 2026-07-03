@@ -434,6 +434,78 @@ const OPERATOR_COMMAND_TO_VSCODE_COMMAND = new Map<string, string>([
   ['stateAuditLog', 'kronos.stateAuditLog'],
 ]);
 const OPERATOR_COMMAND_MESSAGE_COMMANDS = new Set(OPERATOR_COMMAND_TO_VSCODE_COMMAND.keys());
+const SESSION_STATS_OPERATOR_COMMANDS = operatorCommandSet([
+  'runCenter',
+  'sessionHistory',
+  'agentQualityScore',
+  'trendMetrics',
+]);
+const PROMPT_MANAGER_OPERATOR_COMMANDS = operatorCommandSet([
+  'promptSmokeTests',
+  'snapshotPromptPack',
+  'promptHistory',
+  'repairPromptPack',
+]);
+const PROMPT_SMOKE_OPERATOR_COMMANDS = operatorCommandSet([
+  'promptManager',
+  'snapshotPromptPack',
+  'promptHistory',
+  'repairPromptPack',
+]);
+const PROMPT_HISTORY_OPERATOR_COMMANDS = operatorCommandSet([
+  'snapshotPromptPack',
+  'promptManager',
+  'promptSmokeTests',
+  'repairPromptPack',
+]);
+const STATE_AUDIT_OPERATOR_COMMANDS = operatorCommandSet([
+  'recoveryCenter',
+  'doctor',
+  'stats',
+]);
+const EVIDENCE_HANDOFF_OPERATOR_COMMANDS = operatorCommandSet([
+  'viewTicket',
+  'evidenceGate',
+  'exportEvidence',
+  'publishEvidence',
+]);
+const EVIDENCE_PUBLISH_OPERATOR_COMMANDS = operatorCommandSet([
+  'viewTicket',
+  'evidenceGate',
+  'exportEvidence',
+  'evidenceHandoff',
+]);
+const AGENT_QUALITY_OPERATOR_COMMANDS = operatorCommandSet([
+  'runCenter',
+  'stats',
+  'trendMetrics',
+  'evidenceGate',
+]);
+const TREND_METRICS_OPERATOR_COMMANDS = operatorCommandSet([
+  'runCenter',
+  'stats',
+  'agentQualityScore',
+  'agingReport',
+]);
+const INTEGRATION_MANIFEST_OPERATOR_COMMANDS = operatorCommandSet([
+  'snapshotIntegrationManifest',
+  'doctor',
+  'profiles',
+  'promptManager',
+]);
+const PROFILES_OPERATOR_COMMANDS = operatorCommandSet([
+  'settings',
+  'doctor',
+  'integrationManifest',
+]);
+const DOCTOR_OPERATOR_COMMANDS = operatorCommandSet([
+  'setup',
+  'settings',
+  'integrationManifest',
+  'profiles',
+  'recoveryCenter',
+  'stateAuditLog',
+]);
 const AGING_REPORT_MESSAGE_COMMANDS = new Set([
   'refreshPanel',
   'queuePlanner',
@@ -450,6 +522,15 @@ const TICKET_SCOPED_OPERATOR_COMMANDS = new Set([
   'evidenceHandoff',
   'publishEvidence',
 ]);
+
+function operatorCommandSet(commands: string[]): ReadonlySet<string> {
+  for (const command of commands) {
+    if (!OPERATOR_COMMAND_MESSAGE_COMMANDS.has(command)) {
+      throw new Error(`Unknown Kronos operator command: ${command}`);
+    }
+  }
+  return new Set(commands);
+}
 
 function normalizeWebviewCommand(raw: unknown, allowed: Set<string>): string | null {
   const command = recordFromUnknown(raw)['command'];
@@ -3312,7 +3393,7 @@ export function activate(context: vscode.ExtensionContext) {
       }
       const panel = vscode.window.createWebviewPanel('kronosStats', 'Kronos: Session Stats', vscode.ViewColumn.One, { enableScripts: true });
       const nonce = createWebviewNonce();
-      attachOperatorCommandHandler(panel, 'Kronos Session Stats');
+      attachOperatorCommandHandler(panel, 'Kronos Session Stats', SESSION_STATS_OPERATOR_COMMANDS);
       const esc = escapeHtml;
 
       const totalSessions = sessions.length;
@@ -3805,7 +3886,7 @@ function openPromptManager(state: KronosState): void {
   );
   const nonce = createWebviewNonce();
   panel.webview.html = withWebviewCsp(buildPromptManagerHtml(globalTemplates, projectOverrides, smokeResults, REQUIRED_PROMPTS, nonce), webviewScriptCspOptions(panel.webview.cspSource, nonce));
-  attachOperatorCommandHandler(panel, 'Kronos Prompt Manager');
+  attachOperatorCommandHandler(panel, 'Kronos Prompt Manager', PROMPT_MANAGER_OPERATOR_COMMANDS);
 }
 
 function openPromptSmokeTestsPanel(state: KronosState): void {
@@ -3825,7 +3906,7 @@ function openPromptSmokeTestsPanel(state: KronosState): void {
   );
   const nonce = createWebviewNonce();
   panel.webview.html = withWebviewCsp(buildPromptSmokeTestsHtml(results, nonce), webviewScriptCspOptions(panel.webview.cspSource, nonce));
-  attachOperatorCommandHandler(panel, 'Kronos Prompt Smoke Tests');
+  attachOperatorCommandHandler(panel, 'Kronos Prompt Smoke Tests', PROMPT_SMOKE_OPERATOR_COMMANDS);
 }
 
 function snapshotPromptPack(state: KronosState): void {
@@ -3851,7 +3932,7 @@ function openPromptHistoryPanel(): void {
   );
   const nonce = createWebviewNonce();
   panel.webview.html = withWebviewCsp(buildPromptHistoryHtml(snapshots, diff, nonce), webviewScriptCspOptions(panel.webview.cspSource, nonce));
-  attachOperatorCommandHandler(panel, 'Kronos Prompt History');
+  attachOperatorCommandHandler(panel, 'Kronos Prompt History', PROMPT_HISTORY_OPERATOR_COMMANDS);
 }
 
 async function repairPromptPack(state: KronosState): Promise<void> {
@@ -3895,7 +3976,7 @@ function openPromptHistoryDiffPanel(diff: PromptHistoryDiff): void {
   );
   const nonce = createWebviewNonce();
   panel.webview.html = withWebviewCsp(buildPromptHistoryHtml(listPromptHistorySnapshots(25), diff, nonce), webviewScriptCspOptions(panel.webview.cspSource, nonce));
-  attachOperatorCommandHandler(panel, 'Kronos Prompt History');
+  attachOperatorCommandHandler(panel, 'Kronos Prompt History', PROMPT_HISTORY_OPERATOR_COMMANDS);
 }
 
 function promptHistoryTemplatesForState(state: KronosState): PromptTemplateInfo[] {
@@ -4010,7 +4091,7 @@ function openStateAuditLogPanel(): void {
   );
   const nonce = createWebviewNonce();
   panel.webview.html = withWebviewCsp(buildStateAuditLogHtml(events, STATE_AUDIT_FILE, nonce), webviewScriptCspOptions(panel.webview.cspSource, nonce));
-  attachOperatorCommandHandler(panel, 'Kronos State Audit Log');
+  attachOperatorCommandHandler(panel, 'Kronos State Audit Log', STATE_AUDIT_OPERATOR_COMMANDS);
 }
 
 async function executeRecoveryAction(item: RecoveryItem, state: KronosState, backups = listBackups(), requestedAction?: string): Promise<void> {
@@ -4305,7 +4386,7 @@ function openEvidenceHandoffPanel(plan: EvidenceHandoffPlan): void {
   );
   const nonce = createWebviewNonce();
   panel.webview.html = withWebviewCsp(buildEvidenceHandoffHtml(plan, nonce), webviewScriptCspOptions(panel.webview.cspSource, nonce));
-  attachOperatorCommandHandler(panel, 'Kronos Evidence Handoff');
+  attachOperatorCommandHandler(panel, 'Kronos Evidence Handoff', EVIDENCE_HANDOFF_OPERATOR_COMMANDS);
 }
 
 function openEvidencePublishPanel(results: Array<EvidencePublishResult | EvidencePublishDestination>, ticketKey: string): void {
@@ -4317,7 +4398,7 @@ function openEvidencePublishPanel(results: Array<EvidencePublishResult | Evidenc
   );
   const nonce = createWebviewNonce();
   panel.webview.html = withWebviewCsp(buildEvidencePublishHtml(results, ticketKey, nonce), webviewScriptCspOptions(panel.webview.cspSource, nonce));
-  attachOperatorCommandHandler(panel, 'Kronos Evidence Publish');
+  attachOperatorCommandHandler(panel, 'Kronos Evidence Publish', EVIDENCE_PUBLISH_OPERATOR_COMMANDS);
 }
 
 async function executeEvidenceGateAction(command: string, ticketKey: string): Promise<void> {
@@ -4361,11 +4442,11 @@ async function executeOperatorCommandAction(command: string, ticketKey = ''): Pr
   await vscode.commands.executeCommand(commandId);
 }
 
-function attachOperatorCommandHandler(panel: vscode.WebviewPanel, webviewName = 'Kronos action panel'): void {
+function attachOperatorCommandHandler(panel: vscode.WebviewPanel, webviewName: string, allowedCommands: ReadonlySet<string>): void {
   const logReady = createWebviewReadyMonitor(panel, webviewName);
   panel.webview.onDidReceiveMessage(async msg => {
     if (logReady(msg)) { return; }
-    const request = normalizeActionPanelMessage(msg, OPERATOR_COMMAND_MESSAGE_COMMANDS);
+    const request = normalizeActionPanelMessage(msg, allowedCommands);
     if (!request) {
       vscode.window.showWarningMessage('Ignored invalid Kronos operator action.');
       return;
@@ -4707,7 +4788,7 @@ function openAgentQualityScorePanel(state: KronosState): void {
   );
   const nonce = createWebviewNonce();
   panel.webview.html = withWebviewCsp(buildAgentQualityScoreHtml(score, nonce), webviewScriptCspOptions(panel.webview.cspSource, nonce));
-  attachOperatorCommandHandler(panel, 'Kronos Agent Quality Score');
+  attachOperatorCommandHandler(panel, 'Kronos Agent Quality Score', AGENT_QUALITY_OPERATOR_COMMANDS);
 }
 
 function openTrendMetricsPanel(state: KronosState): void {
@@ -4724,7 +4805,7 @@ function openTrendMetricsPanel(state: KronosState): void {
   );
   const nonce = createWebviewNonce();
   panel.webview.html = withWebviewCsp(buildTrendMetricsHtml(report, nonce), webviewScriptCspOptions(panel.webview.cspSource, nonce));
-  attachOperatorCommandHandler(panel, 'Kronos Trend Metrics');
+  attachOperatorCommandHandler(panel, 'Kronos Trend Metrics', TREND_METRICS_OPERATOR_COMMANDS);
 }
 
 function openAgingReportPanel(state: KronosState): void {
@@ -4781,7 +4862,7 @@ function openIntegrationManifestPanel(): void {
   );
   const nonce = createWebviewNonce();
   panel.webview.html = withWebviewCsp(buildIntegrationManifestHtml(status, audit, nonce), webviewScriptCspOptions(panel.webview.cspSource, nonce));
-  attachOperatorCommandHandler(panel, 'Kronos Integration Manifest');
+  attachOperatorCommandHandler(panel, 'Kronos Integration Manifest', INTEGRATION_MANIFEST_OPERATOR_COMMANDS);
 }
 
 async function snapshotIntegrationManifest(): Promise<void> {
@@ -4827,7 +4908,7 @@ function openProfilesPanel(): void {
   );
   const nonce = createWebviewNonce();
   panel.webview.html = withWebviewCsp(buildProfilesHtml(active, nonce), webviewScriptCspOptions(panel.webview.cspSource, nonce));
-  attachOperatorCommandHandler(panel, 'Kronos Profiles');
+  attachOperatorCommandHandler(panel, 'Kronos Profiles', PROFILES_OPERATOR_COMMANDS);
 }
 
 function openDoctorPanel(state: KronosState): void {
@@ -4839,7 +4920,7 @@ function openDoctorPanel(state: KronosState): void {
     { enableScripts: true }
   );
   const nonce = createWebviewNonce();
-  attachOperatorCommandHandler(panel, 'Kronos Doctor');
+  attachOperatorCommandHandler(panel, 'Kronos Doctor', DOCTOR_OPERATOR_COMMANDS);
   const pendingCheck: DoctorCheck = {
     name: 'Provider network reachability',
     status: 'warn',
