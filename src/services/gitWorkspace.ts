@@ -72,8 +72,9 @@ export function runGit(args: string[], options: GitCommandOptions): string {
 export function originProjectPath(cwd: string, runner: GitCommandRunner = runGit): string {
   const remoteRaw = runner(['remote', 'get-url', 'origin'], { cwd, timeoutMs: 5000 }).trim();
   const scpLike = remoteRaw.match(/^[^/@]+@[^:/]+:(.+)$/);
-  if (scpLike) {
-    return stripGitRemotePath(scpLike[1]);
+  const scpPath = scpLike?.[1];
+  if (scpPath) {
+    return stripGitRemotePath(scpPath);
   }
   try {
     const parsed = new URL(remoteRaw);

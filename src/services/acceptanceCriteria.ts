@@ -48,9 +48,10 @@ export function extractCriterionTexts(description: string): string[] {
     }
 
     const acLine = line.match(/^(?:AC|Acceptance Criteria)\s*#?\d*\s*[:.)-]\s*(.+)$/i);
-    if (acLine) {
+    const acText = matchCapture(acLine);
+    if (acText) {
       flushGwt();
-      found.push(acLine[1].trim());
+      found.push(acText);
       continue;
     }
 
@@ -62,9 +63,10 @@ export function extractCriterionTexts(description: string): string[] {
 
     if (inAcceptanceSection) {
       const bullet = line.match(/^(?:[-*]|\d+[.)])\s+(.+)$/);
-      if (bullet) {
+      const bulletText = matchCapture(bullet);
+      if (bulletText) {
         flushGwt();
-        found.push(bullet[1].trim());
+        found.push(bulletText);
         continue;
       }
       if (/^[A-Z][A-Za-z ]{2,}:$/.test(line)) {
@@ -102,6 +104,10 @@ function dedupe(texts: string[]): string[] {
     seen.add(key);
     return true;
   });
+}
+
+function matchCapture(match: RegExpMatchArray | null): string {
+  return match?.[1]?.trim() || '';
 }
 
 function normalizeText(text: string): string {

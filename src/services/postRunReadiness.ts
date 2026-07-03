@@ -67,8 +67,9 @@ export function resolvePostRunTicket(input: {
   const matchedProjectTickets = Object.entries(tickets).filter(([, ticket]) => (
     ticket.next_action !== 'done' && ticketLinkedToProject(ticket, projectName)
   ));
-  return matchedProjectTickets.length === 1
-    ? { ticketKey: matchedProjectTickets[0][0], ticket: matchedProjectTickets[0][1] }
+  const matchedProjectTicket = matchedProjectTickets.length === 1 ? matchedProjectTickets[0] : undefined;
+  return matchedProjectTicket
+    ? { ticketKey: matchedProjectTicket[0], ticket: matchedProjectTicket[1] }
     : { ticketKey };
 }
 

@@ -14,14 +14,16 @@ export interface KronosProfile {
   };
 }
 
-export const BUILTIN_PROFILES: KronosProfile[] = [
-  {
+const DEFAULT_PROFILE: KronosProfile = {
     id: 'enterprise-gitlab-jira',
     label: 'Enterprise GitLab + Jira',
     description: 'Jira tickets, GitLab MRs, Jenkins builds, and SonarQube gates.',
     defaultBaseBranch: 'develop',
     providers: { jira: true, gitlab: true, jenkins: true, sonar: true, githubActions: false },
-  },
+};
+
+export const BUILTIN_PROFILES: KronosProfile[] = [
+  DEFAULT_PROFILE,
   {
     id: 'personal-local',
     label: 'Personal Local',
@@ -50,7 +52,7 @@ export function listProfiles(): KronosProfile[] {
 }
 
 export function resolveProfile(profileId: string | undefined): KronosProfile {
-  return BUILTIN_PROFILES.find(profile => profile.id === profileId) || BUILTIN_PROFILES[0];
+  return BUILTIN_PROFILES.find(profile => profile.id === profileId) || DEFAULT_PROFILE;
 }
 
 export function resolveDefaultBaseBranch(profileId: string | undefined, configuredBranch?: string): string {

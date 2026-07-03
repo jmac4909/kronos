@@ -353,7 +353,10 @@ function describePrompt(name: string, promptPath: string, source: 'project' | 'g
 }
 
 function extractVariables(text: string): string[] {
-  return [...new Set([...text.matchAll(/\{\{([A-Z0-9_]+)\}\}/g)].map(match => match[1]))].sort();
+  const variables = [...text.matchAll(/\{\{([A-Z0-9_]+)\}\}/g)]
+    .map(match => match[1])
+    .filter((variable): variable is string => Boolean(variable));
+  return [...new Set(variables)].sort();
 }
 
 function hashText(text: string): string {
