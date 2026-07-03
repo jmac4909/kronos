@@ -251,6 +251,7 @@ for (const marker of [
   'script nonce="${escapeAttr(nonce)}"',
   "${webviewVsCodeApiScript('Kronos Jira Board')}",
   "${webviewReadyPostScript('Kronos Jira Board')}",
+  "document.documentElement.setAttribute('data-kronos-actions-ready', 'true')",
   "import { createWebviewReadyMonitor } from './services/webviewDiagnostics'",
   "import { isCodeAction, isProofSensitiveAction } from './services/actionSemantics'",
   "const logReady = createWebviewReadyMonitor(panel, 'Kronos Jira Board')",

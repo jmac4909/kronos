@@ -6165,6 +6165,7 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'id="board-filter-summary"',
     'function initKronosJiraBoard',
     "document.addEventListener('DOMContentLoaded', initKronosJiraBoard)",
+    "document.documentElement.setAttribute('data-kronos-actions-ready', 'true')",
     'function applyBoardFilter',
     'let lastFocusedEl = null',
     'data-search="${attr(searchText)}"',

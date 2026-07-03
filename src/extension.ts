@@ -5907,6 +5907,7 @@ document.addEventListener('keydown', function(e) {
     closeModal();
   }
 });
+document.documentElement.setAttribute('data-kronos-actions-ready', 'true');
 function normalizeCommentsPayload(raw) {
   var comments = raw;
   if (typeof comments === 'string') {
