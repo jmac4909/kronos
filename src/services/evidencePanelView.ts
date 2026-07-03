@@ -101,7 +101,7 @@ export function buildEvidenceGateHtml(gates: EvidenceGateResult[], title: string
     <div class="summary-card"><div class="num">${summary.warn}</div><div class="lbl">Warnings</div></div>
     <div class="summary-card"><div class="num">${summary.pass}</div><div class="lbl">Passing</div></div>
   </div>
-  ${empty || `<div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Status</th><th>Ticket</th><th>Check</th><th>Item</th><th>Detail</th><th>Actions</th></tr>${rows}</table></div>`}
+  ${empty || `<div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Status</th><th>Ticket</th><th>Check</th><th>Item</th><th>Detail</th><th class="action-cell">Actions</th></tr>${rows}</table></div>`}
 </div>${kronosActionPanelScript(nonce, 'Kronos Evidence Gate', true)}</body></html>`;
 }
 

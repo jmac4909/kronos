@@ -69,7 +69,7 @@ export function buildBacklogTriageHtml(report: BacklogTriageReport, nonce?: stri
     </div>
   </div>
   <div class="operator-summary">${summaryCards}</div>
-  ${empty || `<div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Severity</th><th>Ticket</th><th>Category</th><th>Action</th><th>Projects</th><th>Age</th><th>Detail</th><th>Actions</th></tr>${rows}</table></div>`}
+  ${empty || `<div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Severity</th><th>Ticket</th><th>Category</th><th>Action</th><th>Projects</th><th>Age</th><th>Detail</th><th class="action-cell">Actions</th></tr>${rows}</table></div>`}
 </div>${nonce ? kronosActionPanelScript(nonce) : ''}</body></html>`;
 }
 
@@ -89,7 +89,7 @@ export function buildProjectBatchPlanHtml(batches: ProjectBatchPlan[], nonce?: s
     return `<section class="operator-card">
       <div class="operator-card-header"><div class="operator-card-title">${escapeHtml(batch.project)}</div><div class="operator-card-meta">${escapeHtml(String(batch.plans.length))} action(s)</div></div>
       <div class="subtitle">Score ${escapeHtml(String(batch.totalScore))} | estimated ${escapeHtml(String(batch.estimatedMinutes))}m | ${escapeHtml(actions || 'no actions')}</div>
-      <div class="table-wrap"><table class="kronos-table"><tr><th>Ticket</th><th>Action</th><th>Score</th><th>Estimate</th><th>Reason</th><th>Actions</th></tr>${plans}</table></div>
+      <div class="table-wrap"><table class="kronos-table"><tr><th>Ticket</th><th>Action</th><th>Score</th><th>Estimate</th><th>Reason</th><th class="action-cell">Actions</th></tr>${plans}</table></div>
     </section>`;
   }).join('');
   const empty = batches.length === 0 ? '<div class="kronos-empty">No project batch plan recommendations found.</div>' : '';
@@ -125,7 +125,7 @@ export function buildReleaseBatchPlanHtml(batches: ReleaseBatchPlan[], nonce?: s
     return `<section class="operator-card">
       <div class="operator-card-header"><div class="operator-card-title">${escapeHtml(batch.release)}</div><div class="operator-card-meta">${escapeHtml(String(batch.plans.length))} action(s)</div></div>
       <div class="subtitle">Score ${escapeHtml(String(batch.totalScore))} | estimated ${escapeHtml(String(batch.estimatedMinutes))}m | ${escapeHtml(actions || 'no actions')}</div>
-      <div class="table-wrap"><table class="kronos-table"><tr><th>Ticket</th><th>Action</th><th>Projects</th><th>Score</th><th>Estimate</th><th>Reason</th><th>Actions</th></tr>${plans}</table></div>
+      <div class="table-wrap"><table class="kronos-table"><tr><th>Ticket</th><th>Action</th><th>Projects</th><th>Score</th><th>Estimate</th><th>Reason</th><th class="action-cell">Actions</th></tr>${plans}</table></div>
     </section>`;
   }).join('');
   const empty = batches.length === 0 ? '<div class="kronos-empty">No release batch plan recommendations found.</div>' : '';
@@ -168,7 +168,7 @@ export function buildCollisionReportHtml(reports: Array<{ plan: PlannedAction; c
       <div class="kronos-subtitle">Active runs, duplicate queue work, and open merge requests that overlap top planned actions</div>
     </div>
   </div>
-  ${empty || `<div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Severity</th><th>Plan</th><th>Kind</th><th>Detail</th><th>Actions</th></tr>${rows}</table></div>`}
+  ${empty || `<div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Severity</th><th>Plan</th><th>Kind</th><th>Detail</th><th class="action-cell">Actions</th></tr>${rows}</table></div>`}
 </div>${nonce ? kronosActionPanelScript(nonce) : ''}</body></html>`;
 }
 
@@ -195,7 +195,7 @@ export function buildQueuePlanModeHtml(title: string, subtitle: string, plans: P
       <div class="kronos-subtitle">${escapeHtml(subtitle)}</div>
     </div>
   </div>
-  ${empty || `<div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>#</th><th>Ticket</th><th>Action</th><th>Projects</th><th>Score</th><th>Estimate</th><th>Reason</th><th>Actions</th></tr>${rows}</table></div>`}
+  ${empty || `<div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>#</th><th>Ticket</th><th>Action</th><th>Projects</th><th>Score</th><th>Estimate</th><th>Reason</th><th class="action-cell">Actions</th></tr>${rows}</table></div>`}
 </div>${nonce ? kronosActionPanelScript(nonce) : ''}</body></html>`;
 }
 

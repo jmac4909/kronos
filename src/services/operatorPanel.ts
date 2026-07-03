@@ -48,7 +48,7 @@ export function kronosOperatorPanelCss(): string {
   .summary-card { padding: 12px; border: 1px solid var(--k-border); border-radius: var(--k-radius); background: var(--k-surface-soft); }
   .summary-card .num { font-size: 24px; line-height: 1.1; font-weight: 700; }
   .summary-card .lbl { margin-top: 4px; color: var(--k-muted); font-size: 11px; font-weight: 650; text-transform: uppercase; }
-  .table-wrap { overflow: auto; }
+  .table-wrap { overflow: auto; position: relative; }
   .detail { white-space: pre-wrap; word-break: break-word; }
   .pill { display: inline-flex; align-items: center; min-height: 20px; border: 1px solid var(--k-border); border-radius: 999px; padding: 2px 8px; font-weight: 650; font-size: 10px; line-height: 1.2; text-transform: uppercase; }
   .pill.critical, .pill.fail, .pill.bad, .pill.error { color: #f44336; background: rgba(244,67,54,0.16); }
@@ -70,7 +70,8 @@ export function kronosOperatorPanelCss(): string {
   .operator-hero { border: 1px solid var(--k-border); border-left: 3px solid var(--k-accent); border-radius: var(--k-radius); padding: 14px 16px; background: var(--k-surface-soft); }
   .operator-hero .score { font-size: 34px; line-height: 1; font-weight: 750; }
   .operator-hero .grade { color: var(--k-muted); font-size: 18px; margin-left: 8px; }
-  .action-cell { min-width: 150px; }
+  .action-cell { min-width: 150px; position: sticky; right: 0; z-index: 1; background: var(--k-surface); box-shadow: -1px 0 0 var(--k-border); }
+  th.action-cell { z-index: 2; background: var(--k-surface-soft); }
   .inline-actions { gap: 6px; align-items: flex-start; }
   .inline-actions .kronos-button { min-height: 24px; padding: 3px 8px; font-size: 10px; }
   .operator-command-row { margin: 12px 0 18px; gap: 8px; align-items: flex-start; }

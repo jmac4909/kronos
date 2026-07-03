@@ -72,7 +72,7 @@ export function buildRecoveryHtml(inventory: RecoveryInventory, nonce?: string):
     <div class="summary-card"><div class="num">${inventory.summary.info}</div><div class="lbl">Info</div></div>
     <div class="summary-card"><div class="num">${inventory.summary.total}</div><div class="lbl">Total</div></div>
   </div>
-  ${empty || `<div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Severity</th><th>Kind</th><th>Item</th><th>Detail</th><th>Action</th></tr>${rows}</table></div>`}
+  ${empty || `<div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Severity</th><th>Kind</th><th>Item</th><th>Detail</th><th class="action-cell">Action</th></tr>${rows}</table></div>`}
 </div>${nonce ? kronosActionPanelScript(nonce) : ''}</body></html>`;
 }
 
