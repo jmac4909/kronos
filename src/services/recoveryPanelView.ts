@@ -1,6 +1,6 @@
 import type { StateAuditEvent } from './stateStore';
 import type { RecoveryInventory, RecoveryItem } from './recoveryCenter';
-import { actionButton, kronosActionPanelScript, kronosOperatorPanelCss, operatorCommandRow } from './operatorPanel';
+import { actionButton, actionRow, kronosActionPanelScript, kronosOperatorPanelCss, operatorCommandRow } from './operatorPanel';
 import { escapeHtml } from './webviewHtml';
 
 export function buildStateAuditLogHtml(events: StateAuditEvent[], stateAuditFile: string, nonce?: string): string {
@@ -52,7 +52,7 @@ export function buildRecoveryHtml(inventory: RecoveryInventory, nonce?: string):
     <td>${escapeHtml(item.kind)}</td>
     <td>${escapeHtml(item.title)}</td>
     <td class="detail">${escapeHtml(item.detail)}</td>
-    <td class="action-cell">${actionButton('executeRecoveryItem', item.actionLabel || recoveryActionLabel(item.action), recoveryActionOptions(item))}</td>
+    <td class="action-cell">${recoveryActionButtons(item)}</td>
   </tr>`).join('');
   const empty = inventory.items.length === 0 ? '<div class="empty">No active recovery items.</div>' : '';
 
@@ -71,13 +71,25 @@ export function buildRecoveryHtml(inventory: RecoveryInventory, nonce?: string):
 </div>${nonce ? kronosActionPanelScript(nonce) : ''}</body></html>`;
 }
 
-function recoveryActionOptions(item: RecoveryItem): { itemId: string; ticket?: string; runId?: string; primary: boolean } {
-  const options: { itemId: string; ticket?: string; runId?: string; primary: boolean } = {
+function recoveryActionButtons(item: RecoveryItem): string {
+  const buttons: string[] = [];
+  if (item.action) {
+    buttons.push(actionButton('executeRecoveryItem', item.actionLabel || recoveryActionLabel(item.action), recoveryActionOptions(item, item.action, item.severity === 'critical')));
+  }
+  for (const action of item.secondaryActions || []) {
+    buttons.push(actionButton('executeRecoveryItem', action.label || recoveryActionLabel(action.action), recoveryActionOptions(item, action.action, false)));
+  }
+  return actionRow(buttons);
+}
+
+function recoveryActionOptions(item: RecoveryItem, action: RecoveryItem['action'], primary: boolean): { itemId: string; ticket?: string; runId?: string; recoveryAction?: string; primary: boolean } {
+  const options: { itemId: string; ticket?: string; runId?: string; recoveryAction?: string; primary: boolean } = {
     itemId: item.id,
-    primary: item.severity === 'critical',
+    primary,
   };
   if (item.ticketKey) { options.ticket = item.ticketKey; }
   if (item.runId) { options.runId = item.runId; }
+  if (action) { options.recoveryAction = action; }
   return options;
 }
 

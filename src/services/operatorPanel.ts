@@ -6,6 +6,7 @@ export interface ActionButtonOptions {
   runId?: string;
   planId?: string;
   itemId?: string;
+  recoveryAction?: string;
   primary?: boolean;
 }
 
@@ -15,6 +16,7 @@ export interface ActionPanelMessage {
   runId: string;
   planId: string;
   itemId: string;
+  recoveryAction: string;
 }
 
 export function actionButton(action: string, label: string, options: ActionButtonOptions = {}): string {
@@ -23,7 +25,8 @@ export function actionButton(action: string, label: string, options: ActionButto
   const runAttr = options.runId ? ` data-run-id="${escapeAttr(options.runId)}"` : '';
   const planAttr = options.planId ? ` data-plan-id="${escapeAttr(options.planId)}"` : '';
   const itemAttr = options.itemId ? ` data-item-id="${escapeAttr(options.itemId)}"` : '';
-  return `<button type="button" class="${classes}" data-action="${escapeAttr(action)}"${ticketAttr}${runAttr}${planAttr}${itemAttr}>${escapeHtml(label)}</button>`;
+  const recoveryActionAttr = options.recoveryAction ? ` data-recovery-action="${escapeAttr(options.recoveryAction)}"` : '';
+  return `<button type="button" class="${classes}" data-action="${escapeAttr(action)}"${ticketAttr}${runAttr}${planAttr}${itemAttr}${recoveryActionAttr}>${escapeHtml(label)}</button>`;
 }
 
 export function actionRow(buttons: string[]): string {
@@ -48,6 +51,7 @@ export function normalizeActionPanelMessage(raw: unknown, allowed: ReadonlySet<s
     runId: stringField(message, 'runId'),
     planId: stringField(message, 'planId'),
     itemId: stringField(message, 'itemId'),
+    recoveryAction: stringField(message, 'recoveryAction'),
   };
 }
 
@@ -58,6 +62,7 @@ export function kronosActionPanelScript(nonce: string, webviewName = 'Kronos act
     { messageKey: 'runId', dataAttribute: 'data-run-id' },
     { messageKey: 'planId', dataAttribute: 'data-plan-id' },
     { messageKey: 'itemId', dataAttribute: 'data-item-id' },
+    { messageKey: 'recoveryAction', dataAttribute: 'data-recovery-action' },
   ], { ...readyOptions, scriptUri });
 }
 

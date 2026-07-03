@@ -436,8 +436,11 @@ const OPERATOR_COMMAND_TO_VSCODE_COMMAND = new Map<string, string>([
 ]);
 const OPERATOR_COMMAND_MESSAGE_COMMANDS = new Set(OPERATOR_COMMAND_TO_VSCODE_COMMAND.keys());
 const AGING_REPORT_MESSAGE_COMMANDS = new Set([
-  ...OPERATOR_COMMAND_MESSAGE_COMMANDS,
   'refreshPanel',
+  'queuePlanner',
+  'humanReviewInbox',
+  'trendMetrics',
+  'evidenceGate',
 ]);
 const TICKET_SCOPED_OPERATOR_COMMANDS = new Set([
   'addEvidence',
@@ -1405,7 +1408,7 @@ export function activate(context: vscode.ExtensionContext) {
     }),
 
     vscode.commands.registerCommand('kronos.refreshProject', async (item: unknown) => {
-      const projectName = resolveProjectName(state, item);
+      const projectName = resolveProjectName(state, item) || await pickProjectName(state, 'Refresh which Kronos project?');
       if (projectName) {
         await state.refresh(projectName);
         lastRefreshTime = Date.now();
@@ -4000,7 +4003,7 @@ function openRecoveryPanel(state: KronosState, initialInventory: RecoveryInvento
       vscode.window.showWarningMessage('Recovery item is no longer available.');
       return;
     }
-    await executeRecoveryAction(item, state, currentBackups);
+    await executeRecoveryAction(item, state, currentBackups, request.recoveryAction);
     render(true);
   });
 }
@@ -4018,12 +4021,17 @@ function openStateAuditLogPanel(): void {
   attachOperatorCommandHandler(panel, 'Kronos State Audit Log');
 }
 
-async function executeRecoveryAction(item: RecoveryItem, state: KronosState, backups = listBackups()): Promise<void> {
-  if (item.action === 'openRunCenter') {
+async function executeRecoveryAction(item: RecoveryItem, state: KronosState, backups = listBackups(), requestedAction?: string): Promise<void> {
+  const action = recoveryActionForRequest(item, requestedAction);
+  if (!action) {
+    vscode.window.showWarningMessage('Recovery item action is no longer available.');
+    return;
+  }
+  if (action === 'openRunCenter') {
     openInteractiveRunCenter(state);
     return;
   }
-  if (item.action === 'retryRun') {
+  if (action === 'retryRun') {
     const run = listRuns().find(r => r.id === item.runId);
     if (!run) {
       vscode.window.showWarningMessage('Run record not found.');
@@ -4032,7 +4040,7 @@ async function executeRecoveryAction(item: RecoveryItem, state: KronosState, bac
     await retryRunFromPrompt(state, run);
     return;
   }
-  if (item.action === 'resumeRun') {
+  if (action === 'resumeRun') {
     const run = listRuns().find(r => r.id === item.runId);
     if (!run) {
       vscode.window.showWarningMessage('Run record not found.');
@@ -4041,22 +4049,22 @@ async function executeRecoveryAction(item: RecoveryItem, state: KronosState, bac
     await resumeSelectedRun(state, run);
     return;
   }
-  if (item.action === 'archiveRun') {
+  if (action === 'archiveRun') {
     if (!item.runId) { return; }
     await archiveSelectedRun(item.runId);
     return;
   }
-  if (item.action === 'openRunLog') {
+  if (action === 'openRunLog') {
     const run = listRuns().find(r => r.id === item.runId);
     await openRunArtifactFileIfExists(run?.logPath, 'Run log not found.');
     return;
   }
-  if (item.action === 'openRunPrompt') {
+  if (action === 'openRunPrompt') {
     const run = listRuns().find(r => r.id === item.runId);
     await openRunArtifactFileIfExists(run?.promptPath, 'Run prompt artifact not found.');
     return;
   }
-  if (item.action === 'linkMrToTicket') {
+  if (action === 'linkMrToTicket') {
     if (!item.ticketKey) {
       vscode.window.showWarningMessage('Recovery item does not include a ticket key.');
       return;
@@ -4064,17 +4072,27 @@ async function executeRecoveryAction(item: RecoveryItem, state: KronosState, bac
     await vscode.commands.executeCommand('kronos.linkMrToTicket', { ticketKey: item.ticketKey });
     return;
   }
-  if (item.action === 'cleanupWorktrees') {
+  if (action === 'cleanupWorktrees') {
     await vscode.commands.executeCommand('kronos.cleanupWorktrees');
     return;
   }
-  if (item.action === 'openDoctor') {
+  if (action === 'openDoctor') {
     openDoctorPanel(state);
     return;
   }
-  if (item.action === 'restoreBackup') {
+  if (action === 'restoreBackup') {
     await pickAndRestoreBackup(state, backups, item.backupPath);
   }
+}
+
+function recoveryActionForRequest(item: RecoveryItem, requestedAction?: string): RecoveryItem['action'] {
+  const available = [item.action, ...(item.secondaryActions || []).map(action => action.action)];
+  if (requestedAction) {
+    return available.includes(requestedAction as RecoveryItem['action'])
+      ? requestedAction as RecoveryItem['action']
+      : undefined;
+  }
+  return item.action;
 }
 
 async function pickAndRestoreBackup(state: KronosState, backups = listBackups(), preferredBackupPath?: string): Promise<void> {
@@ -5234,6 +5252,24 @@ function resolveProjectName(state: KronosState, item: unknown): string | undefin
     if (t?.projects?.length) { return t.projects[0]; }
   }
   return undefined;
+}
+
+async function pickProjectName(state: KronosState, placeHolder: string): Promise<string | undefined> {
+  const projects = Object.entries(state.state?.projects || {});
+  if (projects.length === 0) {
+    vscode.window.showWarningMessage('No projects registered.');
+    return undefined;
+  }
+  if (projects.length === 1) {
+    return projects[0]?.[0];
+  }
+  const picked = await vscode.window.showQuickPick(
+    projects
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([label, project]) => ({ label, description: project.path || '' })),
+    { placeHolder }
+  );
+  return picked?.label;
 }
 
 function resolveTicketKey(item: unknown): string | undefined {

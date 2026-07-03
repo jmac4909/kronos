@@ -94,6 +94,7 @@ export interface RecoveryItem {
   title: string;
   detail: string;
   action?: RecoveryAction;
+  secondaryActions?: Array<{ action: RecoveryAction; label?: string }>;
   actionLabel?: string;
   runId?: string;
   ticketKey?: string;
@@ -203,6 +204,8 @@ function recoveryItemForRun(run: RecoveryRun, now: Date, staleRunMs: number): Re
   const detail = runAttentionDetail(run);
   const action = run.promptPath ? 'resumeRun' : 'openRunCenter';
   const actionLabel = run.promptPath ? 'Resume Run' : 'Open Run Center';
+  const terminalSecondaryActions = terminalRunSecondaryActions(run);
+  const activeSecondaryActions = activeRunSecondaryActions(run);
 
   if (run.status === 'failed' || run.status === 'needs_human') {
     return {
@@ -213,6 +216,7 @@ function recoveryItemForRun(run: RecoveryRun, now: Date, staleRunMs: number): Re
       detail,
       action,
       actionLabel,
+      ...(terminalSecondaryActions ? { secondaryActions: terminalSecondaryActions } : {}),
       runId: run.id,
     };
   }
@@ -226,6 +230,7 @@ function recoveryItemForRun(run: RecoveryRun, now: Date, staleRunMs: number): Re
       detail,
       action,
       actionLabel,
+      ...(terminalSecondaryActions ? { secondaryActions: terminalSecondaryActions } : {}),
       runId: run.id,
     };
   }
@@ -239,11 +244,30 @@ function recoveryItemForRun(run: RecoveryRun, now: Date, staleRunMs: number): Re
       detail: `Started at ${run.startedAt || 'unknown time'} and is still ${run.status}`,
       action: 'openRunCenter',
       actionLabel: 'Open Run Center',
+      ...(activeSecondaryActions ? { secondaryActions: activeSecondaryActions } : {}),
       runId: run.id,
     };
   }
 
   return null;
+}
+
+function terminalRunSecondaryActions(run: RecoveryRun): Array<{ action: RecoveryAction; label?: string }> | undefined {
+  const actions: Array<{ action: RecoveryAction; label?: string }> = [];
+  if (run.logPath) { actions.push({ action: 'openRunLog', label: 'Log' }); }
+  if (run.promptPath) {
+    actions.push({ action: 'openRunPrompt', label: 'Prompt' });
+    actions.push({ action: 'retryRun', label: 'Retry' });
+  }
+  actions.push({ action: 'archiveRun', label: 'Archive' });
+  return actions.length > 0 ? actions : undefined;
+}
+
+function activeRunSecondaryActions(run: RecoveryRun): Array<{ action: RecoveryAction; label?: string }> | undefined {
+  const actions: Array<{ action: RecoveryAction; label?: string }> = [];
+  if (run.logPath) { actions.push({ action: 'openRunLog', label: 'Log' }); }
+  if (run.promptPath) { actions.push({ action: 'openRunPrompt', label: 'Prompt' }); }
+  return actions.length > 0 ? actions : undefined;
 }
 
 function recoveryItemForRunStoreIssue(issue: RunStoreIssue): RecoveryItem {

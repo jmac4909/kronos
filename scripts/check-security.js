@@ -463,6 +463,7 @@ for (const marker of [
   'async function openRecoveryCenter',
   'buildRecoveryInventory',
   'function executeRecoveryAction',
+  'function recoveryActionForRequest',
   'function openRecoveryPanel',
   'buildTicketTimeline',
   'function buildTicketTimelineHtml',
@@ -908,6 +909,7 @@ for (const marker of [
   'runId: stringField(message,',
   'planId: stringField(message,',
   'itemId: stringField(message,',
+  'recoveryAction: stringField(message,',
   'webviewActionScriptTag',
   'scriptUri?: string',
   'readyDiagnostic ? { readyCommand: WEBVIEW_READY_COMMAND } : {}',
@@ -915,9 +917,11 @@ for (const marker of [
   "{ messageKey: 'runId', dataAttribute: 'data-run-id' }",
   "{ messageKey: 'planId', dataAttribute: 'data-plan-id' }",
   "{ messageKey: 'itemId', dataAttribute: 'data-item-id' }",
+  "{ messageKey: 'recoveryAction', dataAttribute: 'data-recovery-action' }",
   "data-action=\"${escapeAttr(action)}\"",
   "data-plan-id=\"${escapeAttr(options.planId)}\"",
   "data-item-id=\"${escapeAttr(options.itemId)}\"",
+  "data-recovery-action=\"${escapeAttr(options.recoveryAction)}\"",
 ]) {
   if (!operatorPanel.includes(marker)) {
     fail(`Missing operator panel helper marker: ${marker}`);
@@ -1134,6 +1138,8 @@ for (const forbiddenPattern of [
 }
 for (const marker of [
   "vscode.commands.registerCommand('kronos.refreshProject', async (item: unknown)",
+  'const projectName = resolveProjectName(state, item) || await pickProjectName(state,',
+  'async function pickProjectName(state: KronosState, placeHolder: string): Promise<string | undefined>',
   "vscode.commands.registerCommand('kronos.implement', async (item: unknown)",
   "vscode.commands.registerCommand('kronos.deployMonitor', async (item: unknown)",
   "vscode.commands.registerCommand('kronos.verifyFix', async (item: unknown)",
@@ -1279,6 +1285,12 @@ for (const marker of [
   'Active worktree registry needs manual review',
   'recoveryItemForOrphanMergeRequest',
   'Link MR to Ticket',
+  'secondaryActions',
+  'terminalRunSecondaryActions',
+  "'openRunLog'",
+  "'openRunPrompt'",
+  "'retryRun'",
+  "'archiveRun'",
 ]) {
   if (!recoveryCenter.includes(marker)) {
     fail(`Missing recovery center marker: ${marker}`);
@@ -1292,6 +1304,9 @@ for (const marker of [
   'Kronos Recovery Center',
   'Kronos State Audit Log',
   "actionButton('executeRecoveryItem'",
+  'recoveryActionButtons',
+  'actionRow(buttons)',
+  'recoveryActionOptions(item, action.action, false)',
   'recoveryActionLabel',
   'kronosOperatorPanelCss',
   'kronosActionPanelScript(nonce)',

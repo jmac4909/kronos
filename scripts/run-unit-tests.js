@@ -2322,6 +2322,7 @@ test('webview security injects CSP and preserves existing nonce policies', () =>
     runId: 'run"1',
     planId: 'plan<1>',
     itemId: 'item&1',
+    recoveryAction: 'openRunLog',
     primary: true,
   });
   assert.match(button, /class="kronos-button primary"/);
@@ -2330,6 +2331,7 @@ test('webview security injects CSP and preserves existing nonce policies', () =>
   assert.match(button, /data-run-id="run&quot;1"/);
   assert.match(button, /data-plan-id="plan&lt;1&gt;"/);
   assert.match(button, /data-item-id="item&amp;1"/);
+  assert.match(button, /data-recovery-action="openRunLog"/);
   assert.ok(button.endsWith('>Open &amp; Check</button>'));
   assert.equal(operatorPanel.actionRow([]), '<span class="muted">No action</span>');
   assert.equal(operatorPanel.operatorCommandRow([]), '');
@@ -2342,12 +2344,14 @@ test('webview security injects CSP and preserves existing nonce policies', () =>
     runId: 'run-1',
     planId: 'plan-1',
     itemId: 'item-1',
+    recoveryAction: 'retryRun',
   }, allowedActions), {
     command: 'openRunRecord',
     ticket: 'K-1',
     runId: 'run-1',
     planId: 'plan-1',
     itemId: 'item-1',
+    recoveryAction: 'retryRun',
   });
   assert.deepEqual(operatorPanel.normalizeActionPanelMessage({
     command: 'openRunRecord',
@@ -2355,12 +2359,14 @@ test('webview security injects CSP and preserves existing nonce policies', () =>
     runId: null,
     planId: false,
     itemId: { id: 'bad' },
+    recoveryAction: 88,
   }, allowedActions), {
     command: 'openRunRecord',
     ticket: '',
     runId: '',
     planId: '',
     itemId: '',
+    recoveryAction: '',
   });
   assert.equal(operatorPanel.normalizeActionPanelMessage({ command: 'unknown' }, allowedActions), null);
   assert.equal(operatorPanel.normalizeActionPanelMessage(null, allowedActions), null);
@@ -2371,6 +2377,7 @@ test('webview security injects CSP and preserves existing nonce policies', () =>
   assert.match(panelScript, /data-run-id/);
   assert.match(panelScript, /data-plan-id/);
   assert.match(panelScript, /data-item-id/);
+  assert.match(panelScript, /data-recovery-action/);
   assert.match(panelScript, /__kronosWebviewReady/);
   const defaultPanelScript = operatorPanel.kronosActionPanelScript('nonce-default');
   assert.match(defaultPanelScript, /__kronosWebviewReady/);
@@ -4430,6 +4437,7 @@ test('recovery center prioritizes failed runs, unsafe worktrees, doctor failures
         ticket: 'K-1',
         status: 'failed',
         events: [{ label: 'Process exited with code 1', detail: 'Jenkins build failed' }],
+        logPath: '/tmp/run.log',
         promptPath: '/tmp/prompt.txt',
       },
       {
@@ -4503,7 +4511,10 @@ test('recovery center prioritizes failed runs, unsafe worktrees, doctor failures
   assert.equal(inventory.summary.info, 2);
   assert.equal(inventory.summary.total, 8);
   assert.equal(inventory.items[0].severity, 'critical');
-  assert.ok(inventory.items.some(item => item.id === 'run:failed-run' && item.action === 'resumeRun'));
+  const failedRunItem = inventory.items.find(item => item.id === 'run:failed-run');
+  assert.ok(failedRunItem);
+  assert.equal(failedRunItem.action, 'resumeRun');
+  assert.deepEqual(failedRunItem.secondaryActions.map(action => action.action), ['openRunLog', 'openRunPrompt', 'retryRun', 'archiveRun']);
   assert.ok(inventory.items.some(item => item.id === 'run:failed-run' && item.detail === 'Jenkins build failed'));
   assert.ok(inventory.items.some(item => item.id === 'mr:MR-7:7' && item.action === 'linkMrToTicket' && item.ticketKey === 'MR-7'));
   assert.ok(inventory.items.some(item => item.id === 'run:stale-run' && item.title.includes('may be abandoned')));
@@ -4522,6 +4533,12 @@ test('recovery panel view renders escaped recovery and state audit rows', () => 
         title: 'Broken <run>',
         detail: 'Needs & review',
         action: 'resumeRun',
+        secondaryActions: [
+          { action: 'openRunLog', label: 'Log' },
+          { action: 'openRunPrompt', label: 'Prompt' },
+          { action: 'retryRun', label: 'Retry' },
+          { action: 'archiveRun', label: 'Archive' },
+        ],
         runId: 'run-1',
         ticketKey: 'K-1',
       },
@@ -4532,7 +4549,16 @@ test('recovery panel view renders escaped recovery and state audit rows', () => 
   assert.ok(recoveryHtml.includes('Needs &amp; review'));
   assert.ok(recoveryHtml.includes('data-action="executeRecoveryItem"'));
   assert.ok(recoveryHtml.includes('data-item-id="item-1"'));
+  assert.ok(recoveryHtml.includes('data-recovery-action="resumeRun"'));
+  assert.ok(recoveryHtml.includes('data-recovery-action="openRunLog"'));
+  assert.ok(recoveryHtml.includes('data-recovery-action="openRunPrompt"'));
+  assert.ok(recoveryHtml.includes('data-recovery-action="retryRun"'));
+  assert.ok(recoveryHtml.includes('data-recovery-action="archiveRun"'));
   assert.ok(recoveryHtml.includes('Resume Run'));
+  assert.ok(recoveryHtml.includes('Log'));
+  assert.ok(recoveryHtml.includes('Prompt'));
+  assert.ok(recoveryHtml.includes('Retry'));
+  assert.ok(recoveryHtml.includes('Archive'));
 
   const auditHtml = recoveryPanelView.buildStateAuditLogHtml([
     {
@@ -7678,7 +7704,8 @@ test('extension dispatch command handlers normalize tree payloads before use', (
     "vscode.commands.registerCommand('kronos.openProject', async (item: unknown)",
     "vscode.commands.registerCommand('kronos.openInClaude', async (item: unknown)",
     "vscode.commands.registerCommand('kronos.removeProject', async (item: unknown)",
-    'const projectName = resolveProjectName(state, item);',
+    'const projectName = resolveProjectName(state, item) || await pickProjectName(state,',
+    'async function pickProjectName(state: KronosState, placeHolder: string): Promise<string | undefined>',
     'const ticketKey = resolveTicketKey(item);',
     'const taskId = resolveTaskId(item);',
     "await startClaudeDispatch(projectPath, 'verify-fix', ticketKey,",
