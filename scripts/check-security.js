@@ -317,7 +317,7 @@ for (const marker of [
   'const notes = evidenceNotes(ticket)',
   'const checks = evidenceChecks(ticket)',
   'const environmentResults = evidenceEnvironmentResults(ticket)',
-  'evidenceRecordCount(state.state?.tickets?.[ticketKey])',
+  'evidenceRecordCount(ticket)',
   'function ticketStringArray',
   'function ticketAttachments',
   'interface TicketAttachmentSummary',
@@ -1740,6 +1740,9 @@ for (const marker of [
 }
 if (ticketTreeProvider.includes('function evidenceItemCount')) {
   fail('Ticket tree must not duplicate evidence counting.');
+}
+if (extension.includes('function evidenceCountForTicket')) {
+  fail('Extension must call shared evidenceRecordCount directly instead of wrapping it locally.');
 }
 
 for (const marker of [

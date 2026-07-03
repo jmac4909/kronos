@@ -4724,10 +4724,6 @@ function minutesUntilTomorrow(): number {
   return Math.max(1, Math.ceil((tomorrow.getTime() - now.getTime()) / (60 * 1000)));
 }
 
-function evidenceCountForTicket(state: KronosState, ticketKey: string): number {
-  return evidenceRecordCount(state.state?.tickets?.[ticketKey]);
-}
-
 function ticketStringField(record: object | null | undefined, key: string, fallback = ''): string {
   const value = record ? Reflect.get(record, key) : undefined;
   return value === undefined || value === null ? fallback : String(value);
@@ -4821,7 +4817,7 @@ async function removeTicketFromQueue(state: KronosState, ticketKey: string, inte
       return false;
     }
   }
-  if (ticket && evidenceCountForTicket(state, ticketKey) === 0) {
+  if (ticket && evidenceRecordCount(ticket) === 0) {
     if (!interactive) {
       vscode.window.showWarningMessage(`${ticketKey} stayed in queue because it has no evidence records.`);
       return false;

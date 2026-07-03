@@ -6099,7 +6099,7 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'const notes = evidenceNotes(ticket)',
     'const checks = evidenceChecks(ticket)',
     'const environmentResults = evidenceEnvironmentResults(ticket)',
-    'evidenceRecordCount(state.state?.tickets?.[ticketKey])',
+    'evidenceRecordCount(ticket)',
     'function ticketStringArray',
     'function ticketAttachments',
     'interface TicketAttachmentSummary',
@@ -6945,6 +6945,7 @@ test('tree providers share action labels and icons', () => {
   assert.equal(ticketTree.includes('function actionToLabel'), false, 'ticket tree should not duplicate action labels');
   assert.equal(ticketTree.includes('function evidenceItemCount'), false, 'ticket tree should not duplicate evidence counting');
   assert.equal(queueTree.includes('function actionIcon'), false, 'queue tree should not duplicate action icons');
+  assert.equal(extensionSource.includes('function evidenceCountForTicket'), false, 'extension should call shared evidenceRecordCount directly');
 });
 
 test('queue tree polling clears active-run decorations after runs finish', async () => {
