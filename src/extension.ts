@@ -4,7 +4,7 @@ import { ProjectTreeProvider } from './views/ProjectTreeProvider';
 import { QueueTreeProvider } from './views/QueueTreeProvider';
 import { SessionTreeProvider } from './views/SessionTreeProvider';
 import { TaskTreeProvider } from './views/TaskTreeProvider';
-import { ReviewTreeProvider } from './views/ReviewTreeProvider';
+import { ReviewTreeProvider, type ReviewSeenKeysStore } from './views/ReviewTreeProvider';
 import { TicketTreeProvider } from './views/TicketTreeProvider';
 import * as path from 'path';
 import * as os from 'os';
@@ -94,6 +94,7 @@ const REQUIRED_PROMPTS = [
 const LIVE_MR_DIFF_LIMIT = 4;
 const LIVE_MR_DIFF_TIMEOUT_MS = 8000;
 const REVIEW_POLL_FAILURE_NOTIFICATION_MS = 15 * 60 * 1000;
+const REVIEW_SEEN_KEYS_STORAGE_KEY = 'kronos.review.seenKeys.v1';
 const reviewPollFailureNotifications = new Map<string, number>();
 const OPTIONAL_SCRIPT_PANEL_WARNING = 'Kronos integration scripts are not installed. Run Kronos: Doctor for setup details.';
 
@@ -207,6 +208,25 @@ function notifyNewReviewItems(reviewTree: ReviewTreeProvider, notifiedReviewKeys
     'kronosReview.focus',
     'Failed to open Kronos Review.'
   );
+}
+
+function reviewSeenKeysStore(globalState: vscode.Memento): ReviewSeenKeysStore {
+  return {
+    get: () => normalizeReviewSeenKeys(globalState.get<unknown>(REVIEW_SEEN_KEYS_STORAGE_KEY)),
+    update: keys => globalState.update(REVIEW_SEEN_KEYS_STORAGE_KEY, normalizeReviewSeenKeys([...keys]) || []),
+  };
+}
+
+function normalizeReviewSeenKeys(value: unknown): string[] | undefined {
+  if (value === undefined) { return undefined; }
+  if (!Array.isArray(value)) { return []; }
+  const keys = new Set<string>();
+  for (const item of value) {
+    if (typeof item === 'string' && item.trim()) {
+      keys.add(item.trim());
+    }
+  }
+  return [...keys].sort();
 }
 
 async function runCommandProgress(
@@ -1168,7 +1188,7 @@ export function activate(context: vscode.ExtensionContext) {
   const queueTree = new QueueTreeProvider(state);
   const sessionTree = new SessionTreeProvider(state);
   const taskTree = new TaskTreeProvider(state);
-  const reviewTree = new ReviewTreeProvider(state);
+  const reviewTree = new ReviewTreeProvider(state, reviewSeenKeysStore(context.globalState));
   const notifiedReviewKeys = new Set<string>();
   const ticketTree = new TicketTreeProvider(state);
 

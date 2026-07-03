@@ -13,6 +13,11 @@ export interface NewReviewItemSummary {
   mrIid?: number;
 }
 
+export interface ReviewSeenKeysStore {
+  get(): readonly string[] | undefined;
+  update(keys: readonly string[]): Thenable<void> | void;
+}
+
 export class ReviewTreeProvider implements vscode.TreeDataProvider<ReviewItem> {
   private _onDidChangeTreeData = new vscode.EventEmitter<ReviewItem | undefined>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
@@ -26,7 +31,7 @@ export class ReviewTreeProvider implements vscode.TreeDataProvider<ReviewItem> {
   private spinTimer: NodeJS.Timeout | undefined;
   private readonly stateSubscription: vscode.Disposable;
 
-  constructor(private kronosState: KronosState) {
+  constructor(private kronosState: KronosState, private readonly seenKeysStore?: ReviewSeenKeysStore) {
     this.seedInitialReviewKeys();
     this.stateSubscription = kronosState.onDidChange(() => this.refresh());
   }
@@ -69,6 +74,7 @@ export class ReviewTreeProvider implements vscode.TreeDataProvider<ReviewItem> {
     this.newReviewKeys.clear();
     this.spinningReviewKeys.clear();
     this.clearSpinTimer();
+    this.persistSeenReviewKeys();
     if (previousCount > 0) {
       this._onDidChangeNewReviewCount.fire(0);
       this._onDidChangeTreeData.fire(undefined);
@@ -104,18 +110,37 @@ export class ReviewTreeProvider implements vscode.TreeDataProvider<ReviewItem> {
   private seedInitialReviewKeys(): void {
     const initialKeys = new Set(this.reviewEntries().map(([key]) => key));
     this.currentReviewKeys = initialKeys;
-    this.seenReviewKeys = new Set(initialKeys);
     this.newReviewKeys.clear();
     this.spinningReviewKeys.clear();
     this.clearSpinTimer();
+    const storedSeenKeys = this.seenKeysStore?.get();
+    if (storedSeenKeys === undefined) {
+      this.seenReviewKeys = new Set(initialKeys);
+      this.persistSeenReviewKeys();
+      return;
+    }
+    const storedSeen = new Set(storedSeenKeys);
+    this.seenReviewKeys = new Set([...initialKeys].filter(key => storedSeen.has(key)));
+    for (const key of initialKeys) {
+      if (!this.seenReviewKeys.has(key)) {
+        this.newReviewKeys.add(key);
+        this.spinningReviewKeys.set(key, Date.now() + NEW_REVIEW_SPIN_MS);
+      }
+    }
+    if (this.seenReviewKeys.size !== storedSeen.size) {
+      this.persistSeenReviewKeys();
+    }
+    this.scheduleSpinRefresh();
   }
 
   private refreshReviewKeys(): void {
     const previousCount = this.newReviewKeys.size;
     const nextKeys = new Set(this.reviewEntries().map(([key]) => key));
+    let seenKeysChanged = false;
     for (const key of this.seenReviewKeys) {
       if (!nextKeys.has(key)) {
         this.seenReviewKeys.delete(key);
+        seenKeysChanged = true;
       }
     }
     for (const key of nextKeys) {
@@ -135,7 +160,24 @@ export class ReviewTreeProvider implements vscode.TreeDataProvider<ReviewItem> {
     if (previousCount !== this.newReviewKeys.size) {
       this._onDidChangeNewReviewCount.fire(this.newReviewKeys.size);
     }
+    if (seenKeysChanged) {
+      this.persistSeenReviewKeys();
+    }
     this.scheduleSpinRefresh();
+  }
+
+  private persistSeenReviewKeys(): void {
+    if (!this.seenKeysStore) { return; }
+    try {
+      const result = this.seenKeysStore.update([...this.seenReviewKeys].sort());
+      if (result && typeof result.then === 'function') {
+        void result.then(undefined, (e: unknown) => {
+          console.warn('Kronos review seen-key persistence failed.', e);
+        });
+      }
+    } catch (e: unknown) {
+      console.warn('Kronos review seen-key persistence failed.', e);
+    }
   }
 
   private reviewEntries(): Array<[string, TicketWithOpenMergeRequest]> {

@@ -2687,6 +2687,54 @@ test('review work service centralizes open review merge request semantics', () =
   }]);
 });
 
+test('review tree persists seen review keys across reloads', async () => {
+  const vscodeStub = createVscodeTestModule();
+  await withPatchedModuleLoad(request => {
+    if (request === 'vscode') {
+      return vscodeStub.vscode;
+    }
+    return undefined;
+  }, async () => {
+    const reviewTreePath = require.resolve('../out/views/ReviewTreeProvider.js');
+    delete require.cache[reviewTreePath];
+    const { ReviewTreeProvider } = require(reviewTreePath);
+    let storedSeenKeys;
+    const seenKeysStore = {
+      get: () => storedSeenKeys,
+      update: keys => { storedSeenKeys = [...keys]; },
+    };
+    const stateEmitter = new vscodeStub.EventEmitter();
+    const reviewTicket = iid => ticket({
+      next_action: 'await_review',
+      mr: { iid, state: 'opened', review_status: 'pending_review', url: `https://gitlab.example/mr/${iid}` },
+    });
+    let currentState = baseState({ 'K-1': reviewTicket(1) });
+    const kronosState = {
+      get state() { return currentState; },
+      onDidChange: stateEmitter.event,
+    };
+
+    const firstProvider = new ReviewTreeProvider(kronosState, seenKeysStore);
+    assert.equal(firstProvider.getNewReviewCount(), 0);
+    assert.deepEqual(storedSeenKeys, ['K-1']);
+
+    currentState = baseState({ 'K-1': reviewTicket(1), 'K-2': reviewTicket(2) });
+    stateEmitter.fire(undefined);
+    assert.equal(firstProvider.getNewReviewCount(), 1);
+    assert.deepEqual(firstProvider.getNewReviewItems().map(item => item.ticketKey), ['K-2']);
+    firstProvider.dispose();
+
+    const reloadedProvider = new ReviewTreeProvider(kronosState, seenKeysStore);
+    assert.equal(reloadedProvider.getNewReviewCount(), 1);
+    assert.deepEqual(reloadedProvider.getNewReviewItems().map(item => item.ticketKey), ['K-2']);
+
+    reloadedProvider.markVisibleReviewItemsSeen();
+    assert.equal(reloadedProvider.getNewReviewCount(), 0);
+    assert.deepEqual(storedSeenKeys, ['K-1', 'K-2']);
+    reloadedProvider.dispose();
+  });
+});
+
 test('queue planner builds backlog triage report for grooming lanes', () => {
   const now = new Date('2026-07-01T12:00:00.000Z');
   const state = baseState({
@@ -6426,6 +6474,10 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'function executeTicketDetailAction',
     'function openTicketExternalUrl',
     'const updateReviewBadge = () =>',
+    "const REVIEW_SEEN_KEYS_STORAGE_KEY = 'kronos.review.seenKeys.v1'",
+    'function reviewSeenKeysStore(globalState: vscode.Memento): ReviewSeenKeysStore',
+    'function normalizeReviewSeenKeys(value: unknown): string[] | undefined',
+    'new ReviewTreeProvider(state, reviewSeenKeysStore(context.globalState))',
     'reviewTree.getNewReviewCount()',
     'view.badge = count > 0',
     'reviewTree.onDidChangeNewReviewCount(updateReviewBadge)',
@@ -7467,6 +7519,7 @@ test('tree providers share action labels and icons', () => {
   for (const marker of [
     'readonly onDidChangeNewReviewCount',
     'const NEW_REVIEW_SPIN_MS = 6000',
+    'export interface ReviewSeenKeysStore',
     'private currentReviewKeys = new Set<string>()',
     'private seenReviewKeys = new Set<string>()',
     'private newReviewKeys = new Set<string>()',
@@ -7484,7 +7537,11 @@ test('tree providers share action labels and icons', () => {
     'dispose(): void',
     'this._onDidChangeNewReviewCount.dispose()',
     'private seedInitialReviewKeys(): void',
+    'const storedSeenKeys = this.seenKeysStore?.get()',
     'this.seenReviewKeys = new Set(initialKeys)',
+    'private persistSeenReviewKeys(): void',
+    'this.persistSeenReviewKeys()',
+    'Kronos review seen-key persistence failed.',
     "this.description = `${isNew ? 'NEW · ' : ''}",
     'const unresolvedSuffix = mr.unresolved_discussion_count !== undefined',
     'Unresolved discussions: ${mr.unresolved_discussion_count}',
