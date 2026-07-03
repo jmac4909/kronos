@@ -371,7 +371,7 @@ const TICKET_SCOPED_OPERATOR_COMMANDS = new Set([
 ]);
 
 function normalizeWebviewCommand(raw: unknown, allowed: Set<string>): string | null {
-  const command = recordFromUnknown(raw).command;
+  const command = recordFromUnknown(raw)['command'];
   if (typeof command !== 'string' || !allowed.has(command)) { return null; }
   return command;
 }
@@ -382,8 +382,8 @@ function normalizeBoardMessage(raw: unknown): { command: string; ticket: string;
   const message = recordFromUnknown(raw);
   return {
     command,
-    ticket: typeof message.ticket === 'string' ? message.ticket : '',
-    project: typeof message.project === 'string' ? message.project : '',
+    ticket: typeof message['ticket'] === 'string' ? message['ticket'] : '',
+    project: typeof message['project'] === 'string' ? message['project'] : '',
   };
 }
 
@@ -393,10 +393,10 @@ function normalizeActionPanelMessage(raw: unknown, allowed: Set<string>): { comm
   const message = recordFromUnknown(raw);
   return {
     command,
-    ticket: typeof message.ticket === 'string' ? message.ticket : '',
-    runId: typeof message.runId === 'string' ? message.runId : '',
-    planId: typeof message.planId === 'string' ? message.planId : '',
-    itemId: typeof message.itemId === 'string' ? message.itemId : '',
+    ticket: typeof message['ticket'] === 'string' ? message['ticket'] : '',
+    runId: typeof message['runId'] === 'string' ? message['runId'] : '',
+    planId: typeof message['planId'] === 'string' ? message['planId'] : '',
+    itemId: typeof message['itemId'] === 'string' ? message['itemId'] : '',
   };
 }
 
@@ -410,11 +410,11 @@ function normalizeSonarIssueCommandList(value: unknown): SonarIssue[] {
 function normalizeSonarIssueCommandValue(value: unknown): SonarIssue | null {
   const record = recordFromUnknown(value);
   const issue: SonarIssue = {};
-  if (typeof record.severity === 'string') { issue.severity = record.severity; }
-  if (typeof record.rule === 'string') { issue.rule = record.rule; }
-  if (typeof record.component === 'string') { issue.component = record.component; }
-  if (record.line !== undefined) { issue.line = record.line; }
-  if (typeof record.message === 'string') { issue.message = record.message; }
+  if (typeof record['severity'] === 'string') { issue.severity = record['severity']; }
+  if (typeof record['rule'] === 'string') { issue.rule = record['rule']; }
+  if (typeof record['component'] === 'string') { issue.component = record['component']; }
+  if (record['line'] !== undefined) { issue.line = record['line']; }
+  if (typeof record['message'] === 'string') { issue.message = record['message']; }
   return issue.severity || issue.rule || issue.component || issue.message || issue.line !== undefined ? issue : null;
 }
 
@@ -4990,14 +4990,14 @@ function sanitizeBranchName(branch: string): string {
 
 function resolveProjectName(state: KronosState, item: unknown): string | undefined {
   const record = recordFromUnknown(item);
-  const projectName = record.projectName;
+  const projectName = record['projectName'];
   if (typeof projectName === 'string' && projectName.trim()) { return projectName; }
-  const ticket = recordFromUnknown(record.ticket);
-  const ticketProjects = ticket.projects;
+  const ticket = recordFromUnknown(record['ticket']);
+  const ticketProjects = ticket['projects'];
   if (Array.isArray(ticketProjects) && typeof ticketProjects[0] === 'string' && ticketProjects[0].trim()) {
     return ticketProjects[0];
   }
-  const ticketKey = record.ticketKey;
+  const ticketKey = record['ticketKey'];
   if (typeof ticketKey === 'string' && state.state) {
     const t = state.state.tickets[ticketKey];
     if (t?.projects?.length) { return t.projects[0]; }
@@ -5008,17 +5008,17 @@ function resolveProjectName(state: KronosState, item: unknown): string | undefin
 function resolveTicketKey(item: unknown): string | undefined {
   if (typeof item === 'string') { return item; }
   const record = recordFromUnknown(item);
-  if (typeof record.ticketKey === 'string') { return record.ticketKey; }
-  const nestedItem = recordFromUnknown(record.item);
-  if (typeof nestedItem.ticket === 'string') { return nestedItem.ticket; }
-  if (typeof record.ticket === 'string') { return record.ticket; }
+  if (typeof record['ticketKey'] === 'string') { return record['ticketKey']; }
+  const nestedItem = recordFromUnknown(record['item']);
+  if (typeof nestedItem['ticket'] === 'string') { return nestedItem['ticket']; }
+  if (typeof record['ticket'] === 'string') { return record['ticket']; }
   return undefined;
 }
 
 function resolveMergeRequestUrl(item: unknown): string | undefined {
-  const ticket = recordFromUnknown(recordFromUnknown(item).ticket);
-  const mr = recordFromUnknown(ticket.mr);
-  return stringFromUnknown(mr.url);
+  const ticket = recordFromUnknown(recordFromUnknown(item)['ticket']);
+  const mr = recordFromUnknown(ticket['mr']);
+  return stringFromUnknown(mr['url']);
 }
 
 interface QueueCommandPayload {
@@ -5030,19 +5030,19 @@ interface QueueCommandPayload {
 
 function resolveQueueCommandItem(item: unknown): QueueCommandPayload | undefined {
   return queueCommandPayloadFromRecord(recordFromUnknown(item))
-    || queueCommandPayloadFromRecord(recordFromUnknown(recordFromUnknown(item).item));
+    || queueCommandPayloadFromRecord(recordFromUnknown(recordFromUnknown(item)['item']));
 }
 
 function queueCommandPayloadFromRecord(record: Record<string, unknown>): QueueCommandPayload | undefined {
-  const action = record.action;
+  const action = record['action'];
   if (typeof action !== 'string' || !action.trim()) { return undefined; }
-  const projects = Array.isArray(record.projects)
-    ? record.projects
+  const projects = Array.isArray(record['projects'])
+    ? record['projects']
       .filter((project): project is string => typeof project === 'string' && project.trim().length > 0)
       .map(project => project.trim())
     : [];
-  const ticket = typeof record.ticket === 'string' && record.ticket.trim() ? record.ticket.trim() : undefined;
-  const id = typeof record.id === 'string' && record.id.trim() ? record.id.trim() : undefined;
+  const ticket = typeof record['ticket'] === 'string' && record['ticket'].trim() ? record['ticket'].trim() : undefined;
+  const id = typeof record['id'] === 'string' && record['id'].trim() ? record['id'].trim() : undefined;
   const payload: QueueCommandPayload = { projects, action: action.trim() };
   if (id) { payload.id = id; }
   if (ticket) { payload.ticket = ticket; }
@@ -5050,12 +5050,12 @@ function queueCommandPayloadFromRecord(record: Record<string, unknown>): QueueCo
 }
 
 function resolveQueueIndex(item: unknown): number | undefined {
-  const index = recordFromUnknown(item).index;
+  const index = recordFromUnknown(item)['index'];
   return typeof index === 'number' && Number.isInteger(index) && index >= 0 ? index : undefined;
 }
 
 function resolveTaskId(item: unknown): string | undefined {
-  const taskId = recordFromUnknown(item).taskId;
+  const taskId = recordFromUnknown(item)['taskId'];
   return typeof taskId === 'string' && taskId.trim() ? taskId : undefined;
 }
 
