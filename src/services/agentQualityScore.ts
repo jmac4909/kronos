@@ -117,7 +117,7 @@ export function computeAgentQualityScore(input: {
 }
 
 function hasRetryMetadata(run: RunQualityRecord): boolean {
-  return isRunRecord(run.promptMetadata) && runString(run.promptMetadata, 'retryOfRunId').length > 0;
+  return isRunRecord(run['promptMetadata']) && runString(run['promptMetadata'], 'retryOfRunId').length > 0;
 }
 
 function runString(run: RunQualityRecord, key: string): string {

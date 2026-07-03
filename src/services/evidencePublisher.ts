@@ -144,9 +144,9 @@ async function publishDestination(destination: EvidencePublishDestination, trans
 }
 
 function buildJiraDestination(ticketKey: string, ticket: Ticket, comment: string, env: NodeJS.ProcessEnv): EvidencePublishDestination {
-  const jiraBase = firstNonEmpty(env.JIRA_BASE_URL, baseUrlFromIssueUrl(ticket.jira_url));
-  const email = env.JIRA_EMAIL;
-  const token = env.JIRA_API_TOKEN;
+  const jiraBase = firstNonEmpty(env['JIRA_BASE_URL'], baseUrlFromIssueUrl(ticket.jira_url));
+  const email = env['JIRA_EMAIL'];
+  const token = env['JIRA_API_TOKEN'];
   if (!ticket.jira_url && !jiraBase) {
     return missing('jira', 'Jira ticket comment', 'No Jira URL or JIRA_BASE_URL is configured.');
   }
@@ -184,11 +184,11 @@ function buildGitLabDestination(ticket: Ticket, comment: string, env: NodeJS.Pro
   if (!ticket.mr?.url) {
     return missing('gitlab_mr', 'Merge request comment', 'No merge request URL is recorded for this ticket.');
   }
-  const token = env.GITLAB_TOKEN;
+  const token = env['GITLAB_TOKEN'];
   if (!token) {
     return missing('gitlab_mr', 'Merge request comment', 'GITLAB_TOKEN is required. Value is not displayed.');
   }
-  const endpoint = gitLabNoteEndpoint(ticket.mr.url, ticket.mr.iid, env.GITLAB_API_BASE_URL);
+  const endpoint = gitLabNoteEndpoint(ticket.mr.url, ticket.mr.iid, env['GITLAB_API_BASE_URL']);
   if (!endpoint) {
     return {
       kind: 'gitlab_mr',

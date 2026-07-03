@@ -173,7 +173,7 @@ function isFailedRunStatus(status: string): boolean {
 }
 
 function hasRetryMetadata(run: RunMetricRecord): boolean {
-  return isRecord(run.promptMetadata) && runString(run.promptMetadata, 'retryOfRunId').length > 0;
+  return isRecord(run['promptMetadata']) && runString(run['promptMetadata'], 'retryOfRunId').length > 0;
 }
 
 function runString(run: RunMetricRecord, key: string): string {
