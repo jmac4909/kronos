@@ -1,4 +1,4 @@
-import { KronosState, QueueState } from '../state/types';
+import { KronosState, QueueState, Ticket } from '../state/types';
 import { AgingThresholds, analyzeAging } from './agingAnalyzer';
 import { evaluateEvidenceGates } from './evidenceGate';
 import { buildHumanReviewInbox } from './humanReviewInbox';
@@ -30,9 +30,14 @@ export function computeAttentionBadge(input: AttentionBadgeInput): AttentionBadg
   const state = input.state || null;
   const tickets = state?.tickets || {};
   const runs = Array.isArray(input.runs) ? input.runs : [];
-  const humanReviewInbox = buildHumanReviewInbox({ state, queue: input.queue, runs });
+  const inboxInput = { state, runs };
+  if (input.queue !== undefined) { Object.assign(inboxInput, { queue: input.queue }); }
+  const humanReviewInbox = buildHumanReviewInbox(inboxInput);
   const evidenceGates = evaluateEvidenceGates(tickets);
-  const agingReport = analyzeAging({ tickets, now: input.now, thresholds: input.agingThresholds });
+  const agingInput: { tickets: Record<string, Ticket>; now?: Date; thresholds?: Partial<AgingThresholds> } = { tickets };
+  if (input.now) { agingInput.now = input.now; }
+  if (input.agingThresholds) { agingInput.thresholds = input.agingThresholds; }
+  const agingReport = analyzeAging(agingInput);
   const summary: Omit<AttentionBadgeSummary, 'count' | 'tooltip'> = {
     humanReviewItems: humanReviewInbox.summary.critical + humanReviewInbox.summary.warning,
     evidenceGateFailures: evidenceGates.filter(gate => gate.status === 'fail').length,

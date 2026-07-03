@@ -47,7 +47,7 @@ export function resolvePostRunTicket(input: {
   const ticketKey = trimmedString(input.ticketKey);
   const tickets = input.tickets;
   if (!tickets) {
-    return { ticketKey };
+    return postRunTicketResolution(ticketKey);
   }
   if (ticketKey) {
     const direct = tickets[ticketKey];
@@ -62,7 +62,7 @@ export function resolvePostRunTicket(input: {
 
   const projectName = trimmedString(input.projectName) || runString(runRecord(input.run).project);
   if (!projectName) {
-    return { ticketKey };
+    return postRunTicketResolution(ticketKey);
   }
   const matchedProjectTickets = Object.entries(tickets).filter(([, ticket]) => (
     ticket.next_action !== 'done' && ticketLinkedToProject(ticket, projectName)
@@ -70,7 +70,11 @@ export function resolvePostRunTicket(input: {
   const matchedProjectTicket = matchedProjectTickets.length === 1 ? matchedProjectTickets[0] : undefined;
   return matchedProjectTicket
     ? { ticketKey: matchedProjectTicket[0], ticket: matchedProjectTicket[1] }
-    : { ticketKey };
+    : postRunTicketResolution(ticketKey);
+}
+
+function postRunTicketResolution(ticketKey: string | undefined): PostRunTicketResolution {
+  return ticketKey ? { ticketKey } : {};
 }
 
 export function shouldRecordRunCompletionEvidence(input: { run: unknown; ticket?: Ticket }): boolean {
@@ -147,15 +151,16 @@ export function evaluatePostRunReadiness(input: {
   const failureKind = classifyRunFailure(input.run);
   const failureReason = runFailureReason(inputRun);
   if (!input.ticketKey || !input.ticket) {
-    return {
+    const readiness: PostRunReadiness = {
       evaluatedAt: now.toISOString(),
-      ticketKey: input.ticketKey,
       status: SUCCESS_RUN_STATUSES.has(runStatus) ? 'unknown' : 'blocked',
       summary: SUCCESS_RUN_STATUSES.has(runStatus)
         ? 'Run completed, but no ticket state was available for readiness evaluation.'
         : `Run did not complete cleanly (${failureSummaryDetail(failureKind, failureReason)}).`,
       failureKind,
     };
+    if (input.ticketKey) { readiness.ticketKey = input.ticketKey; }
+    return readiness;
   }
 
   const gate = evaluateEvidenceGate(input.ticketKey, input.ticket);

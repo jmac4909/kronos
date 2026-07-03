@@ -1649,7 +1649,7 @@ test('process tree service centralizes stop and pause signaling behavior', () =>
     kill: (pid, signal) => { killed.push([pid, signal || 'default']); },
     schedule: callback => { scheduled = callback; },
   });
-  assert.deepEqual(stop, { attempted: true, signalled: true, method: 'process-group', fallbackUsed: false, error: undefined });
+  assert.deepEqual(stop, { attempted: true, signalled: true, method: 'process-group', fallbackUsed: false });
   assert.deepEqual(killed, [[-123, 'SIGTERM']]);
   scheduled();
   assert.deepEqual(killed, [[-123, 'SIGTERM'], [-123, 'SIGKILL']]);

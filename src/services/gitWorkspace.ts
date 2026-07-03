@@ -116,7 +116,9 @@ export function prepareManagedWorktree(input: ManagedWorktreeInput): ManagedWork
   } catch (e: unknown) {
     pullWarning = unknownErrorMessage(e, 'Could not fast-forward managed worktree after creation.');
   }
-  return { checkoutRef, pullWarning };
+  const result: ManagedWorktreeResult = { checkoutRef };
+  if (pullWarning) { result.pullWarning = pullWarning; }
+  return result;
 }
 
 export function removeWorktreeSafely(

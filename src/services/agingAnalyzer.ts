@@ -65,7 +65,7 @@ export function analyzeAging(input: {
     }
 
     if (ticket.next_action === 'fix_build' || isFailedBuild(ticket)) {
-      pushIfStale(items, {
+      const buildInput = {
         ticketKey,
         ticket,
         kind: 'build',
@@ -74,8 +74,8 @@ export function analyzeAging(input: {
         thresholdDays: thresholds.buildFailureDays,
         title: `${ticketKey} has a stale build failure`,
         detail: ticket.build ? `Build #${ticket.build.number} is ${ticket.build.status}.` : 'Ticket is marked fix_build without a build record.',
-        url: ticket.build?.url,
-      });
+      } as const;
+      pushIfStale(items, ticket.build?.url ? { ...buildInput, url: ticket.build.url } : buildInput);
     }
 
     if (ticket.next_action === 'blocked') {
@@ -105,7 +105,7 @@ export function analyzeAging(input: {
     }
 
     if (['implement', 'in_progress'].includes(ticket.next_action)) {
-      pushIfStale(items, {
+      const ticketInput = {
         ticketKey,
         ticket,
         kind: 'ticket',
@@ -114,8 +114,8 @@ export function analyzeAging(input: {
         thresholdDays: thresholds.ticketDays,
         title: `${ticketKey} has not moved recently`,
         detail: `Next action is ${ticket.next_action}.`,
-        url: ticket.jira_url,
-      });
+      } as const;
+      pushIfStale(items, ticket.jira_url ? { ...ticketInput, url: ticket.jira_url } : ticketInput);
     }
   }
 
@@ -145,7 +145,7 @@ function pushIfStale(items: AgingItem[], input: {
 }): void {
   const ageDays = daysBetween(input.reference, input.now);
   if (ageDays < input.thresholdDays) { return; }
-  items.push({
+  const item: AgingItem = {
     id: `${input.kind}:${input.ticketKey}`,
     ticketKey: input.ticketKey,
     kind: input.kind,
@@ -154,8 +154,9 @@ function pushIfStale(items: AgingItem[], input: {
     thresholdDays: input.thresholdDays,
     title: input.title,
     detail: input.detail,
-    url: input.url,
-  });
+  };
+  if (input.url) { item.url = input.url; }
+  items.push(item);
 }
 
 function referenceDate(ticket: Ticket): Date | null {

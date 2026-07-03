@@ -141,12 +141,13 @@ export function readableGoogleApplicationCredentials(options: Pick<CliProbeOptio
 export function runCliProbe(command: string, args: string[], options: CliProbeOptions = {}): CliProbeResult {
   const commandRunner = options.commandRunner || defaultCliProbeCommandRunner;
   try {
+    const commandOptions: CliProbeCommandOptions = {
+      timeoutMs: options.timeoutMs || CLAUDE_AGENTS_TIMEOUT_MS,
+    };
+    if (options.maxBuffer !== undefined) { commandOptions.maxBuffer = options.maxBuffer; }
     return {
       ok: true,
-      output: commandRunner(command, args, {
-        timeoutMs: options.timeoutMs || CLAUDE_AGENTS_TIMEOUT_MS,
-        maxBuffer: options.maxBuffer,
-      }),
+      output: commandRunner(command, args, commandOptions),
     };
   } catch (e: unknown) {
     return {

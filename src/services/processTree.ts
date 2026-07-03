@@ -105,7 +105,9 @@ function result(
   fallbackUsed: boolean,
   error?: string,
 ): ProcessTreeResult {
-  return { attempted, signalled, method, fallbackUsed, error };
+  const output: ProcessTreeResult = { attempted, signalled, method, fallbackUsed };
+  if (error) { output.error = error; }
+  return output;
 }
 
 function defaultCommandRunner(command: string, args: string[], options: ProcessTreeCommandOptions): void {

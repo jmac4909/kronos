@@ -70,13 +70,14 @@ export async function publishEvidencePlan(
   const results: EvidencePublishResult[] = [];
   for (const destination of plan.destinations) {
     if (!selected.has(destination.kind)) {
-      results.push({
+      const skipped: EvidencePublishResult = {
         kind: destination.kind,
         label: destination.label,
         status: 'skipped',
         detail: 'Destination was not selected for publishing.',
-        endpoint: destination.endpoint,
-      });
+      };
+      if (destination.endpoint) { skipped.endpoint = destination.endpoint; }
+      results.push(skipped);
       continue;
     }
     results.push(await publishDestination(destination, transport));
@@ -90,13 +91,14 @@ export function readyPublishDestinations(plan: EvidencePublishPlan): EvidencePub
 
 async function publishDestination(destination: EvidencePublishDestination, transport: EvidenceHttpTransport): Promise<EvidencePublishResult> {
   if (destination.status !== 'ready' || !destination.endpoint || !destination.headers || destination.body === undefined) {
-    return {
+    const result: EvidencePublishResult = {
       kind: destination.kind,
       label: destination.label,
       status: destination.status,
       detail: destination.detail,
-      endpoint: destination.endpoint,
     };
+    if (destination.endpoint) { result.endpoint = destination.endpoint; }
+    return result;
   }
   if (!isHttpUrl(destination.endpoint)) {
     return {

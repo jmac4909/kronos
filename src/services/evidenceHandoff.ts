@@ -24,22 +24,22 @@ export interface EvidenceHandoffPlan {
 export function buildEvidenceHandoffPlan(ticketKey: string, ticket: Ticket, exported: EvidenceExport): EvidenceHandoffPlan {
   const comment = exported.comment || formatEvidenceComment(ticketKey, ticket);
   const destinations: EvidenceDestination[] = [
-    {
-      kind: 'jira',
-      label: 'Jira ticket comment',
-      available: Boolean(ticket.jira_url),
-      url: ticket.jira_url,
-      detail: ticket.jira_url ? 'Open Jira and paste the copied evidence comment.' : 'No Jira URL is recorded for this ticket.',
+    evidenceDestination(
+      'jira',
+      'Jira ticket comment',
+      Boolean(ticket.jira_url),
+      ticket.jira_url,
+      ticket.jira_url ? 'Open Jira and paste the copied evidence comment.' : 'No Jira URL is recorded for this ticket.',
       comment,
-    },
-    {
-      kind: 'mr',
-      label: 'Merge request comment',
-      available: Boolean(ticket.mr?.url),
-      url: ticket.mr?.url,
-      detail: ticket.mr?.url ? `Open MR !${ticket.mr.iid} and paste the copied evidence comment.` : 'No merge request URL is recorded for this ticket.',
+    ),
+    evidenceDestination(
+      'mr',
+      'Merge request comment',
+      Boolean(ticket.mr?.url),
+      ticket.mr?.url,
+      ticket.mr?.url ? `Open MR !${ticket.mr.iid} and paste the copied evidence comment.` : 'No merge request URL is recorded for this ticket.',
       comment,
-    },
+    ),
     {
       kind: 'file',
       label: 'Markdown evidence artifact',
@@ -60,4 +60,10 @@ export function buildEvidenceHandoffPlan(ticketKey: string, ticket: Ticket, expo
       'Keep the markdown artifact as the durable local evidence record.',
     ],
   };
+}
+
+function evidenceDestination(kind: EvidenceDestinationKind, label: string, available: boolean, url: string | undefined, detail: string, comment: string): EvidenceDestination {
+  const destination: EvidenceDestination = { kind, label, available, detail, comment };
+  if (url) { destination.url = url; }
+  return destination;
 }

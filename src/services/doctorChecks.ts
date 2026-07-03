@@ -161,55 +161,61 @@ export function runDoctorChecks(input: DoctorChecksInput): DoctorCheck[] {
 export function buildDoctorReachabilityTargets(input: DoctorChecksInput, manifest: IntegrationManifest | undefined = readIntegrationManifest().manifest): ProviderReachabilityTarget[] {
   const env = input.env || process.env;
   return [
-    {
-      name: 'Jira network reachability',
-      enabled: input.profile.providers.jira,
-      url: firstConfiguredUrl(
+    reachabilityTarget(
+      'Jira network reachability',
+      input.profile.providers.jira,
+      firstConfiguredUrl(
         env.JIRA_BASE_URL,
         manifest?.providers?.jira?.baseUrl,
         firstProjectConfigValue(input.state, ['jira_base_url', 'jira_url']),
       ),
-    },
-    {
-      name: 'GitLab network reachability',
-      enabled: input.profile.providers.gitlab,
-      url: firstConfiguredUrl(
+    ),
+    reachabilityTarget(
+      'GitLab network reachability',
+      input.profile.providers.gitlab,
+      firstConfiguredUrl(
         env.GITLAB_BASE_URL,
         env.GITLAB_URL,
         env.GITLAB_HOST,
         manifest?.providers?.gitlab?.baseUrl,
         firstProjectConfigValue(input.state, ['gitlab_base_url', 'gitlab_url']),
       ),
-    },
-    {
-      name: 'Jenkins network reachability',
-      enabled: input.profile.providers.jenkins,
-      url: firstConfiguredUrl(
+    ),
+    reachabilityTarget(
+      'Jenkins network reachability',
+      input.profile.providers.jenkins,
+      firstConfiguredUrl(
         env.JENKINS_URL,
         manifest?.providers?.jenkins?.baseUrl,
         firstProjectConfigValue(input.state, ['jenkins_url', 'jenkins_base_url']),
       ),
-    },
-    {
-      name: 'SonarQube network reachability',
-      enabled: input.profile.providers.sonar,
-      url: firstConfiguredUrl(
+    ),
+    reachabilityTarget(
+      'SonarQube network reachability',
+      input.profile.providers.sonar,
+      firstConfiguredUrl(
         env.SONAR_HOST_URL,
         manifest?.providers?.sonar?.baseUrl,
         firstProjectConfigValue(input.state, ['sonar_host_url', 'sonar_url']),
       ),
-    },
-    {
-      name: 'GitHub API network reachability',
-      enabled: input.profile.providers.githubActions,
-      url: firstConfiguredUrl(
+    ),
+    reachabilityTarget(
+      'GitHub API network reachability',
+      input.profile.providers.githubActions,
+      firstConfiguredUrl(
         env.GITHUB_API_URL,
         manifest?.providers?.github?.baseUrl,
         firstProjectConfigValue(input.state, ['github_api_url']),
         'https://api.github.com',
       ),
-    },
+    ),
   ];
+}
+
+function reachabilityTarget(name: string, enabled: boolean, url: string | undefined): ProviderReachabilityTarget {
+  const target: ProviderReachabilityTarget = { name, enabled };
+  if (url) { target.url = url; }
+  return target;
 }
 
 export async function runDoctorReachabilityChecks(input: DoctorChecksInput, options: ProviderReachabilityOptions = { timeoutMs: 5000 }): Promise<DoctorCheck[]> {
