@@ -227,11 +227,13 @@ async function startClaudeDispatch(
   ticket?: string,
   onCompleteOrOpts?: ((code: number) => void) | DispatchOptions,
   customPrompt?: string
-): Promise<void> {
+): Promise<boolean> {
   try {
     await dispatchClaudeSession(projectPath, skill, ticket, onCompleteOrOpts, customPrompt);
+    return true;
   } catch (e: unknown) {
     vscode.window.showErrorMessage(unknownErrorMessage(e, `Failed to start ${skill} session.`));
+    return false;
   }
 }
 
@@ -5181,11 +5183,15 @@ async function startDeployMonitorForMergedTicket(state: KronosState, ticketKey: 
     return;
   }
   if (hasActiveDeployMonitorRun(projectName, projectPath, ticketKey)) { return; }
-  await startClaudeDispatch(projectPath, 'deploy-monitor', ticketKey, {
+  const started = await startClaudeDispatch(projectPath, 'deploy-monitor', ticketKey, {
     onComplete: refreshAfterDispatch(state, projectName, ticketKey),
     noWorktree: true,
     projectNameOverride: projectName,
   });
+  if (!started) {
+    void vscode.window.showWarningMessage(`${ticketKey} merged, but deploy monitor did not start. Start deploy monitor manually from the Review view or ticket details.`);
+    return;
+  }
   void vscode.window.showInformationMessage(`${ticketKey} merged - deploy monitor started.`);
 }
 
