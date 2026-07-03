@@ -62,6 +62,7 @@ import { kronosTerminalOptions } from './services/terminalProfiles';
 import { unknownErrorCode, unknownErrorMessage } from './services/errorUtils';
 import { activeRunSummary, isActiveRun } from './services/runStatus';
 import { isAttentionRunStatus, runAttentionDetail, runAttentionLine } from './services/runAttention';
+import { openReviewTicketEntries, reviewBranchTickets as buildReviewBranchTickets, type ReviewBranchTicket, type TicketWithOpenMergeRequest } from './services/reviewWork';
 import { actionButton, actionRow, kronosActionPanelScript, kronosOperatorPanelCss, operatorCommandRow } from './services/operatorPanel';
 import { buildPromptHistoryHtml, buildPromptManagerHtml, buildPromptSmokeTestsHtml } from './services/promptPanelView';
 import { buildRecoveryHtml, buildStateAuditLogHtml } from './services/recoveryPanelView';
@@ -5166,28 +5167,13 @@ function notifyMergeRequestStatusChange(ticketKey: string, update: MergeRequestS
   );
 }
 
-type TicketWithOpenMergeRequest = Ticket & { mr: NonNullable<Ticket['mr']> };
-
 function reviewMergeRequestCandidates(state: KronosState): Array<{ ticketKey: string; ticket: TicketWithOpenMergeRequest }> {
-  if (!state.state) { return []; }
-  return Object.entries(state.state.tickets || {})
-    .filter(isOpenReviewMergeRequestEntry)
+  return openReviewTicketEntries(state.state?.tickets)
     .map(([ticketKey, ticket]) => ({ ticketKey, ticket }));
 }
 
-function isOpenReviewMergeRequestEntry(entry: [string, Ticket]): entry is [string, TicketWithOpenMergeRequest] {
-  return entry[1].next_action === 'await_review' && entry[1].mr?.state === 'opened';
-}
-
-type ReviewBranchTicket = { key: string; summary: string; mr: TicketWithOpenMergeRequest['mr']; projects: string[] };
-
 function reviewBranchTickets(state: KronosState): ReviewBranchTicket[] {
-  return reviewMergeRequestCandidates(state).map(({ ticketKey, ticket }) => ({
-    key: ticketKey,
-    summary: ticket.summary,
-    mr: ticket.mr,
-    projects: ticket.projects,
-  }));
+  return buildReviewBranchTickets(state.state?.tickets);
 }
 
 async function startDeployMonitorForMergedTicket(state: KronosState, ticketKey: string, ticket: Ticket): Promise<void> {

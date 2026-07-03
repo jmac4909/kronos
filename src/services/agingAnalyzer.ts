@@ -1,4 +1,5 @@
 import { Ticket } from '../state/types';
+import { isOpenReviewTicket } from './reviewWork';
 
 type AgingSeverity = 'critical' | 'warning' | 'info';
 type AgingKind = 'review' | 'build' | 'blocked' | 'verification' | 'ticket';
@@ -50,7 +51,7 @@ export function analyzeAging(input: {
     const reference = referenceDate(ticket);
     if (!reference) { continue; }
 
-    if (ticket.next_action === 'await_review' && ticket.mr?.state === 'opened') {
+    if (isOpenReviewTicket(ticket)) {
       pushIfStale(items, {
         ticketKey,
         ticket,

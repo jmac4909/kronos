@@ -143,6 +143,7 @@ const cliProbes = require('../out/services/cliProbes.js');
 const errorUtils = require('../out/services/errorUtils.js');
 const combinedVerification = require('../out/services/combinedVerification.js');
 const changedFiles = require('../out/services/changedFiles.js');
+const reviewWork = require('../out/services/reviewWork.js');
 const sonarReportView = require('../out/services/sonarReportView.js');
 const agingReportView = require('../out/services/agingReportView.js');
 const webviewHtml = require('../out/services/webviewHtml.js');
@@ -2469,6 +2470,40 @@ test('action semantics centralize code and handoff action groups', () => {
   assert.equal(actionSemantics.isReviewReadyAction('deploy_monitor'), true);
   assert.equal(actionSemantics.isHandoffAction('done'), true);
   assert.equal(actionSemantics.isHandoffAction(undefined), false);
+});
+
+test('review work service centralizes open review merge request semantics', () => {
+  const tickets = {
+    'K-OPEN': ticket({
+      projects: ['app'],
+      next_action: 'await_review',
+      mr: { iid: 1, state: 'opened', review_status: 'pending_review', url: 'https://gitlab.example/mr/1' },
+    }),
+    'K-MERGED': ticket({
+      projects: ['app'],
+      next_action: 'await_review',
+      mr: { iid: 2, state: 'merged', review_status: 'approved', url: 'https://gitlab.example/mr/2' },
+    }),
+    'K-CLOSED': ticket({
+      projects: ['app'],
+      next_action: 'await_review',
+      mr: { iid: 3, state: 'closed', review_status: 'changes_requested', url: 'https://gitlab.example/mr/3' },
+    }),
+    'K-VERIFY': ticket({
+      projects: ['app'],
+      next_action: 'verify',
+      mr: { iid: 4, state: 'opened', review_status: 'approved', url: 'https://gitlab.example/mr/4' },
+    }),
+  };
+  assert.equal(reviewWork.isOpenReviewTicket(tickets['K-OPEN']), true);
+  assert.equal(reviewWork.isOpenReviewTicket(tickets['K-MERGED']), false);
+  assert.deepEqual(reviewWork.openReviewTicketEntries(tickets).map(([key]) => key), ['K-OPEN']);
+  assert.deepEqual(reviewWork.reviewBranchTickets(tickets), [{
+    key: 'K-OPEN',
+    summary: tickets['K-OPEN'].summary,
+    mr: tickets['K-OPEN'].mr,
+    projects: ['app'],
+  }]);
 });
 
 test('queue planner builds backlog triage report for grooming lanes', () => {
@@ -6055,11 +6090,10 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'MR status polling failed:',
     'function notifyMergeRequestStatusChange(ticketKey: string, update: MergeRequestStatusUpdate): void',
     'describeMergeRequestStatusChange(ticketKey, update)',
-    'type TicketWithOpenMergeRequest = Ticket & { mr: NonNullable<Ticket[\'mr\']> }',
-    'function isOpenReviewMergeRequestEntry(entry: [string, Ticket]): entry is [string, TicketWithOpenMergeRequest]',
-    '.filter(isOpenReviewMergeRequestEntry)',
+    "import { openReviewTicketEntries, reviewBranchTickets as buildReviewBranchTickets, type ReviewBranchTicket, type TicketWithOpenMergeRequest } from './services/reviewWork'",
+    'return openReviewTicketEntries(state.state?.tickets)',
     'function reviewBranchTickets(state: KronosState): ReviewBranchTicket[]',
-    'return reviewMergeRequestCandidates(state).map(({ ticketKey, ticket }) => ({',
+    'return buildReviewBranchTickets(state.state?.tickets)',
     "vscode.window.showInformationMessage('No open review MRs to fix.')",
     "vscode.window.showInformationMessage('Need at least 2 open review MRs to resolve conflicts.')",
     "vscode.window.showInformationMessage('No open review MRs to verify.')",
@@ -6966,8 +7000,8 @@ test('tree providers share action labels and icons', () => {
     "new vscode.ThemeIcon('sync~spin', new vscode.ThemeColor('charts.yellow'))",
     "new vscode.ThemeIcon('circle-filled'",
     "new vscode.ThemeIcon('git-pull-request', color)",
-    'function isReviewTicket(ticket: Ticket): boolean',
-    "ticket.next_action === 'await_review' && ticket.mr.state === 'opened'",
+    "import { TicketWithOpenMergeRequest, openReviewTicketEntries } from '../services/reviewWork'",
+    'return openReviewTicketEntries(state.tickets)',
   ]) {
     assert.ok(reviewTree.includes(marker), marker);
   }

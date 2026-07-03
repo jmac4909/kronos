@@ -63,6 +63,7 @@ const ticketTimeline = readSource('src/services/ticketTimeline.ts');
 const integrationAdapters = readSource('src/services/integrationAdapters.ts');
 const postRunReadiness = readSource('src/services/postRunReadiness.ts');
 const ticketFilters = readSource('src/services/ticketFilters.ts');
+const reviewWork = readSource('src/services/reviewWork.ts');
 const promptManager = readSource('src/services/promptManager.ts');
 const runRecovery = readSource('src/services/runRecovery.ts');
 const providerReachability = readSource('src/services/providerReachability.ts');
@@ -427,11 +428,10 @@ for (const marker of [
   'MR status polling failed:',
   'function notifyMergeRequestStatusChange(ticketKey: string, update: MergeRequestStatusUpdate): void',
   'describeMergeRequestStatusChange(ticketKey, update)',
-  'type TicketWithOpenMergeRequest = Ticket & { mr: NonNullable<Ticket[\'mr\']> }',
-  'function isOpenReviewMergeRequestEntry(entry: [string, Ticket]): entry is [string, TicketWithOpenMergeRequest]',
-  '.filter(isOpenReviewMergeRequestEntry)',
+  "import { openReviewTicketEntries, reviewBranchTickets as buildReviewBranchTickets, type ReviewBranchTicket, type TicketWithOpenMergeRequest } from './services/reviewWork'",
+  'return openReviewTicketEntries(state.state?.tickets)',
   'function reviewBranchTickets(state: KronosState): ReviewBranchTicket[]',
-  'return reviewMergeRequestCandidates(state).map(({ ticketKey, ticket }) => ({',
+  'return buildReviewBranchTickets(state.state?.tickets)',
   "vscode.window.showInformationMessage('No open review MRs to fix.')",
   "vscode.window.showInformationMessage('Need at least 2 open review MRs to resolve conflicts.')",
   "vscode.window.showInformationMessage('No open review MRs to verify.')",
@@ -1605,6 +1605,29 @@ for (const [name, source, marker] of [
 }
 
 for (const marker of [
+  'export type TicketWithOpenMergeRequest',
+  'export interface ReviewBranchTicket',
+  'export function isOpenReviewTicket',
+  "ticket.next_action === 'await_review' && ticket.mr?.state === 'opened'",
+  'export function openReviewTicketEntries',
+  'export function reviewBranchTickets',
+]) {
+  if (!reviewWork.includes(marker)) {
+    fail(`Missing review work marker: ${marker}`);
+  }
+}
+
+for (const [name, source, marker] of [
+  ['src/extension.ts', extension, 'function isOpenReviewMergeRequestEntry'],
+  ['src/views/ReviewTreeProvider.ts', reviewTreeProvider, 'function isReviewTicket'],
+  ['src/services/agingAnalyzer.ts', agingAnalyzer, "ticket.next_action === 'await_review' && ticket.mr?.state === 'opened'"],
+]) {
+  if (source.includes(marker)) {
+    fail(`${name} must use reviewWork instead of local open-review marker: ${marker}`);
+  }
+}
+
+for (const marker of [
   'export function runStateScript',
   'export function refreshKronosState',
   'export function discoverProjects',
@@ -1810,8 +1833,8 @@ for (const marker of [
   "new vscode.ThemeIcon('sync~spin', new vscode.ThemeColor('charts.yellow'))",
   "new vscode.ThemeIcon('circle-filled'",
   "new vscode.ThemeIcon('git-pull-request', color)",
-  'function isReviewTicket(ticket: Ticket): boolean',
-  "ticket.next_action === 'await_review' && ticket.mr.state === 'opened'",
+  "import { TicketWithOpenMergeRequest, openReviewTicketEntries } from '../services/reviewWork'",
+  'return openReviewTicketEntries(state.tickets)',
 ]) {
   if (!reviewTreeProvider.includes(marker)) {
     fail(`Missing review tree new-item marker: ${marker}`);

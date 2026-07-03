@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { KronosState } from '../state/KronosState';
 import { Ticket } from '../state/types';
 import { TicketFilter, describeTicketFilter, hasTicketFilter, ticketMatchesFilter } from '../services/ticketFilters';
+import { TicketWithOpenMergeRequest, openReviewTicketEntries } from '../services/reviewWork';
 
 const NEW_REVIEW_SPIN_MS = 6000;
 
@@ -137,11 +138,10 @@ export class ReviewTreeProvider implements vscode.TreeDataProvider<ReviewItem> {
     this.scheduleSpinRefresh();
   }
 
-  private reviewEntries(): Array<[string, Ticket]> {
+  private reviewEntries(): Array<[string, TicketWithOpenMergeRequest]> {
     const state = this.kronosState.state;
     if (!state) { return []; }
-    return Object.entries(state.tickets || {})
-      .filter((entry): entry is [string, Ticket] => isReviewTicket(entry[1]));
+    return openReviewTicketEntries(state.tickets);
   }
 
   private isReviewItemSpinning(ticketKey: string): boolean {
@@ -228,10 +228,6 @@ class ReviewItem extends vscode.TreeItem {
       ? new vscode.ThemeIcon('circle-filled', new vscode.ThemeColor('charts.yellow'))
       : new vscode.ThemeIcon('git-pull-request', color);
   }
-}
-
-function isReviewTicket(ticket: Ticket): boolean {
-  return Boolean(ticket.mr && ticket.next_action === 'await_review' && ticket.mr.state === 'opened');
 }
 
 function latestMergeRequestCommentSummary(ticket: Ticket): string {
