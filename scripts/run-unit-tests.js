@@ -64,6 +64,7 @@ const recoveryPanelView = require('../out/services/recoveryPanelView.js');
 const humanReviewPanelView = require('../out/services/humanReviewPanelView.js');
 const evidencePanelView = require('../out/services/evidencePanelView.js');
 const queuePlannerPanelView = require('../out/services/queuePlannerPanelView.js');
+const operationsReportPanelView = require('../out/services/operationsReportPanelView.js');
 const runStatus = require('../out/services/runStatus.js');
 const runProgress = require('../out/services/runProgress.js');
 const relativeTime = require('../out/services/relativeTime.js');
@@ -1978,6 +1979,9 @@ test('CLI probes resolve gcloud.cmd on Windows', () => {
   });
   assert.equal(invocation.command, 'C:\\Windows\\System32\\cmd.exe');
   assert.deepEqual(invocation.args.slice(0, 3), ['/d', '/s', '/c']);
+  assert.equal(invocation.args[3].startsWith('""'), false);
+  assert.equal(invocation.args[3].endsWith('""'), false);
+  assert.ok(invocation.args[3].startsWith('"C:\\Users\\dev\\AppData\\Local\\Google\\Cloud SDK\\google-cloud-sdk\\bin\\gcloud.cmd"'));
   assert.match(invocation.args[3], /"C:\\Users\\dev\\AppData\\Local\\Google\\Cloud SDK\\google-cloud-sdk\\bin\\gcloud\.cmd"/);
   assert.match(invocation.args[3], /"application-default"/);
 });
@@ -2445,6 +2449,75 @@ test('queue planner panel view renders escaped actions for planning panels', () 
     assert.ok(source.includes(marker), marker);
   }
   assert.equal(/\bany\b/.test(source), false, 'queuePlannerPanelView should keep renderer payloads typed without any');
+});
+
+test('operations report panel view renders escaped data and command actions', () => {
+  const scoreHtml = operationsReportPanelView.buildAgentQualityScoreHtml({
+    score: 92,
+    grade: 'A',
+    summary: 'Ready <ship> & review',
+    components: [{ label: 'Run <completion>', score: 20, max: 25, detail: 'Good & improving' }],
+    metrics: [{ label: 'Retries <low>', value: '1 & falling' }],
+  }, 'nonce-score');
+  assert.ok(scoreHtml.includes('Ready &lt;ship&gt; &amp; review'));
+  assert.ok(scoreHtml.includes('Run &lt;completion&gt;'));
+  assert.ok(scoreHtml.includes('data-action="trendMetrics"'));
+  assert.ok(scoreHtml.includes('nonce="nonce-score"'));
+
+  const trendHtml = operationsReportPanelView.buildTrendMetricsHtml({
+    generatedAt: '2026-07-01T12:00:00.000Z',
+    windowDays: 7,
+    runsConsidered: 1,
+    ticketsConsidered: 2,
+    summary: 'Trend <ok> & stable.',
+    metrics: [{ label: 'Build <pass>', value: '95%', detail: 'Good & steady', status: 'good' }],
+  }, 'nonce-trend');
+  assert.ok(trendHtml.includes('Trend &lt;ok&gt; &amp; stable.'));
+  assert.ok(trendHtml.includes('Build &lt;pass&gt;'));
+  assert.ok(trendHtml.includes('data-action="agentQualityScore"'));
+
+  const manifestHtml = operationsReportPanelView.buildIntegrationManifestHtml({
+    present: true,
+    valid: false,
+    path: '/tmp/manifest<bad>.json',
+    manifest: {
+      prompts: { 'prompt<one>': { required: true, sha256: 'abcdef123456' } },
+      providers: { jira: { enabled: true, baseUrl: 'https://jira.example/<team>' } },
+    },
+    errors: ['Bad <json>'],
+    warnings: ['Warn & watch'],
+  }, {
+    status: 'warn',
+    summary: '1 <drift>',
+    artifacts: [{
+      kind: 'prompt',
+      name: 'prompt<one>',
+      path: '/tmp/prompt',
+      status: 'fail',
+      detail: 'Hash <bad>',
+      expectedSha256: 'abcdef1234567890',
+      actualSha256: '123456abcdef7890',
+    }],
+  }, 'nonce-manifest');
+  assert.ok(manifestHtml.includes('/tmp/manifest&lt;bad&gt;.json'));
+  assert.ok(manifestHtml.includes('Bad &lt;json&gt;'));
+  assert.ok(manifestHtml.includes('Warn &amp; watch'));
+  assert.ok(manifestHtml.includes('Hash &lt;bad&gt;'));
+  assert.ok(manifestHtml.includes('data-action="snapshotIntegrationManifest"'));
+
+  const activeProfile = profileManager.listProfiles()[0];
+  const profilesHtml = operationsReportPanelView.buildProfilesHtml(activeProfile, 'nonce-profiles');
+  assert.ok(profilesHtml.includes('Kronos Profiles'));
+  assert.ok(profilesHtml.includes('data-action="integrationManifest"'));
+  assert.ok(profilesHtml.includes('ACTIVE'));
+
+  const doctorHtml = operationsReportPanelView.buildDoctorHtml([
+    { name: 'Git <cli>', status: 'fail', detail: 'Missing & blocked' },
+  ], 'nonce-doctor');
+  assert.ok(doctorHtml.includes('Git &lt;cli&gt;'));
+  assert.ok(doctorHtml.includes('Missing &amp; blocked'));
+  assert.ok(doctorHtml.includes('data-action="setup"'));
+  assert.equal(doctorHtml.includes('Git <cli>'), false);
 });
 
 test('ticket filters match operator search facets and grouped views', () => {
@@ -5417,7 +5490,8 @@ test('extension webviews use shared UI shell and board filtering affordances', (
   const humanReviewPanelViewSource = readSourceFixture('src', 'services', 'humanReviewPanelView.ts');
   const evidencePanelViewSource = readSourceFixture('src', 'services', 'evidencePanelView.ts');
   const queuePlannerPanelViewSource = readSourceFixture('src', 'services', 'queuePlannerPanelView.ts');
-  const uiSource = `${source}\n${queuePlannerPanelViewSource}`;
+  const operationsReportPanelViewSource = readSourceFixture('src', 'services', 'operationsReportPanelView.ts');
+  const uiSource = `${source}\n${queuePlannerPanelViewSource}\n${operationsReportPanelViewSource}`;
   const boardHandlerStart = source.indexOf('panel.webview.onDidReceiveMessage(async (msg) => {\n        if (logReady(msg)) { return; }\n        const request = normalizeBoardMessage(msg);');
   const boardHandlerEnd = source.indexOf("    vscode.commands.registerCommand('kronos.viewTicket'", boardHandlerStart);
   assert.ok(boardHandlerStart >= 0 && boardHandlerEnd > boardHandlerStart, 'Jira board message handler should be present');
@@ -5733,6 +5807,28 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     "kronosActionPanelScript(nonce, 'Kronos Evidence Gate', true)",
   ]) {
     assert.ok(evidencePanelViewSource.includes(marker), marker);
+  }
+  for (const marker of [
+    'export function buildAgentQualityScoreHtml',
+    'export function buildTrendMetricsHtml',
+    'export function buildIntegrationManifestHtml',
+    'export function buildProfilesHtml',
+    'export function buildDoctorHtml',
+    'Kronos Agent Quality Score',
+    'Kronos Trend Metrics',
+    'Kronos Integration Manifest',
+    'Kronos Profiles',
+    'Kronos Doctor',
+    'Hash Status',
+    'manifestPillClass',
+    "actionButton('snapshotIntegrationManifest', 'Snapshot')",
+    "actionButton('stateAuditLog', 'Audit Log')",
+    'requiredScripts().map',
+    'listProfiles().map',
+    'kronosOperatorPanelCss',
+    'kronosActionPanelScript(nonce)',
+  ]) {
+    assert.ok(operationsReportPanelViewSource.includes(marker), marker);
   }
   assert.equal(/^\s*vscode\.window\.withProgress\(/m.test(source), false, 'progress tasks should be awaited by their command handlers');
   assert.equal((source.match(/dispatchClaudeSession\(/g) || []).length, 1, 'command handlers should use startClaudeDispatch for Claude session startup');

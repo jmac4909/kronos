@@ -99,7 +99,7 @@ export function quoteWindowsCmdToken(value: string): string {
 
 export function windowsCmdFileInvocation(command: string, args: string[], env: NodeJS.ProcessEnv = process.env): { command: string; args: string[] } {
   const cmd = env.ComSpec || env.COMSPEC || 'cmd.exe';
-  const shellLine = `"${[command, ...args].map(quoteWindowsCmdToken).join(' ')}"`;
+  const shellLine = [command, ...args].map(quoteWindowsCmdToken).join(' ');
   return {
     command: cmd,
     args: ['/d', '/s', '/c', shellLine],

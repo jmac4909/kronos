@@ -10,6 +10,7 @@ const files = [
   'src/state/KronosState.ts',
   'src/services/scriptClient.ts',
   'src/services/queuePlannerPanelView.ts',
+  'src/services/operationsReportPanelView.ts',
   'src/views/ProjectTreeProvider.ts',
   'src/views/TicketTreeProvider.ts',
 ];
@@ -48,6 +49,7 @@ const runCenterSort = readSource('src/services/runCenterSort.ts');
 const attentionBadge = readSource('src/services/attentionBadge.ts');
 const queuePlanner = readSource('src/services/queuePlanner.ts');
 const queuePlannerPanelView = sources['src/services/queuePlannerPanelView.ts'];
+const operationsReportPanelView = sources['src/services/operationsReportPanelView.ts'];
 const agentQualityScore = readSource('src/services/agentQualityScore.ts');
 const integrationManifest = readSource('src/services/integrationManifest.ts');
 const profileManager = readSource('src/services/profileManager.ts');
@@ -169,7 +171,7 @@ for (const requiredIgnore of ['.git/**', '.claude/**', 'node_modules/**', 'scrip
     fail(`.vscodeignore must exclude ${requiredIgnore}`);
   }
 }
-const extensionUiSource = `${extension}\n${queuePlannerPanelView}`;
+const extensionUiSource = `${extension}\n${queuePlannerPanelView}\n${operationsReportPanelView}`;
 for (const marker of [
   'function mockCommandName(command)',
   'function mockCommandLine(command, args)',
@@ -453,8 +455,6 @@ for (const marker of [
   'kronos.integrationManifest',
   'openIntegrationManifestPanel',
   'Integration manifest',
-  'Hash Status',
-  'manifestPillClass',
   'kronos.snapshotIntegrationManifest',
   'snapshotIntegrationManifest',
   'kronos.profiles',
@@ -2406,6 +2406,34 @@ for (const marker of [
 }
 if (/\bany\b/.test(queuePlannerPanelView)) {
   fail('Queue planner panel view should keep renderer payloads typed without any.');
+}
+
+for (const marker of [
+  'export function buildAgentQualityScoreHtml',
+  'export function buildTrendMetricsHtml',
+  'export function buildIntegrationManifestHtml',
+  'export function buildProfilesHtml',
+  'export function buildDoctorHtml',
+  'Kronos Agent Quality Score',
+  'Kronos Trend Metrics',
+  'Kronos Integration Manifest',
+  'Kronos Profiles',
+  'Kronos Doctor',
+  'Hash Status',
+  'manifestPillClass',
+  "actionButton('snapshotIntegrationManifest', 'Snapshot')",
+  "actionButton('stateAuditLog', 'Audit Log')",
+  'requiredScripts().map',
+  'listProfiles().map',
+  'kronosOperatorPanelCss',
+  'kronosActionPanelScript(nonce)',
+]) {
+  if (!operationsReportPanelView.includes(marker)) {
+    fail(`Missing operations report panel view marker: ${marker}`);
+  }
+}
+if (/\bany\b/.test(operationsReportPanelView)) {
+  fail('Operations report panel view should keep renderer payloads typed without any.');
 }
 
 for (const marker of [
