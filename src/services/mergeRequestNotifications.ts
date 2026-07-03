@@ -54,7 +54,7 @@ function newCommentDetail(previous: MergeRequest, current: MergeRequest): string
     const added = currentCount - previousCount;
     return `${added} new MR comment${added === 1 ? '' : 's'}`;
   }
-  if (previousCount === undefined && previous.last_comment_at && laterIsoTimestamp(current.last_comment_at, previous.last_comment_at)) {
+  if (previous.last_comment_at && laterIsoTimestamp(current.last_comment_at, previous.last_comment_at)) {
     return 'new MR comment';
   }
   return null;

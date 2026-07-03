@@ -1011,6 +1011,16 @@ test('merge request notifications summarize review status and new comment change
     severity: 'info',
     message: 'K-4: MR !4 new MR comment.',
   });
+  assert.deepEqual(mergeRequestNotifications.describeMergeRequestStatusChange('K-4B', {
+    ...baseUpdate,
+    previousMr: { iid: 41, state: 'opened', review_status: 'pending_review', url: 'https://gitlab.example/41', comment_count: 2, last_comment_at: '2026-07-02T01:00:00.000Z' },
+    ticket: ticket({
+      mr: { iid: 41, state: 'opened', review_status: 'pending_review', url: 'https://gitlab.example/41', last_comment_at: '2026-07-02T02:00:00.000Z' },
+    }),
+  }), {
+    severity: 'info',
+    message: 'K-4B: MR !41 new MR comment.',
+  });
   assert.equal(mergeRequestNotifications.describeMergeRequestStatusChange('K-5', {
     ...baseUpdate,
     previousMr: { iid: 5, state: 'opened', review_status: 'pending_review', url: 'https://gitlab.example/5' },
@@ -4467,6 +4477,20 @@ test('integration adapters wrap selected Jira, GitLab, and Sonar script contract
     comment_count: 1,
     last_comment_at: '2026-07-02T03:00:00.000Z',
     comments: [{ created: '2026-07-02T03:00:00.000Z', body: 'Looks good' }],
+  });
+  assert.deepEqual(integrationAdapters.normalizeMergeRequestStatus({
+    mr: {
+      state: 'opened',
+      review_status: 'pending_review',
+      user_notes_count: '3',
+      last_note_at: '2026-07-02T04:00:00.000Z',
+    },
+  }), {
+    state: 'opened',
+    review_status: 'pending_review',
+    comment_count: 3,
+    last_comment_at: '2026-07-02T04:00:00.000Z',
+    comments: [],
   });
   assert.deepEqual(integrationAdapters.normalizeMergeRequestComments(['plain', { body: 42 }]), [{ body: 'plain' }, { body: '' }]);
   await assert.rejects(

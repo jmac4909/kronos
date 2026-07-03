@@ -160,6 +160,22 @@ export function normalizeMergeRequestStatus(value: unknown): MergeRequestStatusR
   const commentsSource = firstDefined(data['comments'], data['notes'], data['discussions'], mr['comments'], mr['notes'], mr['discussions']);
   const comments = commentsSource === undefined ? [] : normalizeMergeRequestComments(commentsSource);
   const latestComment = latestCommentAt(comments);
+  const providedCommentCount = numberField(firstDefined(
+    mr['comment_count'],
+    data['comment_count'],
+    mr['user_notes_count'],
+    data['user_notes_count'],
+    mr['notes_count'],
+    data['notes_count'],
+  ));
+  const providedLastCommentAt = stringField(firstDefined(
+    mr['last_comment_at'],
+    data['last_comment_at'],
+    mr['last_note_at'],
+    data['last_note_at'],
+    mr['last_activity_at'],
+    data['last_activity_at'],
+  ));
   const status: MergeRequestStatusResult = {
     comments,
   };
@@ -192,8 +208,11 @@ export function normalizeMergeRequestStatus(value: unknown): MergeRequestStatusR
   copyString(status, 'head_branch', firstDefined(mr['head_branch'], data['head_branch']));
   if (commentsSource !== undefined) {
     status.comment_count = comments.length;
-    if (latestComment) { status.last_comment_at = latestComment; }
+  } else if (providedCommentCount !== undefined) {
+    status.comment_count = providedCommentCount;
   }
+  const lastCommentAt = latestComment || providedLastCommentAt;
+  if (lastCommentAt) { status.last_comment_at = lastCommentAt; }
   return status;
 }
 
@@ -312,4 +331,13 @@ function stringField(value: unknown): string | undefined {
   if (typeof value !== 'string') { return undefined; }
   const trimmed = value.trim();
   return trimmed ? trimmed : undefined;
+}
+
+function numberField(value: unknown): number | undefined {
+  const numeric = typeof value === 'number'
+    ? value
+    : typeof value === 'string' && value.trim()
+      ? Number(value.trim())
+      : NaN;
+  return Number.isFinite(numeric) && numeric >= 0 ? Math.floor(numeric) : undefined;
 }
