@@ -1,6 +1,6 @@
 import { KronosState as KronosStateType, QueueDecision, QueueItem, QueueState, Ticket } from '../state/types';
 import { actionToLabel } from './actionLabels';
-import { evidenceChecks, evidenceEnvironmentResults, evidenceNotes } from './evidenceData';
+import { evidenceRecordCount } from './evidenceData';
 
 export { actionToLabel } from './actionLabels';
 
@@ -273,7 +273,7 @@ export function planToQueueItem(input: PlannerInput, plan: PlannedAction): Queue
 }
 
 function evidenceItemCount(ticket: Ticket): number {
-  return evidenceNotes(ticket).length + evidenceChecks(ticket).length + evidenceEnvironmentResults(ticket).length;
+  return evidenceRecordCount(ticket);
 }
 
 function ticketAgeDays(ticket: Ticket, now: Date): number | undefined {

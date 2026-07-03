@@ -6093,7 +6093,7 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'const notes = evidenceNotes(ticket)',
     'const checks = evidenceChecks(ticket)',
     'const environmentResults = evidenceEnvironmentResults(ticket)',
-    'return evidenceNotes(ticket).length + evidenceChecks(ticket).length + evidenceEnvironmentResults(ticket).length',
+    'evidenceRecordCount(state.state?.tickets?.[ticketKey])',
     'function ticketStringArray',
     'function ticketAttachments',
     'interface TicketAttachmentSummary',
@@ -6730,7 +6730,7 @@ test('ticket detail rendering uses typed tickets and evidence records', () => {
   const evidenceData = readSourceFixture('src', 'services', 'evidenceData.ts');
   for (const marker of [
     'import type { DiscoveredProject, MergeRequestChangedFile, QueueItem, Ticket }',
-    'function ticketEvidenceItemCount(ticket: Ticket)',
+    'function evidenceRecordCount(ticket: Ticket | null | undefined): number',
     'function buildTicketHtml(key: string, ticket: Ticket',
     'const mr = ticket.mr',
     'const build = ticket.build',
@@ -6744,7 +6744,7 @@ test('ticket detail rendering uses typed tickets and evidence records', () => {
     'Reflect.get(record, key)',
     "Reflect.get(record, 'checked')",
   ]) {
-    assert.ok((marker.startsWith('export type') || marker.startsWith('Reflect.'))
+    assert.ok((marker.startsWith('export type') || marker.startsWith('Reflect.') || marker.startsWith('function evidenceRecordCount'))
       ? evidenceData.includes(marker)
       : extensionSource.includes(marker), marker);
   }

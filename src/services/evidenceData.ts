@@ -24,6 +24,11 @@ export function evidenceEnvironmentResults(ticket: Ticket): EvidenceRecord[] {
   return Object.values(value).filter(isEvidenceRecord);
 }
 
+export function evidenceRecordCount(ticket: Ticket | null | undefined): number {
+  if (!ticket) { return 0; }
+  return evidenceNotes(ticket).length + evidenceChecks(ticket).length + evidenceEnvironmentResults(ticket).length;
+}
+
 export function evidenceString(record: EvidenceRecord | null | undefined, key: string, fallback = ''): string {
   const value = record ? Reflect.get(record, key) : undefined;
   return typeof value === 'string' ? value.trim() : fallback;

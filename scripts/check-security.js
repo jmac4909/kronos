@@ -316,7 +316,7 @@ for (const marker of [
   'const notes = evidenceNotes(ticket)',
   'const checks = evidenceChecks(ticket)',
   'const environmentResults = evidenceEnvironmentResults(ticket)',
-  'return evidenceNotes(ticket).length + evidenceChecks(ticket).length + evidenceEnvironmentResults(ticket).length',
+  'evidenceRecordCount(state.state?.tickets?.[ticketKey])',
   'function ticketStringArray',
   'function ticketAttachments',
   'interface TicketAttachmentSummary',
@@ -1603,9 +1603,8 @@ for (const marker of [
   'Cannot start',
   'Claude auth preflight must pass before dispatch.',
   'Collision detector checks active runs',
-  'evidenceNotes(ticket).length',
-  'evidenceChecks(ticket).length',
-  'evidenceEnvironmentResults(ticket).length',
+  "import { evidenceRecordCount } from './evidenceData'",
+  'evidenceRecordCount(ticket)',
 ]) {
   if (!nextActionContext.includes(marker)) {
     fail(`Missing next action context marker: ${marker}`);
@@ -2387,9 +2386,8 @@ for (const marker of [
   'planByRelease',
   'releaseFromLabel',
   'summarizePlanActions',
-  'evidenceNotes(ticket).length',
-  'evidenceChecks(ticket).length',
-  'evidenceEnvironmentResults(ticket).length',
+  "import { evidenceRecordCount } from './evidenceData'",
+  'evidenceRecordCount(ticket)',
 ]) {
   if (!queuePlanner.includes(marker)) {
     fail(`Missing queue planner marker: ${marker}`);

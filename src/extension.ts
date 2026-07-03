@@ -16,7 +16,7 @@ import { KRONOS_DIR, STATE_AUDIT_FILE, listBackups, listStateAuditEvents, restor
 import { PlannedAction, buildBacklogTriageReport, overnightCandidatePlans, planByProject, planByRelease, planForMinutes, planNextActions as buildNextActionPlan, planToQueueItem as buildQueueItemFromPlan } from './services/queuePlanner';
 import { actionToLabel } from './services/actionLabels';
 import { writeEvidenceExport } from './services/evidenceStore';
-import { evidenceAcceptanceCriteria, evidenceChecked, evidenceChecks, evidenceEnvironmentResults, evidenceNotes, evidenceString } from './services/evidenceData';
+import { evidenceAcceptanceCriteria, evidenceChecked, evidenceChecks, evidenceEnvironmentResults, evidenceNotes, evidenceRecordCount, evidenceString } from './services/evidenceData';
 import { EvidenceHandoffPlan, buildEvidenceHandoffPlan } from './services/evidenceHandoff';
 import { EvidencePublishDestination, EvidencePublishResult, buildEvidencePublishPlan, publishEvidencePlan, readyPublishDestinations } from './services/evidencePublisher';
 import { RUNS_DIR, archiveRun, listRunStoreIssues, markRunCancelled, markRunContinued, markRunNeedsHuman, markRunPaused, runRecordPath, writeRunRecord } from './services/runStore';
@@ -4723,12 +4723,7 @@ function minutesUntilTomorrow(): number {
 }
 
 function evidenceCountForTicket(state: KronosState, ticketKey: string): number {
-  const ticket = state.state?.tickets?.[ticketKey];
-  return ticket ? ticketEvidenceItemCount(ticket) : 0;
-}
-
-function ticketEvidenceItemCount(ticket: Ticket): number {
-  return evidenceNotes(ticket).length + evidenceChecks(ticket).length + evidenceEnvironmentResults(ticket).length;
+  return evidenceRecordCount(state.state?.tickets?.[ticketKey]);
 }
 
 function ticketStringField(record: object | null | undefined, key: string, fallback = ''): string {
@@ -5621,7 +5616,7 @@ function buildJiraBoardHtml(state: KronosState, nonce: string): string {
         number: ticketStringField(build, 'number', '?'),
         status: ticketStringField(build, 'status'),
       } : null,
-      evidenceCount: ticketEvidenceItemCount(t),
+      evidenceCount: evidenceRecordCount(t),
       hasJiraUrl: Boolean(t.jira_url),
       isQueued,
     };
@@ -5632,7 +5627,7 @@ function buildJiraBoardHtml(state: KronosState, nonce: string): string {
     const mrReviewStatus = mr ? ticketStringField(mr, 'review_status') : '';
     const mrLink = mr ? `<button type="button" class="badge mr clickable" data-action="openMr" data-ticket="${attr(key)}">MR !${esc(ticketStringField(mr, 'iid', '?'))} &middot; ${esc(mrReviewStatus.replace(/_/g, ' '))}</button>` : '';
     const attBadge = attachments.length > 0 ? `<span class="badge att">${attachments.length} attachment${attachments.length === 1 ? '' : 's'}</span>` : '';
-    const evidenceCount = ticketEvidenceItemCount(t);
+    const evidenceCount = evidenceRecordCount(t);
     const evidenceBadge = evidenceCount > 0 ? `<span class="badge evidence">${evidenceCount} evidence</span>` : '';
     const hasProjects = linkedProjects.length > 0;
     const statusTag = isQueued ? `<span class="tag status">${esc(jiraStatus)}</span>` : '';

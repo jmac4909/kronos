@@ -1,6 +1,6 @@
 import { KronosState, QueueState, Ticket } from '../state/types';
 import { actionToLabel } from './actionLabels';
-import { evidenceChecks, evidenceEnvironmentResults, evidenceNotes } from './evidenceData';
+import { evidenceRecordCount } from './evidenceData';
 import { PlannedAction } from './queuePlanner';
 import { SafetyPlan, SafetyRisk } from './safetyGate';
 
@@ -177,6 +177,5 @@ function blockersForPlan(plan: PlannedAction, input: NextActionContextInput): st
 }
 
 function evidenceItemCount(ticket: Ticket | undefined): number {
-  if (!ticket?.evidence) { return 0; }
-  return evidenceNotes(ticket).length + evidenceChecks(ticket).length + evidenceEnvironmentResults(ticket).length;
+  return evidenceRecordCount(ticket);
 }
