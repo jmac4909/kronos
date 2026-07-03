@@ -2787,10 +2787,19 @@ test('review tree persists seen review keys across reloads', async () => {
     const reloadedProvider = new ReviewTreeProvider(kronosState, seenKeysStore);
     assert.equal(reloadedProvider.getNewReviewCount(), 1);
     assert.deepEqual(reloadedProvider.getNewReviewItems().map(item => item.ticketKey), ['K-2']);
+    const newReviewCountEvents = [];
+    const eventSubscription = reloadedProvider.onDidChangeNewReviewCount(count => newReviewCountEvents.push(count));
+
+    currentState = baseState({ 'K-1': reviewTicket(1), 'K-3': reviewTicket(3) });
+    stateEmitter.fire(undefined);
+    assert.equal(reloadedProvider.getNewReviewCount(), 1);
+    assert.deepEqual(reloadedProvider.getNewReviewItems().map(item => item.ticketKey), ['K-3']);
+    assert.deepEqual(newReviewCountEvents, [1]);
+    eventSubscription.dispose();
 
     reloadedProvider.markVisibleReviewItemsSeen();
     assert.equal(reloadedProvider.getNewReviewCount(), 0);
-    assert.deepEqual(storedSeenKeys, ['K-1', 'K-2']);
+    assert.deepEqual(storedSeenKeys, ['K-1', 'K-3']);
     reloadedProvider.dispose();
   });
 });

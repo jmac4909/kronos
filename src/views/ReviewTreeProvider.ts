@@ -134,7 +134,7 @@ export class ReviewTreeProvider implements vscode.TreeDataProvider<ReviewItem> {
   }
 
   private refreshReviewKeys(): void {
-    const previousCount = this.newReviewKeys.size;
+    const previousNewReviewKeys = new Set(this.newReviewKeys);
     const nextKeys = new Set(this.reviewEntries().map(([key]) => key));
     let seenKeysChanged = false;
     for (const key of this.seenReviewKeys) {
@@ -157,7 +157,7 @@ export class ReviewTreeProvider implements vscode.TreeDataProvider<ReviewItem> {
     }
     this.pruneExpiredSpins();
     this.currentReviewKeys = nextKeys;
-    if (previousCount !== this.newReviewKeys.size) {
+    if (!stringSetsEqual(previousNewReviewKeys, this.newReviewKeys)) {
       this._onDidChangeNewReviewCount.fire(this.newReviewKeys.size);
     }
     if (seenKeysChanged) {
@@ -224,6 +224,14 @@ export class ReviewTreeProvider implements vscode.TreeDataProvider<ReviewItem> {
     this._onDidChangeTreeData.dispose();
     this._onDidChangeNewReviewCount.dispose();
   }
+}
+
+function stringSetsEqual(first: ReadonlySet<string>, second: ReadonlySet<string>): boolean {
+  if (first.size !== second.size) { return false; }
+  for (const value of first) {
+    if (!second.has(value)) { return false; }
+  }
+  return true;
 }
 
 class ReviewItem extends vscode.TreeItem {
