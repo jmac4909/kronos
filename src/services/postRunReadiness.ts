@@ -60,6 +60,11 @@ export function resolvePostRunTicket(input: {
     }
   }
 
+  const runResolved = resolveTicketFromRunRecord(tickets, input.run);
+  if (runResolved) {
+    return runResolved;
+  }
+
   const projectName = trimmedString(input.projectName) || runString(runRecord(input.run)['project']);
   if (!projectName) {
     return postRunTicketResolution(ticketKey);
@@ -303,6 +308,47 @@ function runEventDetails(value: unknown): unknown[] {
     const record = runRecord(event);
     return [record['label'], record['detail']];
   });
+}
+
+function resolveTicketFromRunRecord(tickets: Record<string, Ticket>, run: unknown): PostRunTicketResolution | undefined {
+  const searchValues = runSearchStrings(runRecord(run));
+  if (searchValues.length === 0) { return undefined; }
+  const matches = Object.entries(tickets).filter(([key]) => ticketKeyAppearsInStrings(key, searchValues));
+  if (matches.length !== 1) { return undefined; }
+  const matched = matches[0];
+  return matched ? { ticketKey: matched[0], ticket: matched[1] } : undefined;
+}
+
+function runSearchStrings(record: Record<string, unknown>): string[] {
+  const branch = runRecord(record['branch']);
+  const promptMetadata = runRecord(record['promptMetadata']);
+  return [
+    record['ticket'],
+    record['ticketKey'],
+    record['issueKey'],
+    record['jiraKey'],
+    record['id'],
+    record['promptPreview'],
+    record['prompt'],
+    record['worktreePath'],
+    record['cwd'],
+    branch['requestedWorktreeBranch'],
+    branch['resolvedWorktreeRef'],
+    branch['checkoutRef'],
+    branch['currentRef'],
+    promptMetadata['name'],
+    promptMetadata['path'],
+    ...runEventDetails(record['events']),
+  ].map(runText).filter((line): line is string => Boolean(line));
+}
+
+function ticketKeyAppearsInStrings(ticketKey: string, values: string[]): boolean {
+  const pattern = new RegExp(`(^|[^A-Za-z0-9])${escapeRegExp(ticketKey)}($|[^A-Za-z0-9])`, 'i');
+  return values.some(value => pattern.test(value));
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function ticketLinkedToProject(ticket: Ticket, projectName: string): boolean {

@@ -5878,6 +5878,21 @@ test('post-run readiness distinguishes process completion from handoff readiness
   assert.equal(inferredResolution.ticket, resolutionTickets['K-READY']);
   const runProjectResolution = postRunReadiness.resolvePostRunTicket({ tickets: resolutionTickets, run: { project: 'api' } });
   assert.equal(runProjectResolution.ticketKey, 'K-API');
+  const runMetadataResolution = postRunReadiness.resolvePostRunTicket({
+    tickets: {
+      'K-ONE': ticket({ next_action: 'await_review', projects: ['app'] }),
+      'K-TWO': ticket({ next_action: 'await_review', projects: ['app'] }),
+    },
+    ticketKey: 'K-MISSING',
+    projectName: 'app',
+    run: {
+      id: 'app-implement-K-TWO-run',
+      promptPreview: '/implement K-TWO',
+      branch: { currentRef: 'feature/K-TWO' },
+      events: [{ label: 'Editing src/app.ts', detail: 'Handled K-TWO review notes' }],
+    },
+  });
+  assert.equal(runMetadataResolution.ticketKey, 'K-TWO');
   const ambiguousResolution = postRunReadiness.resolvePostRunTicket({
     tickets: {
       'K-ONE': ticket({ next_action: 'await_review', projects: ['app'] }),
@@ -6009,9 +6024,14 @@ test('post-run readiness distinguishes process completion from handoff readiness
     'export function shouldRecordRunCompletionEvidence',
     'export function resolvePostRunTicket',
     'interface PostRunTicketResolution',
+    'const runResolved = resolveTicketFromRunRecord(tickets, input.run)',
     'const matchedProjectTickets',
     'matchedProjectTickets.length === 1',
     'function ticketLinkedToProject(ticket: Ticket, projectName: string): boolean',
+    'function resolveTicketFromRunRecord(tickets: Record<string, Ticket>, run: unknown): PostRunTicketResolution | undefined',
+    'function runSearchStrings(record: Record<string, unknown>): string[]',
+    'function ticketKeyAppearsInStrings(ticketKey: string, values: string[]): boolean',
+    'function escapeRegExp(value: string): string',
     'function trimmedString(value: unknown): string | undefined',
     "runString(record['skill']) === 'implement'",
     "input.ticket.next_action === 'await_review'",
