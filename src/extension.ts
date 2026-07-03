@@ -1587,9 +1587,9 @@ export function activate(context: vscode.ExtensionContext) {
         recordPlanDecision(state, picked.plan, 'rejected', undefined, reason || undefined);
         vscode.window.showInformationMessage(`Rejected ${picked.plan.ticketKey} recommendation.`);
       } else if (action === 'View Ticket' && picked.plan.ticketKey) {
-        vscode.commands.executeCommand('kronos.viewTicket', { ticketKey: picked.plan.ticketKey });
+        await vscode.commands.executeCommand('kronos.viewTicket', { ticketKey: picked.plan.ticketKey });
       } else if (action === 'Add Evidence' && picked.plan.ticketKey) {
-        vscode.commands.executeCommand('kronos.addEvidence', { ticketKey: picked.plan.ticketKey });
+        await vscode.commands.executeCommand('kronos.addEvidence', { ticketKey: picked.plan.ticketKey });
       }
     }),
 
@@ -1715,7 +1715,7 @@ export function activate(context: vscode.ExtensionContext) {
           await removeTicketFromQueue(state, ticket, true);
           renderBoard();
         } else if (command === 'start' && hasTicket(ticket)) {
-          vscode.commands.executeCommand('kronos.implement', { ticketKey: ticket });
+          await vscode.commands.executeCommand('kronos.implement', { ticketKey: ticket });
           return;
         } else if (command === 'openJira' && hasTicket(ticket)) {
           openKnownTicketUrl(ticket, 'jira');
@@ -2506,7 +2506,7 @@ export function activate(context: vscode.ExtensionContext) {
             'View Report', 'Dismiss'
           );
           if (action === 'View Report') {
-            vscode.commands.executeCommand('kronos.sonarReport', { projectName });
+            await vscode.commands.executeCommand('kronos.sonarReport', { projectName });
           }
         },
         customPrompt: scanPrompt.text,
@@ -2570,7 +2570,7 @@ export function activate(context: vscode.ExtensionContext) {
           const command = normalizeWebviewCommand(msg, sonarCommands);
           if (command === 'fixSonar') {
             panel.dispose();
-            vscode.commands.executeCommand('kronos.fixSonarIssues', { projectName, sourceBranch: branch, issuesData: report.issueList });
+            await vscode.commands.executeCommand('kronos.fixSonarIssues', { projectName, sourceBranch: branch, issuesData: report.issueList });
           } else if (command === 'openSonar' && report.dashboardUrl) {
             openExternalHttpUrl(report.dashboardUrl);
           }
@@ -2805,7 +2805,7 @@ export function activate(context: vscode.ExtensionContext) {
             'Fix Findings', 'Dismiss'
           );
           if (action === 'Fix Findings') {
-            vscode.commands.executeCommand('kronos.fixFinding', { projectName, projectPath, tickets: ticketList });
+            await vscode.commands.executeCommand('kronos.fixFinding', { projectName, projectPath, tickets: ticketList });
           }
         },
         customPrompt: prompt.text,
@@ -4673,7 +4673,7 @@ async function snapshotIntegrationManifest(): Promise<void> {
     if (action === 'Open Manifest') {
       await openTextFileIfExists(result.path, 'Integration manifest not found.');
     } else if (action === 'Run Doctor') {
-      vscode.commands.executeCommand('kronos.doctor');
+      await vscode.commands.executeCommand('kronos.doctor');
     }
   } catch (e: unknown) {
     vscode.window.showErrorMessage(unknownErrorMessage(e, 'Failed to snapshot integration manifest.'));

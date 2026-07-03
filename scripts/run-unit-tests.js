@@ -7179,6 +7179,14 @@ test('extension command handlers normalize remaining unknown errors', () => {
   ]) {
     assert.equal(source.includes(marker), false, marker);
   }
+  for (const pattern of [
+    /^\s+vscode\.commands\.executeCommand\('kronos\.viewTicket', \{ ticketKey: picked\.plan\.ticketKey \}\);/m,
+    /^\s+vscode\.commands\.executeCommand\('kronos\.addEvidence', \{ ticketKey: picked\.plan\.ticketKey \}\);/m,
+    /^\s+vscode\.commands\.executeCommand\('kronos\.implement', \{ ticketKey: ticket \}\);/m,
+    /^\s+vscode\.commands\.executeCommand\('kronos\.doctor'\);/m,
+  ]) {
+    assert.equal(pattern.test(source), false, String(pattern));
+  }
 });
 
 test('extension Sonar commands normalize webview and issue payloads', () => {
@@ -7226,6 +7234,13 @@ test('extension Sonar commands normalize webview and issue payloads', () => {
     'let projectName = item?.projectName;',
   ]) {
     assert.equal(sonarCommandSource.includes(marker), false, marker);
+  }
+  for (const pattern of [
+    /^\s+vscode\.commands\.executeCommand\('kronos\.sonarReport', \{ projectName \}\);/m,
+    /^\s+vscode\.commands\.executeCommand\('kronos\.fixSonarIssues', \{ projectName, sourceBranch: branch, issuesData: report\.issueList \}\);/m,
+    /^\s+vscode\.commands\.executeCommand\('kronos\.fixFinding', \{ projectName, projectPath, tickets: ticketList \}\);/m,
+  ]) {
+    assert.equal(pattern.test(sonarCommandSource), false, String(pattern));
   }
 });
 

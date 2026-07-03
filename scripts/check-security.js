@@ -931,6 +931,16 @@ for (const forbidden of [
     fail(`Extension command handlers must normalize unknown errors instead of using ${forbidden}.`);
   }
 }
+for (const forbiddenPattern of [
+  /^\s+vscode\.commands\.executeCommand\('kronos\.viewTicket', \{ ticketKey: picked\.plan\.ticketKey \}\);/m,
+  /^\s+vscode\.commands\.executeCommand\('kronos\.addEvidence', \{ ticketKey: picked\.plan\.ticketKey \}\);/m,
+  /^\s+vscode\.commands\.executeCommand\('kronos\.implement', \{ ticketKey: ticket \}\);/m,
+  /^\s+vscode\.commands\.executeCommand\('kronos\.doctor'\);/m,
+]) {
+  if (forbiddenPattern.test(extension)) {
+    fail(`Extension command handlers must await command promises: ${forbiddenPattern}`);
+  }
+}
 for (const marker of [
   "vscode.commands.registerCommand('kronos.refreshProject', async (item: unknown)",
   "vscode.commands.registerCommand('kronos.implement', async (item: unknown)",
@@ -1032,6 +1042,15 @@ for (const forbidden of [
 ]) {
   if (sonarCommandSource.includes(forbidden)) {
     fail(`Sonar command handlers must normalize payloads before use: ${forbidden}`);
+  }
+}
+for (const forbiddenPattern of [
+  /^\s+vscode\.commands\.executeCommand\('kronos\.sonarReport', \{ projectName \}\);/m,
+  /^\s+vscode\.commands\.executeCommand\('kronos\.fixSonarIssues', \{ projectName, sourceBranch: branch, issuesData: report\.issueList \}\);/m,
+  /^\s+vscode\.commands\.executeCommand\('kronos\.fixFinding', \{ projectName, projectPath, tickets: ticketList \}\);/m,
+]) {
+  if (forbiddenPattern.test(sonarCommandSource)) {
+    fail(`Sonar command handlers must await command promises: ${forbiddenPattern}`);
   }
 }
 
