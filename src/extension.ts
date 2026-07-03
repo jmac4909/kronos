@@ -245,9 +245,11 @@ function startActiveRunPanelRefresh(
     if (!hasActive && !wasActive) { return; }
     if (rendering) { return; }
     rendering = true;
-    state.reloadAndNotify();
     void Promise.resolve()
-      .then(render)
+      .then(() => {
+        state.reloadAndNotify();
+        return render();
+      })
       .catch((e: unknown) => { warnUnexpectedPanelIntegrationError(e, 'Kronos panel auto-refresh failed.'); })
       .finally(() => {
         wasActive = hasActive;
