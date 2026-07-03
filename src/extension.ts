@@ -89,6 +89,8 @@ const REQUIRED_PROMPTS = [
 const CODE_COLLISION_ACTIONS = new Set(['implement', 'in_progress', 'fix_build']);
 const LIVE_MR_DIFF_LIMIT = 4;
 const LIVE_MR_DIFF_TIMEOUT_MS = 8000;
+const REVIEW_POLL_FAILURE_NOTIFICATION_MS = 15 * 60 * 1000;
+const reviewPollFailureNotifications = new Map<string, number>();
 
 function jsonForScript(value: unknown): string {
   const json = JSON.stringify(value) ?? 'null';
@@ -5122,6 +5124,7 @@ function startReviewAutomation(context: vscode.ExtensionContext, state: KronosSt
 }
 
 async function pollReviewMergeRequests(state: KronosState): Promise<void> {
+  state.reloadAndNotify();
   for (const candidate of reviewMergeRequestCandidates(state)) {
     try {
       const status = await gitlabAdapter.mergeRequestStatus(state, candidate.ticketKey, { timeout: LIVE_MR_DIFF_TIMEOUT_MS });
@@ -5138,8 +5141,32 @@ async function pollReviewMergeRequests(state: KronosState): Promise<void> {
       }
     } catch (e: unknown) {
       console.warn(unknownErrorMessage(e, `Failed to poll MR status for ${candidate.ticketKey}.`));
+      notifyReviewMergeRequestPollFailure(candidate.ticketKey, e);
     }
   }
+}
+
+function notifyReviewMergeRequestPollFailure(ticketKey: string, error: unknown): void {
+  const now = Date.now();
+  const lastNotified = reviewPollFailureNotifications.get(ticketKey) || 0;
+  if (now - lastNotified < REVIEW_POLL_FAILURE_NOTIFICATION_MS) { return; }
+  reviewPollFailureNotifications.set(ticketKey, now);
+  const detail = unknownErrorMessage(error, 'unknown error');
+  const selection = vscode.window.showWarningMessage(
+    `${ticketKey}: MR status polling failed: ${detail}`,
+    'Open Review',
+    'Run Doctor',
+  );
+  void selection.then(action => {
+    if (action === 'Open Review') {
+      return vscode.commands.executeCommand('kronosReview.focus');
+    } else if (action === 'Run Doctor') {
+      return vscode.commands.executeCommand('kronos.doctor');
+    }
+    return undefined;
+  }).then(undefined, (e: unknown) => {
+    console.warn(unknownErrorMessage(e, 'Failed to handle MR polling failure action.'));
+  });
 }
 
 function notifyMergeRequestStatusChange(ticketKey: string, update: MergeRequestStatusUpdate): void {
