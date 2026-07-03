@@ -67,60 +67,61 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function projectStatusRecord(gate: unknown): Record<string, unknown> {
-  if (isRecord(gate) && isRecord(gate.projectStatus)) {
-    return gate.projectStatus;
+  if (isRecord(gate) && isRecord(gate['projectStatus'])) {
+    return gate['projectStatus'];
   }
   return {};
 }
 
 export function sonarGateStatus(gate: unknown): string {
   const projectStatus = projectStatusRecord(gate);
-  if (typeof projectStatus.status === 'string' && projectStatus.status.trim()) {
-    return projectStatus.status;
+  if (typeof projectStatus['status'] === 'string' && projectStatus['status'].trim()) {
+    return projectStatus['status'];
   }
-  if (isRecord(gate) && typeof gate.status === 'string' && gate.status.trim()) {
-    return gate.status;
+  if (isRecord(gate) && typeof gate['status'] === 'string' && gate['status'].trim()) {
+    return gate['status'];
   }
   return 'UNKNOWN';
 }
 
 export function sonarConditionList(gate: unknown): SonarCondition[] {
   const projectStatus = projectStatusRecord(gate);
-  if (!Array.isArray(projectStatus.conditions)) { return []; }
-  return projectStatus.conditions.filter(isRecord).map(condition => {
+  if (!Array.isArray(projectStatus['conditions'])) { return []; }
+  return projectStatus['conditions'].filter(isRecord).map(condition => {
     const normalized: SonarCondition = {
-      errorThreshold: condition.errorThreshold,
-      actualValue: condition.actualValue,
+      errorThreshold: condition['errorThreshold'],
+      actualValue: condition['actualValue'],
     };
-    if (typeof condition.status === 'string') { normalized.status = condition.status; }
-    if (typeof condition.metricKey === 'string') { normalized.metricKey = condition.metricKey; }
-    if (typeof condition.comparator === 'string') { normalized.comparator = condition.comparator; }
+    if (typeof condition['status'] === 'string') { normalized.status = condition['status']; }
+    if (typeof condition['metricKey'] === 'string') { normalized.metricKey = condition['metricKey']; }
+    if (typeof condition['comparator'] === 'string') { normalized.comparator = condition['comparator']; }
     return normalized;
   });
 }
 
 export function sonarMeasureList(measures: unknown): SonarMeasure[] {
   if (!isRecord(measures)) { return []; }
-  const componentMeasures = isRecord(measures.component) && Array.isArray(measures.component.measures)
-    ? measures.component.measures
+  const component = isRecord(measures['component']) ? measures['component'] : undefined;
+  const componentMeasures = component && Array.isArray(component['measures'])
+    ? component['measures']
     : undefined;
-  const list = componentMeasures || (Array.isArray(measures.measures) ? measures.measures : []);
+  const list = componentMeasures || (Array.isArray(measures['measures']) ? measures['measures'] : []);
   return list.filter(isRecord).map(measure => {
-    const normalized: SonarMeasure = { value: measure.value };
-    if (typeof measure.metric === 'string') { normalized.metric = measure.metric; }
-    if (isRecord(measure.period)) { normalized.period = { value: measure.period.value }; }
+    const normalized: SonarMeasure = { value: measure['value'] };
+    if (typeof measure['metric'] === 'string') { normalized.metric = measure['metric']; }
+    if (isRecord(measure['period'])) { normalized.period = { value: measure['period']['value'] }; }
     return normalized;
   });
 }
 
 export function sonarIssueList(issues: unknown): SonarIssue[] {
-  if (!isRecord(issues) || !Array.isArray(issues.issues)) { return []; }
-  return issues.issues.filter(isRecord).map(issue => {
-    const normalized: SonarIssue = { line: issue.line };
-    if (typeof issue.severity === 'string') { normalized.severity = issue.severity; }
-    if (typeof issue.rule === 'string') { normalized.rule = issue.rule; }
-    if (typeof issue.component === 'string') { normalized.component = issue.component; }
-    if (typeof issue.message === 'string') { normalized.message = issue.message; }
+  if (!isRecord(issues) || !Array.isArray(issues['issues'])) { return []; }
+  return issues['issues'].filter(isRecord).map(issue => {
+    const normalized: SonarIssue = { line: issue['line'] };
+    if (typeof issue['severity'] === 'string') { normalized.severity = issue['severity']; }
+    if (typeof issue['rule'] === 'string') { normalized.rule = issue['rule']; }
+    if (typeof issue['component'] === 'string') { normalized.component = issue['component']; }
+    if (typeof issue['message'] === 'string') { normalized.message = issue['message']; }
     return normalized;
   });
 }

@@ -40,7 +40,7 @@ export function discoverProjectsJson(options: StateScriptAdapterOptions = {}): D
   const data = isPlainObject(parsed) ? parsed : {};
   return {
     ...data,
-    candidates: normalizeDiscoveredProjects(data.candidates),
+    candidates: normalizeDiscoveredProjects(data['candidates']),
   };
 }
 
@@ -59,16 +59,16 @@ export function normalizeDiscoveredProjects(value: unknown): DiscoveredProject[]
 
 function normalizeDiscoveredProject(value: unknown): DiscoveredProject | null {
   if (!isPlainObject(value)) { return null; }
-  const path = stringOrNull(value.path);
+  const path = stringOrNull(value['path']);
   if (!path) { return null; }
-  const repoName = stringOrNull(value.repo_name) || path.replace(/\\/g, '/').split('/').filter(Boolean).pop() || path;
+  const repoName = stringOrNull(value['repo_name']) || path.replace(/\\/g, '/').split('/').filter(Boolean).pop() || path;
   return {
     path,
     repo_name: repoName,
-    has_project_json: value.has_project_json === true,
-    git_remote: stringOrNull(value.git_remote),
-    pom_artifact_id: stringOrNull(value.pom_artifact_id),
-    suggested_jira_key: stringOrNull(value.suggested_jira_key),
+    has_project_json: value['has_project_json'] === true,
+    git_remote: stringOrNull(value['git_remote']),
+    pom_artifact_id: stringOrNull(value['pom_artifact_id']),
+    suggested_jira_key: stringOrNull(value['suggested_jira_key']),
   };
 }
 
@@ -97,11 +97,11 @@ export function readMorningBriefJson(options: StateScriptAdapterOptions = {}): M
   if (!isPlainObject(parsed)) { return {}; }
   return {
     ...parsed,
-    completed: arrayOrEmpty(parsed.completed),
-    needs_attention: arrayOrEmpty(parsed.needs_attention),
-    ready_to_go: arrayOrEmpty(parsed.ready_to_go),
-    overnight_actions: finiteNumberOrZero(parsed.overnight_actions),
-    vpn_drops: finiteNumberOrZero(parsed.vpn_drops),
+    completed: arrayOrEmpty(parsed['completed']),
+    needs_attention: arrayOrEmpty(parsed['needs_attention']),
+    ready_to_go: arrayOrEmpty(parsed['ready_to_go']),
+    overnight_actions: finiteNumberOrZero(parsed['overnight_actions']),
+    vpn_drops: finiteNumberOrZero(parsed['vpn_drops']),
   };
 }
 
