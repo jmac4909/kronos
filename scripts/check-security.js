@@ -273,7 +273,7 @@ for (const marker of [
   'function refreshAfterDispatch(state: KronosState, projectName?: string, ticketKey?: string): (code: number, run: KronosRun) => Promise<void>',
   'return async (_code: number, run: KronosRun)',
   'await refreshAfterDispatch(state, projectName)(code, run)',
-  'function isAttentionRunStatus(status: string): boolean',
+  "import { isAttentionRunStatus, runAttentionDetail } from './services/runAttention'",
   'function runQuickPickDescription(run: KronosRun)',
   'function singleLineRunSummary(value: string, maxLength = 140): string',
   'description: runQuickPickDescription(run)',
@@ -1743,6 +1743,9 @@ if (ticketTreeProvider.includes('function evidenceItemCount')) {
 }
 if (extension.includes('function evidenceCountForTicket')) {
   fail('Extension must call shared evidenceRecordCount directly instead of wrapping it locally.');
+}
+if (extension.includes('function isAttentionRunStatus')) {
+  fail('Extension must use the shared run attention status helper.');
 }
 
 for (const marker of [

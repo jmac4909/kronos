@@ -60,7 +60,7 @@ import { escapeAttr, escapeClass, escapeHtml, kronosWebviewBaseCss, safeHttpHref
 import { kronosTerminalOptions } from './services/terminalProfiles';
 import { unknownErrorCode, unknownErrorMessage } from './services/errorUtils';
 import { activeRunSummary, isActiveRun } from './services/runStatus';
-import { runAttentionDetail } from './services/runAttention';
+import { isAttentionRunStatus, runAttentionDetail } from './services/runAttention';
 import { actionButton, actionRow, kronosActionPanelScript, kronosOperatorPanelCss, operatorCommandRow } from './services/operatorPanel';
 import { buildPromptHistoryHtml, buildPromptManagerHtml, buildPromptSmokeTestsHtml } from './services/promptPanelView';
 import { buildRecoveryHtml, buildStateAuditLogHtml } from './services/recoveryPanelView';
@@ -741,10 +741,6 @@ function runLastEventLabel(run: KronosRun): string {
   const events = Array.isArray(run.events) ? run.events : [];
   const last = events[events.length - 1];
   return typeof last?.label === 'string' ? last.label : '';
-}
-
-function isAttentionRunStatus(status: string): boolean {
-  return status === 'failed' || status === 'needs_human' || status === 'cancelled';
 }
 
 function runQuickPickDetail(run: KronosRun): string {

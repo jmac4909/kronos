@@ -31,6 +31,11 @@ const FAILURE_KIND_LABELS: Record<RunFailureKind, string> = {
   cancelled: 'Cancelled',
   unknown: '',
 };
+const ATTENTION_RUN_STATUSES = new Set(['failed', 'needs_human', 'cancelled']);
+
+export function isAttentionRunStatus(status: unknown): boolean {
+  return typeof status === 'string' && ATTENTION_RUN_STATUSES.has(status);
+}
 
 export function summarizeRunAttention(run: unknown): RunAttentionSummary {
   const record = runRecord(run);

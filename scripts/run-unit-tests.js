@@ -3789,6 +3789,10 @@ test('run attention summarizes actionable failure reasons', () => {
     failureKind: 'auth',
   });
   assert.equal(authFailure, 'Auth or credential issue');
+  assert.equal(runAttention.isAttentionRunStatus('failed'), true);
+  assert.equal(runAttention.isAttentionRunStatus('needs_human'), true);
+  assert.equal(runAttention.isAttentionRunStatus('cancelled'), true);
+  assert.equal(runAttention.isAttentionRunStatus('completed'), false);
 });
 
 test('recovery center prioritizes failed runs, unsafe worktrees, doctor failures, and backups', () => {
@@ -6392,7 +6396,7 @@ test('extension run recovery helpers use typed run records', () => {
     'async function openRunDiffArtifact(run: KronosRun)',
     'async function markSelectedRunNeedsHuman(run: KronosRun)',
     'function runLastEventLabel(run: KronosRun)',
-    'function isAttentionRunStatus(status: string): boolean',
+    "import { isAttentionRunStatus, runAttentionDetail } from './services/runAttention'",
     'function runQuickPickDetail(run: KronosRun)',
     'function runQuickPickDescription(run: KronosRun)',
     'function singleLineRunSummary(value: string, maxLength = 140): string',
@@ -6946,6 +6950,7 @@ test('tree providers share action labels and icons', () => {
   assert.equal(ticketTree.includes('function evidenceItemCount'), false, 'ticket tree should not duplicate evidence counting');
   assert.equal(queueTree.includes('function actionIcon'), false, 'queue tree should not duplicate action icons');
   assert.equal(extensionSource.includes('function evidenceCountForTicket'), false, 'extension should call shared evidenceRecordCount directly');
+  assert.equal(extensionSource.includes('function isAttentionRunStatus'), false, 'extension should use shared run attention status helper');
 });
 
 test('queue tree polling clears active-run decorations after runs finish', async () => {
