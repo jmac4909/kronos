@@ -1232,6 +1232,7 @@ test('review monitor decisions route merged, closed, comment, and no-op MR polls
     kind: 'blocked',
     severity: 'warning',
     message: 'K-2 MR closed - ticket moved to blocked.',
+    url: 'https://gitlab.example/1',
   });
   assert.deepEqual(reviewMonitor.decideReviewMonitorAction('K-3', {
     ...baseUpdate,
@@ -1243,6 +1244,7 @@ test('review monitor decisions route merged, closed, comment, and no-op MR polls
     kind: 'notify',
     severity: 'info',
     message: 'K-3: MR !3 1 new MR comment.',
+    url: 'https://gitlab.example/3',
   });
   assert.deepEqual(reviewMonitor.decideReviewMonitorAction('K-4', {
     ...baseUpdate,
@@ -1254,6 +1256,7 @@ test('review monitor decisions route merged, closed, comment, and no-op MR polls
     kind: 'notify',
     severity: 'warning',
     message: 'K-4: MR !4 2 new unresolved MR discussions.',
+    url: 'https://gitlab.example/4',
   });
   assert.deepEqual(reviewMonitor.decideReviewMonitorAction('K-4B', {
     ...baseUpdate,
@@ -1265,6 +1268,7 @@ test('review monitor decisions route merged, closed, comment, and no-op MR polls
     kind: 'notify',
     severity: 'info',
     message: 'K-4B: MR !41 new MR discussion activity.',
+    url: 'https://gitlab.example/41',
   });
   assert.deepEqual(reviewMonitor.decideReviewMonitorAction('K-5', baseUpdate), {
     kind: 'none',
@@ -7004,12 +7008,14 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'const decision = decideReviewMonitorAction(candidate.ticketKey, update)',
     "decision.kind === 'deploy_monitor'",
     "decision.kind === 'blocked'",
-    'MR closed - ticket moved to blocked.',
     'notifyReviewMonitorDecision(decision)',
     'notifyReviewMergeRequestPollFailure(candidate.ticketKey, e)',
     'function notifyReviewMergeRequestPollFailure(ticketKey: string, error: unknown): void',
     'MR status polling failed:',
     'function notifyReviewMonitorDecision(decision: ReviewMonitorDecision): void',
+    "const actions = decision.url ? ['Open MR', 'Open Review'] : ['Open Review']",
+    "action === 'Open MR' && decision.url",
+    'openExternalHttpUrl(decision.url)',
     "import { openReviewTicketEntries, reviewBranchTickets as buildReviewBranchTickets, type ReviewBranchTicket, type TicketWithOpenMergeRequest } from './services/reviewWork'",
     'return openReviewTicketEntries(state.state?.tickets)',
     'function reviewBranchTickets(state: KronosState): ReviewBranchTicket[]',

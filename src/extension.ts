@@ -5261,7 +5261,7 @@ async function pollReviewMergeRequests(state: KronosState): Promise<void> {
       if (decision.kind === 'deploy_monitor') {
         await startDeployMonitorForMergedTicket(state, candidate.ticketKey, update.ticket);
       } else if (decision.kind === 'blocked') {
-        void vscode.window.showWarningMessage(decision.message || `${candidate.ticketKey} MR closed - ticket moved to blocked.`);
+        notifyReviewMonitorDecision(decision);
       } else if (decision.kind === 'notify') {
         notifyReviewMonitorDecision(decision);
       }
@@ -5318,15 +5318,22 @@ function notifyReviewMergeRequestPollFailure(ticketKey: string, error: unknown):
 
 function notifyReviewMonitorDecision(decision: ReviewMonitorDecision): void {
   if (!decision.message) { return; }
+  const actions = decision.url ? ['Open MR', 'Open Review'] : ['Open Review'];
   const selection = decision.severity === 'warning'
-    ? vscode.window.showWarningMessage(decision.message, 'Open Review')
-    : vscode.window.showInformationMessage(decision.message, 'Open Review');
-  runNotificationCommandAction(
-    selection,
-    'Open Review',
-    'kronosReview.focus',
-    'Failed to open Kronos Review.',
-  );
+    ? vscode.window.showWarningMessage(decision.message, ...actions)
+    : vscode.window.showInformationMessage(decision.message, ...actions);
+  void selection.then(action => {
+    if (action === 'Open MR' && decision.url) {
+      openExternalHttpUrl(decision.url);
+      return;
+    }
+    if (action === 'Open Review') {
+      return vscode.commands.executeCommand('kronosReview.focus');
+    }
+    return undefined;
+  }).then(undefined, (e: unknown) => {
+    void vscode.window.showWarningMessage(unknownErrorMessage(e, 'Failed to handle MR review notification action.'));
+  });
 }
 
 function reviewMergeRequestCandidates(state: KronosState): Array<{ ticketKey: string; ticket: TicketWithOpenMergeRequest }> {
