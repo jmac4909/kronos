@@ -103,6 +103,7 @@ const acceptanceCriteria = require('../out/services/acceptanceCriteria.js');
 const humanReviewInbox = require('../out/services/humanReviewInbox.js');
 const evidenceGate = require('../out/services/evidenceGate.js');
 const evidenceGatePolicy = require('../out/services/evidenceGatePolicy.js');
+const queueRemovalPolicy = require('../out/services/queueRemovalPolicy.js');
 const agentQualityScore = require('../out/services/agentQualityScore.js');
 const dashboardWorklist = require('../out/services/dashboardWorklist.js');
 const integrationManifest = require('../out/services/integrationManifest.js');
@@ -5651,6 +5652,52 @@ test('evidence gate tolerates malformed direct evidence entries', () => {
   assert.ok(gate.checks.some(check => check.kind === 'acceptance' && check.status === 'pass'));
 });
 
+test('queue removal policy protects evidence gates without blocking evidenced tickets', () => {
+  const reviewNoEvidence = ticket({
+    next_action: 'await_review',
+    projects: ['app'],
+    mr: { iid: 1, state: 'opened', review_status: 'pending_review', url: 'https://gitlab.example/1' },
+  });
+
+  const automaticFail = queueRemovalPolicy.decideQueueRemoval('K-1', reviewNoEvidence, false);
+  assert.equal(automaticFail.kind, 'block_failing_gate');
+  assert.equal(automaticFail.allowed, false);
+  assert.equal(automaticFail.requiresConfirmation, false);
+  assert.match(automaticFail.message, /stayed in queue because its evidence gate is failing/);
+  assert.ok(automaticFail.failingSummary.includes('No evidence records'));
+
+  const interactiveFail = queueRemovalPolicy.decideQueueRemoval('K-1', reviewNoEvidence, true);
+  assert.equal(interactiveFail.kind, 'confirm_failing_gate');
+  assert.equal(interactiveFail.allowed, false);
+  assert.equal(interactiveFail.requiresConfirmation, true);
+
+  const implementNoEvidence = ticket({
+    next_action: 'implement',
+    projects: ['app'],
+  });
+  const missing = queueRemovalPolicy.decideQueueRemoval('K-2', implementNoEvidence, false);
+  assert.equal(missing.kind, 'block_missing_evidence');
+  assert.equal(missing.allowed, false);
+  assert.equal(missing.requiresConfirmation, false);
+  assert.match(missing.message, /stayed in queue because it has no evidence records/);
+
+  const evidenced = ticket({
+    next_action: 'await_review',
+    projects: ['app'],
+    mr: { iid: 2, state: 'opened', review_status: 'approved', url: 'https://gitlab.example/2' },
+    build: { number: 2, status: 'SUCCESS', url: 'https://jenkins.example/2' },
+    evidence: {
+      notes: [{ at: 'now', kind: 'test', text: 'smoke passed' }],
+      checks: [{ id: 'check-1', at: 'now', name: 'smoke', result: 'pass' }],
+    },
+  });
+  const allowed = queueRemovalPolicy.decideQueueRemoval('K-3', evidenced, false);
+  assert.equal(allowed.kind, 'allow');
+  assert.equal(allowed.allowed, true);
+
+  assert.equal(queueRemovalPolicy.decideQueueRemoval('K-4', undefined, false).kind, 'allow');
+});
+
 test('post-run readiness distinguishes process completion from handoff readiness', () => {
   const readyTicket = ticket({
     next_action: 'await_review',
@@ -6233,7 +6280,7 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'const notes = evidenceNotes(ticket)',
     'const checks = evidenceChecks(ticket)',
     'const environmentResults = evidenceEnvironmentResults(ticket)',
-    'evidenceRecordCount(ticket)',
+    'evidenceCount: evidenceRecordCount(t)',
     'function ticketStringArray',
     'function ticketAttachments',
     'interface TicketAttachmentSummary',

@@ -43,6 +43,7 @@ const humanReviewInbox = readSource('src/services/humanReviewInbox.ts');
 const recoveryCenter = readSource('src/services/recoveryCenter.ts');
 const evidenceGate = readSource('src/services/evidenceGate.ts');
 const evidenceGatePolicy = readSource('src/services/evidenceGatePolicy.ts');
+const queueRemovalPolicy = readSource('src/services/queueRemovalPolicy.ts');
 const collisionDetector = readSource('src/services/collisionDetector.ts');
 const runStatus = readSource('src/services/runStatus.ts');
 const runProgress = readSource('src/services/runProgress.ts');
@@ -270,7 +271,11 @@ for (const marker of [
   'kronos.openExternalUrl',
   'async function confirmSafetyGate',
   'async function removeTicketFromQueue',
-  'stayed in queue because it has no evidence records',
+  "import { decideQueueRemoval } from './services/queueRemovalPolicy'",
+  'const decision = decideQueueRemoval(ticketKey, ticket, interactive)',
+  "decision.kind === 'block_failing_gate' || decision.kind === 'block_missing_evidence'",
+  "decision.kind === 'confirm_failing_gate'",
+  "decision.kind === 'confirm_missing_evidence'",
   "import { unknownErrorCode, unknownErrorMessage } from './services/errorUtils'",
   "import type { DiscoveredProject, MergeRequestChangedFile, QueueItem, Ticket } from './state/types'",
   'function planToQueueItem(state: KronosState, plan: PlannedAction): QueueItem',
@@ -320,7 +325,7 @@ for (const marker of [
   'const notes = evidenceNotes(ticket)',
   'const checks = evidenceChecks(ticket)',
   'const environmentResults = evidenceEnvironmentResults(ticket)',
-  'evidenceRecordCount(ticket)',
+  'evidenceCount: evidenceRecordCount(t)',
   'function ticketStringArray',
   'function ticketAttachments',
   'interface TicketAttachmentSummary',
@@ -373,7 +378,7 @@ for (const marker of [
   'openEvidencePublishPanel',
   'Publish Evidence Comment',
   "risks: ['external-publish']",
-  'stayed in queue because its evidence gate is failing',
+  'decideQueueRemoval(ticketKey, ticket, interactive)',
   'Gate Fails',
   'kronos.nextBestAction',
   'buildNextActionContext',
@@ -2382,6 +2387,25 @@ for (const marker of [
 ]) {
   if (!evidenceGatePolicy.includes(marker)) {
     fail(`Missing evidence gate policy marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  'export type QueueRemovalDecisionKind',
+  'export interface QueueRemovalDecision',
+  'export function decideQueueRemoval',
+  "'block_failing_gate'",
+  "'confirm_failing_gate'",
+  "'block_missing_evidence'",
+  "'confirm_missing_evidence'",
+  "kind: 'allow'",
+  'evaluateEvidenceGate(ticketKey, ticket)',
+  'evidenceRecordCount(ticket) === 0',
+  'stayed in queue because its evidence gate is failing',
+  'stayed in queue because it has no evidence records',
+]) {
+  if (!queueRemovalPolicy.includes(marker)) {
+    fail(`Missing queue removal policy marker: ${marker}`);
   }
 }
 

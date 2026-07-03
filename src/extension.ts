@@ -63,6 +63,7 @@ import { activeRunSummary, isActiveRun } from './services/runStatus';
 import { isAttentionRunStatus, runAttentionDetail, runAttentionLine } from './services/runAttention';
 import { openReviewTicketEntries, reviewBranchTickets as buildReviewBranchTickets, type ReviewBranchTicket, type TicketWithOpenMergeRequest } from './services/reviewWork';
 import { decideReviewMonitorAction, type ReviewMonitorDecision } from './services/reviewMonitor';
+import { decideQueueRemoval } from './services/queueRemovalPolicy';
 import { actionButton, actionRow, kronosActionPanelScript, kronosOperatorPanelCss, operatorCommandRow } from './services/operatorPanel';
 import { buildPromptHistoryHtml, buildPromptManagerHtml, buildPromptSmokeTestsHtml } from './services/promptPanelView';
 import { buildRecoveryHtml, buildStateAuditLogHtml } from './services/recoveryPanelView';
@@ -4784,34 +4785,31 @@ interface JiraBoardTicketPayload {
 
 async function removeTicketFromQueue(state: KronosState, ticketKey: string, interactive: boolean): Promise<boolean> {
   const ticket = state.state?.tickets?.[ticketKey];
-  const gate = ticket ? evaluateEvidenceGate(ticketKey, ticket) : undefined;
-  if (ticket && gate?.status === 'fail') {
-    const failing = gate.checks.filter(check => check.status === 'fail').map(check => check.title).join('; ');
-    if (!interactive) {
-      vscode.window.showWarningMessage(`${ticketKey} stayed in queue because its evidence gate is failing: ${failing}`);
-      return false;
-    }
+  const decision = decideQueueRemoval(ticketKey, ticket, interactive);
+  if (decision.kind === 'block_failing_gate' || decision.kind === 'block_missing_evidence') {
+    vscode.window.showWarningMessage(decision.message || `${ticketKey} stayed in queue.`);
+    return false;
+  }
+  if (decision.kind === 'confirm_failing_gate') {
     const action = await vscode.window.showWarningMessage(
-      `${ticketKey} has failing evidence gate checks: ${failing}`,
+      decision.message || `${ticketKey} has failing evidence gate checks.`,
       'Open Gate',
       'Remove Anyway',
       'Cancel'
     );
     if (action === 'Open Gate') {
-      openEvidenceGatePanel(state, [gate], `Evidence Gate: ${ticketKey}`);
+      if (decision.gate) {
+        openEvidenceGatePanel(state, [decision.gate], `Evidence Gate: ${ticketKey}`);
+      }
       return false;
     }
     if (action !== 'Remove Anyway') {
       return false;
     }
   }
-  if (ticket && evidenceRecordCount(ticket) === 0) {
-    if (!interactive) {
-      vscode.window.showWarningMessage(`${ticketKey} stayed in queue because it has no evidence records.`);
-      return false;
-    }
+  if (decision.kind === 'confirm_missing_evidence') {
     const action = await vscode.window.showWarningMessage(
-      `${ticketKey} has no evidence records. Removing it from the queue will make the work harder to audit.`,
+      decision.message || `${ticketKey} has no evidence records. Removing it from the queue will make the work harder to audit.`,
       'Add Evidence',
       'Remove Anyway',
       'Cancel'
