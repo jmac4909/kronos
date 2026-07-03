@@ -372,6 +372,10 @@ for (const marker of [
   'openHumanReviewInbox',
   'const HUMAN_REVIEW_MESSAGE_COMMANDS = new Set',
   "request.command === 'refreshPanel'",
+  'const OPERATOR_COMMAND_TO_VSCODE_COMMAND = new Map<string, string>',
+  'const OPERATOR_COMMAND_MESSAGE_COMMANDS = new Set(OPERATOR_COMMAND_TO_VSCODE_COMMAND.keys())',
+  'const commandId = OPERATOR_COMMAND_TO_VSCODE_COMMAND.get(command)',
+  "vscode.window.showWarningMessage('Ignored unknown Kronos operator action.')",
   'await executeOperatorCommandAction(command, ticketKey)',
   "command === 'runCenter' || command === 'recoveryCenter' || command === 'doctor' || command === 'queuePlanner'",
   'kronos.evidenceGate',
@@ -920,6 +924,8 @@ for (const forbidden of [
   'function resolveTicketKey(item: any)',
   'return async (_code: number, run?: any)',
   'await refreshAfterDispatch(state, projectName)(code);',
+  'vscode.commands.executeCommand(`kronos.${command}`',
+  'await vscode.commands.executeCommand(`kronos.${command}`',
 ]) {
   if (extension.includes(forbidden)) {
     fail(`Extension command handlers must normalize unknown errors instead of using ${forbidden}.`);

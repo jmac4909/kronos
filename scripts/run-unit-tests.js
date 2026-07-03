@@ -6340,6 +6340,8 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'const BACKLOG_TRIAGE_MESSAGE_COMMANDS = new Set',
     'const TICKET_DETAIL_MESSAGE_COMMANDS = new Set',
     'const RECOVERY_MESSAGE_COMMANDS = new Set',
+    'const OPERATOR_COMMAND_TO_VSCODE_COMMAND = new Map<string, string>',
+    'const OPERATOR_COMMAND_MESSAGE_COMMANDS = new Set(OPERATOR_COMMAND_TO_VSCODE_COMMAND.keys())',
     'const TICKET_SCOPED_OPERATOR_COMMANDS = new Set',
     'normalizeActionPanelMessage(msg, EVIDENCE_GATE_MESSAGE_COMMANDS)',
     'normalizeActionPanelMessage(msg, DASHBOARD_MESSAGE_COMMANDS)',
@@ -6492,6 +6494,10 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     "'Failed to discover Kronos projects.'",
     "'Failed to open merge request diff.'",
     'function runQuickPickDetail',
+    'const commandId = OPERATOR_COMMAND_TO_VSCODE_COMMAND.get(command)',
+    "vscode.window.showWarningMessage('Ignored unknown Kronos operator action.')",
+    'await vscode.commands.executeCommand(commandId, { ticketKey })',
+    'await vscode.commands.executeCommand(commandId)',
     'This Kronos action needs a ticket context.',
     "if (command === 'evidenceGate' && ticketKey)",
     'function executePlanPanelAction',
@@ -6528,6 +6534,12 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'Kronos Doctor',
   ]) {
     assert.ok(uiSource.includes(marker), marker);
+  }
+  for (const marker of [
+    'vscode.commands.executeCommand(`kronos.${command}`',
+    'await vscode.commands.executeCommand(`kronos.${command}`',
+  ]) {
+    assert.equal(uiSource.includes(marker), false, marker);
   }
   for (const marker of [
     'export function actionButton',

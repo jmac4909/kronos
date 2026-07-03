@@ -372,37 +372,38 @@ const TICKET_DETAIL_MESSAGE_COMMANDS = new Set([
 const RECOVERY_MESSAGE_COMMANDS = new Set([
   'executeRecoveryItem',
 ]);
-const OPERATOR_COMMAND_MESSAGE_COMMANDS = new Set([
-  'addEvidence',
-  'addEvidenceCheck',
-  'setup',
-  'settings',
-  'doctor',
-  'integrationManifest',
-  'snapshotIntegrationManifest',
-  'profiles',
-  'queuePlanner',
-  'humanReviewInbox',
-  'promptManager',
-  'promptSmokeTests',
-  'snapshotPromptPack',
-  'promptHistory',
-  'repairPromptPack',
-  'runCenter',
-  'stats',
-  'sessionHistory',
-  'viewTicket',
-  'recordEnvironmentResult',
-  'evidenceGate',
-  'exportEvidence',
-  'evidenceHandoff',
-  'publishEvidence',
-  'agentQualityScore',
-  'trendMetrics',
-  'agingReport',
-  'recoveryCenter',
-  'stateAuditLog',
+const OPERATOR_COMMAND_TO_VSCODE_COMMAND = new Map<string, string>([
+  ['addEvidence', 'kronos.addEvidence'],
+  ['addEvidenceCheck', 'kronos.addEvidenceCheck'],
+  ['setup', 'kronos.setup'],
+  ['settings', 'kronos.settings'],
+  ['doctor', 'kronos.doctor'],
+  ['integrationManifest', 'kronos.integrationManifest'],
+  ['snapshotIntegrationManifest', 'kronos.snapshotIntegrationManifest'],
+  ['profiles', 'kronos.profiles'],
+  ['queuePlanner', 'kronos.queuePlanner'],
+  ['humanReviewInbox', 'kronos.humanReviewInbox'],
+  ['promptManager', 'kronos.promptManager'],
+  ['promptSmokeTests', 'kronos.promptSmokeTests'],
+  ['snapshotPromptPack', 'kronos.snapshotPromptPack'],
+  ['promptHistory', 'kronos.promptHistory'],
+  ['repairPromptPack', 'kronos.repairPromptPack'],
+  ['runCenter', 'kronos.runCenter'],
+  ['stats', 'kronos.stats'],
+  ['sessionHistory', 'kronos.sessionHistory'],
+  ['viewTicket', 'kronos.viewTicket'],
+  ['recordEnvironmentResult', 'kronos.recordEnvironmentResult'],
+  ['evidenceGate', 'kronos.evidenceGate'],
+  ['exportEvidence', 'kronos.exportEvidence'],
+  ['evidenceHandoff', 'kronos.evidenceHandoff'],
+  ['publishEvidence', 'kronos.publishEvidence'],
+  ['agentQualityScore', 'kronos.agentQualityScore'],
+  ['trendMetrics', 'kronos.trendMetrics'],
+  ['agingReport', 'kronos.agingReport'],
+  ['recoveryCenter', 'kronos.recoveryCenter'],
+  ['stateAuditLog', 'kronos.stateAuditLog'],
 ]);
+const OPERATOR_COMMAND_MESSAGE_COMMANDS = new Set(OPERATOR_COMMAND_TO_VSCODE_COMMAND.keys());
 const AGING_REPORT_MESSAGE_COMMANDS = new Set([
   ...OPERATOR_COMMAND_MESSAGE_COMMANDS,
   'refreshPanel',
@@ -4206,19 +4207,24 @@ async function executeEvidenceGateAction(command: string, ticketKey: string): Pr
 }
 
 async function executeOperatorCommandAction(command: string, ticketKey = ''): Promise<void> {
+  const commandId = OPERATOR_COMMAND_TO_VSCODE_COMMAND.get(command);
+  if (!commandId) {
+    vscode.window.showWarningMessage('Ignored unknown Kronos operator action.');
+    return;
+  }
   if (TICKET_SCOPED_OPERATOR_COMMANDS.has(command)) {
     if (!ticketKey) {
       vscode.window.showWarningMessage('This Kronos action needs a ticket context.');
       return;
     }
-    await vscode.commands.executeCommand(`kronos.${command}`, { ticketKey });
+    await vscode.commands.executeCommand(commandId, { ticketKey });
     return;
   }
   if (command === 'evidenceGate' && ticketKey) {
-    await vscode.commands.executeCommand(`kronos.${command}`, { ticketKey });
+    await vscode.commands.executeCommand(commandId, { ticketKey });
     return;
   }
-  await vscode.commands.executeCommand(`kronos.${command}`);
+  await vscode.commands.executeCommand(commandId);
 }
 
 function attachOperatorCommandHandler(panel: vscode.WebviewPanel, webviewName = 'Kronos action panel'): void {
