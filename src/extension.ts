@@ -2387,7 +2387,7 @@ export function activate(context: vscode.ExtensionContext) {
       if (!mode) { return; }
 
       const commandArg = recordFromUnknown(item);
-      const branch = mode.value === 'new' ? (stringFromUnknown(commandArg.branch) || baseBranch) : '';
+      const branch = mode.value === 'new' ? (stringFromUnknown(commandArg['branch']) || baseBranch) : '';
       const scanPrompt = loadPromptForDispatch(state, 'sonar-scan', { PROJECT_NAME: projectName, SONAR_KEY: sonarKey, BRANCH: branch }, projectPath);
 
       await startClaudeDispatch(projectPath, 'sonar-scan', undefined, {
@@ -2453,7 +2453,7 @@ export function activate(context: vscode.ExtensionContext) {
           issues,
           nonce,
         };
-        if (process.env.SONAR_HOST_URL) { Object.assign(reportInput, { host: process.env.SONAR_HOST_URL }); }
+        if (process.env['SONAR_HOST_URL']) { Object.assign(reportInput, { host: process.env['SONAR_HOST_URL'] }); }
         const report = buildSonarReport(reportInput);
         const panel = vscode.window.createWebviewPanel('sonarReport', `Sonar: ${projectName}`, vscode.ViewColumn.One, { enableScripts: true });
         panel.webview.html = withWebviewCsp(report.html, webviewScriptCspOptions(panel.webview.cspSource, nonce));
@@ -2490,7 +2490,7 @@ export function activate(context: vscode.ExtensionContext) {
       if (customInstructions === undefined) { return; }
 
       const commandArg = recordFromUnknown(item);
-      const sourceBranch = stringFromUnknown(commandArg.sourceBranch) || '';
+      const sourceBranch = stringFromUnknown(commandArg['sourceBranch']) || '';
       const isProtected = !sourceBranch || sourceBranch === 'develop' || sourceBranch === 'main' || sourceBranch === 'master';
       const branchStrategy = isProtected
         ? `You are fixing issues from the ${sourceBranch || 'develop'} branch. Create a NEW branch: bugfix/sonar-${projectName.toLowerCase()} from ${sourceBranch || 'develop'}. After fixing and pushing, create a GitLab MR from your branch into ${sourceBranch || 'develop'} using: python ~/.claude/scripts/gitlab_api.py --create-mr`
@@ -2498,7 +2498,7 @@ export function activate(context: vscode.ExtensionContext) {
 
       // Format pre-fetched issues if available
       let issuesBlock = '';
-      const issuesData = normalizeSonarIssueCommandList(commandArg.issuesData);
+      const issuesData = normalizeSonarIssueCommandList(commandArg['issuesData']);
       if (issuesData.length > 0) {
         const lines = issuesData.map(formatSonarIssuePromptLine);
         issuesBlock = `KNOWN ISSUES (already fetched — do NOT re-query SonarQube for the issue list):\n${lines.join('\n')}`;
@@ -2609,7 +2609,7 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('kronos.fixFinding', async (args: unknown) => {
       const projectName = resolveProjectName(state, args);
       const commandArg = recordFromUnknown(args);
-      const projectPath = stringFromUnknown(commandArg.projectPath) || getProjectPath(state, projectName);
+      const projectPath = stringFromUnknown(commandArg['projectPath']) || getProjectPath(state, projectName);
       if (!projectPath || !projectName) {
         vscode.window.showWarningMessage('No project specified.');
         return;
@@ -2914,7 +2914,7 @@ export function activate(context: vscode.ExtensionContext) {
         preview = previewLinkMergeRequestToTicket(state.state, {
           orphanKey,
           targetTicketKey: ticketKey,
-          jiraBaseUrl: process.env.JIRA_BASE_URL || 'https://bcbsma.atlassian.net',
+          jiraBaseUrl: process.env['JIRA_BASE_URL'] || 'https://bcbsma.atlassian.net',
         });
       } catch (e: unknown) {
         vscode.window.showErrorMessage(unknownErrorMessage(e, 'Failed to preview merge request link.'));
@@ -2973,7 +2973,7 @@ export function activate(context: vscode.ExtensionContext) {
         linkMergeRequestToTicket({
           orphanKey,
           targetTicketKey: ticketKey,
-          jiraBaseUrl: process.env.JIRA_BASE_URL || 'https://bcbsma.atlassian.net',
+          jiraBaseUrl: process.env['JIRA_BASE_URL'] || 'https://bcbsma.atlassian.net',
           allowReviewHandoffWithWarnings,
         });
         state.reloadAndNotify();
@@ -3034,7 +3034,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     vscode.commands.registerCommand('kronos.unlinkTicket', async (item: unknown) => {
       const ticketKey = resolveTicketKey(item);
-      const projectName = stringFromUnknown(recordFromUnknown(item).linkedProject);
+      const projectName = stringFromUnknown(recordFromUnknown(item)['linkedProject']);
       if (ticketKey && projectName) {
         const canUnlink = await confirmSafetyGate({
           command: 'kronos.unlinkTicket',
@@ -4726,7 +4726,7 @@ function ticketAttachments(value: unknown): TicketAttachmentSummary[] {
     .filter(item => ticketRecord(item))
     .map(item => ({
       filename: ticketStringField(item, 'filename', 'attachment'),
-      size: Number.isFinite(Number(item.size)) ? Number(item.size) : 0,
+      size: Number.isFinite(Number(item['size'])) ? Number(item['size']) : 0,
       mimeType: ticketStringField(item, 'mimeType'),
     }));
 }
