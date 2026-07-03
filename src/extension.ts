@@ -5342,7 +5342,7 @@ async function startDeployMonitorForMergedTicket(state: KronosState, ticketKey: 
   const project = resolveDeployMonitorProject(state.state, ticketKey, ticket);
   if (project.kind !== 'ok' || !project.projectName || !project.projectPath) {
     const reason = project.reason || `${ticketKey} MR merged, but deploy monitoring could not resolve a project.`;
-    recordDeployMonitorHandoffIssue(ticketKey, ticket, reason);
+    recordDeployMonitorHandoffIssue(state, ticketKey, ticket, reason);
     void vscode.window.showWarningMessage(reason);
     return false;
   }
@@ -5362,8 +5362,7 @@ async function startDeployMonitorForMergedTicket(state: KronosState, ticketKey: 
   });
   if (!started) {
     const reason = `${ticketKey} merged, but deploy monitor did not start. Start deploy monitor manually from the Review view or ticket details.`;
-    recordDeployMonitorHandoffIssue(ticketKey, ticket, reason);
-    state.reloadAndNotify();
+    recordDeployMonitorHandoffIssue(state, ticketKey, ticket, reason);
     void vscode.window.showWarningMessage(reason);
     return false;
   }
@@ -5371,17 +5370,20 @@ async function startDeployMonitorForMergedTicket(state: KronosState, ticketKey: 
   return true;
 }
 
-function recordDeployMonitorHandoffIssue(ticketKey: string, ticket: Ticket, summary: string): void {
-  if (hasDeployMonitorHandoffIssue(ticket, summary)) { return; }
+function recordDeployMonitorHandoffIssue(state: KronosState, ticketKey: string, ticket: Ticket, summary: string): void {
+  state.reloadAndNotify();
+  const currentTicket = state.state?.tickets?.[ticketKey] || ticket;
+  if (hasDeployMonitorHandoffIssue(currentTicket, summary)) { return; }
   try {
     addTicketEvidenceCheck(ticketKey, {
-      name: deployMonitorHandoffCheckName(ticket),
+      name: deployMonitorHandoffCheckName(currentTicket),
       result: 'fail',
       environment: 'Kronos review monitor',
       command: `kronos run deploy-monitor ${ticketKey}`,
       summary,
       confidence: 'high',
     });
+    state.reloadAndNotify();
   } catch (e: unknown) {
     console.warn(unknownErrorMessage(e, `Failed to record deploy-monitor handoff issue for ${ticketKey}.`));
   }
