@@ -6646,7 +6646,7 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'extension run pickers should tolerate missing or malformed run.events',
   );
   assert.ok(source.includes('function startActiveRunPanelRefresh('), 'webview panels should share active-run auto-refresh');
-  assert.ok(source.includes("unknownErrorMessage(e, 'Kronos panel auto-refresh failed.')"), 'panel auto-refresh errors should be normalized');
+  assert.ok(source.includes("warnUnexpectedPanelIntegrationError(e, 'Kronos panel auto-refresh failed.')"), 'panel auto-refresh errors should be normalized');
   for (const [label, startMarker, endMarker] of [
     ['Dashboard', "vscode.commands.registerCommand('kronos.openDashboard'", "    vscode.commands.registerCommand('kronos.queueMoveUp'"],
     ['Human Review Inbox', 'function openHumanReviewInbox', 'async function executeHumanReviewAction'],

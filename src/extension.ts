@@ -231,7 +231,7 @@ function startActiveRunPanelRefresh(
     state.reloadAndNotify();
     void Promise.resolve()
       .then(render)
-      .catch((e: unknown) => console.warn(unknownErrorMessage(e, 'Kronos panel auto-refresh failed.')))
+      .catch((e: unknown) => { warnUnexpectedPanelIntegrationError(e, 'Kronos panel auto-refresh failed.'); })
       .finally(() => {
         wasActive = hasActive;
         rendering = false;

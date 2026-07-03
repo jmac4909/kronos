@@ -733,7 +733,7 @@ if (extension.includes('mr: ticket.mr!')) {
 if (!extension.includes('function startActiveRunPanelRefresh(')) {
   fail('Missing shared active-run webview panel refresh helper.');
 }
-if (!extension.includes("unknownErrorMessage(e, 'Kronos panel auto-refresh failed.')")) {
+if (!extension.includes("warnUnexpectedPanelIntegrationError(e, 'Kronos panel auto-refresh failed.')")) {
   fail('Panel auto-refresh errors should be normalized.');
 }
 for (const [label, startMarker, endMarker] of [
