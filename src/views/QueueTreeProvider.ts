@@ -67,7 +67,7 @@ export class QueueTreeProvider implements vscode.TreeDataProvider<QueueTreeItem>
   }
 }
 
-export class QueueTreeItem extends vscode.TreeItem {
+class QueueTreeItem extends vscode.TreeItem {
   public readonly item: QueueItem;
   public readonly index: number;
 

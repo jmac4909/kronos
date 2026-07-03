@@ -1747,7 +1747,7 @@ for (const [name, source, marker] of [
 for (const marker of [
   'export function runStateScript',
   'export function refreshKronosState',
-  'export function discoverProjects',
+  'function discoverProjects(',
   'export function discoverProjectsJson',
   'export function normalizeDiscoveredProjects',
   'function normalizeDiscoveredProject',
@@ -1755,7 +1755,7 @@ for (const marker of [
   'export function registerProject',
   'export function addAdhocTask',
   'export function completeAdhocTask',
-  'export function readMorningBrief',
+  'function readMorningBrief(',
   'export function readMorningBriefJson',
   'function arrayOrEmpty',
   'function finiteNumberOrZero',
@@ -1769,6 +1769,14 @@ for (const marker of [
 ]) {
   if (!stateScriptAdapter.includes(marker)) {
     fail(`Missing state script adapter marker: ${marker}`);
+  }
+}
+for (const marker of [
+  'export function discoverProjects(',
+  'export function readMorningBrief(',
+]) {
+  if (stateScriptAdapter.includes(marker)) {
+    fail(`State script adapter raw string helper should remain private: ${marker}`);
   }
 }
 
@@ -1903,6 +1911,9 @@ for (const marker of [
 }
 if (queueTreeProvider.includes('activeRuns.find(run => runMatchesQueueTicket(run, item))\n    || activeRuns.find')) {
   fail('Queue active-run matching must not use broad ticket-only or project-only fallbacks.');
+}
+if (queueTreeProvider.includes('export class QueueTreeItem')) {
+  fail('QueueTreeItem should stay internal to QueueTreeProvider.');
 }
 
 for (const marker of [

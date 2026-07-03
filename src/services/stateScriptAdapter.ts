@@ -31,7 +31,7 @@ export function refreshKronosState(project?: string, options: StateScriptAdapter
   return runStateScript(project ? ['--refresh', project] : ['--refresh-all'], options);
 }
 
-export function discoverProjects(options: StateScriptAdapterOptions = {}): string {
+function discoverProjects(options: StateScriptAdapterOptions = {}): string {
   return runStateScript(['--discover'], options);
 }
 
@@ -88,7 +88,7 @@ export function completeAdhocTask(taskId: string, options: StateScriptAdapterOpt
   return runStateScript(['--adhoc-done', taskId], options);
 }
 
-export function readMorningBrief(options: StateScriptAdapterOptions = {}): string {
+function readMorningBrief(options: StateScriptAdapterOptions = {}): string {
   return runStateScript(['--morning-brief'], options);
 }
 
