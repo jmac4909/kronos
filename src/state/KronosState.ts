@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import { KronosState as KronosStateType, QueueState, ClaudeSession } from './types';
-import { RenderedPrompt, renderPrompt } from '../services/promptManager';
+import { RenderedPrompt, renderPrompt, type RenderPromptOptions } from '../services/promptManager';
 import { STATE_FILE, QUEUE_FILE, readQueueFile, readStateFileWithIssues } from '../services/stateStore';
 import { ScriptRunOptions } from '../services/scriptClient';
 import { DiscoverProjectsResult, MorningBriefResult, addAdhocTask, completeAdhocTask, discoverProjectsJson, readMorningBriefJson, refreshKronosState, registerProject, runStateScript } from '../services/stateScriptAdapter';
@@ -131,7 +131,9 @@ export class KronosState {
 
   renderPrompt(name: string, vars: Record<string, string> = {}, projectPath?: string): RenderedPrompt | null {
     try {
-      return renderPrompt(name, vars, { projectPath });
+      const options: RenderPromptOptions = {};
+      if (projectPath) { options.projectPath = projectPath; }
+      return renderPrompt(name, vars, options);
     } catch (e: unknown) {
       console.warn(unknownErrorMessage(e, `Failed to render Kronos prompt ${name}.`));
       return null;

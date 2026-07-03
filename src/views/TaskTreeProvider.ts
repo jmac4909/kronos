@@ -51,7 +51,7 @@ class TaskTreeItem extends vscode.TreeItem {
 
     const isDone = task.status === 'done';
     this.contextValue = isDone ? 'adhoc_done' : 'adhoc_todo';
-    this.description = task.description || undefined;
+    if (task.description) { this.description = task.description; }
     this.tooltip = `Status: ${task.status}\nCreated: ${task.created_at}`;
 
     this.iconPath = new vscode.ThemeIcon(

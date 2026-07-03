@@ -87,13 +87,16 @@ export function sonarGateStatus(gate: unknown): string {
 export function sonarConditionList(gate: unknown): SonarCondition[] {
   const projectStatus = projectStatusRecord(gate);
   if (!Array.isArray(projectStatus.conditions)) { return []; }
-  return projectStatus.conditions.filter(isRecord).map(condition => ({
-    status: typeof condition.status === 'string' ? condition.status : undefined,
-    metricKey: typeof condition.metricKey === 'string' ? condition.metricKey : undefined,
-    comparator: typeof condition.comparator === 'string' ? condition.comparator : undefined,
-    errorThreshold: condition.errorThreshold,
-    actualValue: condition.actualValue,
-  }));
+  return projectStatus.conditions.filter(isRecord).map(condition => {
+    const normalized: SonarCondition = {
+      errorThreshold: condition.errorThreshold,
+      actualValue: condition.actualValue,
+    };
+    if (typeof condition.status === 'string') { normalized.status = condition.status; }
+    if (typeof condition.metricKey === 'string') { normalized.metricKey = condition.metricKey; }
+    if (typeof condition.comparator === 'string') { normalized.comparator = condition.comparator; }
+    return normalized;
+  });
 }
 
 export function sonarMeasureList(measures: unknown): SonarMeasure[] {
@@ -102,22 +105,24 @@ export function sonarMeasureList(measures: unknown): SonarMeasure[] {
     ? measures.component.measures
     : undefined;
   const list = componentMeasures || (Array.isArray(measures.measures) ? measures.measures : []);
-  return list.filter(isRecord).map(measure => ({
-    metric: typeof measure.metric === 'string' ? measure.metric : undefined,
-    value: measure.value,
-    period: isRecord(measure.period) ? { value: measure.period.value } : undefined,
-  }));
+  return list.filter(isRecord).map(measure => {
+    const normalized: SonarMeasure = { value: measure.value };
+    if (typeof measure.metric === 'string') { normalized.metric = measure.metric; }
+    if (isRecord(measure.period)) { normalized.period = { value: measure.period.value }; }
+    return normalized;
+  });
 }
 
 export function sonarIssueList(issues: unknown): SonarIssue[] {
   if (!isRecord(issues) || !Array.isArray(issues.issues)) { return []; }
-  return issues.issues.filter(isRecord).map(issue => ({
-    severity: typeof issue.severity === 'string' ? issue.severity : undefined,
-    rule: typeof issue.rule === 'string' ? issue.rule : undefined,
-    component: typeof issue.component === 'string' ? issue.component : undefined,
-    line: issue.line,
-    message: typeof issue.message === 'string' ? issue.message : undefined,
-  }));
+  return issues.issues.filter(isRecord).map(issue => {
+    const normalized: SonarIssue = { line: issue.line };
+    if (typeof issue.severity === 'string') { normalized.severity = issue.severity; }
+    if (typeof issue.rule === 'string') { normalized.rule = issue.rule; }
+    if (typeof issue.component === 'string') { normalized.component = issue.component; }
+    if (typeof issue.message === 'string') { normalized.message = issue.message; }
+    return normalized;
+  });
 }
 
 export function buildSonarReport(input: SonarReportRenderInput): SonarReportRenderResult {
@@ -216,5 +221,7 @@ export function buildSonarReport(input: SonarReportRenderInput): SonarReportRend
           </script>
         </div></body></html>`;
 
-  return { html, dashboardUrl, issueList };
+  const result: SonarReportRenderResult = { html, issueList };
+  if (dashboardUrl) { result.dashboardUrl = dashboardUrl; }
+  return result;
 }

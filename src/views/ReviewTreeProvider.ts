@@ -48,12 +48,15 @@ export class ReviewTreeProvider implements vscode.TreeDataProvider<ReviewItem> {
   getNewReviewItems(): NewReviewItemSummary[] {
     return this.reviewEntries()
       .filter(([key]) => this.newReviewKeys.has(key))
-      .map(([ticketKey, ticket]) => ({
-        ticketKey,
-        summary: ticket.summary,
-        projectNames: ticket.projects || [],
-        mrIid: ticket.mr?.iid,
-      }));
+      .map(([ticketKey, ticket]) => {
+        const summary: NewReviewItemSummary = {
+          ticketKey,
+          summary: ticket.summary,
+          projectNames: ticket.projects || [],
+        };
+        if (ticket.mr?.iid !== undefined) { summary.mrIid = ticket.mr.iid; }
+        return summary;
+      });
   }
 
   markVisibleReviewItemsSeen(): void {
@@ -87,7 +90,6 @@ export class ReviewTreeProvider implements vscode.TreeDataProvider<ReviewItem> {
       const empty = new ReviewItem('', { summary: '', type: '', priority: '', jira_status: '', source: 'jira', projects: [], mr: null, build: null, next_action: '', last_action: null, last_action_at: null });
       empty.label = hasTicketFilter(this.filter) ? `No MRs match ${describeTicketFilter(this.filter)}` : 'No MRs waiting for review';
       empty.iconPath = new vscode.ThemeIcon('check', new vscode.ThemeColor('testing.iconPassed'));
-      empty.contextValue = undefined;
       return [empty];
     }
     return items;

@@ -169,7 +169,10 @@ export function archiveRun(runId: string): ArchivedRun {
   if (warnings.length > 0) { run.archiveWarnings = warnings; }
   writeJsonAtomic(archivedPath, run);
   fs.unlinkSync(currentPath);
-  return { run, runPath: archivedPath, logPath, promptPath, warnings };
+  const archived: ArchivedRun = { run, runPath: archivedPath, warnings };
+  if (logPath) { archived.logPath = logPath; }
+  if (promptPath) { archived.promptPath = promptPath; }
+  return archived;
 }
 
 function readRequiredRunRecord(runId: string): RunRecord {
@@ -223,7 +226,8 @@ function normalizeTerminalActiveRun(run: RunRecord): RunRecord {
     normalized.failureReason = `Run record had terminal metadata while persisted status was ${status}; inspect the run before retrying.`;
   }
   if (repairedStatus && !normalized.endedAt) {
-    normalized.endedAt = logModifiedAt(run.logPath);
+    const endedAt = logModifiedAt(run.logPath);
+    if (endedAt) { normalized.endedAt = endedAt; }
   }
   if (repairedStatus === 'failed' && !normalized.failureReason) {
     normalized.failureReason = `Run log indicates the session exited unsuccessfully while persisted status was ${status}.`;

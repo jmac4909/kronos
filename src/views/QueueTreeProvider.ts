@@ -32,7 +32,6 @@ export class QueueTreeProvider implements vscode.TreeDataProvider<QueueTreeItem>
       empty.label = 'Queue empty — click refresh';
       empty.iconPath = new vscode.ThemeIcon('info');
       empty.command = { command: 'kronos.refresh', title: 'Refresh' };
-      empty.contextValue = undefined;
       return [empty];
     }
 

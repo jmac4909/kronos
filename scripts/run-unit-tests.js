@@ -6621,7 +6621,7 @@ test('tree providers share action labels and icons', () => {
     'getNewReviewCount(): number',
     'export interface NewReviewItemSummary',
     'getNewReviewItems(): NewReviewItemSummary[]',
-    'mrIid: ticket.mr?.iid',
+    'if (ticket.mr?.iid !== undefined) { summary.mrIid = ticket.mr.iid; }',
     'markVisibleReviewItemsSeen(): void',
     'this.spinningReviewKeys.set(key, Date.now() + NEW_REVIEW_SPIN_MS)',
     'new ReviewItem(key, ticket, isNew, isNew && this.isReviewItemSpinning(key))',

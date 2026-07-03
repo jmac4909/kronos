@@ -98,17 +98,22 @@ export function addTicketEvidenceCheck(ticketKey: string, input: TicketEvidenceC
     if (!Array.isArray(evidence.checks)) {
       evidence.checks = [];
     }
-    evidence.checks.push({
+    const check: TicketEvidenceCheck = {
       id: `check-${at.replace(/[^0-9]/g, '')}`,
       at,
       name: input.name.trim(),
       result: input.result,
-      environment: optionalTrim(input.environment),
-      command: optionalTrim(input.command),
-      summary: optionalTrim(input.summary),
-      artifact_path: optionalTrim(input.artifactPath),
       confidence: input.confidence,
-    });
+    };
+    const environment = optionalTrim(input.environment);
+    const command = optionalTrim(input.command);
+    const summary = optionalTrim(input.summary);
+    const artifactPath = optionalTrim(input.artifactPath);
+    if (environment) { check.environment = environment; }
+    if (command) { check.command = command; }
+    if (summary) { check.summary = summary; }
+    if (artifactPath) { check.artifact_path = artifactPath; }
+    evidence.checks.push(check);
     evidence.updated_at = at;
   });
 }
@@ -121,13 +126,15 @@ export function recordTicketEnvironmentResult(ticketKey: string, input: TicketEn
     if (!evidence.environment_results || typeof evidence.environment_results !== 'object' || Array.isArray(evidence.environment_results)) {
       evidence.environment_results = {};
     }
-    evidence.environment_results[input.environment] = {
+    const result: TicketEnvironmentResult = {
       environment: input.environment,
       status: input.status,
       checked_at: at,
       detail: input.detail.trim(),
-      artifact_path: optionalTrim(input.artifactPath),
     };
+    const artifactPath = optionalTrim(input.artifactPath);
+    if (artifactPath) { result.artifact_path = artifactPath; }
+    evidence.environment_results[input.environment] = result;
     evidence.updated_at = at;
   });
 }
