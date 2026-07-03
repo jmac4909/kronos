@@ -2032,7 +2032,7 @@ for (const marker of [
   'function validateEvidenceNote',
   'function isPlainObject',
   'function requireFiniteNumber',
-  'validateActionValue(t.next_action',
+  "validateActionValue(t['next_action']",
   'validateActionValue(item.action',
   'type MutableStateRecord = Record<string, unknown>',
   'interface StateWriteLock',

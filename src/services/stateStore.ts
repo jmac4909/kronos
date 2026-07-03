@@ -518,22 +518,22 @@ export function validateStateFileShape(raw: unknown): void {
   if (!isPlainObject(raw)) {
     throw new Error('state.json must be an object');
   }
-  const settings = raw.settings;
+  const settings = raw['settings'];
   if (!isPlainObject(settings)) {
     throw new Error('state.json must contain settings');
   }
-  if (!Array.isArray(settings.scan_dirs)) {
+  if (!Array.isArray(settings['scan_dirs'])) {
     throw new Error('state.settings.scan_dirs must be an array');
   }
-  validateStringArray(settings.scan_dirs, 'state.settings.scan_dirs');
-  const projects = raw.projects;
+  validateStringArray(settings['scan_dirs'], 'state.settings.scan_dirs');
+  const projects = raw['projects'];
   if (!isPlainObject(projects)) {
     throw new Error('state.json must contain projects');
   }
   for (const [name, project] of Object.entries(projects)) {
     validateProjectRecord(name, project);
   }
-  const tickets = raw.tickets;
+  const tickets = raw['tickets'];
   if (!isPlainObject(tickets)) {
     throw new Error('state.json must contain tickets');
   }
@@ -547,91 +547,91 @@ function validateTicketRecord(key: string, ticket: unknown): void {
     throw new Error(`ticket ${key} must be an object`);
   }
   const t = ticket;
-  requireString(t.summary, `ticket ${key} summary`);
-  requireString(t.type, `ticket ${key} type`);
-  requireString(t.priority, `ticket ${key} priority`);
-  requireString(t.jira_status, `ticket ${key} jira_status`);
-  if (t.source !== 'jira' && t.source !== 'adhoc') {
+  requireString(t['summary'], `ticket ${key} summary`);
+  requireString(t['type'], `ticket ${key} type`);
+  requireString(t['priority'], `ticket ${key} priority`);
+  requireString(t['jira_status'], `ticket ${key} jira_status`);
+  if (t['source'] !== 'jira' && t['source'] !== 'adhoc') {
     throw new Error(`ticket ${key} source must be jira or adhoc`);
   }
-  if (!Array.isArray(t.projects)) {
+  if (!Array.isArray(t['projects'])) {
     throw new Error(`ticket ${key} must contain a projects array`);
   }
-  validateStringArray(t.projects, `ticket ${key} projects`);
-  validateActionValue(t.next_action, VALID_TICKET_ACTION_SET, `ticket ${key} next_action`);
-  validateMergeRequest(t.mr, `ticket ${key} mr`);
-  validateBuildStatus(t.build, `ticket ${key} build`);
-  const evidenceValue = t.evidence;
+  validateStringArray(t['projects'], `ticket ${key} projects`);
+  validateActionValue(t['next_action'], VALID_TICKET_ACTION_SET, `ticket ${key} next_action`);
+  validateMergeRequest(t['mr'], `ticket ${key} mr`);
+  validateBuildStatus(t['build'], `ticket ${key} build`);
+  const evidenceValue = t['evidence'];
   if (evidenceValue !== null && evidenceValue !== undefined && !isPlainObject(evidenceValue)) {
     throw new Error(`ticket ${key} evidence must be an object`);
   }
   const evidence = isPlainObject(evidenceValue) ? evidenceValue : undefined;
   if (!evidence) { return; }
 
-  const notes = evidence.notes;
+  const notes = evidence['notes'];
   if (notes !== undefined && !Array.isArray(notes)) {
     throw new Error(`ticket ${key} evidence.notes must be an array`);
   }
   for (const [idx, note] of (Array.isArray(notes) ? notes : []).entries()) {
     validateEvidenceNote(note, `ticket ${key} evidence note ${idx}`);
   }
-  const acceptanceCriteria = evidence.acceptance_criteria;
+  const acceptanceCriteria = evidence['acceptance_criteria'];
   if (acceptanceCriteria !== undefined) {
     if (!Array.isArray(acceptanceCriteria)) {
       throw new Error(`ticket ${key} evidence.acceptance_criteria must be an array`);
     }
     for (const [idx, criterion] of acceptanceCriteria.entries()) {
-      if (!isPlainObject(criterion) || typeof criterion.text !== 'string') {
+      if (!isPlainObject(criterion) || typeof criterion['text'] !== 'string') {
         throw new Error(`ticket ${key} acceptance criterion ${idx} must contain text`);
       }
-      if (criterion.checked !== undefined && typeof criterion.checked !== 'boolean') {
+      if (criterion['checked'] !== undefined && typeof criterion['checked'] !== 'boolean') {
         throw new Error(`ticket ${key} acceptance criterion ${idx} checked must be boolean`);
       }
     }
   }
-  const checks = evidence.checks;
+  const checks = evidence['checks'];
   if (checks !== undefined) {
     if (!Array.isArray(checks)) {
       throw new Error(`ticket ${key} evidence.checks must be an array`);
     }
     for (const [idx, check] of checks.entries()) {
-      if (!isPlainObject(check) || typeof check.name !== 'string') {
+      if (!isPlainObject(check) || typeof check['name'] !== 'string') {
         throw new Error(`ticket ${key} evidence check ${idx} must contain name`);
       }
-      if (typeof check.result !== 'string' || !['pass', 'fail', 'warn', 'unknown'].includes(check.result)) {
+      if (typeof check['result'] !== 'string' || !['pass', 'fail', 'warn', 'unknown'].includes(check['result'])) {
         throw new Error(`ticket ${key} evidence check ${idx} has invalid result`);
       }
-      if (check.confidence !== undefined && (typeof check.confidence !== 'string' || !['low', 'medium', 'high'].includes(check.confidence))) {
+      if (check['confidence'] !== undefined && (typeof check['confidence'] !== 'string' || !['low', 'medium', 'high'].includes(check['confidence']))) {
         throw new Error(`ticket ${key} evidence check ${idx} has invalid confidence`);
       }
     }
   }
-  const environmentResults = evidence.environment_results;
+  const environmentResults = evidence['environment_results'];
   if (environmentResults !== undefined) {
     if (!isPlainObject(environmentResults)) {
       throw new Error(`ticket ${key} evidence.environment_results must be an object`);
     }
     for (const [env, result] of Object.entries(environmentResults)) {
-      if (!isPlainObject(result) || typeof result.detail !== 'string') {
+      if (!isPlainObject(result) || typeof result['detail'] !== 'string') {
         throw new Error(`ticket ${key} environment result ${env} must contain detail`);
       }
-      if (typeof result.status !== 'string' || !['pass', 'fail', 'warn', 'unknown'].includes(result.status)) {
+      if (typeof result['status'] !== 'string' || !['pass', 'fail', 'warn', 'unknown'].includes(result['status'])) {
         throw new Error(`ticket ${key} environment result ${env} has invalid status`);
       }
-      requireString(result.environment, `ticket ${key} environment result ${env} environment`);
-      requireString(result.checked_at, `ticket ${key} environment result ${env} checked_at`);
+      requireString(result['environment'], `ticket ${key} environment result ${env} environment`);
+      requireString(result['checked_at'], `ticket ${key} environment result ${env} checked_at`);
     }
   }
-  const riskNotes = evidence.risk_notes;
+  const riskNotes = evidence['risk_notes'];
   if (riskNotes !== undefined) {
     if (!Array.isArray(riskNotes)) {
       throw new Error(`ticket ${key} evidence.risk_notes must be an array`);
     }
     for (const [idx, risk] of riskNotes.entries()) {
-      if (!isPlainObject(risk) || typeof risk.text !== 'string') {
+      if (!isPlainObject(risk) || typeof risk['text'] !== 'string') {
         throw new Error(`ticket ${key} risk note ${idx} must contain text`);
       }
-      if (risk.severity !== undefined && (typeof risk.severity !== 'string' || !['low', 'medium', 'high'].includes(risk.severity))) {
+      if (risk['severity'] !== undefined && (typeof risk['severity'] !== 'string' || !['low', 'medium', 'high'].includes(risk['severity']))) {
         throw new Error(`ticket ${key} risk note ${idx} has invalid severity`);
       }
     }
@@ -643,20 +643,20 @@ function validateProjectRecord(name: string, project: unknown): void {
     throw new Error(`project ${name} must be an object`);
   }
   const p = project;
-  requireString(p.path, `project ${name} path`);
-  requireFiniteNumber(p.priority, `project ${name} priority`);
-  if (!isPlainObject(p.config)) {
+  requireString(p['path'], `project ${name} path`);
+  requireFiniteNumber(p['priority'], `project ${name} priority`);
+  if (!isPlainObject(p['config'])) {
     throw new Error(`project ${name} config must be an object`);
   }
-  validateProjectConfig(p.config, `project ${name} config`);
-  if (typeof p.health !== 'string' || !['green', 'yellow', 'red', 'gray'].includes(p.health)) {
+  validateProjectConfig(p['config'], `project ${name} config`);
+  if (typeof p['health'] !== 'string' || !['green', 'yellow', 'red', 'gray'].includes(p['health'])) {
     throw new Error(`project ${name} health is invalid`);
   }
-  requireString(p.summary, `project ${name} summary`);
-  if (p.last_polled !== null && p.last_polled !== undefined) {
-    requireString(p.last_polled, `project ${name} last_polled`);
+  requireString(p['summary'], `project ${name} summary`);
+  if (p['last_polled'] !== null && p['last_polled'] !== undefined) {
+    requireString(p['last_polled'], `project ${name} last_polled`);
   }
-  requireFiniteNumber(p.open_mr_count, `project ${name} open_mr_count`);
+  requireFiniteNumber(p['open_mr_count'], `project ${name} open_mr_count`);
 }
 
 function validateProjectConfig(config: unknown, label: string): void {
@@ -668,26 +668,26 @@ function validateProjectConfig(config: unknown, label: string): void {
       throw new Error(`${label}.${key} must be a string`);
     }
   }
-  if (config.gitlab_project_id !== undefined) {
-    requireFiniteNumber(config.gitlab_project_id, `${label}.gitlab_project_id`);
+  if (config['gitlab_project_id'] !== undefined) {
+    requireFiniteNumber(config['gitlab_project_id'], `${label}.gitlab_project_id`);
   }
-  if (config.extra_dirs !== undefined) {
-    if (!Array.isArray(config.extra_dirs)) {
+  if (config['extra_dirs'] !== undefined) {
+    if (!Array.isArray(config['extra_dirs'])) {
       throw new Error(`${label}.extra_dirs must be an array`);
     }
-    validateStringArray(config.extra_dirs, `${label}.extra_dirs`);
+    validateStringArray(config['extra_dirs'], `${label}.extra_dirs`);
   }
-  if (config.deploy_approvers !== undefined) {
-    if (!Array.isArray(config.deploy_approvers)) {
+  if (config['deploy_approvers'] !== undefined) {
+    if (!Array.isArray(config['deploy_approvers'])) {
       throw new Error(`${label}.deploy_approvers must be an array`);
     }
-    for (const [idx, approver] of config.deploy_approvers.entries()) {
+    for (const [idx, approver] of config['deploy_approvers'].entries()) {
       if (!isPlainObject(approver)) {
         throw new Error(`${label}.deploy_approvers ${idx} must be an object`);
       }
-      requireString(approver.name, `${label}.deploy_approvers ${idx} name`);
-      requireString(approver.id, `${label}.deploy_approvers ${idx} id`);
-      requireString(approver.email, `${label}.deploy_approvers ${idx} email`);
+      requireString(approver['name'], `${label}.deploy_approvers ${idx} name`);
+      requireString(approver['id'], `${label}.deploy_approvers ${idx} id`);
+      requireString(approver['email'], `${label}.deploy_approvers ${idx} email`);
     }
   }
 }
@@ -698,14 +698,14 @@ function validateMergeRequest(mr: unknown, label: string): void {
     throw new Error(`${label} must be an object or null`);
   }
   const value = mr;
-  requireFiniteNumber(value.iid, `${label}.iid`);
-  if (typeof value.state !== 'string' || !['opened', 'merged', 'closed'].includes(value.state)) {
+  requireFiniteNumber(value['iid'], `${label}.iid`);
+  if (typeof value['state'] !== 'string' || !['opened', 'merged', 'closed'].includes(value['state'])) {
     throw new Error(`${label}.state is invalid`);
   }
-  if (typeof value.review_status !== 'string' || !['pending_review', 'approved', 'changes_requested'].includes(value.review_status)) {
+  if (typeof value['review_status'] !== 'string' || !['pending_review', 'approved', 'changes_requested'].includes(value['review_status'])) {
     throw new Error(`${label}.review_status is invalid`);
   }
-  requireString(value.url, `${label}.url`);
+  requireString(value['url'], `${label}.url`);
 }
 
 function validateBuildStatus(build: unknown, label: string): void {
@@ -714,9 +714,9 @@ function validateBuildStatus(build: unknown, label: string): void {
     throw new Error(`${label} must be an object or null`);
   }
   const value = build;
-  requireFiniteNumber(value.number, `${label}.number`);
-  requireString(value.status, `${label}.status`);
-  requireString(value.url, `${label}.url`);
+  requireFiniteNumber(value['number'], `${label}.number`);
+  requireString(value['status'], `${label}.status`);
+  requireString(value['url'], `${label}.url`);
 }
 
 function validateEvidenceNote(note: unknown, label: string): void {
@@ -724,11 +724,11 @@ function validateEvidenceNote(note: unknown, label: string): void {
     throw new Error(`${label} must be an object`);
   }
   const value = note;
-  requireString(value.at, `${label}.at`);
-  if (typeof value.kind !== 'string' || !['note', 'test', 'risk', 'decision'].includes(value.kind)) {
+  requireString(value['at'], `${label}.at`);
+  if (typeof value['kind'] !== 'string' || !['note', 'test', 'risk', 'decision'].includes(value['kind'])) {
     throw new Error(`${label}.kind is invalid`);
   }
-  requireString(value.text, `${label}.text`);
+  requireString(value['text'], `${label}.text`);
 }
 
 function validateActionValue(value: unknown, allowed: Set<string>, label: string): void {
@@ -914,8 +914,10 @@ function readCurrentWriteLock(): StateWriteLock | null {
     const lock = readJsonFile(STATE_WRITE_LOCK_FILE);
     if (!isPlainObject(lock)) { return null; }
     const current: StateWriteLock = {};
-    if (typeof lock.pid === 'string' || typeof lock.pid === 'number') { current.pid = lock.pid; }
-    if (typeof lock.action === 'string') { current.action = lock.action; }
+    const pid = lock['pid'];
+    const action = lock['action'];
+    if (typeof pid === 'string' || typeof pid === 'number') { current.pid = pid; }
+    if (typeof action === 'string') { current.action = action; }
     return current;
   } catch {
     return null;

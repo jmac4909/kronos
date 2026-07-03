@@ -664,8 +664,8 @@ test('state store validators keep raw JSON payloads unknown while checking shape
     'export function validateStateFileShape(raw: unknown): void',
     'function validateProjectConfig(config: unknown, label: string): void',
     'function readCurrentWriteLock(): StateWriteLock | null',
-    'const evidenceValue = t.evidence',
-    'const environmentResults = evidence.environment_results',
+    "const evidenceValue = t['evidence']",
+    "const environmentResults = evidence['environment_results']",
   ]) {
     assert.ok(source.includes(marker), marker);
   }
