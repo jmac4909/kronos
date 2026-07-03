@@ -3964,6 +3964,7 @@ test('dispatcher records branch and permission metadata for persisted runs', () 
     "from '../services/webviewSecurity'",
     "import { isFreshActiveRun } from '../services/runStatus'",
     "import { runProgressSummary } from '../services/runProgress'",
+    "import { isAttentionRunStatus, runAttentionDetail } from '../services/runAttention'",
     'createWebviewNonce',
     'webviewScriptCspOptions',
     'WEBVIEW_ACTION_PANEL_SCRIPT',
@@ -4037,6 +4038,12 @@ test('dispatcher records branch and permission metadata for persisted runs', () 
     'await opts.onComplete(code, run)',
     "unknownErrorMessage(e, 'Post-run completion callback failed.')",
     "label: 'Post-run completion callback failed'",
+    'buildProgressHtml(context.projectName, context.skill, context.ticket, context.events, run)',
+    "function buildProgressHtml(project: string, skill: string, ticket: string, events: ProgressEvent[], run?: KronosRun)",
+    'const attentionDetail = run && isAttentionRunStatus(run.status) ? runAttentionDetail(run) :',
+    'attention-banner',
+    '<strong>Needs Attention</strong>',
+    "buildProgressHtml(projectName, skill, ticket || '', events, run)",
     "label: 'Managed worktree pull skipped'",
     'updateRun(run, { warnings: [...(run.warnings || []), warning] })',
     "const nextStatus = run.status === 'completed' || run.status === 'waiting_for_review' ? 'needs_human' : run.status",
@@ -4625,6 +4632,13 @@ test('ticket timeline combines queue, runs, evidence, MR, build, and ticket even
       promptHash: 123,
     },
     {
+      id: 'needs-human',
+      ticket: 'K-44',
+      status: 'needs_human',
+      endedAt: '2026-06-30T13:00:00.000Z',
+      events: [{ label: 'Worktree cleanup blocked', detail: 'Dirty worktree: .claude/' }],
+    },
+    {
       id: 'other-run',
       ticket: 'K-45',
       status: 'failed',
@@ -4638,12 +4652,15 @@ test('ticket timeline combines queue, runs, evidence, MR, build, and ticket even
   assert.ok(events.some(event => event.title.includes('Environment local') && event.detail.includes('local replay failed')));
   assert.ok(events.some(event => event.source === 'queue' && event.detail.includes('score 99')));
   assert.ok(events.some(event => event.source === 'run' && event.detail.includes('unit test failed')));
+  assert.ok(events.some(event => event.source === 'run' && event.id.includes('needs-human') && event.detail.includes('Dirty worktree: .claude/')));
   assert.ok(events.some(event => event.source === 'mr' && event.severity === 'failure'));
   assert.ok(events.some(event => event.source === 'build' && event.severity === 'failure'));
   assert.equal(events.some(event => event.id.includes('other-run')), false);
 
   const source = readSourceFixture('src', 'services', 'ticketTimeline.ts');
   assert.ok(source.includes('type TimelineRunRecord = TimelineRun & Record<string, unknown>'));
+  assert.ok(source.includes("import { isAttentionRunStatus, runAttentionDetail } from './runAttention'"));
+  assert.ok(source.includes('const attentionDetail = isAttentionRunStatus(status) ? runAttentionDetail(run) :'));
   assert.equal(source.includes('type TimelineRunRecord = TimelineRun & Record<string, any>'), false);
 });
 
@@ -8022,6 +8039,7 @@ test('tree providers share action labels and icons', () => {
     "import { KronosRun, listRuns } from '../runners/sessionDispatcher'",
     "import { isFreshActiveRun } from '../services/runStatus'",
     "import { formatRunProgress } from '../services/runProgress'",
+    "import { isAttentionRunStatus, runAttentionLine } from '../services/runAttention'",
     "import { unknownErrorMessage } from '../services/errorUtils'",
     'private _refreshing = false',
     'private readonly sessionSubscription: vscode.Disposable',
@@ -8032,7 +8050,12 @@ test('tree providers share action labels and icons', () => {
     'void this.refreshSessionsSafely()',
     'private async refreshSessionsSafely(): Promise<void>',
     "unknownErrorMessage(e, 'Kronos session refresh failed.')",
-    'const activeRuns = listRuns().filter(run => isFreshActiveRun(run))',
+    'const runs = listRuns()',
+    'const activeRuns = runs.filter(run => isFreshActiveRun(run))',
+    'const attentionRuns = runs.filter(run => isAttentionRunStatus(run.status)).slice(0, 5)',
+    'const attention = isAttentionRunStatus(run.status) ? runAttentionLine(run, 90) :',
+    'Reason: ${attention}',
+    "new vscode.ThemeIcon('warning', new vscode.ThemeColor('charts.yellow'))",
     'const progress = formatRunProgress(run)',
     'Progress: ${progress}',
     "new vscode.ThemeIcon('sync~spin'",

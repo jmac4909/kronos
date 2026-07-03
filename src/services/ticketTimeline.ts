@@ -1,5 +1,6 @@
 import { QueueState, Ticket } from '../state/types';
 import { evidenceChecks, evidenceEnvironmentResults, evidenceNotes, evidenceString } from './evidenceData';
+import { isAttentionRunStatus, runAttentionDetail } from './runAttention';
 
 export type TimelineSource = 'jira' | 'queue' | 'run' | 'evidence' | 'mr' | 'build' | 'ticket';
 export type TimelineSeverity = 'info' | 'success' | 'warning' | 'failure';
@@ -209,8 +210,10 @@ function severityForRun(status: string | undefined): TimelineSeverity {
 
 function runDetail(run: TimelineRunRecord): string {
   const promptHash = runString(run, 'promptHash');
+  const status = runString(run, 'status');
+  const attentionDetail = isAttentionRunStatus(status) ? runAttentionDetail(run) : '';
   const parts = [
-    runString(run, 'failureReason'),
+    attentionDetail || runString(run, 'failureReason'),
     runString(run, 'project') ? `project ${runString(run, 'project')}` : '',
     runString(run, 'model') ? `model ${runString(run, 'model')}` : '',
     promptHash ? `prompt ${promptHash.substring(0, 12)}` : '',

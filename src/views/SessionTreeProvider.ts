@@ -5,6 +5,7 @@ import { ClaudeSession } from '../state/types';
 import { KronosRun, listRuns } from '../runners/sessionDispatcher';
 import { isFreshActiveRun } from '../services/runStatus';
 import { formatRunProgress } from '../services/runProgress';
+import { isAttentionRunStatus, runAttentionLine } from '../services/runAttention';
 import { unknownErrorMessage } from '../services/errorUtils';
 
 type SessionTreeEntry =
@@ -45,13 +46,16 @@ export class SessionTreeProvider implements vscode.TreeDataProvider<SessionTreeI
 
   getChildren(): SessionTreeItem[] {
     const sessions = this.kronosState.sessions;
-    const activeRuns = listRuns().filter(run => isFreshActiveRun(run));
-    if (sessions.length === 0 && activeRuns.length === 0) {
+    const runs = listRuns();
+    const activeRuns = runs.filter(run => isFreshActiveRun(run));
+    const attentionRuns = runs.filter(run => isAttentionRunStatus(run.status)).slice(0, 5);
+    if (sessions.length === 0 && activeRuns.length === 0 && attentionRuns.length === 0) {
       return [new SessionTreeItem('No active sessions', { kind: 'empty' })];
     }
 
     return [
       ...activeRuns.map(run => new SessionTreeItem(runTreeLabel(run), { kind: 'run', run })),
+      ...attentionRuns.map(run => new SessionTreeItem(runTreeLabel(run), { kind: 'run', run })),
       ...sessions.map(session => new SessionTreeItem(`${path.basename(session.cwd)} (pid ${session.pid})`, { kind: 'claude', session })),
     ];
   }
@@ -85,10 +89,13 @@ class SessionTreeItem extends vscode.TreeItem {
     if (entry.kind === 'run') {
       const run = entry.run;
       const progress = formatRunProgress(run);
+      const attention = isAttentionRunStatus(run.status) ? runAttentionLine(run, 90) : '';
       this.contextValue = 'run';
-      this.description = `${run.status} - ${progress}`;
-      this.tooltip = `Run: ${run.id}\nProject: ${run.project || 'unknown'}\nTicket: ${run.ticket || 'none'}\nSkill: ${run.skill || 'unknown'}\nStatus: ${run.status}\nProgress: ${progress}\nStarted: ${run.startedAt || 'unknown'}`;
-      this.iconPath = new vscode.ThemeIcon('sync~spin', new vscode.ThemeColor('charts.blue'));
+      this.description = attention ? `${run.status} - ${attention}` : `${run.status} - ${progress}`;
+      this.tooltip = `Run: ${run.id}\nProject: ${run.project || 'unknown'}\nTicket: ${run.ticket || 'none'}\nSkill: ${run.skill || 'unknown'}\nStatus: ${run.status}${attention ? `\nReason: ${attention}` : ''}\nProgress: ${progress}\nStarted: ${run.startedAt || 'unknown'}`;
+      this.iconPath = attention
+        ? new vscode.ThemeIcon('warning', new vscode.ThemeColor('charts.yellow'))
+        : new vscode.ThemeIcon('sync~spin', new vscode.ThemeColor('charts.blue'));
       this.command = { command: 'kronos.runCenter', title: 'Open Run Center' };
       return;
     }

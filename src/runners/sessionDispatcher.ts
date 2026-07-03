@@ -21,7 +21,7 @@ import { gcloudApplicationDefaultLoginCommand, kronosLoginShellTerminalOptions, 
 import { unknownErrorMessage } from '../services/errorUtils';
 import { isFreshActiveRun } from '../services/runStatus';
 import { runProgressSummary } from '../services/runProgress';
-import { runAttentionDetail } from '../services/runAttention';
+import { isAttentionRunStatus, runAttentionDetail } from '../services/runAttention';
 import { sortedRunCenterRuns } from '../services/runCenterSort';
 import { readJsonFile } from '../services/jsonFiles';
 export { getAggregateStats, listSavedSessions, listSessionStoreIssues } from '../services/sessionStore';
@@ -406,7 +406,7 @@ async function runCompletionCallback(
       failureReason,
       failureKind: classifyRunFailure({ ...run, status: nextStatus, failureReason, events: run.events }),
     });
-    context.panel.webview.html = withWebviewCsp(buildProgressHtml(context.projectName, context.skill, context.ticket, context.events));
+    context.panel.webview.html = withWebviewCsp(buildProgressHtml(context.projectName, context.skill, context.ticket, context.events, run));
     saveSession(context.projectName, context.skill, context.ticket, context.events);
     vscode.window.showWarningMessage(`Kronos post-run completion failed for ${run.id}. See Run Center.`);
   }
@@ -684,7 +684,7 @@ export async function dispatchClaudeSession(
     const event = { type: 'error' as const, label: 'Could not fully resolve project base branch config', detail: baseRef.warning, timestamp: new Date() };
     events.push(event);
     addRunEvent(run, event);
-    panel.webview.html = withWebviewCsp(buildProgressHtml(projectName, skill, ticket || '', events));
+    panel.webview.html = withWebviewCsp(buildProgressHtml(projectName, skill, ticket || '', events, run));
   }
 
   const authed = await ensureAuth();
@@ -700,7 +700,7 @@ export async function dispatchClaudeSession(
       failureReason: message,
       failureKind: classifyRunFailure({ ...run, status: 'failed', failureReason: message, events: run.events }),
     });
-    panel.webview.html = withWebviewCsp(buildProgressHtml(projectName, skill, ticket || '', events));
+    panel.webview.html = withWebviewCsp(buildProgressHtml(projectName, skill, ticket || '', events, run));
     saveSession(projectName, skill, ticket || '', events);
     await runCompletionCallback(opts, 1, run, { projectName, skill, ticket: ticket || '', events, panel });
     return launchResult(run, false);
@@ -718,7 +718,7 @@ export async function dispatchClaudeSession(
       const event = { type: 'text' as const, label: `Creating worktree on ${targetBranch}...`, detail: '', timestamp: new Date() };
       events.push(event);
       addRunEvent(run, event);
-      panel.webview.html = withWebviewCsp(buildProgressHtml(projectName, skill, ticket || '', events));
+      panel.webview.html = withWebviewCsp(buildProgressHtml(projectName, skill, ticket || '', events, run));
       // For feature branches: use local name so worktree gets a real branch checkout
       // For base branches: use origin/ ref so the main checkout is not mutated
       const isFeatureBranch = Boolean(opts.worktreeBranch);
@@ -776,7 +776,7 @@ export async function dispatchClaudeSession(
         failureReason,
         failureKind: 'git',
       });
-      panel.webview.html = withWebviewCsp(buildProgressHtml(projectName, skill, ticket || '', events));
+      panel.webview.html = withWebviewCsp(buildProgressHtml(projectName, skill, ticket || '', events, run));
       saveSession(projectName, skill, ticket || '', events);
       await runCompletionCallback(opts, 1, run, { projectName, skill, ticket: ticket || '', events, panel });
       return launchResult(run, false);
@@ -786,7 +786,7 @@ export async function dispatchClaudeSession(
   const launchEvent = { type: 'text' as const, label: 'Launching Claude session...', detail: '', timestamp: new Date() };
   events.push(launchEvent);
   addRunEvent(run, launchEvent);
-  panel.webview.html = withWebviewCsp(buildProgressHtml(projectName, skill, ticket || '', events));
+  panel.webview.html = withWebviewCsp(buildProgressHtml(projectName, skill, ticket || '', events, run));
 
   const addDirs = ['~/.claude'];
   if (opts.extraDirs) { addDirs.push(...opts.extraDirs); }
@@ -798,7 +798,7 @@ export async function dispatchClaudeSession(
     const event = { type: 'error' as const, label: 'Could not read project extra_dirs', detail: configuredExtraDirs.warning, timestamp: new Date() };
     events.push(event);
     addRunEvent(run, event);
-    panel.webview.html = withWebviewCsp(buildProgressHtml(projectName, skill, ticket || '', events));
+    panel.webview.html = withWebviewCsp(buildProgressHtml(projectName, skill, ticket || '', events, run));
   }
   const claudeArgs = buildClaudeArgs(prompt, model, opts.appendSystemPrompt, addDirs);
   const permissions = buildRunPermissionMetadata(addDirs);
@@ -841,7 +841,7 @@ export async function dispatchClaudeSession(
       failureReason,
       failureKind: classifyRunFailure({ ...run, status: 'failed', failureReason, events: run.events }),
     });
-    panel.webview.html = withWebviewCsp(buildProgressHtml(projectName, skill, ticket || '', events));
+    panel.webview.html = withWebviewCsp(buildProgressHtml(projectName, skill, ticket || '', events, run));
     saveSession(projectName, skill, ticket || '', events);
     await runCompletionCallback(opts, 1, run, { projectName, skill, ticket: ticket || '', events, panel });
     return launchResult(run, false);
@@ -868,7 +868,7 @@ export async function dispatchClaudeSession(
       failureReason: message,
       failureKind: classifyRunFailure({ ...run, status: 'failed', failureReason: message }),
     });
-    panel.webview.html = withWebviewCsp(buildProgressHtml(projectName, skill, ticket || '', events));
+    panel.webview.html = withWebviewCsp(buildProgressHtml(projectName, skill, ticket || '', events, run));
     saveSession(projectName, skill, ticket || '', events);
     await runCompletionCallback(opts, 1, run, { projectName, skill, ticket: ticket || '', events, panel });
   });
@@ -887,7 +887,7 @@ export async function dispatchClaudeSession(
         if (pe) {
           events.push(pe);
           addRunEvent(run, pe);
-          panel.webview.html = withWebviewCsp(buildProgressHtml(projectName, skill, ticket || '', events));
+          panel.webview.html = withWebviewCsp(buildProgressHtml(projectName, skill, ticket || '', events, run));
         }
       } catch (e: unknown) {
         const detail = unknownErrorMessage(e, 'Failed to parse Claude stream event.');
@@ -899,7 +899,7 @@ export async function dispatchClaudeSession(
         };
         events.push(event);
         addRunEvent(run, event);
-        panel.webview.html = withWebviewCsp(buildProgressHtml(projectName, skill, ticket || '', events));
+        panel.webview.html = withWebviewCsp(buildProgressHtml(projectName, skill, ticket || '', events, run));
       }
     }
   });
@@ -911,7 +911,7 @@ export async function dispatchClaudeSession(
       const event = { type: 'error' as const, label: text.substring(0, 200), detail: '', timestamp: new Date() };
       events.push(event);
       addRunEvent(run, event);
-      panel.webview.html = withWebviewCsp(buildProgressHtml(projectName, skill, ticket || '', events));
+      panel.webview.html = withWebviewCsp(buildProgressHtml(projectName, skill, ticket || '', events, run));
     }
   });
 
@@ -950,7 +950,7 @@ export async function dispatchClaudeSession(
     };
     if (finalFailureReason !== undefined) { finalPatch.failureReason = finalFailureReason; }
     updateRun(run, finalPatch);
-    panel.webview.html = withWebviewCsp(buildProgressHtml(projectName, skill, ticket || '', events));
+    panel.webview.html = withWebviewCsp(buildProgressHtml(projectName, skill, ticket || '', events, run));
     saveSession(projectName, skill, ticket || '', events);
 
     if (managedWorktreePath) {
@@ -969,7 +969,7 @@ export async function dispatchClaudeSession(
           failureReason: cleanupFailureReason,
           failureKind: classifyRunFailure({ ...run, status: cleanupStatus, failureReason: cleanupFailureReason }),
         });
-        panel.webview.html = withWebviewCsp(buildProgressHtml(projectName, skill, ticket || '', events));
+        panel.webview.html = withWebviewCsp(buildProgressHtml(projectName, skill, ticket || '', events, run));
       }
     }
 
@@ -1141,8 +1141,9 @@ function shortenPath(p: string): string {
   return `.../${parts.slice(-3).join('/')}`;
 }
 
-function buildProgressHtml(project: string, skill: string, ticket: string, events: ProgressEvent[]): string {
+function buildProgressHtml(project: string, skill: string, ticket: string, events: ProgressEvent[], run?: KronosRun): string {
   const progress = runProgressSummary({ events });
+  const attentionDetail = run && isAttentionRunStatus(run.status) ? runAttentionDetail(run) : '';
   const filesEdited = new Set<string>();
   const filesRead = new Set<string>();
   let lastThinking = '';
@@ -1194,6 +1195,8 @@ function buildProgressHtml(project: string, skill: string, ticket: string, event
   .file.edited { color: var(--vscode-gitDecoration-modifiedResourceForeground, var(--k-ok)); }
   .file-icon { flex: 0 0 auto; opacity: 0.8; }
   .thinking { border-left: 3px solid var(--k-accent); padding: 10px 12px; margin: 8px 0 16px 0; color: var(--k-muted); font-style: italic; font-size: 12px; }
+  .attention-banner { border-left: 4px solid var(--k-danger); padding: 10px 12px; margin: 0 0 16px 0; color: var(--k-text); }
+  .attention-banner strong { display: block; margin-bottom: 4px; color: var(--k-danger); }
   .done-summary { padding: 16px; margin-top: 12px; }
   .done-summary h2 { margin: 12px 0 8px 0; font-size: 15px; }
   .done-summary h3 { margin: 12px 0 6px 0; font-size: 13px; opacity: 0.8; }
@@ -1218,6 +1221,7 @@ function buildProgressHtml(project: string, skill: string, ticket: string, event
     </div>
     <div class="run-status">${statusText}</div>
   </div>
+  ${attentionDetail ? `<div class="attention-banner kronos-panel"><strong>Needs Attention</strong>${escapeHtml(attentionDetail)}</div>` : ''}
   ${lastThinking && !isDone ? `<div class="thinking">${escapeHtml(lastThinking)}</div>` : ''}
   <div class="columns">
     <div>
