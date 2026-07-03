@@ -26,7 +26,6 @@ import { TimelineEvent, buildTicketTimeline } from './services/ticketTimeline';
 import { DispatchCollision, detectDispatchCollisions, type DispatchCollisionInput } from './services/collisionDetector';
 import { gitlabAdapter, jiraAdapter, sonarAdapter, type MergeRequestDiffResult } from './services/integrationAdapters';
 import { buildRunCompletionEvidenceCheck, buildRunCompletionEvidenceText, evaluatePostRunReadiness, resolvePostRunTicket, shouldRecordRunCompletionEvidence } from './services/postRunReadiness';
-import { describeMergeRequestStatusChange } from './services/mergeRequestNotifications';
 import { extractAcceptanceCriteria } from './services/acceptanceCriteria';
 import type { ExistingAcceptanceCriterion } from './services/acceptanceCriteria';
 import { buildHumanReviewInbox } from './services/humanReviewInbox';
@@ -41,7 +40,7 @@ import { SafetyPlan, assessSafetyGate } from './services/safetyGate';
 import { computeTrendMetrics } from './services/trendMetrics';
 import { TicketFilter, TicketGroupBy, TICKET_FILTER_PRESETS, describeTicketFilter } from './services/ticketFilters';
 import { buildRunResumePrompt, readRunLogTail } from './services/runRecovery';
-import { addTicketEvidenceCheck, addTicketEvidenceNote, linkMergeRequestToTicket, previewLinkMergeRequestToTicket, recordTicketEnvironmentResult, replaceTicketAcceptanceCriteria, updateTicketAcceptanceCriteria, updateTicketMergeRequestStatus, type MergeRequestStatusUpdate, type TicketEvidenceCheckInput } from './services/ticketMutations';
+import { addTicketEvidenceCheck, addTicketEvidenceNote, linkMergeRequestToTicket, previewLinkMergeRequestToTicket, recordTicketEnvironmentResult, replaceTicketAcceptanceCriteria, updateTicketAcceptanceCriteria, updateTicketMergeRequestStatus, type TicketEvidenceCheckInput } from './services/ticketMutations';
 import { addPlanToQueue as addPlanToQueueState, addTicketToQueue, linkTicketToProject, recordPlanQueueDecision, removeTicketFromQueue as removeTicketFromQueueState, reorderQueueItem, selectNextQueueItem, unlinkTicketFromProject } from './services/queueMutations';
 import { removeProject as removeProjectFromState, setProjectConfigValue, setProjectIntegrationConfig, setScanDirs, writeProjectSetupConfig } from './services/projectMutations';
 import { DoctorCheck, runDoctorChecks as collectDoctorChecks, runDoctorReachabilityChecks as collectDoctorReachabilityChecks } from './services/doctorChecks';
@@ -63,6 +62,7 @@ import { unknownErrorCode, unknownErrorMessage } from './services/errorUtils';
 import { activeRunSummary, isActiveRun } from './services/runStatus';
 import { isAttentionRunStatus, runAttentionDetail, runAttentionLine } from './services/runAttention';
 import { openReviewTicketEntries, reviewBranchTickets as buildReviewBranchTickets, type ReviewBranchTicket, type TicketWithOpenMergeRequest } from './services/reviewWork';
+import { decideReviewMonitorAction, type ReviewMonitorDecision } from './services/reviewMonitor';
 import { actionButton, actionRow, kronosActionPanelScript, kronosOperatorPanelCss, operatorCommandRow } from './services/operatorPanel';
 import { buildPromptHistoryHtml, buildPromptManagerHtml, buildPromptSmokeTestsHtml } from './services/promptPanelView';
 import { buildRecoveryHtml, buildStateAuditLogHtml } from './services/recoveryPanelView';
@@ -5116,12 +5116,13 @@ async function pollReviewMergeRequests(state: KronosState): Promise<void> {
       if (update.changed) {
         state.reloadAndNotify();
       }
-      if (update.mergedNow) {
+      const decision = decideReviewMonitorAction(candidate.ticketKey, update);
+      if (decision.kind === 'deploy_monitor') {
         await startDeployMonitorForMergedTicket(state, candidate.ticketKey, update.ticket);
-      } else if (update.closedNow) {
-        void vscode.window.showWarningMessage(`${candidate.ticketKey} MR closed - ticket moved to blocked.`);
-      } else {
-        notifyMergeRequestStatusChange(candidate.ticketKey, update);
+      } else if (decision.kind === 'blocked') {
+        void vscode.window.showWarningMessage(decision.message || `${candidate.ticketKey} MR closed - ticket moved to blocked.`);
+      } else if (decision.kind === 'notify') {
+        notifyReviewMonitorDecision(decision);
       }
     } catch (e: unknown) {
       console.warn(unknownErrorMessage(e, `Failed to poll MR status for ${candidate.ticketKey}.`));
@@ -5153,12 +5154,11 @@ function notifyReviewMergeRequestPollFailure(ticketKey: string, error: unknown):
   });
 }
 
-function notifyMergeRequestStatusChange(ticketKey: string, update: MergeRequestStatusUpdate): void {
-  const notification = describeMergeRequestStatusChange(ticketKey, update);
-  if (!notification) { return; }
-  const selection = notification.severity === 'warning'
-    ? vscode.window.showWarningMessage(notification.message, 'Open Review')
-    : vscode.window.showInformationMessage(notification.message, 'Open Review');
+function notifyReviewMonitorDecision(decision: ReviewMonitorDecision): void {
+  if (!decision.message) { return; }
+  const selection = decision.severity === 'warning'
+    ? vscode.window.showWarningMessage(decision.message, 'Open Review')
+    : vscode.window.showInformationMessage(decision.message, 'Open Review');
   runNotificationCommandAction(
     selection,
     'Open Review',

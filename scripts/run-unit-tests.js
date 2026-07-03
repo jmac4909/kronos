@@ -144,6 +144,7 @@ const errorUtils = require('../out/services/errorUtils.js');
 const combinedVerification = require('../out/services/combinedVerification.js');
 const changedFiles = require('../out/services/changedFiles.js');
 const reviewWork = require('../out/services/reviewWork.js');
+const reviewMonitor = require('../out/services/reviewMonitor.js');
 const sonarReportView = require('../out/services/sonarReportView.js');
 const agingReportView = require('../out/services/agingReportView.js');
 const webviewHtml = require('../out/services/webviewHtml.js');
@@ -1149,6 +1150,58 @@ test('merge request notifications summarize review status and new comment change
   }), null);
   assert.equal(mergeRequestNotifications.describeMergeRequestStatusChange('K-6', { ...baseUpdate, mergedNow: true }), null);
   assert.equal(mergeRequestNotifications.describeMergeRequestStatusChange('K-7', { ...baseUpdate, closedNow: true }), null);
+});
+
+test('review monitor decisions route merged, closed, comment, and no-op MR polls', () => {
+  const baseUpdate = {
+    changed: true,
+    mergedNow: false,
+    closedNow: false,
+    previousMr: { iid: 1, state: 'opened', review_status: 'pending_review', url: 'https://gitlab.example/1' },
+    ticket: ticket({
+      mr: { iid: 1, state: 'opened', review_status: 'pending_review', url: 'https://gitlab.example/1' },
+    }),
+  };
+
+  assert.deepEqual(reviewMonitor.decideReviewMonitorAction('K-1', {
+    ...baseUpdate,
+    mergedNow: true,
+  }), {
+    kind: 'deploy_monitor',
+  });
+  assert.deepEqual(reviewMonitor.decideReviewMonitorAction('K-2', {
+    ...baseUpdate,
+    closedNow: true,
+  }), {
+    kind: 'blocked',
+    severity: 'warning',
+    message: 'K-2 MR closed - ticket moved to blocked.',
+  });
+  assert.deepEqual(reviewMonitor.decideReviewMonitorAction('K-3', {
+    ...baseUpdate,
+    previousMr: { iid: 3, state: 'opened', review_status: 'pending_review', url: 'https://gitlab.example/3', comment_count: 1 },
+    ticket: ticket({
+      mr: { iid: 3, state: 'opened', review_status: 'pending_review', url: 'https://gitlab.example/3', comment_count: 2 },
+    }),
+  }), {
+    kind: 'notify',
+    severity: 'info',
+    message: 'K-3: MR !3 1 new MR comment.',
+  });
+  assert.deepEqual(reviewMonitor.decideReviewMonitorAction('K-4', {
+    ...baseUpdate,
+    previousMr: { iid: 4, state: 'opened', review_status: 'pending_review', url: 'https://gitlab.example/4', unresolved_discussion_count: 0 },
+    ticket: ticket({
+      mr: { iid: 4, state: 'opened', review_status: 'pending_review', url: 'https://gitlab.example/4', unresolved_discussion_count: 2 },
+    }),
+  }), {
+    kind: 'notify',
+    severity: 'warning',
+    message: 'K-4: MR !4 2 new unresolved MR discussions.',
+  });
+  assert.deepEqual(reviewMonitor.decideReviewMonitorAction('K-5', baseUpdate), {
+    kind: 'none',
+  });
 });
 
 test('queue mutation helpers centralize queue membership and ticket project links', () => {
@@ -5960,7 +6013,7 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     "import { buildPromptHistoryHtml, buildPromptManagerHtml, buildPromptSmokeTestsHtml } from './services/promptPanelView'",
     "import { buildRecoveryHtml, buildStateAuditLogHtml } from './services/recoveryPanelView'",
     "import { buildHumanReviewInboxHtml } from './services/humanReviewPanelView'",
-    "import { describeMergeRequestStatusChange } from './services/mergeRequestNotifications'",
+    "import { decideReviewMonitorAction, type ReviewMonitorDecision } from './services/reviewMonitor'",
     "import { buildEvidenceGateHtml, buildEvidenceHandoffHtml, buildEvidencePublishHtml } from './services/evidencePanelView'",
     "import { buildBacklogTriageHtml, buildCollisionReportHtml, buildProjectBatchPlanHtml, buildQueuePlanModeHtml, buildQueuePlannerHtml, buildReleaseBatchPlanHtml } from './services/queuePlannerPanelView'",
     "import { isCodeAction, isProofSensitiveAction } from './services/actionSemantics'",
@@ -6082,14 +6135,15 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'state.reloadAndNotify();',
     'gitlabAdapter.mergeRequestStatus',
     'updateTicketMergeRequestStatus({ ticketKey: candidate.ticketKey, status })',
-    'update.closedNow',
+    'const decision = decideReviewMonitorAction(candidate.ticketKey, update)',
+    "decision.kind === 'deploy_monitor'",
+    "decision.kind === 'blocked'",
     'MR closed - ticket moved to blocked.',
-    'notifyMergeRequestStatusChange(candidate.ticketKey, update)',
+    'notifyReviewMonitorDecision(decision)',
     'notifyReviewMergeRequestPollFailure(candidate.ticketKey, e)',
     'function notifyReviewMergeRequestPollFailure(ticketKey: string, error: unknown): void',
     'MR status polling failed:',
-    'function notifyMergeRequestStatusChange(ticketKey: string, update: MergeRequestStatusUpdate): void',
-    'describeMergeRequestStatusChange(ticketKey, update)',
+    'function notifyReviewMonitorDecision(decision: ReviewMonitorDecision): void',
     "import { openReviewTicketEntries, reviewBranchTickets as buildReviewBranchTickets, type ReviewBranchTicket, type TicketWithOpenMergeRequest } from './services/reviewWork'",
     'return openReviewTicketEntries(state.state?.tickets)',
     'function reviewBranchTickets(state: KronosState): ReviewBranchTicket[]',

@@ -64,6 +64,7 @@ const integrationAdapters = readSource('src/services/integrationAdapters.ts');
 const postRunReadiness = readSource('src/services/postRunReadiness.ts');
 const ticketFilters = readSource('src/services/ticketFilters.ts');
 const reviewWork = readSource('src/services/reviewWork.ts');
+const reviewMonitor = readSource('src/services/reviewMonitor.ts');
 const promptManager = readSource('src/services/promptManager.ts');
 const runRecovery = readSource('src/services/runRecovery.ts');
 const providerReachability = readSource('src/services/providerReachability.ts');
@@ -408,7 +409,7 @@ for (const marker of [
   'attentionBadgeTarget.badge = summary.count > 0',
   'reviewTree.onDidChangeNewReviewCount(updateAttentionBadge)',
   'startReviewAutomation(context, state)',
-  "import { describeMergeRequestStatusChange } from './services/mergeRequestNotifications'",
+  "import { decideReviewMonitorAction, type ReviewMonitorDecision } from './services/reviewMonitor'",
   'const REVIEW_POLL_FAILURE_NOTIFICATION_MS = 15 * 60 * 1000',
   "const sessionPollMs = configIntervalMs(config.get<number>('sessionPollIntervalMs', 5000), 5000, 1000)",
   "setInterval(throttledRefresh, configIntervalSecondsMs(config.get<number>('pollIntervalSec', 300), 300, 1))",
@@ -420,14 +421,15 @@ for (const marker of [
   'state.reloadAndNotify();',
   'gitlabAdapter.mergeRequestStatus',
   'updateTicketMergeRequestStatus({ ticketKey: candidate.ticketKey, status })',
-  'update.closedNow',
+  'const decision = decideReviewMonitorAction(candidate.ticketKey, update)',
+  "decision.kind === 'deploy_monitor'",
+  "decision.kind === 'blocked'",
   'MR closed - ticket moved to blocked.',
-  'notifyMergeRequestStatusChange(candidate.ticketKey, update)',
+  'notifyReviewMonitorDecision(decision)',
   'notifyReviewMergeRequestPollFailure(candidate.ticketKey, e)',
   'function notifyReviewMergeRequestPollFailure(ticketKey: string, error: unknown): void',
   'MR status polling failed:',
-  'function notifyMergeRequestStatusChange(ticketKey: string, update: MergeRequestStatusUpdate): void',
-  'describeMergeRequestStatusChange(ticketKey, update)',
+  'function notifyReviewMonitorDecision(decision: ReviewMonitorDecision): void',
   "import { openReviewTicketEntries, reviewBranchTickets as buildReviewBranchTickets, type ReviewBranchTicket, type TicketWithOpenMergeRequest } from './services/reviewWork'",
   'return openReviewTicketEntries(state.state?.tickets)',
   'function reviewBranchTickets(state: KronosState): ReviewBranchTicket[]',
@@ -614,6 +616,30 @@ for (const marker of [
 ]) {
   if (!extension.includes(marker)) {
     fail(`Missing safety marker: ${marker}`);
+  }
+}
+for (const marker of [
+  'export type ReviewMonitorDecisionKind',
+  'export interface ReviewMonitorDecision',
+  'export function decideReviewMonitorAction',
+  'update.mergedNow',
+  "kind: 'deploy_monitor'",
+  'update.closedNow',
+  "kind: 'blocked'",
+  'describeMergeRequestStatusChange(ticketKey, update)',
+  "kind: 'notify'",
+  "kind: 'none'",
+]) {
+  if (!reviewMonitor.includes(marker)) {
+    fail(`Missing review monitor marker: ${marker}`);
+  }
+}
+for (const marker of [
+  'function notifyMergeRequestStatusChange',
+  "import { describeMergeRequestStatusChange } from './services/mergeRequestNotifications'",
+]) {
+  if (extension.includes(marker)) {
+    fail(`Extension must route MR polling decisions through reviewMonitor instead of ${marker}.`);
   }
 }
 if (extension.includes('try { await state.refresh(); } catch {}')) {
