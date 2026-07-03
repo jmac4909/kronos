@@ -173,8 +173,6 @@ export function normalizeMergeRequestStatus(value: unknown): MergeRequestStatusR
     data['last_comment_at'],
     mr['last_note_at'],
     data['last_note_at'],
-    mr['last_activity_at'],
-    data['last_activity_at'],
   ));
   const status: MergeRequestStatusResult = {
     comments,

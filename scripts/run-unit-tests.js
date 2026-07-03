@@ -4492,6 +4492,17 @@ test('integration adapters wrap selected Jira, GitLab, and Sonar script contract
     last_comment_at: '2026-07-02T04:00:00.000Z',
     comments: [],
   });
+  assert.deepEqual(integrationAdapters.normalizeMergeRequestStatus({
+    mr: {
+      state: 'opened',
+      review_status: 'pending_review',
+      last_activity_at: '2026-07-02T05:00:00.000Z',
+    },
+  }), {
+    state: 'opened',
+    review_status: 'pending_review',
+    comments: [],
+  });
   assert.deepEqual(integrationAdapters.normalizeMergeRequestComments(['plain', { body: 42 }]), [{ body: 'plain' }, { body: '' }]);
   await assert.rejects(
     () => integrationAdapters.jiraAdapter.ticketComments({ runScript: async () => 'not json' }, 'K-8'),
