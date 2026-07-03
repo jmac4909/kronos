@@ -1034,8 +1034,10 @@ export function activate(context: vscode.ExtensionContext) {
   const notifiedReviewKeys = new Set<string>();
   const ticketTree = new TicketTreeProvider(state);
 
-  vscode.window.registerTreeDataProvider('kronosSessions', sessionTree);
-  vscode.window.registerTreeDataProvider('kronosTasks', taskTree);
+  context.subscriptions.push(
+    vscode.window.registerTreeDataProvider('kronosSessions', sessionTree),
+    vscode.window.registerTreeDataProvider('kronosTasks', taskTree),
+  );
 
   // Shared refresh guard — prevents concurrent refresh calls
   let refreshing = false;
@@ -1093,7 +1095,7 @@ export function activate(context: vscode.ExtensionContext) {
         reviewTree.markVisibleReviewItemsSeen();
       }
     }
-    view.onDidChangeVisibility(e => {
+    const visibilitySubscription = view.onDidChangeVisibility(e => {
       if (!e.visible) { return; }
       void throttledRefresh().finally(() => {
         if (id === 'kronosReview') {
@@ -1101,7 +1103,7 @@ export function activate(context: vscode.ExtensionContext) {
         }
       });
     });
-    context.subscriptions.push(view);
+    context.subscriptions.push(view, visibilitySubscription);
   }
   updateAttentionBadge();
   context.subscriptions.push(
@@ -1125,8 +1127,10 @@ export function activate(context: vscode.ExtensionContext) {
   statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 50);
   statusBarItem.command = 'kronos.openDashboard';
   updateStatusBar(state);
-  state.onDidChange(() => updateStatusBar(state));
-  state.onDidSessionChange(() => updateStatusBar(state));
+  context.subscriptions.push(
+    state.onDidChange(() => updateStatusBar(state)),
+    state.onDidSessionChange(() => updateStatusBar(state)),
+  );
   statusBarItem.show();
   context.subscriptions.push(statusBarItem);
   if (state.loadIssues.length > 0) {

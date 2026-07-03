@@ -5937,6 +5937,44 @@ test('extension webviews use shared UI shell and board filtering affordances', (
   }
 });
 
+test('extension activation tracks long-lived disposables', () => {
+  const source = readSourceFixture('src', 'extension.ts');
+  const activateStart = source.indexOf('export function activate');
+  const activateEnd = source.indexOf('export function deactivate', activateStart);
+  assert.ok(activateStart >= 0 && activateEnd > activateStart, 'activate block should be present');
+  const activateSource = source.slice(activateStart, activateEnd);
+  for (const marker of [
+    "vscode.window.registerTreeDataProvider('kronosSessions', sessionTree),",
+    "vscode.window.registerTreeDataProvider('kronosTasks', taskTree),",
+    'const visibilitySubscription = view.onDidChangeVisibility',
+    'context.subscriptions.push(view, visibilitySubscription)',
+    'state.onDidChange(() => updateStatusBar(state)),',
+    'state.onDidSessionChange(() => updateStatusBar(state)),',
+  ]) {
+    assert.ok(activateSource.includes(marker), marker);
+  }
+  assert.equal(
+    activateSource.includes("vscode.window.registerTreeDataProvider('kronosSessions', sessionTree);\n  vscode.window.registerTreeDataProvider('kronosTasks', taskTree);"),
+    false,
+    'tree data provider registrations should be tracked in context subscriptions',
+  );
+  assert.equal(
+    activateSource.includes('\n    view.onDidChangeVisibility(e => {'),
+    false,
+    'tree view visibility listeners should be tracked in context subscriptions',
+  );
+  assert.equal(
+    activateSource.includes('\n  state.onDidChange(() => updateStatusBar(state));'),
+    false,
+    'status bar state listener should be tracked in context subscriptions',
+  );
+  assert.equal(
+    activateSource.includes('\n  state.onDidSessionChange(() => updateStatusBar(state));'),
+    false,
+    'status bar session listener should be tracked in context subscriptions',
+  );
+});
+
 test('extension run recovery helpers use typed run records', () => {
   const source = readSourceFixture('src', 'extension.ts');
   const runActionStart = source.indexOf('async function resumeSelectedRun');
