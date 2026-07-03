@@ -4,8 +4,6 @@ import { actionToLabel } from './actionLabels';
 import { isCodeAction } from './actionSemantics';
 import { evidenceRecordCount } from './evidenceData';
 
-export { actionToLabel } from './actionLabels';
-
 export interface PlannerInput {
   state: KronosStateType | null;
   queue: QueueState | null;
