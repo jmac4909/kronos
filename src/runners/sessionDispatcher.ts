@@ -277,12 +277,13 @@ function computeStats(events: ProgressEvent[]): SessionStats {
 function saveSession(project: string, skill: string, ticket: string, events: ProgressEvent[]): string {
   const id = safeSessionId(`${project}-${skill}-${ticket || 'no-ticket'}-${Date.now().toString(36)}`);
   const stats = computeStats(events);
+  const firstEvent = events[0];
   const session: SavedSession = {
     id,
     project,
     skill,
     ticket,
-    startedAt: events.length > 0 ? events[0].timestamp.toISOString() : new Date().toISOString(),
+    startedAt: firstEvent ? firstEvent.timestamp.toISOString() : new Date().toISOString(),
     events: events.map(e => ({ type: e.type, label: e.label, detail: e.detail, timestamp: e.timestamp.toISOString() })),
     stats,
   };
@@ -629,7 +630,10 @@ export async function dispatchClaudeSession(
     }),
     permissions: buildRunPermissionMetadata(['~/.claude']),
   });
-  addRunEvent(run, events[0]);
+  const setupEvent = events[0];
+  if (setupEvent) {
+    addRunEvent(run, setupEvent);
+  }
   if (baseRef.warning) {
     const event = { type: 'error' as const, label: 'Could not fully resolve project base branch config', detail: baseRef.warning, timestamp: new Date() };
     events.push(event);
@@ -665,8 +669,9 @@ export async function dispatchClaudeSession(
     resolvedWorktreeRef = targetBranch;
 
     try {
-      events.push({ type: 'text', label: `Creating worktree on ${targetBranch}...`, detail: '', timestamp: new Date() });
-      addRunEvent(run, events[events.length - 1]);
+      const event = { type: 'text' as const, label: `Creating worktree on ${targetBranch}...`, detail: '', timestamp: new Date() };
+      events.push(event);
+      addRunEvent(run, event);
       panel.webview.html = withWebviewCsp(buildProgressHtml(projectName, skill, ticket || '', events));
       // For feature branches: use local name so worktree gets a real branch checkout
       // For base branches: use origin/ ref so the main checkout is not mutated
@@ -732,8 +737,9 @@ export async function dispatchClaudeSession(
     }
   }
 
-  events.push({ type: 'text', label: 'Launching Claude session...', detail: '', timestamp: new Date() });
-  addRunEvent(run, events[events.length - 1]);
+  const launchEvent = { type: 'text' as const, label: 'Launching Claude session...', detail: '', timestamp: new Date() };
+  events.push(launchEvent);
+  addRunEvent(run, launchEvent);
   panel.webview.html = withWebviewCsp(buildProgressHtml(projectName, skill, ticket || '', events));
 
   const addDirs = ['~/.claude'];
@@ -983,7 +989,10 @@ function progressDurationSeconds(events: Array<{ timestamp?: unknown }>): number
     .map(event => toValidDate(event.timestamp))
     .filter((date): date is Date => Boolean(date));
   if (dates.length < 2) { return 0; }
-  return Math.max(0, Math.round((dates[dates.length - 1].getTime() - dates[0].getTime()) / 1000));
+  const first = dates[0];
+  const last = dates[dates.length - 1];
+  if (!first || !last) { return 0; }
+  return Math.max(0, Math.round((last.getTime() - first.getTime()) / 1000));
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -42,7 +42,7 @@ export function computeAgentQualityScore(input: {
   const gates = evaluateEvidenceGates(tickets);
   const reviewRelevantGates = gates.filter(gate => {
     const action = tickets[gate.ticketKey]?.next_action;
-    return ['await_review', 'verify', 'deploy_monitor', 'done'].includes(action);
+    return typeof action === 'string' && ['await_review', 'verify', 'deploy_monitor', 'done'].includes(action);
   });
   const gatePasses = reviewRelevantGates.filter(gate => gate.status === 'pass').length;
   const gateFailures = reviewRelevantGates.filter(gate => gate.status === 'fail').length;

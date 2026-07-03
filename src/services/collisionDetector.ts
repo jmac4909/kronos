@@ -114,8 +114,9 @@ export function detectDispatchCollisions(input: DispatchCollisionInput): Dispatc
         detail: `${item.ticket || 'unticketed'} ${item.action}: ${item.reason || 'No reason recorded'}`,
       });
     }
-    if (isCodeAction && item.ticket && item.ticket !== ticketKey && input.tickets?.[item.ticket]) {
-      const overlap = sharedAreaTokens(targetArea, ticketAreaTokens(input.tickets[item.ticket]));
+    const queuedTicket = item.ticket ? input.tickets?.[item.ticket] : undefined;
+    if (isCodeAction && item.ticket && item.ticket !== ticketKey && queuedTicket) {
+      const overlap = sharedAreaTokens(targetArea, ticketAreaTokens(queuedTicket));
       if (overlap.length > 0 && item.projects?.some(project => targetProjects.has(project))) {
         collisions.push({
           id: `queue-area:${item.id}`,
