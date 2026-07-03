@@ -3211,14 +3211,6 @@ export function activate(context: vscode.ExtensionContext) {
       if (url) { openExternalHttpUrl(url); }
     }),
 
-    vscode.commands.registerCommand('kronos.overnightStart', () => {
-      vscode.window.showInformationMessage('Overnight engine — use /kronos overnight start from a Claude session.');
-    }),
-
-    vscode.commands.registerCommand('kronos.overnightStop', () => {
-      vscode.window.showInformationMessage('Overnight engine — use /kronos overnight stop from a Claude session.');
-    }),
-
     vscode.commands.registerCommand('kronos.setup', async () => {
       await runSetupWizard();
     }),

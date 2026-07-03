@@ -207,7 +207,9 @@ class TicketDetailItem extends vscode.TreeItem {
     this.ticketKey = ticketKey || '';
     this.linkedProject = linkedProject || '';
     if (contextValue) { this.contextValue = contextValue; }
-    if (contextValue === 'link_action') {
+    if (contextValue === 'unlinked') {
+      this.command = { command: 'kronos.linkTicket', title: 'Link', arguments: [ticketKey] };
+    } else if (contextValue === 'link_action') {
       this.command = { command: 'kronos.linkTicket', title: 'Link', arguments: [ticketKey] };
       this.iconPath = new vscode.ThemeIcon('add');
     } else if (contextValue === 'linked_project') {

@@ -193,16 +193,6 @@
         "icon": "$(dashboard)"
       },
       {
-        "command": "kronos.overnightStart",
-        "title": "Kronos: Start Overnight Run",
-        "icon": "$(run-all)"
-      },
-      {
-        "command": "kronos.overnightStop",
-        "title": "Kronos: Stop Overnight Run",
-        "icon": "$(debug-stop)"
-      },
-      {
         "command": "kronos.openProject",
         "title": "Kronos: Open in Terminal",
         "icon": "$(terminal)"
@@ -529,6 +519,120 @@
       }
     ],
     "menus": {
+      "commandPalette": [
+        {
+          "command": "kronos.openExternalUrl",
+          "when": "false"
+        },
+        {
+          "command": "kronos.implement",
+          "when": "false"
+        },
+        {
+          "command": "kronos.completeTask",
+          "when": "false"
+        },
+        {
+          "command": "kronos.openProject",
+          "when": "false"
+        },
+        {
+          "command": "kronos.openInClaude",
+          "when": "false"
+        },
+        {
+          "command": "kronos.viewTicket",
+          "when": "false"
+        },
+        {
+          "command": "kronos.addEvidence",
+          "when": "false"
+        },
+        {
+          "command": "kronos.addEvidenceCheck",
+          "when": "false"
+        },
+        {
+          "command": "kronos.recordEnvironmentResult",
+          "when": "false"
+        },
+        {
+          "command": "kronos.extractAcceptanceCriteria",
+          "when": "false"
+        },
+        {
+          "command": "kronos.updateAcceptanceCriteria",
+          "when": "false"
+        },
+        {
+          "command": "kronos.exportEvidence",
+          "when": "false"
+        },
+        {
+          "command": "kronos.evidenceHandoff",
+          "when": "false"
+        },
+        {
+          "command": "kronos.publishEvidence",
+          "when": "false"
+        },
+        {
+          "command": "kronos.addToQueue",
+          "when": "false"
+        },
+        {
+          "command": "kronos.removeFromQueue",
+          "when": "false"
+        },
+        {
+          "command": "kronos.linkTicket",
+          "when": "false"
+        },
+        {
+          "command": "kronos.unlinkTicket",
+          "when": "false"
+        },
+        {
+          "command": "kronos.removeProject",
+          "when": "false"
+        },
+        {
+          "command": "kronos.registerDiscovered",
+          "when": "false"
+        },
+        {
+          "command": "kronos.startQueueItem",
+          "when": "false"
+        },
+        {
+          "command": "kronos.queueMoveUp",
+          "when": "false"
+        },
+        {
+          "command": "kronos.queueMoveDown",
+          "when": "false"
+        },
+        {
+          "command": "kronos.queuePinTop",
+          "when": "false"
+        },
+        {
+          "command": "kronos.openMrDiff",
+          "when": "false"
+        },
+        {
+          "command": "kronos.openMrInGitlab",
+          "when": "false"
+        },
+        {
+          "command": "kronos.rejectReview",
+          "when": "false"
+        },
+        {
+          "command": "kronos.verifyLocal",
+          "when": "false"
+        }
+      ],
       "view/title": [
         {
           "command": "kronos.refresh",
@@ -562,6 +666,11 @@
         },
         {
           "command": "kronos.discover",
+          "when": "view == kronosProjects",
+          "group": "navigation"
+        },
+        {
+          "command": "kronos.register",
           "when": "view == kronosProjects",
           "group": "navigation"
         },

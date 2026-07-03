@@ -108,6 +108,45 @@ if (staleMenuCommands.length > 0) {
   process.exit(1);
 }
 
+const contextOnlyCommands = [
+  'kronos.openExternalUrl',
+  'kronos.implement',
+  'kronos.completeTask',
+  'kronos.openProject',
+  'kronos.openInClaude',
+  'kronos.viewTicket',
+  'kronos.addEvidence',
+  'kronos.addEvidenceCheck',
+  'kronos.recordEnvironmentResult',
+  'kronos.extractAcceptanceCriteria',
+  'kronos.updateAcceptanceCriteria',
+  'kronos.exportEvidence',
+  'kronos.evidenceHandoff',
+  'kronos.publishEvidence',
+  'kronos.addToQueue',
+  'kronos.removeFromQueue',
+  'kronos.linkTicket',
+  'kronos.unlinkTicket',
+  'kronos.removeProject',
+  'kronos.registerDiscovered',
+  'kronos.startQueueItem',
+  'kronos.queueMoveUp',
+  'kronos.queueMoveDown',
+  'kronos.queuePinTop',
+  'kronos.openMrDiff',
+  'kronos.openMrInGitlab',
+  'kronos.rejectReview',
+  'kronos.verifyLocal',
+];
+const hiddenPaletteCommands = new Set((manifest.contributes?.menus?.commandPalette || [])
+  .filter((entry) => entry?.when === 'false')
+  .map((entry) => entry.command));
+const visibleContextOnlyCommands = contextOnlyCommands.filter((command) => !hiddenPaletteCommands.has(command));
+if (visibleContextOnlyCommands.length > 0) {
+  console.error(`Context-only commands must be hidden from the Command Palette:\n${visibleContextOnlyCommands.join('\n')}`);
+  process.exit(1);
+}
+
 const untrustedWorkspaces = manifest.capabilities?.untrustedWorkspaces;
 if (untrustedWorkspaces?.supported !== 'limited') {
   console.error('Kronos must declare limited untrusted workspace support so read-only operator panels remain available in Restricted Mode.');
