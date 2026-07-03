@@ -2170,6 +2170,21 @@ test('CLI probes accept readable GOOGLE_APPLICATION_CREDENTIALS without running 
   assert.match(result.output, /GOOGLE_APPLICATION_CREDENTIALS file is readable/);
 });
 
+test('feedback readiness script runs npm and npx through the Windows shell', () => {
+  const source = readSourceFixture('scripts', 'prepare-human-feedback.js');
+  for (const marker of [
+    "const IS_WINDOWS = process.platform === 'win32'",
+    'shell: shouldUseWindowsShell(command)',
+    "return IS_WINDOWS && (command === 'npm' || command === 'npx');",
+    "run('npx', ['--yes', '@vscode/vsce', 'ls', '--tree', '--no-dependencies'], { capture: true })",
+    "spawnSync('where.exe', [command]",
+    "spawnSync('sh', ['-lc', `command -v ${command}`]",
+    'function firstOutputLine(value)',
+  ]) {
+    assert.ok(source.includes(marker), marker);
+  }
+});
+
 test('terminal profiles prefer Windows Git Bash and avoid PowerShell gcloud shims', () => {
   const gitBash = 'C:\\Program Files\\Git\\bin\\bash.exe';
   const windowsEnv = { ProgramFiles: 'C:\\Program Files' };

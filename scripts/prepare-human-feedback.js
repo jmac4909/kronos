@@ -4,6 +4,7 @@ const { spawnSync } = require('child_process');
 
 const ROOT = process.cwd();
 const VSIX = path.join(ROOT, 'kronos-0.1.0.vsix');
+const IS_WINDOWS = process.platform === 'win32';
 
 function fail(message) {
   console.error(`\nFeedback readiness failed: ${message}`);
@@ -16,7 +17,7 @@ function run(command, args, options = {}) {
   const result = spawnSync(command, args, {
     cwd: ROOT,
     encoding: 'utf8',
-    shell: false,
+    shell: shouldUseWindowsShell(command),
     stdio: options.capture ? 'pipe' : 'inherit',
   });
 
@@ -34,12 +35,30 @@ function run(command, args, options = {}) {
 }
 
 function commandExists(command) {
-  const result = spawnSync('sh', ['-lc', `command -v ${command}`], {
-    cwd: ROOT,
-    encoding: 'utf8',
-    stdio: 'pipe',
-  });
-  return result.status === 0 ? result.stdout.trim() : '';
+  const result = IS_WINDOWS
+    ? spawnSync('where.exe', [command], {
+        cwd: ROOT,
+        encoding: 'utf8',
+        stdio: 'pipe',
+      })
+    : spawnSync('sh', ['-lc', `command -v ${command}`], {
+        cwd: ROOT,
+        encoding: 'utf8',
+        stdio: 'pipe',
+      });
+  if (result.error) { return ''; }
+  return result.status === 0 ? firstOutputLine(result.stdout) : '';
+}
+
+function shouldUseWindowsShell(command) {
+  return IS_WINDOWS && (command === 'npm' || command === 'npx');
+}
+
+function firstOutputLine(value) {
+  return String(value || '')
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .find(Boolean) || '';
 }
 
 function requireFile(file, includes = []) {
@@ -107,7 +126,7 @@ if (stat.size < 200 * 1024) {
   fail(`kronos-0.1.0.vsix is unexpectedly small (${stat.size} bytes)`);
 }
 
-const tree = run('npx', ['@vscode/vsce', 'ls', '--tree', '--no-dependencies'], { capture: true });
+const tree = run('npx', ['--yes', '@vscode/vsce', 'ls', '--tree', '--no-dependencies'], { capture: true });
 for (const marker of [
   'HUMAN_FEEDBACK_CHECKLIST.md',
   'LICENSE',
