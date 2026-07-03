@@ -583,7 +583,7 @@ for (const marker of [
   'await runCommandProgress(',
   'await vscode.window.withProgress(',
   'unknownErrorMessage(e, failureFallback)',
-  "unknownErrorMessage(e, 'Kronos auto-refresh failed.')",
+  "warnUnexpectedPanelIntegrationError(e, 'Kronos auto-refresh failed.')",
   'unknownErrorMessage(e, `Failed to register ${s.label || s.detail}.`)',
   "unknownErrorMessage(e, 'Failed to parse discovery results.')",
   "unknownErrorMessage(e, 'Failed to load MR diff.')",

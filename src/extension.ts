@@ -1115,7 +1115,7 @@ export function activate(context: vscode.ExtensionContext) {
     try {
       await state.refresh();
     } catch (e: unknown) {
-      console.warn(unknownErrorMessage(e, 'Kronos auto-refresh failed.'));
+      warnUnexpectedPanelIntegrationError(e, 'Kronos auto-refresh failed.');
     } finally {
       refreshing = false;
     }
