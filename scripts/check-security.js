@@ -1474,13 +1474,16 @@ for (const marker of [
   'function processIsGone',
   "unknownErrorCode(e) === 'ESRCH'",
   'Run record had terminal metadata while persisted status was ${status}',
-  'function normalizeRunFile',
-  "scope === 'active' && normalized !== run",
+  'export function repairActiveRunRecords',
+  'function normalizeRunView',
   'writeJsonAtomic(filePath, normalized)',
 ]) {
   if (!runStore.includes(marker)) {
     fail(`Missing run store marker: ${marker}`);
   }
+}
+if (runStore.includes('function normalizeRunFile')) {
+  fail('Run store reads must not persist terminal-active repairs through normalizeRunFile.');
 }
 if (runStore.includes('[key: string]: any')) {
   fail('Run store records must keep extension fields unknown, not any.');

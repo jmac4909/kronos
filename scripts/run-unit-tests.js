@@ -3596,7 +3596,7 @@ test('run store reads UTF-8 BOM-prefixed JSON files from Windows tools', () => {
   assert.equal(issues.some(issue => issue.filePath === runStore.runRecordPath(run.id)), false);
 });
 
-test('run store normalizes terminal active records on read and archive', () => {
+test('run store returns normalized active views and repairs only on explicit request', () => {
   const completed = {
     id: 'run-terminal-completed',
     project: 'app',
@@ -3692,6 +3692,17 @@ test('run store normalizes terminal active records on read and archive', () => {
   assert.equal(logCompletedRead.status, 'completed');
   assert.ok(logCompletedRead.endedAt);
   assert.equal(unsafeLogRead.status, 'running');
+  assert.equal(JSON.parse(fs.readFileSync(runStore.runRecordPath(completed.id), 'utf8')).status, 'running');
+  assert.equal(JSON.parse(fs.readFileSync(runStore.runRecordPath(failed.id), 'utf8')).status, 'preflight');
+  assert.equal(JSON.parse(fs.readFileSync(runStore.runRecordPath(timestampOnly.id), 'utf8')).status, 'running');
+  assert.equal(JSON.parse(fs.readFileSync(runStore.runRecordPath(deadProcess.id), 'utf8')).status, 'running');
+  assert.equal(JSON.parse(fs.readFileSync(runStore.runRecordPath(staleProcessless.id), 'utf8')).status, 'running');
+  assert.equal(JSON.parse(fs.readFileSync(runStore.runRecordPath(logCompleted.id), 'utf8')).status, 'running');
+  assert.equal(JSON.parse(fs.readFileSync(runStore.runRecordPath(unsafeLog.id), 'utf8')).status, 'running');
+
+  const repaired = runStore.repairActiveRunRecords();
+  assert.equal(repaired.repaired, 6);
+  assert.equal(repaired.runs.some(run => run.id === unsafeLog.id && run.status === 'running'), true);
   assert.equal(JSON.parse(fs.readFileSync(runStore.runRecordPath(completed.id), 'utf8')).status, 'completed');
   assert.equal(JSON.parse(fs.readFileSync(runStore.runRecordPath(failed.id), 'utf8')).status, 'failed');
   assert.equal(JSON.parse(fs.readFileSync(runStore.runRecordPath(timestampOnly.id), 'utf8')).status, 'needs_human');
@@ -3911,8 +3922,8 @@ test('run store surfaces invalid records and blocks strict mutations', () => {
     'Stale active run needs human review',
     'function processIsGone',
     "unknownErrorCode(e) === 'ESRCH'",
-    'function normalizeRunFile',
-    "scope === 'active' && normalized !== run",
+    'export function repairActiveRunRecords',
+    'function normalizeRunView',
     'writeJsonAtomic(filePath, normalized)',
   ]) {
     assert.ok(source.includes(marker), marker);

@@ -42,6 +42,11 @@ export interface RunStoreIssue {
   detail: string;
 }
 
+export interface RunStoreRepairResult {
+  repaired: number;
+  runs: RunRecord[];
+}
+
 export function runRecordPath(runId: string): string {
   return path.join(RUNS_DIR, `${safeRunId(runId)}.json`);
 }
@@ -65,6 +70,22 @@ export function listRunStoreIssues(limit = 100): RunStoreIssue[] {
 
 export function readRunRecord(runId: string): RunRecord | null {
   return readRunFile(runRecordPath(runId), 'active');
+}
+
+export function repairActiveRunRecords(limit = 100): RunStoreRepairResult {
+  let repaired = 0;
+  const runs: RunRecord[] = [];
+  for (const filePath of listRunRecordFiles(RUNS_DIR, limit)) {
+    const run = readRunFileResult(filePath, 'active').run;
+    if (!run) { continue; }
+    const normalized = normalizeTerminalActiveRun(run);
+    runs.push(normalized);
+    if (normalized !== run) {
+      writeJsonAtomic(filePath, normalized);
+      repaired += 1;
+    }
+  }
+  return { repaired, runs };
 }
 
 export function writeRunRecord(run: RunRecord): void {
@@ -179,12 +200,12 @@ function readRequiredRunRecord(runId: string): RunRecord {
   if (result.issue) {
     throw new Error(`Invalid run record ${currentPath}: ${result.issue.detail}`);
   }
-  return normalizeRunFile(result.run!, currentPath, 'active');
+  return normalizeRunView(result.run!);
 }
 
 function readRunFile(filePath: string, scope: RunStoreIssue['scope']): RunRecord | null {
   const run = readRunFileResult(filePath, scope).run;
-  return run ? normalizeRunFile(run, filePath, scope) : null;
+  return run ? normalizeRunView(run) : null;
 }
 
 function readRunFileIssue(filePath: string, scope: RunStoreIssue['scope']): RunStoreIssue | null {
@@ -364,12 +385,8 @@ function stringField(value: unknown): string {
   return typeof value === 'string' || typeof value === 'number' ? String(value) : '';
 }
 
-function normalizeRunFile(run: RunRecord, filePath: string, scope: RunStoreIssue['scope']): RunRecord {
-  const normalized = normalizeTerminalActiveRun(run);
-  if (scope === 'active' && normalized !== run) {
-    writeJsonAtomic(filePath, normalized);
-  }
-  return normalized;
+function normalizeRunView(run: RunRecord): RunRecord {
+  return normalizeTerminalActiveRun(run);
 }
 
 function invalidRunRecordIssue(scope: RunStoreIssue['scope'], filePath: string, detail: string): RunStoreIssue {
