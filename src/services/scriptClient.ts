@@ -35,11 +35,13 @@ export class KronosScriptMissingError extends Error {
 
 export function isKronosScriptMissingError(error: unknown): error is KronosScriptMissingError {
   if (error instanceof KronosScriptMissingError) { return true; }
+  if (typeof error === 'string') { return isKronosScriptMissingMessage(error); }
   if (!error || typeof error !== 'object') { return false; }
   const record = error as Record<string, unknown>;
-  return record['name'] === 'KronosScriptMissingError'
+  const structurallyMissing = record['name'] === 'KronosScriptMissingError'
     && isRequiredScriptName(record['scriptName'])
     && typeof record['filePath'] === 'string';
+  return structurallyMissing || isKronosScriptMissingMessage(record['message']);
 }
 
 const DEFAULT_TIMEOUT = 60000;
@@ -56,6 +58,12 @@ export function requiredScripts(): ScriptHealth[] {
 
 function isRequiredScriptName(value: unknown): value is RequiredScriptName {
   return typeof value === 'string' && REQUIRED_SCRIPT_NAMES.has(value as RequiredScriptName);
+}
+
+function isKronosScriptMissingMessage(value: unknown): boolean {
+  if (typeof value !== 'string' || !value.startsWith('Kronos script missing: ')) { return false; }
+  const normalized = value.replace(/\\/g, '/');
+  return Array.from(REQUIRED_SCRIPT_NAMES).some(name => normalized.endsWith(`/${name}`) || normalized.endsWith(name));
 }
 
 function scriptPath(scriptName: RequiredScriptName): string {

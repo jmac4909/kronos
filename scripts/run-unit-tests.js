@@ -4713,6 +4713,7 @@ test('script client reports required scripts and wraps Python JSON contracts', a
     scriptName: 'not-a-script.py',
     filePath: kronosStatePath,
   }), false);
+  assert.equal(scriptClient.isKronosScriptMissingError(new Error(`Kronos script missing: ${kronosStatePath}`)), true);
   assert.equal(scriptClient.isKronosScriptMissingError(new Error('Kronos script missing: old string')), false);
 });
 
@@ -4724,6 +4725,8 @@ test('script client keeps raw JSON and process errors unknown by default', () =>
     'export function isKronosScriptMissingError(error: unknown): error is KronosScriptMissingError',
     "const REQUIRED_SCRIPT_NAMES = new Set<RequiredScriptName>(['kronos_state.py', 'pipeline_monitor.py', 'gitlab_api.py'])",
     'function isRequiredScriptName(value: unknown): value is RequiredScriptName',
+    'function isKronosScriptMissingMessage(value: unknown): boolean',
+    "value.startsWith('Kronos script missing: ')",
     'throw new KronosScriptMissingError(scriptName, filePath)',
     'export async function runJsonScript<T = unknown>',
     'export function runGitlabJson<T = unknown>',
