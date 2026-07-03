@@ -5324,6 +5324,7 @@ async function pollReviewMergeRequests(state: KronosState): Promise<void> {
       const decision = decideReviewMonitorAction(candidate.ticketKey, update);
       if (decision.kind === 'deploy_monitor') {
         await startDeployMonitorForMergedTicket(state, candidate.ticketKey, update.ticket);
+        rememberReviewTerminalMergeRequestAction(candidate.ticketKey, update.ticket, 'deploy_monitor');
       } else if (decision.kind === 'blocked') {
         notifyReviewMonitorDecision(decision);
       } else if (decision.kind === 'notify') {
@@ -5342,19 +5343,25 @@ async function reconcileTerminalReviewMergeRequests(state: KronosState): Promise
     state.reloadAndNotify();
   }
   for (const update of updates) {
-    const mrIid = update.ticket.mr?.iid || 'mr';
-    const actionKey = `${update.ticketKey}:${mrIid}:${update.action}`;
+    const actionKey = reviewTerminalMergeRequestActionKey(update.ticketKey, update.ticket, update.action);
     if (reviewTerminalMergeRequestActions.has(actionKey)) { continue; }
     if (update.action === 'deploy_monitor') {
-      const handled = await startDeployMonitorForMergedTicket(state, update.ticketKey, update.ticket);
-      if (handled) {
-        reviewTerminalMergeRequestActions.add(actionKey);
-      }
+      await startDeployMonitorForMergedTicket(state, update.ticketKey, update.ticket);
+      reviewTerminalMergeRequestActions.add(actionKey);
     } else if (update.action === 'blocked') {
       reviewTerminalMergeRequestActions.add(actionKey);
       void vscode.window.showWarningMessage(`${update.ticketKey} ${update.message}`);
     }
   }
+}
+
+function rememberReviewTerminalMergeRequestAction(ticketKey: string, ticket: Ticket, action: 'deploy_monitor' | 'blocked'): void {
+  reviewTerminalMergeRequestActions.add(reviewTerminalMergeRequestActionKey(ticketKey, ticket, action));
+}
+
+function reviewTerminalMergeRequestActionKey(ticketKey: string, ticket: Ticket, action: 'deploy_monitor' | 'blocked'): string {
+  const mrIid = ticket.mr?.iid || 'mr';
+  return `${ticketKey}:${mrIid}:${action}`;
 }
 
 function notifyReviewMergeRequestPollFailure(ticketKey: string, error: unknown): void {
@@ -5420,7 +5427,10 @@ async function startDeployMonitorForMergedTicket(state: KronosState, ticketKey: 
   const projectName = project.projectName;
   const projectPath = project.projectPath;
   const mrIid = ticket.mr?.iid;
-  if (hasHandledDeployMonitorRun(listRuns(), { projectName, projectPath, ticketKey, mrIid })) { return true; }
+  if (hasHandledDeployMonitorRun(listRuns(), { projectName, projectPath, ticketKey, mrIid })) {
+    void vscode.window.showInformationMessage(`${ticketKey} merged - deploy monitor already handled.`);
+    return true;
+  }
   const promptMetadata: PromptRunMetadata = {
     source: 'slash',
     handoff: 'review-monitor',
