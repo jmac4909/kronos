@@ -2,6 +2,7 @@ import { Ticket } from '../state/types';
 import { EvidenceGateResult, evaluateEvidenceGate } from './evidenceGate';
 import { evidenceNotes } from './evidenceData';
 import { runProgressSummary } from './runProgress';
+import { terminalRunOutcome } from './runStatus';
 
 export type PostRunReadinessStatus = 'ready' | 'needs_human' | 'blocked' | 'not_ready' | 'unknown';
 export type RunFailureKind = 'none' | 'auth' | 'model' | 'script' | 'git' | 'build' | 'test' | 'sonar' | 'timeout' | 'cancelled' | 'unknown';
@@ -74,7 +75,7 @@ export function resolvePostRunTicket(input: {
 export function shouldRecordRunCompletionEvidence(input: { run: unknown; ticket?: Ticket }): boolean {
   if (!input.ticket) { return false; }
   const record = runRecord(input.run);
-  return runString(record.status) === 'completed'
+  return runCompletedForEvidence(record)
     && runString(record.skill) === 'implement'
     && input.ticket.next_action === 'await_review'
     && evidenceNotes(input.ticket).length === 0;
@@ -115,7 +116,7 @@ export function buildRunCompletionEvidenceCheck(run: unknown, ticket?: Ticket): 
   const mr = ticket?.mr || undefined;
   const build = ticket?.build || undefined;
   const strongSignal = testCount !== undefined || isPassingBuild(build) || isPassingSonar(sonarStatus);
-  const cleanRun = SUCCESS_RUN_STATUSES.has(status) && (exitCode === undefined || exitCode === 0);
+  const cleanRun = runCompletedForEvidence(record) && (exitCode === undefined || exitCode === 0);
   const summaryParts = [
     `run ${runId} ${status}${exitCode === undefined ? '' : ` exit ${exitCode}`}`,
     `${progress.filesChanged} changed file${progress.filesChanged === 1 ? '' : 's'} from run events`,
@@ -256,6 +257,11 @@ export function classifyRunFailure(run: unknown): RunFailureKind {
 
 function runRecord(value: unknown): Record<string, unknown> {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value)) ? value as Record<string, unknown> : {};
+}
+
+function runCompletedForEvidence(record: Record<string, unknown>): boolean {
+  const status = runString(record.status);
+  return SUCCESS_RUN_STATUSES.has(status) || (status === 'needs_human' && terminalRunOutcome(record) === 'completed');
 }
 
 function runString(value: unknown): string {

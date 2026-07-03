@@ -5200,6 +5200,16 @@ test('post-run readiness distinguishes process completion from handoff readiness
     ticket: ticket({ next_action: 'await_review', projects: ['app'] }),
   }), true);
   assert.equal(postRunReadiness.shouldRecordRunCompletionEvidence({
+    run: {
+      id: 'run-cleanup-needs-human',
+      skill: 'implement',
+      status: 'needs_human',
+      exitCode: 0,
+      failureReason: 'Worktree not removed: Dirty worktree',
+    },
+    ticket: ticket({ next_action: 'await_review', projects: ['app'] }),
+  }), true);
+  assert.equal(postRunReadiness.shouldRecordRunCompletionEvidence({
     run: { id: 'run-1', skill: 'implement', status: 'completed' },
     ticket: readyTicket,
   }), false);
@@ -5296,6 +5306,19 @@ test('post-run readiness distinguishes process completion from handoff readiness
   assert.equal(weakCompletionCheck.result, 'warn');
   assert.equal(weakCompletionCheck.confidence, 'medium');
   assert.match(weakCompletionCheck.summary, /test count not captured/);
+  const cleanupBlockedCompletionCheck = postRunReadiness.buildRunCompletionEvidenceCheck({
+    id: 'run-cleanup-needs-human',
+    status: 'needs_human',
+    exitCode: 0,
+    testCount: 105,
+  }, ticket({
+    next_action: 'await_review',
+    projects: ['app'],
+    sonar_status: 'OK',
+    mr: { iid: 2, state: 'opened', review_status: 'pending_review', url: 'https://gitlab.example/2' },
+  }));
+  assert.equal(cleanupBlockedCompletionCheck.result, 'pass');
+  assert.match(cleanupBlockedCompletionCheck.summary, /run-cleanup-needs-human needs_human exit 0/);
 
   const notReady = postRunReadiness.evaluatePostRunReadiness({
     run: { status: 'completed' },
@@ -5334,6 +5357,7 @@ test('post-run readiness distinguishes process completion from handoff readiness
   for (const marker of [
     'run: unknown',
     "import { runProgressSummary } from './runProgress'",
+    "import { terminalRunOutcome } from './runStatus'",
     "import { evidenceNotes } from './evidenceData'",
     'export function shouldRecordRunCompletionEvidence',
     'export function resolvePostRunTicket',
@@ -5353,6 +5377,7 @@ test('post-run readiness distinguishes process completion from handoff readiness
     'function isPassingSonar',
     'export function classifyRunFailure(run: unknown): RunFailureKind',
     'function runRecord(value: unknown): Record<string, unknown>',
+    'function runCompletedForEvidence(record: Record<string, unknown>): boolean',
     'function runString(value: unknown): string',
     'function runText(value: unknown): string | undefined',
     'function runFailureReason(record: Record<string, unknown>): string',
