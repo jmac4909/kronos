@@ -2551,9 +2551,10 @@ export function activate(context: vscode.ExtensionContext) {
           'kronosDashboard',
           'Kronos Dashboard',
           vscode.ViewColumn.One,
-          { enableScripts: true }
+          kronosScriptableWebviewOptions(context.extensionUri)
         );
         const nonce = createWebviewNonce();
+        const actionScriptUri = kronosActionPanelScriptUri(panel, context.extensionUri);
         const render = async () => {
           let data: unknown = {};
           let loadWarning: string | undefined;
@@ -2562,7 +2563,7 @@ export function activate(context: vscode.ExtensionContext) {
           } catch (e: unknown) {
             loadWarning = warnUnexpectedPanelIntegrationError(e, 'Morning brief unavailable.');
           }
-          panel.webview.html = withWebviewCsp(buildDashboardHtml(state, data, nonce, loadWarning), webviewScriptCspOptions(panel.webview.cspSource, nonce));
+          panel.webview.html = withWebviewCsp(buildDashboardHtml(state, data, nonce, loadWarning, actionScriptUri), webviewScriptCspOptions(panel.webview.cspSource, nonce));
         };
         await render();
         startActiveRunPanelRefresh(panel, state, render);
@@ -3464,7 +3465,7 @@ export function activate(context: vscode.ExtensionContext) {
     }),
 
     vscode.commands.registerCommand('kronos.agingReport', async () => {
-      openAgingReportPanel(state);
+      openAgingReportPanel(state, context.extensionUri);
     }),
 
     vscode.commands.registerCommand('kronos.runCenter', async (item: unknown) => {
@@ -4809,14 +4810,15 @@ function openTrendMetricsPanel(state: KronosState): void {
   attachOperatorCommandHandler(panel, 'Kronos Trend Metrics', TREND_METRICS_OPERATOR_COMMANDS);
 }
 
-function openAgingReportPanel(state: KronosState): void {
+function openAgingReportPanel(state: KronosState, extensionUri?: vscode.Uri): void {
   const panel = vscode.window.createWebviewPanel(
     'kronosAgingReport',
     'Kronos Aging Report',
     vscode.ViewColumn.One,
-    { enableScripts: true }
+    kronosScriptableWebviewOptions(extensionUri)
   );
   const nonce = createWebviewNonce();
+  const actionScriptUri = kronosActionPanelScriptUri(panel, extensionUri);
   const render = () => {
     const report = analyzeAging({
       tickets: state.state?.tickets || {},
@@ -4830,7 +4832,7 @@ function openAgingReportPanel(state: KronosState): void {
         actionButton('trendMetrics', 'Trend Metrics'),
         actionButton('evidenceGate', 'Evidence Gate'),
       ]),
-      scriptHtml: kronosActionPanelScript(nonce),
+      scriptHtml: kronosActionPanelScript(nonce, 'Kronos Aging Report', true, actionScriptUri),
     }), webviewScriptCspOptions(panel.webview.cspSource, nonce));
   };
   render();
@@ -5722,7 +5724,7 @@ async function executeDashboardAction(state: KronosState, request: ActionPanelMe
   }
 }
 
-function buildDashboardHtml(state: KronosState, brief: unknown, nonce?: string, loadWarning?: string): string {
+function buildDashboardHtml(state: KronosState, brief: unknown, nonce?: string, loadWarning?: string, actionScriptUri?: string): string {
   const safeBrief = dashboardBriefRecord(brief);
   const projects = state.state?.projects || {};
 
@@ -5870,7 +5872,7 @@ function buildDashboardHtml(state: KronosState, brief: unknown, nonce?: string, 
     <h3 class="kronos-section-title">Projects</h3>
     <div class="grid">${projectCards || '<div class="kronos-empty">No projects registered.</div>'}</div>
   </div>
-</div>${nonce ? kronosActionPanelScript(nonce) : ''}</body>
+</div>${nonce ? kronosActionPanelScript(nonce, 'Kronos Dashboard', true, actionScriptUri) : ''}</body>
 </html>`;
 }
 

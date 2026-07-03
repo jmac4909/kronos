@@ -329,7 +329,7 @@ if (unitTests.includes("const joined = [command, ...args].join(' ');")) {
 
 assertExplicitWebviewScriptPolicy('src/extension.ts', extension);
 assertExplicitWebviewScriptPolicy('src/runners/sessionDispatcher.ts', dispatcher);
-for (const panelId of ['kronosJiraBoard', 'kronosHumanReviewInbox', 'kronosEvidenceGate']) {
+for (const panelId of ['kronosJiraBoard', 'kronosDashboard', 'kronosHumanReviewInbox', 'kronosEvidenceGate', 'kronosAgingReport']) {
   assertPanelUsesScriptableWebviewOptions('src/extension.ts', extension, panelId);
 }
 for (const [file, source] of Object.entries({ 'src/extension.ts': extension, 'src/runners/sessionDispatcher.ts': dispatcher })) {
@@ -1429,7 +1429,11 @@ for (const marker of [
   'let data: unknown = {}',
   'let loadWarning: string | undefined',
   "loadWarning = warnUnexpectedPanelIntegrationError(e, 'Morning brief unavailable.')",
-  'buildDashboardHtml(state, data, nonce, loadWarning)',
+  'const actionScriptUri = kronosActionPanelScriptUri(panel, context.extensionUri)',
+  'buildDashboardHtml(state, data, nonce, loadWarning, actionScriptUri)',
+  "kronosActionPanelScript(nonce, 'Kronos Dashboard', true, actionScriptUri)",
+  "function openAgingReportPanel(state: KronosState, extensionUri?: vscode.Uri)",
+  "kronosActionPanelScript(nonce, 'Kronos Aging Report', true, actionScriptUri)",
   'Morning brief unavailable',
   'dashboard-warning',
   'class="kronos-shell ticket-shell"',
@@ -2324,8 +2328,8 @@ for (const marker of [
   'data-kronos-webview-name',
   'data-kronos-action-fields',
   'data-kronos-ready-command',
-  'data-kronos-inline-fallback="action-panel"',
   'options.scriptUri',
+  '!options.scriptUri',
   'cspSource?: string',
   'options.cspSource?.trim()',
   'scriptSources.join',

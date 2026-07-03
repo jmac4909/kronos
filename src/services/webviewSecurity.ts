@@ -177,9 +177,6 @@ ${webviewActionPostScript(webviewName, fields, options)}
     `src="${escapeAttr(options.scriptUri)}"`,
     `data-kronos-webview-name="${escapeAttr(webviewName)}"`,
     `data-kronos-action-fields="${escapeAttr(JSON.stringify(fields))}"${readyAttr}></script>`,
-    `<script nonce="${escapeAttr(nonce)}" data-kronos-inline-fallback="action-panel">`,
-    webviewActionPostScript(webviewName, fields, options),
-    '</script>',
   ].join('\n');
 }
 

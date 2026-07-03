@@ -2251,8 +2251,8 @@ test('webview security injects CSP and preserves existing nonce policies', () =>
   assert.match(externalScriptTag, /data-kronos-webview-name="Kronos External"/);
   assert.match(externalScriptTag, /data-kronos-action-fields="\[\{&quot;messageKey&quot;:&quot;runId&quot;,&quot;dataAttribute&quot;:&quot;data-run-id&quot;\}\]"/);
   assert.match(externalScriptTag, /data-kronos-ready-command="__kronosWebviewReady"/);
-  assert.match(externalScriptTag, /data-kronos-inline-fallback="action-panel"/);
-  assert.match(externalScriptTag, /function postKronosAction/);
+  assert.doesNotMatch(externalScriptTag, /data-kronos-inline-fallback="action-panel"/);
+  assert.doesNotMatch(externalScriptTag, /function postKronosAction/);
 
   const externalActionScript = readSourceFixture('media', webviewSecurity.WEBVIEW_ACTION_PANEL_SCRIPT);
   assert.match(externalActionScript, /document\.currentScript/);
@@ -6946,7 +6946,11 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'let data: unknown = {}',
     'let loadWarning: string | undefined',
     "loadWarning = warnUnexpectedPanelIntegrationError(e, 'Morning brief unavailable.')",
-    'buildDashboardHtml(state, data, nonce, loadWarning)',
+    'const actionScriptUri = kronosActionPanelScriptUri(panel, context.extensionUri)',
+    'buildDashboardHtml(state, data, nonce, loadWarning, actionScriptUri)',
+    "kronosActionPanelScript(nonce, 'Kronos Dashboard', true, actionScriptUri)",
+    "function openAgingReportPanel(state: KronosState, extensionUri?: vscode.Uri)",
+    "kronosActionPanelScript(nonce, 'Kronos Aging Report', true, actionScriptUri)",
     'Morning brief unavailable',
     'dashboard-warning',
     'class="kronos-shell board-shell"',
@@ -7489,7 +7493,7 @@ test('security check validates semantic webview script policy', () => {
     'function assertPanelUsesScriptableWebviewOptions',
     "assertExplicitWebviewScriptPolicy('src/extension.ts', extension)",
     "assertExplicitWebviewScriptPolicy('src/runners/sessionDispatcher.ts', dispatcher)",
-    "for (const panelId of ['kronosJiraBoard', 'kronosHumanReviewInbox', 'kronosEvidenceGate'])",
+    "for (const panelId of ['kronosJiraBoard', 'kronosDashboard', 'kronosHumanReviewInbox', 'kronosEvidenceGate', 'kronosAgingReport'])",
     'kronosScriptableWebviewOptions for media-backed scripts',
     'const webviewOptions: vscode.WebviewOptions',
   ]) {
