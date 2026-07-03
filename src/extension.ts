@@ -32,7 +32,7 @@ import { buildHumanReviewInbox } from './services/humanReviewInbox';
 import { EvidenceGateResult, evaluateEvidenceGate, evaluateEvidenceGates } from './services/evidenceGate';
 import { decideEvidenceHandoff } from './services/evidenceGatePolicy';
 import { computeAgentQualityScore } from './services/agentQualityScore';
-import { DashboardWorklistLane, buildDashboardWorklist } from './services/dashboardWorklist';
+import { DashboardWorklistItem, DashboardWorklistLane, buildDashboardWorklist } from './services/dashboardWorklist';
 import { INTEGRATION_MANIFEST_FILE, auditIntegrationManifest, readIntegrationManifest, writeIntegrationManifestSnapshot } from './services/integrationManifest';
 import { KronosProfile, listProfiles, resolveDefaultBaseBranch, resolveProfile, sanitizeBranch as sanitizeProfileBranch } from './services/profileManager';
 import { AgingThresholds, analyzeAging } from './services/agingAnalyzer';
@@ -67,7 +67,7 @@ import { buildRunCompletionNotification } from './services/runCompletionNotifica
 import { openReviewTicketEntries, reviewBranchTickets as buildReviewBranchTickets, type ReviewBranchTicket, type TicketWithOpenMergeRequest } from './services/reviewWork';
 import { decideReviewMonitorAction, type ReviewMonitorDecision } from './services/reviewMonitor';
 import { decideQueueRemoval } from './services/queueRemovalPolicy';
-import { actionButton, actionRow, kronosActionPanelScript, kronosOperatorPanelCss, normalizeActionPanelMessage, operatorCommandRow } from './services/operatorPanel';
+import { actionButton, actionRow, kronosActionPanelScript, kronosOperatorPanelCss, normalizeActionPanelMessage, operatorCommandRow, type ActionPanelMessage } from './services/operatorPanel';
 import { buildPromptHistoryHtml, buildPromptManagerHtml, buildPromptSmokeTestsHtml } from './services/promptPanelView';
 import { buildRecoveryHtml, buildStateAuditLogHtml } from './services/recoveryPanelView';
 import { buildHumanReviewInboxHtml } from './services/humanReviewPanelView';
@@ -355,6 +355,10 @@ const DASHBOARD_MESSAGE_COMMANDS = new Set([
   'humanReviewInbox',
   'evidenceGate',
   'recoveryCenter',
+  'addEvidence',
+  'addEvidenceCheck',
+  'startTicket',
+  'viewTicket',
 ]);
 const PLAN_MESSAGE_COMMANDS = new Set([
   'startPlan',
@@ -2427,7 +2431,7 @@ export function activate(context: vscode.ExtensionContext) {
               await render();
               return;
             }
-            await executeDashboardAction(request.command);
+            await executeDashboardAction(state, request);
             await render();
           }, 'Kronos dashboard action failed.');
         });
@@ -5463,7 +5467,14 @@ function dashboardBriefCount(brief: Record<string, unknown>, key: string): numbe
   return 0;
 }
 
-async function executeDashboardAction(command: string): Promise<void> {
+async function executeDashboardAction(state: KronosState, request: ActionPanelMessage): Promise<void> {
+  const command = request.command;
+  const ticketKey = request.ticket;
+  if (ticketKey && !state.state?.tickets?.[ticketKey]) {
+    vscode.window.showWarningMessage(`${ticketKey} is no longer in Kronos state.`);
+    return;
+  }
+
   if (command === 'nextBestAction') {
     await vscode.commands.executeCommand('kronos.nextBestAction');
   } else if (command === 'queuePlanner') {
@@ -5473,9 +5484,19 @@ async function executeDashboardAction(command: string): Promise<void> {
   } else if (command === 'humanReviewInbox') {
     await vscode.commands.executeCommand('kronos.humanReviewInbox');
   } else if (command === 'evidenceGate') {
-    await vscode.commands.executeCommand('kronos.evidenceGate');
+    if (ticketKey) {
+      await executeOperatorCommandAction(command, ticketKey);
+    } else {
+      await vscode.commands.executeCommand('kronos.evidenceGate');
+    }
   } else if (command === 'recoveryCenter') {
     await vscode.commands.executeCommand('kronos.recoveryCenter');
+  } else if (command === 'startTicket' && ticketKey) {
+    await startTicketFromActionPanel(state, ticketKey);
+  } else if ((command === 'viewTicket' || command === 'addEvidence' || command === 'addEvidenceCheck') && ticketKey) {
+    await executeOperatorCommandAction(command, ticketKey);
+  } else {
+    vscode.window.showWarningMessage('Ignored Kronos dashboard action without a valid target.');
   }
 }
 
@@ -5602,6 +5623,7 @@ function buildDashboardHtml(state: KronosState, brief: unknown, nonce?: string, 
   .work-item:first-child { border-top: none; }
   .work-item strong { display: block; font-size: 12px; }
   .work-item div { color: var(--k-muted); font-size: 11px; margin-top: 2px; }
+  .work-item .inline-actions { margin-top: 7px; }
   .work-item.critical strong { color: #f44336; }
   .work-item.warning strong { color: #ff9800; }
   .work-item.ok strong { color: #4caf50; }
@@ -5641,11 +5663,15 @@ function buildDashboardHtml(state: KronosState, brief: unknown, nonce?: string, 
 
 function buildDashboardWorklistHtml(lanes: DashboardWorklistLane[]): string {
   const laneHtml = lanes.map(lane => {
-    const items = lane.items.map(item => `<li class="work-item ${escapeClass(item.severity)}">
+    const items = lane.items.map(item => {
+      const actions = dashboardWorkItemActions(lane.kind, item);
+      return `<li class="work-item ${escapeClass(item.severity)}">
       <strong>${escapeHtml(item.title)}</strong>
       <div>${escapeHtml(item.detail)}</div>
       ${item.ticketKey || item.runId ? `<div>${escapeHtml([item.ticketKey, item.runId].filter(Boolean).join(' | '))}</div>` : ''}
-    </li>`).join('');
+      ${actions.length ? actionRow(actions) : ''}
+    </li>`;
+    }).join('');
     return `<div class="lane ${escapeClass(lane.kind)}">
       <h3>${escapeHtml(lane.title)}</h3>
       ${items ? `<ul>${items}</ul>` : `<div class="lane-empty">${escapeHtml(lane.emptyText)}</div>`}
@@ -5656,6 +5682,46 @@ function buildDashboardWorklistHtml(lanes: DashboardWorklistLane[]): string {
     <h3 class="kronos-section-title">Command Center</h3>
     <div class="worklists">${laneHtml}</div>
   </div>`;
+}
+
+function dashboardWorkItemActions(kind: DashboardWorklistLane['kind'], item: DashboardWorklistItem): string[] {
+  const ticket = item.ticketKey;
+  const runId = item.runId;
+  if (kind === 'needs_human') {
+    return [
+      ticket ? actionButton('viewTicket', 'View', { ticket, primary: true }) : '',
+      ticket ? actionButton('startTicket', 'Start', { ticket }) : '',
+      runId ? actionButton('runCenter', 'Run Center', { runId }) : '',
+      runId ? actionButton('recoveryCenter', 'Recovery', { runId }) : '',
+    ].filter(Boolean);
+  }
+  if (kind === 'active_runs') {
+    return [
+      runId ? actionButton('runCenter', 'Run Center', { runId }) : actionButton('runCenter', 'Run Center'),
+      ticket ? actionButton('viewTicket', 'Ticket', { ticket }) : '',
+    ].filter(Boolean);
+  }
+  if (kind === 'failing_gates') {
+    return ticket ? [
+      actionButton('evidenceGate', 'Gate', { ticket, primary: true }),
+      actionButton('addEvidenceCheck', 'Add Check', { ticket }),
+      actionButton('addEvidence', 'Add Evidence', { ticket }),
+    ] : [];
+  }
+  if (kind === 'recent_completed') {
+    return [
+      ticket ? actionButton('viewTicket', 'Review', { ticket, primary: true }) : '',
+      ticket ? actionButton('evidenceGate', 'Gate', { ticket }) : '',
+      runId ? actionButton('runCenter', 'Run Center', { runId }) : '',
+    ].filter(Boolean);
+  }
+  if (kind === 'stale_items') {
+    return ticket ? [
+      actionButton('viewTicket', 'View', { ticket, primary: true }),
+      actionButton('startTicket', 'Start', { ticket }),
+    ] : [];
+  }
+  return [];
 }
 
 function buildDiffHtml(data: MergeRequestDiffResult): string {
