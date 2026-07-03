@@ -1143,6 +1143,16 @@ test('merge request notifications summarize review status and new comment change
     severity: 'info',
     message: 'K-4D: MR !43 all MR discussions resolved.',
   });
+  assert.deepEqual(mergeRequestNotifications.describeMergeRequestStatusChange('K-4E', {
+    ...baseUpdate,
+    previousMr: { iid: 44, state: 'opened', review_status: 'pending_review', url: 'https://gitlab.example/44', unresolved_discussion_count: 1, last_discussion_at: '2026-07-02T01:00:00.000Z' },
+    ticket: ticket({
+      mr: { iid: 44, state: 'opened', review_status: 'pending_review', url: 'https://gitlab.example/44', unresolved_discussion_count: 1, last_discussion_at: '2026-07-02T02:00:00.000Z' },
+    }),
+  }), {
+    severity: 'info',
+    message: 'K-4E: MR !44 new MR discussion activity.',
+  });
   assert.equal(mergeRequestNotifications.describeMergeRequestStatusChange('K-5', {
     ...baseUpdate,
     previousMr: { iid: 5, state: 'opened', review_status: 'pending_review', url: 'https://gitlab.example/5' },
@@ -1200,6 +1210,17 @@ test('review monitor decisions route merged, closed, comment, and no-op MR polls
     kind: 'notify',
     severity: 'warning',
     message: 'K-4: MR !4 2 new unresolved MR discussions.',
+  });
+  assert.deepEqual(reviewMonitor.decideReviewMonitorAction('K-4B', {
+    ...baseUpdate,
+    previousMr: { iid: 41, state: 'opened', review_status: 'pending_review', url: 'https://gitlab.example/41', unresolved_discussion_count: 1, last_discussion_at: '2026-07-02T01:00:00.000Z' },
+    ticket: ticket({
+      mr: { iid: 41, state: 'opened', review_status: 'pending_review', url: 'https://gitlab.example/41', unresolved_discussion_count: 1, last_discussion_at: '2026-07-02T02:00:00.000Z' },
+    }),
+  }), {
+    kind: 'notify',
+    severity: 'info',
+    message: 'K-4B: MR !41 new MR discussion activity.',
   });
   assert.deepEqual(reviewMonitor.decideReviewMonitorAction('K-5', baseUpdate), {
     kind: 'none',

@@ -37,6 +37,11 @@ export function describeMergeRequestStatusChange(
     if (discussionDetail.severity === 'warning') {
       severity = 'warning';
     }
+  } else if (!commentDetail) {
+    const discussionActivity = discussionActivityDetail(previous, current);
+    if (discussionActivity) {
+      details.push(discussionActivity);
+    }
   }
 
   if (details.length === 0) {
@@ -88,6 +93,13 @@ function discussionResolutionDetail(previous: MergeRequest, current: MergeReques
       ? 'all MR discussions resolved'
       : `${resolved} MR discussion${resolved === 1 ? '' : 's'} resolved`,
   };
+}
+
+function discussionActivityDetail(previous: MergeRequest, current: MergeRequest): string | null {
+  if (previous.last_discussion_at && laterIsoTimestamp(current.last_discussion_at, previous.last_discussion_at)) {
+    return 'new MR discussion activity';
+  }
+  return null;
 }
 
 function finiteCommentCount(value: unknown): number | undefined {
