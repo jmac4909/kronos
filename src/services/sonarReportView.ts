@@ -166,7 +166,7 @@ export function buildSonarReport(input: SonarReportRenderInput): SonarReportRend
   const openSonarScript = dashboardUrl
     ? `const openSonar = document.getElementById('open-sonar');
             openSonar.addEventListener('click', function() {
-              vscode.postMessage({ command: 'openSonar' });
+              kronosVsCodeApi().postMessage({ command: 'openSonar' });
             });`
     : '';
   const html = `<!DOCTYPE html><html><head>
@@ -216,7 +216,7 @@ export function buildSonarReport(input: SonarReportRenderInput): SonarReportRend
           <script nonce="${input.nonce}">
             ${webviewVsCodeApiScript()}
             document.getElementById('fix-sonar').addEventListener('click', function() {
-              vscode.postMessage({ command: 'fixSonar' });
+              kronosVsCodeApi().postMessage({ command: 'fixSonar' });
             });
             ${openSonarScript}
           </script>

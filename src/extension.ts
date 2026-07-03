@@ -129,6 +129,15 @@ function warnUnexpectedPanelIntegrationError(error: unknown, fallback: string): 
   return detail;
 }
 
+async function runWebviewPanelAction(action: () => Promise<void> | void, fallback: string): Promise<void> {
+  try {
+    await action();
+  } catch (e: unknown) {
+    const detail = warnUnexpectedPanelIntegrationError(e, fallback);
+    vscode.window.showWarningMessage(detail);
+  }
+}
+
 function formatWebviewDateTime(value: unknown, fallback = 'N/A'): string {
   if (typeof value !== 'string' && typeof value !== 'number') { return fallback; }
   const date = new Date(value);
@@ -1684,92 +1693,94 @@ export function activate(context: vscode.ExtensionContext) {
           vscode.window.showWarningMessage('Ignored invalid Kronos board request.');
           return;
         }
-        const { command, ticket, project } = request;
+        await runWebviewPanelAction(async () => {
+          const { command, ticket, project } = request;
 
-        if (command === 'link' && hasTicket(ticket) && hasProject(project)) {
-          try {
-            linkTicketToProject(ticket, project);
-            state.reloadAndNotify();
+          if (command === 'link' && hasTicket(ticket) && hasProject(project)) {
+            try {
+              linkTicketToProject(ticket, project);
+              state.reloadAndNotify();
+              renderBoard();
+            } catch (e: unknown) {
+              vscode.window.showWarningMessage(unknownErrorMessage(e, 'Failed to link ticket.'));
+            }
+          } else if (command === 'unlink' && hasTicket(ticket) && hasProject(project)) {
+            try {
+              unlinkTicketFromProject(ticket, project);
+              state.reloadAndNotify();
+              renderBoard();
+            } catch (e: unknown) {
+              vscode.window.showWarningMessage(unknownErrorMessage(e, 'Failed to unlink ticket.'));
+            }
+          } else if (command === 'addToQueue' && hasTicket(ticket)) {
+            try {
+              const result = addTicketToQueue(ticket);
+              state.reloadAndNotify();
+              renderBoard();
+              if (result.alreadyInQueue) { vscode.window.showInformationMessage(`${ticket} is already in the queue.`); }
+            } catch (e: unknown) {
+              vscode.window.showWarningMessage(unknownErrorMessage(e, 'Failed to add ticket to queue.'));
+            }
+          } else if (command === 'removeFromQueue' && hasTicket(ticket)) {
+            await removeTicketFromQueue(state, ticket, true);
             renderBoard();
-          } catch (e: unknown) {
-            vscode.window.showWarningMessage(unknownErrorMessage(e, 'Failed to link ticket.'));
-          }
-        } else if (command === 'unlink' && hasTicket(ticket) && hasProject(project)) {
-          try {
-            unlinkTicketFromProject(ticket, project);
-            state.reloadAndNotify();
+          } else if (command === 'start' && hasTicket(ticket)) {
+            await vscode.commands.executeCommand('kronos.implement', { ticketKey: ticket });
+            return;
+          } else if (command === 'openJira' && hasTicket(ticket)) {
+            openKnownTicketUrl(ticket, 'jira');
+            return;
+          } else if (command === 'openMr' && hasTicket(ticket)) {
+            openKnownTicketUrl(ticket, 'mr');
+            return;
+          } else if (command === 'getComments' && hasTicket(ticket)) {
+            try {
+              const result = await jiraAdapter.ticketComments(state, ticket);
+              panel.webview.postMessage({ command: 'comments', ticket, data: result });
+            } catch (e: unknown) {
+              const detail = warnUnexpectedPanelIntegrationError(e, 'Could not load comments');
+              panel.webview.postMessage({ command: 'comments', ticket, data: [], error: detail });
+            }
+            return;
+          } else if (command === 'addToQueueFromModal' && hasTicket(ticket)) {
+            try {
+              const result = addTicketToQueue(ticket);
+              state.reloadAndNotify();
+              if (result.alreadyInQueue) { vscode.window.showInformationMessage(`${ticket} is already in the queue.`); }
+            } catch (e: unknown) {
+              vscode.window.showWarningMessage(unknownErrorMessage(e, 'Failed to add ticket to queue.'));
+            }
             renderBoard();
-          } catch (e: unknown) {
-            vscode.window.showWarningMessage(unknownErrorMessage(e, 'Failed to unlink ticket.'));
-          }
-        } else if (command === 'addToQueue' && hasTicket(ticket)) {
-          try {
-            const result = addTicketToQueue(ticket);
-            state.reloadAndNotify();
+            return;
+          } else if (command === 'addEvidence' && hasTicket(ticket)) {
+            await vscode.commands.executeCommand('kronos.addEvidence', { ticketKey: ticket });
             renderBoard();
-            if (result.alreadyInQueue) { vscode.window.showInformationMessage(`${ticket} is already in the queue.`); }
-          } catch (e: unknown) {
-            vscode.window.showWarningMessage(unknownErrorMessage(e, 'Failed to add ticket to queue.'));
-          }
-        } else if (command === 'removeFromQueue' && hasTicket(ticket)) {
-          await removeTicketFromQueue(state, ticket, true);
-          renderBoard();
-        } else if (command === 'start' && hasTicket(ticket)) {
-          await vscode.commands.executeCommand('kronos.implement', { ticketKey: ticket });
-          return;
-        } else if (command === 'openJira' && hasTicket(ticket)) {
-          openKnownTicketUrl(ticket, 'jira');
-          return;
-        } else if (command === 'openMr' && hasTicket(ticket)) {
-          openKnownTicketUrl(ticket, 'mr');
-          return;
-        } else if (command === 'getComments' && hasTicket(ticket)) {
-          try {
-            const result = await jiraAdapter.ticketComments(state, ticket);
-            panel.webview.postMessage({ command: 'comments', ticket, data: result });
-          } catch (e: unknown) {
-            const detail = warnUnexpectedPanelIntegrationError(e, 'Could not load comments');
-            panel.webview.postMessage({ command: 'comments', ticket, data: [], error: detail });
-          }
-          return;
-        } else if (command === 'addToQueueFromModal' && hasTicket(ticket)) {
-          try {
-            const result = addTicketToQueue(ticket);
-            state.reloadAndNotify();
-            if (result.alreadyInQueue) { vscode.window.showInformationMessage(`${ticket} is already in the queue.`); }
-          } catch (e: unknown) {
-            vscode.window.showWarningMessage(unknownErrorMessage(e, 'Failed to add ticket to queue.'));
+            return;
+          } else if (command === 'addEvidenceCheck' && hasTicket(ticket)) {
+            await vscode.commands.executeCommand('kronos.addEvidenceCheck', { ticketKey: ticket });
+            renderBoard();
+            return;
+          } else if (command === 'recordEnvironmentResult' && hasTicket(ticket)) {
+            await vscode.commands.executeCommand('kronos.recordEnvironmentResult', { ticketKey: ticket });
+            renderBoard();
+            return;
+          } else if (command === 'exportEvidence' && hasTicket(ticket)) {
+            await vscode.commands.executeCommand('kronos.exportEvidence', { ticketKey: ticket });
+            renderBoard();
+            return;
+          } else if (command === 'evidenceHandoff' && hasTicket(ticket)) {
+            await vscode.commands.executeCommand('kronos.evidenceHandoff', { ticketKey: ticket });
+            renderBoard();
+            return;
+          } else if (command === 'publishEvidence' && hasTicket(ticket)) {
+            await vscode.commands.executeCommand('kronos.publishEvidence', { ticketKey: ticket });
+            renderBoard();
+            return;
+          } else {
+            vscode.window.showWarningMessage('Ignored invalid Kronos board request.');
           }
           renderBoard();
-          return;
-        } else if (command === 'addEvidence' && hasTicket(ticket)) {
-          await vscode.commands.executeCommand('kronos.addEvidence', { ticketKey: ticket });
-          renderBoard();
-          return;
-        } else if (command === 'addEvidenceCheck' && hasTicket(ticket)) {
-          await vscode.commands.executeCommand('kronos.addEvidenceCheck', { ticketKey: ticket });
-          renderBoard();
-          return;
-        } else if (command === 'recordEnvironmentResult' && hasTicket(ticket)) {
-          await vscode.commands.executeCommand('kronos.recordEnvironmentResult', { ticketKey: ticket });
-          renderBoard();
-          return;
-        } else if (command === 'exportEvidence' && hasTicket(ticket)) {
-          await vscode.commands.executeCommand('kronos.exportEvidence', { ticketKey: ticket });
-          renderBoard();
-          return;
-        } else if (command === 'evidenceHandoff' && hasTicket(ticket)) {
-          await vscode.commands.executeCommand('kronos.evidenceHandoff', { ticketKey: ticket });
-          renderBoard();
-          return;
-        } else if (command === 'publishEvidence' && hasTicket(ticket)) {
-          await vscode.commands.executeCommand('kronos.publishEvidence', { ticketKey: ticket });
-          renderBoard();
-          return;
-        } else {
-          vscode.window.showWarningMessage('Ignored invalid Kronos board request.');
-        }
-        renderBoard();
+        }, 'Kronos board action failed.');
       });
       renderBoard();
     }),
@@ -2372,13 +2383,15 @@ export function activate(context: vscode.ExtensionContext) {
             vscode.window.showWarningMessage('Ignored invalid Kronos dashboard action.');
             return;
           }
-          if (request.command === 'refreshPanel') {
-            state.reloadAndNotify();
+          await runWebviewPanelAction(async () => {
+            if (request.command === 'refreshPanel') {
+              state.reloadAndNotify();
+              await render();
+              return;
+            }
+            await executeDashboardAction(request.command);
             await render();
-            return;
-          }
-          await executeDashboardAction(request.command);
-          await render();
+          }, 'Kronos dashboard action failed.');
         });
       } catch (e: unknown) {
         vscode.window.showErrorMessage(unknownErrorMessage(e, 'Failed to generate dashboard.'));
@@ -4034,13 +4047,15 @@ function openHumanReviewInbox(state: KronosState): void {
       vscode.window.showWarningMessage('Ignored invalid Kronos human review request.');
       return;
     }
-    if (request.command === 'refreshPanel') {
-      state.reloadAndNotify();
+    await runWebviewPanelAction(async () => {
+      if (request.command === 'refreshPanel') {
+        state.reloadAndNotify();
+        render();
+        return;
+      }
+      await executeHumanReviewAction(state, request.command, request.ticket);
       render();
-      return;
-    }
-    await executeHumanReviewAction(state, request.command, request.ticket);
-    render();
+    }, 'Kronos human review action failed.');
   });
   render();
   startActiveRunPanelRefresh(panel, state, render);
@@ -4139,17 +4154,19 @@ function openEvidenceGatePanel(
       vscode.window.showWarningMessage('Ignored invalid Kronos evidence gate request.');
       return;
     }
-    if (request.command === 'refreshPanel') {
-      state.reloadAndNotify();
+    await runWebviewPanelAction(async () => {
+      if (request.command === 'refreshPanel') {
+        state.reloadAndNotify();
+        render();
+        return;
+      }
+      if (!request.ticket || !state.state?.tickets?.[request.ticket]) {
+        vscode.window.showWarningMessage('Ignored invalid Kronos evidence gate request.');
+        return;
+      }
+      await executeEvidenceGateAction(request.command, request.ticket);
       render();
-      return;
-    }
-    if (!request.ticket || !state.state?.tickets?.[request.ticket]) {
-      vscode.window.showWarningMessage('Ignored invalid Kronos evidence gate request.');
-      return;
-    }
-    await executeEvidenceGateAction(request.command, request.ticket);
-    render();
+    }, 'Kronos evidence gate action failed.');
   });
   render();
   startActiveRunPanelRefresh(panel, state, render);
@@ -4236,7 +4253,10 @@ function attachOperatorCommandHandler(panel: vscode.WebviewPanel, webviewName = 
       vscode.window.showWarningMessage('Ignored invalid Kronos operator action.');
       return;
     }
-    await executeOperatorCommandAction(request.command, request.ticket);
+    await runWebviewPanelAction(
+      () => executeOperatorCommandAction(request.command, request.ticket),
+      'Kronos operator action failed.',
+    );
   });
 }
 
@@ -5861,7 +5881,7 @@ function setText(id, value) {
   if (el) { el.textContent = value === undefined || value === null || value === '' ? '' : String(value); }
 }
 function post(command, payload) {
-  vscode.postMessage(Object.assign({ command: command }, payload || {}));
+  kronosVsCodeApi().postMessage(Object.assign({ command: command }, payload || {}));
 }
 function showPlaceholder(el, text) {
   clearNode(el);

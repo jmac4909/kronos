@@ -547,6 +547,18 @@ export function openRunCenter(options: RunCenterOptions = {}): void {
     );
     return runs.some(run => isFreshActiveRun(run));
   };
+  const warnPanelFailure = (error: unknown, fallback: string): void => {
+    const detail = unknownErrorMessage(error, fallback);
+    console.warn(detail);
+    vscode.window.showWarningMessage(detail);
+  };
+  const safeRender = (): void => {
+    try {
+      wasActive = render();
+    } catch (e: unknown) {
+      warnPanelFailure(e, 'Kronos Run Center refresh failed.');
+    }
+  };
   let wasActive = false;
   if (interactive && options.onAction) {
     const pollIntervalMs = Math.max(1000, options.pollIntervalMs || 5000);
@@ -554,7 +566,7 @@ export function openRunCenter(options: RunCenterOptions = {}): void {
     const pollTimer = setInterval(() => {
       const hasActive = listRuns().some(run => isFreshActiveRun(run));
       if (hasActive || wasActive) {
-        wasActive = render();
+        safeRender();
       }
     }, pollIntervalMs);
     panel.onDidDispose(() => clearInterval(pollTimer));
@@ -566,14 +578,18 @@ export function openRunCenter(options: RunCenterOptions = {}): void {
         return;
       }
       if (request.command === 'refreshPanel') {
-        wasActive = render();
+        safeRender();
         return;
       }
-      await options.onAction!(request);
-      wasActive = render();
+      try {
+        await options.onAction!(request);
+      } catch (e: unknown) {
+        warnPanelFailure(e, 'Kronos Run Center action failed.');
+      }
+      safeRender();
     });
   }
-  wasActive = render();
+  safeRender();
 }
 
 export async function dispatchClaudeSession(

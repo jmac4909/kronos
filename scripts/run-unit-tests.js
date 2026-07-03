@@ -1988,7 +1988,8 @@ test('webview security injects CSP and preserves existing nonce policies', () =>
   const nonceSource = webviewSecurity.webviewCspMeta({ allowScripts: true, nonce });
   assert.match(nonceSource, new RegExp(`script-src 'nonce-${nonce}'`));
   const apiScript = webviewSecurity.webviewVsCodeApiScript();
-  assert.match(apiScript, /const vscode = \(function\(\) \{/);
+  assert.match(apiScript, /function kronosVsCodeApi\(\) \{/);
+  assert.match(apiScript, /Symbol\.for\('kronos\.vscodeApi'\)/);
   assert.match(apiScript, /typeof acquireVsCodeApi !== 'function'/);
   assert.match(apiScript, /Failed to acquire VS Code API for Kronos webview action/);
   assert.match(apiScript, /VS Code API unavailable for Kronos webview action/);
@@ -1997,11 +1998,12 @@ test('webview security injects CSP and preserves existing nonce policies', () =>
   assert.match(apiScript, /Kronos webview script error/);
   assert.match(apiScript, /Kronos webview unhandled rejection/);
   assert.doesNotMatch(apiScript, /window\.__kronosVscodeApi/);
+  assert.doesNotMatch(apiScript, /const vscode =/);
   assert.doesNotMatch(apiScript, /var vscode =/);
   assert.equal(webviewSecurity.WEBVIEW_READY_COMMAND, '__kronosWebviewReady');
   const readyScript = webviewSecurity.webviewReadyPostScript('Kronos Ready');
   assert.match(readyScript, /__kronosWebviewReady/);
-  assert.match(readyScript, /vscode\.postMessage/);
+  assert.match(readyScript, /kronosVsCodeApi\(\)\.postMessage/);
   assert.match(readyScript, /Kronos webview could not post script readiness/);
   assert.match(readyScript, /DOMContentLoaded/);
   const diagnosticBanner = webviewSecurity.webviewScriptDiagnosticBanner();
@@ -2030,6 +2032,7 @@ test('webview security injects CSP and preserves existing nonce policies', () =>
   assert.match(actionScript, /DOMContentLoaded/);
   assert.match(actionScript, /data-kronos-actions-ready/);
   assert.match(actionScript, /message\[field\.messageKey\]/);
+  assert.match(actionScript, /kronosVsCodeApi\(\)\.postMessage/);
   assert.match(actionScript, /function closestKronosActionTarget/);
   assert.match(actionScript, /target\.parentElement/);
   assert.doesNotMatch(actionScript, /instanceof Element/);
@@ -2037,8 +2040,12 @@ test('webview security injects CSP and preserves existing nonce policies', () =>
   const postedMessages = [];
   const documentListeners = {};
   const documentElementAttributes = {};
+  let acquireCalls = 0;
   const sandbox = {
-    acquireVsCodeApi: () => ({ postMessage: message => postedMessages.push(message) }),
+    acquireVsCodeApi: () => {
+      acquireCalls += 1;
+      return { postMessage: message => postedMessages.push(message) };
+    },
     console: { info() {}, warn() {}, error() {} },
     navigator: { userAgent: 'Kronos Windows Webview Test' },
     window: { addEventListener() {} },
@@ -2071,6 +2078,7 @@ test('webview security injects CSP and preserves existing nonce policies', () =>
   assert.equal(postedMessages[0].command, 'openRunRecord');
   assert.equal(postedMessages[0].ticket, 'K-1');
   assert.equal(postedMessages[0].runId, 'run-1');
+  assert.equal(acquireCalls, 1);
   defaultPrevented = false;
   const fakeTextTarget = { parentElement: fakeButton };
   documentListeners.click({ target: fakeTextTarget, preventDefault() { defaultPrevented = true; } });
@@ -2079,6 +2087,29 @@ test('webview security injects CSP and preserves existing nonce policies', () =>
   assert.equal(postedMessages[1].command, 'openRunRecord');
   assert.equal(postedMessages[1].ticket, 'K-1');
   assert.equal(postedMessages[1].runId, 'run-1');
+  assert.equal(acquireCalls, 1);
+  const duplicateListeners = [];
+  let duplicateAcquireCalls = 0;
+  const duplicateSandbox = {
+    acquireVsCodeApi: () => {
+      duplicateAcquireCalls += 1;
+      return { postMessage() {} };
+    },
+    console: { info() {}, warn() {}, error() {} },
+    navigator: { userAgent: 'Kronos Windows Webview Test' },
+    window: { addEventListener() {} },
+    document: {
+      readyState: 'complete',
+      documentElement: { setAttribute() {} },
+      addEventListener(type, handler) {
+        if (type === 'click') { duplicateListeners.push(handler); }
+      },
+    },
+  };
+  assert.doesNotThrow(() => vm.runInNewContext(`${actionScript}\n${actionScript}`, duplicateSandbox));
+  assert.equal(duplicateListeners.length, 2);
+  duplicateListeners.forEach(handler => handler({ target: fakeButton, preventDefault() {} }));
+  assert.equal(duplicateAcquireCalls, 1);
   const diagnosticActionScript = webviewSecurity.webviewActionPostScript('Kronos Actions', [
     { messageKey: 'ticket', dataAttribute: 'data-ticket' },
   ], { readyCommand: webviewSecurity.WEBVIEW_READY_COMMAND });
@@ -2511,7 +2542,7 @@ test('sonar report view renders escaped report data and command buttons', () => 
   assert.equal(report.issueList.length, 1);
   assert.equal(report.dashboardUrl, 'https://sonar.example/dashboard?id=proj%3Akey&branch=feature%2F%3Cx%3E');
   assert.match(report.html, /script nonce="nonce123"/);
-  assert.match(report.html, /vscode\.postMessage\(\{ command: 'fixSonar' \}\)/);
+  assert.match(report.html, /kronosVsCodeApi\(\)\.postMessage\(\{ command: 'fixSonar' \}\)/);
   assert.match(report.html, /Open in SonarQube/);
   assert.match(report.html, /New Duplicated Lines Density/);
   assert.match(report.html, /&lt;project&gt;/);
@@ -6321,10 +6352,10 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'function normalizeCommentsPayload',
     "console.warn('Kronos Jira Board could not parse comments payload', error)",
     "post(t.isQueued ? 'removeFromQueue' : 'addToQueueFromModal'",
-    "linkTicketToProject(ticket, project);\n            state.reloadAndNotify();\n            renderBoard();",
-    "unlinkTicketFromProject(ticket, project);\n            state.reloadAndNotify();\n            renderBoard();",
-    "const result = addTicketToQueue(ticket);\n            state.reloadAndNotify();\n            renderBoard();",
-    "await removeTicketFromQueue(state, ticket, true);\n          renderBoard();",
+    "linkTicketToProject(ticket, project);\n              state.reloadAndNotify();\n              renderBoard();",
+    "unlinkTicketFromProject(ticket, project);\n              state.reloadAndNotify();\n              renderBoard();",
+    "const result = addTicketToQueue(ticket);\n              state.reloadAndNotify();\n              renderBoard();",
+    "await removeTicketFromQueue(state, ticket, true);\n            renderBoard();",
     "unknownErrorMessage(e, 'Failed to link ticket.')",
     "unknownErrorMessage(e, 'Failed to unlink ticket.')",
     "unknownErrorMessage(e, 'Failed to add ticket to queue.')",
@@ -6346,13 +6377,21 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'normalizeActionPanelMessage(msg, EVIDENCE_GATE_MESSAGE_COMMANDS)',
     'normalizeActionPanelMessage(msg, DASHBOARD_MESSAGE_COMMANDS)',
     'normalizeActionPanelMessage(msg, AGING_REPORT_MESSAGE_COMMANDS)',
+    'async function runWebviewPanelAction',
+    "warnUnexpectedPanelIntegrationError(e, fallback)",
+    "runWebviewPanelAction(async () =>",
+    "'Kronos board action failed.'",
+    "'Kronos dashboard action failed.'",
+    "'Kronos human review action failed.'",
+    "'Kronos evidence gate action failed.'",
+    "'Kronos operator action failed.'",
     'await executeOperatorCommandAction(command, ticketKey)',
     "command === 'runCenter' || command === 'recoveryCenter' || command === 'doctor' || command === 'queuePlanner'",
     'const render = (currentChecks: DoctorCheck[]) =>',
     ".catch((e: unknown) => render([...checks, {",
     "unknownErrorMessage(e, 'Provider reachability checks failed.')",
     "request.command === 'refreshPanel'",
-    "if (request.command === 'refreshPanel') {\n      state.reloadAndNotify();\n      render();\n      return;\n    }",
+    "if (request.command === 'refreshPanel') {\n        state.reloadAndNotify();\n        render();\n        return;\n      }",
     "openEvidenceGatePanel(state, evidenceGatePanelGatesForState(state), 'Kronos Evidence Gate', { refreshAllEvidenceGates: true })",
     'options.refreshAllEvidenceGates',
     'function evidenceGatePanelGatesForState(state: KronosState): EvidenceGateResult[]',
@@ -6700,7 +6739,7 @@ test('extension webviews use shared UI shell and board filtering affordances', (
   assert.ok(evidenceGateHandlerStart >= 0 && evidenceGateHandlerEnd > evidenceGateHandlerStart, 'Evidence Gate message handler should be present');
   const evidenceGateHandlerSource = source.slice(evidenceGateHandlerStart, evidenceGateHandlerEnd);
   assert.ok(
-    evidenceGateHandlerSource.includes("if (request.command === 'refreshPanel') {\n      state.reloadAndNotify();\n      render();\n      return;\n    }"),
+    evidenceGateHandlerSource.includes("if (request.command === 'refreshPanel') {\n        state.reloadAndNotify();\n        render();\n        return;\n      }"),
     'Evidence Gate refresh should reload state before rendering',
   );
   const dashboardHandlerStart = source.indexOf('const request = normalizeActionPanelMessage(msg, DASHBOARD_MESSAGE_COMMANDS);');
@@ -6708,7 +6747,7 @@ test('extension webviews use shared UI shell and board filtering affordances', (
   assert.ok(dashboardHandlerStart >= 0 && dashboardHandlerEnd > dashboardHandlerStart, 'Dashboard message handler should be present');
   const dashboardHandlerSource = source.slice(dashboardHandlerStart, dashboardHandlerEnd);
   assert.ok(
-    dashboardHandlerSource.includes("if (request.command === 'refreshPanel') {\n            state.reloadAndNotify();\n            await render();\n            return;\n          }"),
+    dashboardHandlerSource.includes("if (request.command === 'refreshPanel') {\n              state.reloadAndNotify();\n              await render();\n              return;\n            }"),
     'Dashboard refresh should reload state before rendering',
   );
   const agingHandlerStart = source.indexOf('const request = normalizeActionPanelMessage(msg, AGING_REPORT_MESSAGE_COMMANDS);');

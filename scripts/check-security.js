@@ -381,7 +381,7 @@ for (const marker of [
   'kronos.evidenceGate',
   'openEvidenceGatePanel',
   'const EVIDENCE_GATE_MESSAGE_COMMANDS = new Set',
-  "if (request.command === 'refreshPanel') {\n      state.reloadAndNotify();\n      render();\n      return;\n    }",
+  "if (request.command === 'refreshPanel') {\n        state.reloadAndNotify();\n        render();\n        return;\n      }",
   "openEvidenceGatePanel(state, evidenceGatePanelGatesForState(state), 'Kronos Evidence Gate', { refreshAllEvidenceGates: true })",
   'options.refreshAllEvidenceGates',
   'function evidenceGatePanelGatesForState(state: KronosState): EvidenceGateResult[]',
@@ -772,7 +772,7 @@ if (evidenceGateHandlerStart < 0 || evidenceGateHandlerEnd <= evidenceGateHandle
   fail('Missing Evidence Gate message handler block.');
 }
 const evidenceGateHandlerSource = extension.slice(evidenceGateHandlerStart, evidenceGateHandlerEnd);
-if (!evidenceGateHandlerSource.includes("if (request.command === 'refreshPanel') {\n      state.reloadAndNotify();\n      render();\n      return;\n    }")) {
+if (!evidenceGateHandlerSource.includes("if (request.command === 'refreshPanel') {\n        state.reloadAndNotify();\n        render();\n        return;\n      }")) {
   fail('Evidence Gate refresh should reload state before rendering.');
 }
 const dashboardHandlerStart = extension.indexOf('const request = normalizeActionPanelMessage(msg, DASHBOARD_MESSAGE_COMMANDS);');
@@ -781,7 +781,7 @@ if (dashboardHandlerStart < 0 || dashboardHandlerEnd <= dashboardHandlerStart) {
   fail('Missing Dashboard message handler block.');
 }
 const dashboardHandlerSource = extension.slice(dashboardHandlerStart, dashboardHandlerEnd);
-if (!dashboardHandlerSource.includes("if (request.command === 'refreshPanel') {\n            state.reloadAndNotify();\n            await render();\n            return;\n          }")) {
+if (!dashboardHandlerSource.includes("if (request.command === 'refreshPanel') {\n              state.reloadAndNotify();\n              await render();\n              return;\n            }")) {
   fail('Dashboard refresh should reload state before rendering.');
 }
 const agingHandlerStart = extension.indexOf('const request = normalizeActionPanelMessage(msg, AGING_REPORT_MESSAGE_COMMANDS);');
@@ -1193,10 +1193,10 @@ for (const marker of [
   'function normalizeCommentsPayload',
   "console.warn('Kronos Jira Board could not parse comments payload', error)",
   "post(t.isQueued ? 'removeFromQueue' : 'addToQueueFromModal'",
-  "linkTicketToProject(ticket, project);\n            state.reloadAndNotify();\n            renderBoard();",
-  "unlinkTicketFromProject(ticket, project);\n            state.reloadAndNotify();\n            renderBoard();",
-  "const result = addTicketToQueue(ticket);\n            state.reloadAndNotify();\n            renderBoard();",
-  "await removeTicketFromQueue(state, ticket, true);\n          renderBoard();",
+  "linkTicketToProject(ticket, project);\n              state.reloadAndNotify();\n              renderBoard();",
+  "unlinkTicketFromProject(ticket, project);\n              state.reloadAndNotify();\n              renderBoard();",
+  "const result = addTicketToQueue(ticket);\n              state.reloadAndNotify();\n              renderBoard();",
+  "await removeTicketFromQueue(state, ticket, true);\n            renderBoard();",
   "unknownErrorMessage(e, 'Failed to link ticket.')",
   "unknownErrorMessage(e, 'Failed to unlink ticket.')",
   "unknownErrorMessage(e, 'Failed to add ticket to queue.')",
@@ -1982,7 +1982,8 @@ for (const marker of [
   'export function webviewScriptCspOptions',
   'return { allowScripts: true, nonce, cspSource }',
   'export function webviewVsCodeApiScript',
-  'const vscode = (function() {',
+  'function kronosVsCodeApi() {',
+  "Symbol.for('kronos.vscodeApi')",
   "typeof acquireVsCodeApi !== 'function'",
   "console.error('Failed to acquire VS Code API for Kronos webview action', error)",
   "document.documentElement.setAttribute('data-kronos-script-ready', 'true')",
@@ -1991,7 +1992,7 @@ for (const marker of [
   "console.error('Kronos webview unhandled rejection', webviewName",
   'export const WEBVIEW_READY_COMMAND',
   'export function webviewReadyPostScript',
-  "vscode.postMessage({ command: readyCommand",
+  "kronosVsCodeApi().postMessage({ command: readyCommand",
   "console.warn('Kronos webview could not post script readiness', error)",
   'export function webviewScriptDiagnosticBanner',
   'data-kronos-script-required',
@@ -2134,8 +2135,8 @@ for (const marker of [
   'class="kronos-shell sonar-shell"',
   'class="kronos-button primary"',
   'script nonce="${input.nonce}"',
-  "vscode.postMessage({ command: 'fixSonar' })",
-  "vscode.postMessage({ command: 'openSonar' })",
+  "kronosVsCodeApi().postMessage({ command: 'fixSonar' })",
+  "kronosVsCodeApi().postMessage({ command: 'openSonar' })",
   'issueList.slice(0, 50)',
 ]) {
   if (!sonarReportView.includes(marker)) {
