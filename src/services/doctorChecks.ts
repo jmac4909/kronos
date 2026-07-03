@@ -7,7 +7,7 @@ import { KronosProfile } from './profileManager';
 import { ProviderReachabilityOptions, ProviderReachabilityTarget, probeProviderReachability } from './providerReachability';
 import { requiredScripts } from './scriptClient';
 import { KRONOS_DIR } from './stateStore';
-import { defaultCliProbeCommandRunner, readableGoogleApplicationCredentials, resolveGcloudCommand } from './cliProbes';
+import { defaultCliProbeCommandRunner, readableGoogleApplicationCredentials, resolveGcloudCommandStatus } from './cliProbes';
 import { unknownErrorMessage } from './errorUtils';
 
 export interface DoctorCheck {
@@ -87,9 +87,12 @@ export function runDoctorChecks(input: DoctorChecksInput): DoctorCheck[] {
   commandCheck(checks, commandRunner, 'Git', 'git', ['--version']);
   claudeVersionCheck(checks, commandRunner);
   const readableGacFile = readableGoogleApplicationCredentials({ env: env as NodeJS.ProcessEnv });
-  const gcloudCommand = readableGacFile ? '' : resolveGcloudCommand({ env: env as NodeJS.ProcessEnv });
+  const gcloudResolution = readableGacFile ? undefined : resolveGcloudCommandStatus({ env: env as NodeJS.ProcessEnv });
+  const gcloudCommand = gcloudResolution?.command || '';
   if (readableGacFile) {
     add('GCloud CLI', 'pass', 'Skipped because GOOGLE_APPLICATION_CREDENTIALS points to a readable file.');
+  } else if (!gcloudResolution?.available) {
+    add('GCloud CLI', 'fail', `${gcloudCommand} unavailable; install Google Cloud SDK or set GOOGLE_APPLICATION_CREDENTIALS.`);
   } else {
     commandCheck(checks, commandRunner, 'GCloud CLI', gcloudCommand, ['--version']);
   }
@@ -103,6 +106,8 @@ export function runDoctorChecks(input: DoctorChecksInput): DoctorCheck[] {
 
   if (readableGacFile) {
     add('GCP application default auth', 'pass', 'GOOGLE_APPLICATION_CREDENTIALS file is readable; skipped gcloud token command.');
+  } else if (!gcloudResolution?.available) {
+    add('GCP application default auth', 'warn', `${gcloudCommand} unavailable; install Google Cloud SDK or set GOOGLE_APPLICATION_CREDENTIALS.`);
   } else {
     try {
       commandRunner(gcloudCommand, ['auth', 'application-default', 'print-access-token'], { timeoutMs: TOKEN_TIMEOUT_MS });

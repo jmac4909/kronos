@@ -2213,16 +2213,31 @@ test('CLI probes centralize Claude and GCloud argv checks', () => {
     ['gcloud', ['auth', 'application-default', 'print-access-token'], 10000],
   ]);
 
-  const windowsCalls = [];
-  assert.equal(cliProbes.checkGcloudApplicationDefaultAuth({
+  const missingWindowsCalls = [];
+  const missingWindowsGcloud = cliProbes.checkGcloudApplicationDefaultAuth({
     platform: 'win32',
     existsSync: () => false,
     commandRunner(command, args, options) {
-      windowsCalls.push({ command, args, options });
+      missingWindowsCalls.push({ command, args, options });
+      return commandRunner(command, args, options);
+    },
+  });
+  assert.equal(missingWindowsGcloud.ok, false);
+  assert.match(missingWindowsGcloud.error, /gcloud\.cmd unavailable/);
+  assert.deepEqual(missingWindowsCalls, []);
+
+  const pathGcloud = 'C:\\Tools\\Google Cloud SDK\\bin\\gcloud.cmd';
+  const pathWindowsCalls = [];
+  assert.equal(cliProbes.checkGcloudApplicationDefaultAuth({
+    platform: 'win32',
+    env: { Path: 'C:\\Tools\\Google Cloud SDK\\bin' },
+    existsSync: filePath => filePath === pathGcloud,
+    commandRunner(command, args, options) {
+      pathWindowsCalls.push({ command, args, options });
       return commandRunner(command, args, options);
     },
   }).ok, true);
-  assert.deepEqual(windowsCalls.map(call => [mockCommandName(call.command), call.args, call.options.timeoutMs]), [
+  assert.deepEqual(pathWindowsCalls.map(call => [mockCommandName(call.command), call.args, call.options.timeoutMs]), [
     ['gcloud', ['auth', 'application-default', 'print-access-token'], 10000],
   ]);
 });
@@ -2306,6 +2321,22 @@ test('CLI probes resolve gcloud.cmd on Windows', () => {
       existsSync: () => false,
     }),
     'gcloud.cmd',
+  );
+  assert.deepEqual(
+    cliProbes.resolveGcloudCommandStatus({
+      platform: 'win32',
+      env: {},
+      existsSync: () => false,
+    }),
+    { command: 'gcloud.cmd', available: false },
+  );
+  assert.deepEqual(
+    cliProbes.resolveGcloudCommandStatus({
+      platform: 'win32',
+      env: { Path: 'C:\\Tools\\Google Cloud SDK\\bin' },
+      existsSync: filePath => filePath === 'C:\\Tools\\Google Cloud SDK\\bin\\gcloud.cmd',
+    }),
+    { command: 'C:\\Tools\\Google Cloud SDK\\bin\\gcloud.cmd', available: true },
   );
 
   const calls = [];

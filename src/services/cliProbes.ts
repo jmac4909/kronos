@@ -26,6 +26,11 @@ export interface CliProbeResult {
   error?: string;
 }
 
+export interface CliCommandResolution {
+  command: string;
+  available: boolean;
+}
+
 const CLAUDE_AGENTS_TIMEOUT_MS = 5000;
 const GCLOUD_AUTH_TIMEOUT_MS = 10000;
 const CLAUDE_MODEL_TIMEOUT_MS = 15000;
@@ -72,18 +77,45 @@ function gcloudCandidateCommands(env: NodeJS.ProcessEnv = process.env): string[]
   ]);
 }
 
-export function resolveGcloudCommand(options: Pick<CliProbeOptions, 'platform' | 'env' | 'existsSync'> = {}): string {
+function resolveCommandOnPath(command: string, env: NodeJS.ProcessEnv, existsSync: (filePath: string) => boolean, platform: string): string | undefined {
+  const pathValue = envValue(env, ['Path', 'PATH']);
+  if (!pathValue) { return undefined; }
+  const delimiter = platform === 'win32' ? ';' : ':';
+  const dirs = pathValue.split(delimiter).map(value => value.trim()).filter(Boolean);
+  for (const dir of dirs) {
+    const candidate = platform === 'win32' ? path.win32.join(dir, command) : path.join(dir, command);
+    if (existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  return undefined;
+}
+
+export function resolveGcloudCommandStatus(options: Pick<CliProbeOptions, 'platform' | 'env' | 'existsSync'> = {}): CliCommandResolution {
   const platform = options.platform || process.platform;
   const env = options.env || process.env;
   if (platform !== 'win32') {
-    return envValue(env, ['GCLOUD_PATH']) || 'gcloud';
+    return { command: envValue(env, ['GCLOUD_PATH']) || 'gcloud', available: true };
   }
 
   const existsSync = options.existsSync || fs.existsSync;
   const candidates = gcloudCandidateCommands(env);
-  return candidates.find(candidate => /[\\/]/.test(candidate) && existsSync(candidate))
-    || candidates.find(candidate => candidate.toLowerCase() === 'gcloud.cmd')
-    || 'gcloud.cmd';
+  const explicitPath = candidates.find(candidate => /[\\/]/.test(candidate) && existsSync(candidate));
+  if (explicitPath) {
+    return { command: explicitPath, available: true };
+  }
+  const pathCommand = resolveCommandOnPath('gcloud.cmd', env, existsSync, platform);
+  if (pathCommand) {
+    return { command: pathCommand, available: true };
+  }
+  return {
+    command: candidates.find(candidate => candidate.toLowerCase() === 'gcloud.cmd') || 'gcloud.cmd',
+    available: false,
+  };
+}
+
+export function resolveGcloudCommand(options: Pick<CliProbeOptions, 'platform' | 'env' | 'existsSync'> = {}): string {
+  return resolveGcloudCommandStatus(options).command;
 }
 
 export function commandNeedsCmdWrapper(command: string, platform = process.platform): boolean {
@@ -182,7 +214,15 @@ export function checkGcloudApplicationDefaultAuth(options: CliProbeOptions = {})
       output: 'GOOGLE_APPLICATION_CREDENTIALS file is readable; skipped gcloud token command.\n',
     };
   }
-  return runCliProbe(resolveGcloudCommand(options), ['auth', 'application-default', 'print-access-token'], {
+  const resolution = resolveGcloudCommandStatus(options);
+  if (!resolution.available) {
+    return {
+      ok: false,
+      output: '',
+      error: `${resolution.command} unavailable; install Google Cloud SDK or set GOOGLE_APPLICATION_CREDENTIALS.`,
+    };
+  }
+  return runCliProbe(resolution.command, ['auth', 'application-default', 'print-access-token'], {
     ...options,
     timeoutMs: options.timeoutMs || GCLOUD_AUTH_TIMEOUT_MS,
   });
