@@ -137,6 +137,7 @@ const runStatus = require('../out/services/runStatus.js');
 const runProgress = require('../out/services/runProgress.js');
 const relativeTime = require('../out/services/relativeTime.js');
 const runAttention = require('../out/services/runAttention.js');
+const runCompletionNotification = require('../out/services/runCompletionNotification.js');
 const runCenterSort = require('../out/services/runCenterSort.js');
 const attentionBadge = require('../out/services/attentionBadge.js');
 const intervalConfig = require('../out/services/intervalConfig.js');
@@ -3905,6 +3906,50 @@ test('run attention summarizes actionable failure reasons', () => {
   }, 20), 'Run failed: xxxxx...');
 });
 
+test('run completion notifications route review-ready and attention outcomes', () => {
+  const withMr = runCompletionNotification.buildRunCompletionNotification(
+    'K-1',
+    ticket({ mr: { iid: 17, state: 'opened', review_status: 'approved', url: 'https://gitlab.example/17' } }),
+    { status: 'waiting_for_review', skill: 'implement' },
+  );
+  assert.deepEqual(withMr, {
+    kind: 'review_ready',
+    severity: 'info',
+    message: 'K-1 implement completed - MR !17 ready for review.',
+    actions: ['Open Review', 'Run Center'],
+    reviewTarget: 'mr',
+  });
+
+  const withoutMr = runCompletionNotification.buildRunCompletionNotification(
+    'K-2',
+    ticket({ mr: null }),
+    { status: 'waiting_for_review', skill: 'verify-local' },
+  );
+  assert.deepEqual(withoutMr, {
+    kind: 'review_ready',
+    severity: 'info',
+    message: 'K-2 verify-local completed - ready for review.',
+    actions: ['Open Review', 'Run Center'],
+    reviewTarget: 'ticket',
+  });
+
+  const needsHuman = runCompletionNotification.buildRunCompletionNotification(
+    'K-3',
+    ticket({}),
+    { status: 'needs_human', skill: 'implement', failureReason: 'Build failed in Jenkins' },
+  );
+  assert.equal(needsHuman.kind, 'attention');
+  assert.equal(needsHuman.severity, 'warning');
+  assert.match(needsHuman.message, /K-3 implement needs human - Build failed/);
+  assert.deepEqual(needsHuman.actions, ['Run Center']);
+
+  assert.equal(runCompletionNotification.buildRunCompletionNotification(
+    'K-4',
+    ticket({}),
+    { status: 'completed', skill: 'verify-local' },
+  ), null);
+});
+
 test('recovery center prioritizes failed runs, unsafe worktrees, doctor failures, and backups', () => {
   const inventory = recoveryCenter.buildRecoveryInventory({
     now: new Date('2026-07-01T12:00:00.000Z'),
@@ -6246,10 +6291,10 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     "import { buildRunCompletionEvidenceCheck, buildRunCompletionEvidenceText, evaluatePostRunReadiness, resolvePostRunTicket, shouldRecordRunCompletionEvidence } from './services/postRunReadiness'",
     'await showRunCompletionToast(resolvedTicketKey, ticket, run)',
     'async function showRunCompletionToast(ticketKey: string, ticket: Ticket | undefined, run: KronosRun): Promise<void>',
-    "status === 'waiting_for_review'",
-    '!isAttentionRunStatus(status)',
+    "import { buildRunCompletionNotification } from './services/runCompletionNotification'",
+    'const notification = buildRunCompletionNotification(ticketKey, ticket, run)',
+    "notification.severity === 'warning'",
     'vscode.window.showWarningMessage',
-    'runAttentionLine(run, 180)',
     "'Open Review'",
     "'Run Center'",
     "vscode.commands.executeCommand('kronos.openMrDiff'",

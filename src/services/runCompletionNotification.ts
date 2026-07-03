@@ -1,0 +1,57 @@
+import type { Ticket } from '../state/types';
+import { isAttentionRunStatus, runAttentionLine } from './runAttention';
+
+export type RunCompletionNotificationKind = 'review_ready' | 'attention';
+export type RunCompletionNotificationSeverity = 'info' | 'warning';
+export type RunCompletionReviewTarget = 'mr' | 'ticket';
+
+export interface RunCompletionNotification {
+  kind: RunCompletionNotificationKind;
+  severity: RunCompletionNotificationSeverity;
+  message: string;
+  actions: string[];
+  reviewTarget?: RunCompletionReviewTarget;
+}
+
+export function buildRunCompletionNotification(
+  ticketKey: string,
+  ticket: Ticket | undefined,
+  run: unknown,
+): RunCompletionNotification | null {
+  const record = runRecord(run);
+  const status = runString(record['status']);
+  const skill = runString(record['skill']) || 'run';
+
+  if (status === 'waiting_for_review') {
+    const hasMr = Boolean(ticket?.mr);
+    const reviewTarget = hasMr ? `MR !${ticket?.mr?.iid} ready for review` : 'ready for review';
+    return {
+      kind: 'review_ready',
+      severity: 'info',
+      message: `${ticketKey} ${skill} completed - ${reviewTarget}.`,
+      actions: ['Open Review', 'Run Center'],
+      reviewTarget: hasMr ? 'mr' : 'ticket',
+    };
+  }
+
+  if (!isAttentionRunStatus(status)) {
+    return null;
+  }
+
+  const detail = runAttentionLine(run, 180);
+  const statusLabel = status.replace(/_/g, ' ');
+  return {
+    kind: 'attention',
+    severity: 'warning',
+    message: `${ticketKey} ${skill} ${statusLabel}${detail ? ` - ${detail}` : ''}.`,
+    actions: ['Run Center'],
+  };
+}
+
+function runRecord(value: unknown): Record<string, unknown> {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value)) ? value as Record<string, unknown> : {};
+}
+
+function runString(value: unknown): string {
+  return typeof value === 'string' && value.trim() ? value.trim() : '';
+}

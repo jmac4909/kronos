@@ -61,6 +61,7 @@ import { kronosTerminalOptions } from './services/terminalProfiles';
 import { unknownErrorCode, unknownErrorMessage } from './services/errorUtils';
 import { activeRunSummary, isActiveRun } from './services/runStatus';
 import { isAttentionRunStatus, runAttentionDetail, runAttentionLine } from './services/runAttention';
+import { buildRunCompletionNotification } from './services/runCompletionNotification';
 import { openReviewTicketEntries, reviewBranchTickets as buildReviewBranchTickets, type ReviewBranchTicket, type TicketWithOpenMergeRequest } from './services/reviewWork';
 import { decideReviewMonitorAction, type ReviewMonitorDecision } from './services/reviewMonitor';
 import { decideQueueRemoval } from './services/queueRemovalPolicy';
@@ -4920,33 +4921,18 @@ function resolveDispatchTicketKey(ticketKey: string | undefined, run: KronosRun)
 }
 
 async function showRunCompletionToast(ticketKey: string, ticket: Ticket | undefined, run: KronosRun): Promise<void> {
-  const status = String(run.status || '');
-  const skill = run.skill || 'run';
-  if (status === 'waiting_for_review') {
-    const reviewTarget = ticket?.mr ? `MR !${ticket.mr.iid} ready for review` : 'ready for review';
-    const action = await vscode.window.showInformationMessage(
-      `${ticketKey} ${skill} completed - ${reviewTarget}.`,
-      'Open Review',
-      'Run Center'
-    );
-    if (action === 'Open Review') {
-      if (ticket?.mr) {
-        await vscode.commands.executeCommand('kronos.openMrDiff', { ticketKey, ticket });
-      } else {
-        await vscode.commands.executeCommand('kronos.viewTicket', { ticketKey });
-      }
-    } else if (action === 'Run Center') {
-      await vscode.commands.executeCommand('kronos.runCenter');
+  const notification = buildRunCompletionNotification(ticketKey, ticket, run);
+  if (!notification) { return; }
+  const action = notification.severity === 'warning'
+    ? await vscode.window.showWarningMessage(notification.message, ...notification.actions)
+    : await vscode.window.showInformationMessage(notification.message, ...notification.actions);
+  if (action === 'Open Review') {
+    if (notification.reviewTarget === 'mr' && ticket?.mr) {
+      await vscode.commands.executeCommand('kronos.openMrDiff', { ticketKey, ticket });
+    } else {
+      await vscode.commands.executeCommand('kronos.viewTicket', { ticketKey });
     }
-    return;
   }
-  if (!isAttentionRunStatus(status)) { return; }
-  const detail = runAttentionLine(run, 180);
-  const statusLabel = status.replace(/_/g, ' ');
-  const action = await vscode.window.showWarningMessage(
-    `${ticketKey} ${skill} ${statusLabel}${detail ? ` - ${detail}` : ''}.`,
-    'Run Center'
-  );
   if (action === 'Run Center') {
     await vscode.commands.executeCommand('kronos.runCenter');
   }

@@ -47,6 +47,7 @@ const queueRemovalPolicy = readSource('src/services/queueRemovalPolicy.ts');
 const collisionDetector = readSource('src/services/collisionDetector.ts');
 const runStatus = readSource('src/services/runStatus.ts');
 const runProgress = readSource('src/services/runProgress.ts');
+const runCompletionNotification = readSource('src/services/runCompletionNotification.ts');
 const runCenterSort = readSource('src/services/runCenterSort.ts');
 const attentionBadge = readSource('src/services/attentionBadge.ts');
 const queuePlanner = readSource('src/services/queuePlanner.ts');
@@ -566,10 +567,10 @@ for (const marker of [
   'writeRunRecord(run)',
   'await showRunCompletionToast(resolvedTicketKey, ticket, run)',
   'async function showRunCompletionToast(ticketKey: string, ticket: Ticket | undefined, run: KronosRun): Promise<void>',
-  "status === 'waiting_for_review'",
-  '!isAttentionRunStatus(status)',
+  "import { buildRunCompletionNotification } from './services/runCompletionNotification'",
+  'const notification = buildRunCompletionNotification(ticketKey, ticket, run)',
+  "notification.severity === 'warning'",
   'vscode.window.showWarningMessage',
-  'runAttentionLine(run, 180)',
   "'Open Review'",
   "'Run Center'",
   "vscode.commands.executeCommand('kronos.openMrDiff'",
@@ -2441,6 +2442,26 @@ for (const marker of [
 ]) {
   if (!runProgress.includes(marker)) {
     fail(`Missing run progress marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  'export type RunCompletionNotificationKind',
+  'export interface RunCompletionNotification',
+  'export function buildRunCompletionNotification',
+  "status === 'waiting_for_review'",
+  "kind: 'review_ready'",
+  "severity: 'info'",
+  "actions: ['Open Review', 'Run Center']",
+  "reviewTarget: hasMr ? 'mr' : 'ticket'",
+  '!isAttentionRunStatus(status)',
+  'runAttentionLine(run, 180)',
+  "kind: 'attention'",
+  "severity: 'warning'",
+  "actions: ['Run Center']",
+]) {
+  if (!runCompletionNotification.includes(marker)) {
+    fail(`Missing run completion notification marker: ${marker}`);
   }
 }
 
