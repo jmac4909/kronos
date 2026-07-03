@@ -26,7 +26,7 @@ import { sortedRunCenterRuns } from '../services/runCenterSort';
 import { readJsonFile } from '../services/jsonFiles';
 export { getAggregateStats, listSavedSessions, listSessionStoreIssues } from '../services/sessionStore';
 
-const CLAUDE_PATH = process.env.CLAUDE_PATH || 'claude';
+const CLAUDE_PATH = process.env['CLAUDE_PATH'] || 'claude';
 const CLAUDE_PERMISSION_MODE = 'acceptEdits';
 const CLAUDE_ALLOWED_TOOL_PATTERNS = [
   'Bash(git *)',
@@ -155,7 +155,7 @@ function configuredProjectJsonBaseBranch(projConfig: string): { branch?: string;
     const parsed = readJsonFile(projConfig);
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) { return {}; }
     const cfg = parsed as Record<string, unknown>;
-    const configured = cfg?.base_branch || cfg?.default_branch;
+    const configured = cfg['base_branch'] || cfg['default_branch'];
     if (typeof configured !== 'string' || !configured.trim()) { return {}; }
     const branch = sanitizeBranch(configured);
     return branch
@@ -1041,35 +1041,35 @@ function streamString(value: unknown): string {
 export function parseStreamEvent(event: unknown): ProgressEvent | null {
   const now = new Date();
   const payload = isRecord(event) ? event : {};
-  if (payload.type === 'assistant') {
+  if (payload['type'] === 'assistant') {
     const message = recordField(payload, 'message');
     for (const rawBlock of arrayField(message, 'content')) {
       const block = isRecord(rawBlock) ? rawBlock : {};
-      const blockType = streamString(block.type);
+      const blockType = streamString(block['type']);
       if (blockType === 'tool_use') {
-        const name = streamString(block.name);
+        const name = streamString(block['name']);
         const input = recordField(block, 'input');
         let label = '';
         let detail = '';
         if (name === 'Read') {
-          label = `Reading ${shortenPath(streamString(input.file_path))}`;
+          label = `Reading ${shortenPath(streamString(input['file_path']))}`;
         } else if (name === 'Edit') {
-          label = `Editing ${shortenPath(streamString(input.file_path))}`;
-          const oldString = streamString(input.old_string);
+          label = `Editing ${shortenPath(streamString(input['file_path']))}`;
+          const oldString = streamString(input['old_string']);
           detail = oldString ? `replacing: ${oldString.substring(0, 60)}...` : '';
         } else if (name === 'Write') {
-          label = `Writing ${shortenPath(streamString(input.file_path))}`;
+          label = `Writing ${shortenPath(streamString(input['file_path']))}`;
         } else if (name === 'Bash' || name === 'PowerShell') {
-          label = `Running: ${streamString(input.command).substring(0, 80)}`;
-          detail = streamString(input.description);
+          label = `Running: ${streamString(input['command']).substring(0, 80)}`;
+          detail = streamString(input['description']);
         } else if (name === 'Grep') {
-          label = `Searching for "${streamString(input.pattern)}"`;
-          const pathValue = streamString(input.path);
+          label = `Searching for "${streamString(input['pattern'])}"`;
+          const pathValue = streamString(input['path']);
           detail = pathValue ? `in ${shortenPath(pathValue)}` : '';
         } else if (name === 'Glob') {
-          label = `Finding files: ${streamString(input.pattern)}`;
+          label = `Finding files: ${streamString(input['pattern'])}`;
         } else if (name === 'Skill') {
-          label = `Invoking /${streamString(input.skill)}`;
+          label = `Invoking /${streamString(input['skill'])}`;
         } else {
           label = `${name}`;
           detail = JSON.stringify(input).substring(0, 80);
@@ -1077,22 +1077,22 @@ export function parseStreamEvent(event: unknown): ProgressEvent | null {
         return { type: 'tool', label, detail, timestamp: now };
       }
       if (blockType === 'thinking') {
-        const text = streamString(block.thinking).substring(0, 120);
+        const text = streamString(block['thinking']).substring(0, 120);
         if (text.length > 10) {
           return { type: 'thinking', label: text, detail: '', timestamp: now };
         }
       }
       if (blockType === 'text') {
-        const text = streamString(block.text).trim();
+        const text = streamString(block['text']).trim();
         if (text.length > 5) {
           return { type: 'text', label: text.substring(0, 150), detail: '', timestamp: now };
         }
       }
     }
   }
-  if (payload.type === 'result') {
-    const result = streamString(payload.result);
-    const rawDurationMs = typeof payload.duration_ms === 'number' ? payload.duration_ms : Number.NaN;
+  if (payload['type'] === 'result') {
+    const result = streamString(payload['result']);
+    const rawDurationMs = typeof payload['duration_ms'] === 'number' ? payload['duration_ms'] : Number.NaN;
     const duration = Number.isFinite(rawDurationMs) ? `${(rawDurationMs / 1000).toFixed(1)}s` : '';
     return { type: 'done', label: `Complete — ${duration}`, detail: result, timestamp: now };
   }
@@ -1276,11 +1276,13 @@ function buildRunCenterHtml(runs: KronosRun[], nonce?: string): string {
     const runEvents = Array.isArray(run.events) ? run.events : [];
     const lastEvent = runEvents[runEvents.length - 1];
     const promptMeta = isRecord(run.promptMetadata) ? run.promptMetadata : undefined;
-    const promptLabel = promptMeta?.name
-      ? `${String(promptMeta.name)} (${stringOrDefault(promptMeta.source, 'unknown')})`
-      : stringOrDefault(promptMeta?.source, 'prompt');
-    const promptHash = stringOrDefault(promptMeta?.templateHash || run.promptHash, '');
-    const missingVariables = Array.isArray(promptMeta?.missingVariables) ? promptMeta.missingVariables.map(String) : [];
+    const promptName = stringOrDefault(promptMeta?.['name'], '');
+    const promptLabel = promptName
+      ? `${promptName} (${stringOrDefault(promptMeta?.['source'], 'unknown')})`
+      : stringOrDefault(promptMeta?.['source'], 'prompt');
+    const promptHash = stringOrDefault(promptMeta?.['templateHash'] || run.promptHash, '');
+    const rawMissingVariables = promptMeta?.['missingVariables'];
+    const missingVariables = Array.isArray(rawMissingVariables) ? rawMissingVariables.map(String) : [];
     const missing = missingVariables.length ? `<br><span class="failure">missing vars: ${escapeHtml(missingVariables.join(', '))}</span>` : '';
     const readiness = isRecord(run.readiness) ? run.readiness : undefined;
     const readinessStatus = stringOrDefault(readiness?.status, 'unknown');
@@ -1290,8 +1292,10 @@ function buildRunCenterHtml(runs: KronosRun[], nonce?: string): string {
     const toolCount = Array.isArray(permissions?.allowedTools) ? permissions.allowedTools.length : 0;
     const permissionSummary = permissionMode ? `${permissionMode}${toolCount ? `, ${toolCount} tools` : ''}` : '';
     const branch = isRecord(run.branch) ? run.branch : undefined;
-    const branchSummary = branch?.currentRef
-      ? `ref ${String(branch.currentRef)}${branch.currentCommit ? ` @ ${String(branch.currentCommit).substring(0, 12)}` : ''}`
+    const currentRef = stringOrDefault(branch?.['currentRef'], '');
+    const currentCommit = stringOrDefault(branch?.['currentCommit'], '');
+    const branchSummary = currentRef
+      ? `ref ${currentRef}${currentCommit ? ` @ ${currentCommit.substring(0, 12)}` : ''}`
       : '';
     const progress = runProgressSummary(run);
     const needsAttention = status === 'failed' || status === 'needs_human' || status === 'cancelled';
