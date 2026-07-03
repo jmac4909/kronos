@@ -1274,6 +1274,7 @@ function runCenterActionButtons(run: KronosRun): string {
   const hasPrompt = Boolean(run.promptPath);
   const hasLog = Boolean(run.logPath);
   const canResume = hasPrompt || hasLog;
+  const canRetry = hasPrompt && !isFreshActiveRun(run);
   const buttons = [
     runCenterActionButton('openRunRecord', 'Record', runId),
   ];
@@ -1292,7 +1293,7 @@ function runCenterActionButtons(run: KronosRun): string {
   } else if (canResume) {
     buttons.push(runCenterActionButton('resumeRun', 'Resume', runId, status === 'failed' || status === 'needs_human'));
   }
-  if (hasPrompt) { buttons.push(runCenterActionButton('retryRun', 'Retry', runId)); }
+  if (canRetry) { buttons.push(runCenterActionButton('retryRun', 'Retry', runId)); }
   if (status !== 'needs_human') { buttons.push(runCenterActionButton('markNeedsHuman', 'Needs Human', runId)); }
   buttons.push(runCenterActionButton('archiveRun', 'Archive', runId));
   return `<div class="run-actions">${buttons.join('')}</div>`;

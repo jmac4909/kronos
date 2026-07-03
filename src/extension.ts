@@ -262,7 +262,12 @@ function startActiveRunPanelRefresh(
   panel.onDidDispose(() => clearInterval(pollTimer));
 }
 
-function startStatusBarRunRefresh(context: vscode.ExtensionContext, state: KronosState, intervalMs: number): void {
+function startBackgroundRefreshPoll(throttledRefresh: () => Promise<void>, intervalMs: number): vscode.Disposable {
+  const timer = setInterval(() => { void throttledRefresh(); }, intervalMs);
+  return { dispose: () => clearInterval(timer) };
+}
+
+function startStatusBarRunRefresh(state: KronosState, intervalMs: number): vscode.Disposable {
   const safeIntervalMs = Number.isFinite(intervalMs) && intervalMs > 0 ? intervalMs : 5000;
   let hadActiveRuns = false;
   const timer = setInterval(() => {
@@ -272,7 +277,7 @@ function startStatusBarRunRefresh(context: vscode.ExtensionContext, state: Krono
     }
     hadActiveRuns = hasActiveRuns;
   }, safeIntervalMs);
-  context.subscriptions.push({ dispose: () => clearInterval(timer) });
+  return { dispose: () => clearInterval(timer) };
 }
 
 async function startClaudeDispatch(
@@ -613,7 +618,25 @@ async function openRunArtifactFileIfExists(filePath: string | undefined, missing
   await openTextFileIfExists(resolved.filePath, missingMessage);
 }
 
+function warnIfRunStillActive(run: KronosRun, action: 'retry' | 'resume'): boolean {
+  if (!isFreshActiveRun(run)) { return false; }
+  vscode.window.showWarningMessage(`Run ${run.id} is still active. Stop it or let it finish before attempting to ${action}.`);
+  return true;
+}
+
+function isRetryableRun(run: KronosRun): boolean {
+  return !isFreshActiveRun(run) && resolveRunArtifactFile(run.promptPath).ok;
+}
+
+function isResumableRun(run: KronosRun): boolean {
+  return !isFreshActiveRun(run) && (
+    resolveRunArtifactFile(run.promptPath).ok
+    || resolveRunArtifactFile(run.logPath).ok
+  );
+}
+
 async function retryRunFromPrompt(state: KronosState, run: KronosRun): Promise<void> {
+  if (warnIfRunStillActive(run, 'retry')) { return; }
   const promptPath = resolveRunArtifactFile(run?.promptPath);
   if (!promptPath.ok) {
     warnForRunArtifactPath(promptPath, 'Run prompt artifact not found.');
@@ -662,6 +685,7 @@ function resolveRunWorkspace(run: KronosRun): string | null {
 }
 
 async function resumeSelectedRun(state: KronosState, run: KronosRun): Promise<void> {
+  if (warnIfRunStillActive(run, 'resume')) { return; }
   const workspace = resolveRunWorkspace(run);
   if (!workspace) {
     vscode.window.showWarningMessage('Run workspace no longer exists.');
@@ -1308,16 +1332,6 @@ export function activate(context: vscode.ExtensionContext) {
     reviewTree.onDidChangeNewReviewCount(updateAttentionBadge),
   );
 
-  const config = vscode.workspace.getConfiguration('kronos');
-  const sessionPollMs = configIntervalMs(config.get<number>('sessionPollIntervalMs', 5000), 5000, 1000);
-  sessionTree.startPolling(sessionPollMs);
-  queueTree.startPolling(sessionPollMs);
-
-  // Background poll (uses same throttle — won't double-refresh)
-  const pollTimer = setInterval(throttledRefresh, configIntervalSecondsMs(config.get<number>('pollIntervalSec', 300), 300, 1));
-  context.subscriptions.push({ dispose: () => clearInterval(pollTimer) });
-  startReviewAutomation(context, state);
-
   // Status bar
   statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 50);
   statusBarItem.command = 'kronos.openDashboard';
@@ -1328,7 +1342,40 @@ export function activate(context: vscode.ExtensionContext) {
   );
   statusBarItem.show();
   context.subscriptions.push(statusBarItem);
-  startStatusBarRunRefresh(context, state, sessionPollMs);
+
+  let runtimePollingDisposables: vscode.Disposable[] = [];
+  const stopRuntimePolling = () => {
+    for (const disposable of runtimePollingDisposables.splice(0)) {
+      disposable.dispose();
+    }
+  };
+  const startRuntimePolling = () => {
+    stopRuntimePolling();
+    const config = vscode.workspace.getConfiguration('kronos');
+    const sessionPollMs = configIntervalMs(config.get<number>('sessionPollIntervalMs', 5000), 5000, 1000);
+    sessionTree.startPolling(sessionPollMs);
+    queueTree.startPolling(sessionPollMs);
+    runtimePollingDisposables = [
+      startBackgroundRefreshPoll(throttledRefresh, configIntervalSecondsMs(config.get<number>('pollIntervalSec', 300), 300, 1)),
+      startReviewAutomation(state),
+      startStatusBarRunRefresh(state, sessionPollMs),
+    ];
+  };
+  startRuntimePolling();
+  context.subscriptions.push(
+    { dispose: stopRuntimePolling },
+    vscode.workspace.onDidChangeConfiguration(e => {
+      if (
+        e.affectsConfiguration('kronos.pollIntervalSec')
+        || e.affectsConfiguration('kronos.sessionPollIntervalMs')
+        || e.affectsConfiguration('kronos.reviewPollIntervalSec')
+      ) {
+        startRuntimePolling();
+        updateStatusBar(state);
+        updateAttentionBadge();
+      }
+    }),
+  );
   if (state.loadIssues.length > 0) {
     const loaded = state.state ? 'loaded with warnings' : 'could not load state.json';
     runNotificationCommandAction(
@@ -3403,7 +3450,7 @@ export function activate(context: vscode.ExtensionContext) {
     }),
 
     vscode.commands.registerCommand('kronos.retryRun', async () => {
-      const runs = listRuns().filter(run => resolveRunArtifactFile(run.promptPath).ok);
+      const runs = listRuns().filter(isRetryableRun);
       if (runs.length === 0) {
         vscode.window.showInformationMessage('No runs with saved prompt artifacts found.');
         return;
@@ -3420,7 +3467,7 @@ export function activate(context: vscode.ExtensionContext) {
     }),
 
     vscode.commands.registerCommand('kronos.resumeRun', async () => {
-      const runs = listRuns().filter(run => resolveRunArtifactFile(run.promptPath).ok || resolveRunArtifactFile(run.logPath).ok);
+      const runs = listRuns().filter(isResumableRun);
       if (runs.length === 0) {
         vscode.window.showInformationMessage('No resumable Kronos runs found.');
         return;
@@ -5243,7 +5290,7 @@ function resolveTaskId(item: unknown): string | undefined {
   return typeof taskId === 'string' && taskId.trim() ? taskId : undefined;
 }
 
-function startReviewAutomation(context: vscode.ExtensionContext, state: KronosState): void {
+function startReviewAutomation(state: KronosState): vscode.Disposable {
   const config = vscode.workspace.getConfiguration('kronos');
   const fallbackSec = positiveConfigNumber(config.get<number>('pollIntervalSec', 300), 300);
   const pollIntervalMs = configIntervalSecondsMs(config.get<number>('reviewPollIntervalSec', fallbackSec), fallbackSec, 60);
@@ -5261,7 +5308,7 @@ function startReviewAutomation(context: vscode.ExtensionContext, state: KronosSt
   };
   void poll();
   const timer = setInterval(() => { void poll(); }, pollIntervalMs);
-  context.subscriptions.push({ dispose: () => clearInterval(timer) });
+  return { dispose: () => clearInterval(timer) };
 }
 
 async function pollReviewMergeRequests(state: KronosState): Promise<void> {
