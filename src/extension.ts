@@ -59,6 +59,7 @@ import { createWebviewNonce, webviewReadyPostScript, webviewScriptCspOptions, we
 import { escapeAttr, escapeClass, escapeHtml, kronosWebviewBaseCss, safeHttpHref } from './services/webviewHtml';
 import { kronosTerminalOptions } from './services/terminalProfiles';
 import { unknownErrorCode, unknownErrorMessage } from './services/errorUtils';
+import { isKronosScriptMissingError } from './services/scriptClient';
 import { activeRunSummary, isFreshActiveRun } from './services/runStatus';
 import { isAttentionRunStatus, runAttentionDetail, runAttentionLine } from './services/runAttention';
 import { buildRunCompletionNotification } from './services/runCompletionNotification';
@@ -94,6 +95,7 @@ const LIVE_MR_DIFF_LIMIT = 4;
 const LIVE_MR_DIFF_TIMEOUT_MS = 8000;
 const REVIEW_POLL_FAILURE_NOTIFICATION_MS = 15 * 60 * 1000;
 const reviewPollFailureNotifications = new Map<string, number>();
+const OPTIONAL_SCRIPT_PANEL_WARNING = 'Kronos integration scripts are not installed. Run Kronos: Doctor for setup details.';
 
 function jsonForScript(value: unknown): string {
   const json = JSON.stringify(value) ?? 'null';
@@ -113,6 +115,18 @@ function recordFromUnknown(value: unknown): Record<string, unknown> {
 
 function stringFromUnknown(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+function panelIntegrationErrorMessage(error: unknown, fallback: string): string {
+  return isKronosScriptMissingError(error) ? OPTIONAL_SCRIPT_PANEL_WARNING : unknownErrorMessage(error, fallback);
+}
+
+function warnUnexpectedPanelIntegrationError(error: unknown, fallback: string): string {
+  const detail = panelIntegrationErrorMessage(error, fallback);
+  if (!isKronosScriptMissingError(error)) {
+    console.warn(detail);
+  }
+  return detail;
 }
 
 function formatWebviewDateTime(value: unknown, fallback = 'N/A'): string {
@@ -1653,8 +1667,7 @@ export function activate(context: vscode.ExtensionContext) {
             const result = await jiraAdapter.ticketComments(state, ticket);
             panel.webview.postMessage({ command: 'comments', ticket, data: result });
           } catch (e: unknown) {
-            const detail = unknownErrorMessage(e, 'Could not load comments');
-            console.warn(detail);
+            const detail = warnUnexpectedPanelIntegrationError(e, 'Could not load comments');
             panel.webview.postMessage({ command: 'comments', ticket, data: [], error: detail });
           }
           return;
@@ -2285,8 +2298,7 @@ export function activate(context: vscode.ExtensionContext) {
           try {
             data = await state.morningBrief();
           } catch (e: unknown) {
-            loadWarning = unknownErrorMessage(e, 'Morning brief unavailable.');
-            console.warn(loadWarning);
+            loadWarning = warnUnexpectedPanelIntegrationError(e, 'Morning brief unavailable.');
           }
           panel.webview.html = withWebviewCsp(buildDashboardHtml(state, data, nonce, loadWarning), webviewScriptCspOptions(panel.webview.cspSource, nonce));
         };

@@ -4695,13 +4695,23 @@ test('script client reports required scripts and wraps Python JSON contracts', a
   );
   await assert.rejects(
     () => scriptClient.runGitlabJson(['--project-id', 'app']),
-    /Kronos script missing/
+    error => {
+      assert.equal(scriptClient.isKronosScriptMissingError(error), true);
+      assert.equal(error.name, 'KronosScriptMissingError');
+      assert.equal(error.scriptName, 'gitlab_api.py');
+      assert.match(error.message, /Kronos script missing/);
+      return true;
+    }
   );
+  assert.equal(scriptClient.isKronosScriptMissingError(new Error('Kronos script missing: old string')), false);
 });
 
 test('script client keeps raw JSON and process errors unknown by default', () => {
   const source = readSourceFixture('src', 'services', 'scriptClient.ts');
   for (const marker of [
+    'export class KronosScriptMissingError extends Error',
+    'export function isKronosScriptMissingError(error: unknown): error is KronosScriptMissingError',
+    'throw new KronosScriptMissingError(scriptName, filePath)',
     'export async function runJsonScript<T = unknown>',
     'export function runGitlabJson<T = unknown>',
     'export function runPipelineJson<T = unknown>',
@@ -6245,7 +6255,7 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'class="kronos-shell dashboard-shell"',
     'let data: unknown = {}',
     'let loadWarning: string | undefined',
-    "loadWarning = unknownErrorMessage(e, 'Morning brief unavailable.')",
+    "loadWarning = warnUnexpectedPanelIntegrationError(e, 'Morning brief unavailable.')",
     'buildDashboardHtml(state, data, nonce, loadWarning)',
     'Morning brief unavailable',
     'dashboard-warning',
@@ -7075,7 +7085,11 @@ test('extension command handlers normalize remaining unknown errors', () => {
     "import { unknownErrorCode, unknownErrorMessage } from './services/errorUtils'",
     "unknownErrorMessage(e, 'Could not inspect project remotes for setup.')",
     "unknownErrorMessage(e, 'Failed to get next queue item.')",
-    "unknownErrorMessage(e, 'Could not load comments')",
+    "warnUnexpectedPanelIntegrationError(e, 'Could not load comments')",
+    "import { isKronosScriptMissingError } from './services/scriptClient'",
+    'const OPTIONAL_SCRIPT_PANEL_WARNING =',
+    'function warnUnexpectedPanelIntegrationError(error: unknown, fallback: string): string',
+    'if (!isKronosScriptMissingError(error))',
     "unknownErrorMessage(e, 'Failed to register project.')",
     "unknownErrorMessage(e, 'Could not load SonarQube branches.')",
     "'(default; Sonar branches unavailable)'",

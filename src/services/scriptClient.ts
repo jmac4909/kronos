@@ -20,6 +20,22 @@ export interface ScriptHealth {
   present: boolean;
 }
 
+export class KronosScriptMissingError extends Error {
+  readonly scriptName: RequiredScriptName;
+  readonly filePath: string;
+
+  constructor(scriptName: RequiredScriptName, filePath: string) {
+    super(`Kronos script missing: ${filePath}`);
+    this.name = 'KronosScriptMissingError';
+    this.scriptName = scriptName;
+    this.filePath = filePath;
+  }
+}
+
+export function isKronosScriptMissingError(error: unknown): error is KronosScriptMissingError {
+  return error instanceof KronosScriptMissingError;
+}
+
 const DEFAULT_TIMEOUT = 60000;
 const DEFAULT_BUFFER = 10 * 1024 * 1024;
 
@@ -87,7 +103,7 @@ export function runPipelineJson<T = unknown>(args: string[], options: ScriptRunO
 function assertScriptAvailable(scriptName: RequiredScriptName): string {
   const filePath = scriptPath(scriptName);
   if (!fs.existsSync(filePath)) {
-    throw new Error(`Kronos script missing: ${filePath}`);
+    throw new KronosScriptMissingError(scriptName, filePath);
   }
   return filePath;
 }
