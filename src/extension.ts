@@ -5566,7 +5566,6 @@ function buildDashboardHtml(state: KronosState, brief: unknown, nonce?: string, 
   }).join('');
 
   const completedBrief = dashboardBriefItems(safeBrief, 'completed').map((r: unknown) => escapeHtml(String(r))).join(', ');
-  const attentionBrief = dashboardBriefItems(safeBrief, 'needs_attention').map((r: unknown) => escapeHtml(String(r))).join(', ');
   const overnightActions = dashboardBriefCount(safeBrief, 'overnight_actions');
   const vpnDrops = dashboardBriefCount(safeBrief, 'vpn_drops');
   const briefHtml = overnightActions > 0
@@ -5574,12 +5573,9 @@ function buildDashboardHtml(state: KronosState, brief: unknown, nonce?: string, 
         <h3>Overnight Summary</h3>
         <p>${escapeHtml(String(overnightActions))} actions, ${escapeHtml(String(vpnDrops))} VPN drops</p>
         ${completedBrief ? `<p><strong>Completed:</strong> ${completedBrief}</p>` : ''}
-        ${attentionBrief ? `<p><strong>Needs Attention:</strong> ${attentionBrief}</p>` : ''}
       </div>`
     : '';
 
-  const readyItems = dashboardBriefItems(safeBrief, 'ready_to_go').map((r: unknown) => `<li>${escapeHtml(String(r))}</li>`).join('');
-  const attentionItems = dashboardBriefItems(safeBrief, 'needs_attention').map((r: unknown) => `<li>${escapeHtml(String(r))}</li>`).join('');
   const worklistHtml = buildDashboardWorklistHtml(worklistLanes);
   const warningHtml = loadWarning
     ? `<div class="dashboard-warning kronos-panel pad"><strong>Morning brief unavailable</strong><div>${escapeHtml(loadWarning)}</div></div>`
@@ -5628,8 +5624,6 @@ function buildDashboardHtml(state: KronosState, brief: unknown, nonce?: string, 
   .work-item.warning strong { color: #ff9800; }
   .work-item.ok strong { color: #4caf50; }
   .lane-empty { color: var(--k-muted); font-size: 12px; }
-  .dashboard-list { display: grid; gap: 7px; list-style: none; padding: 0; margin: 8px 0 0; }
-  .dashboard-list li { padding: 8px 10px; border: 1px solid var(--k-border); border-radius: var(--k-radius-sm); background: var(--k-surface-soft); }
   .dashboard-warning { margin: 12px 0; border-color: color-mix(in srgb, #ff9800 42%, var(--k-border)); color: var(--k-fg); }
   .dashboard-warning strong { display: block; margin-bottom: 4px; color: #ff9800; }
   .dashboard-warning div { color: var(--k-muted); font-size: 12px; line-height: 1.45; }
@@ -5654,9 +5648,6 @@ function buildDashboardHtml(state: KronosState, brief: unknown, nonce?: string, 
     <h3 class="kronos-section-title">Projects</h3>
     <div class="grid">${projectCards || '<div class="kronos-empty">No projects registered.</div>'}</div>
   </div>
-
-  ${attentionItems ? `<div class="section"><h3>Needs Attention</h3><ul class="dashboard-list">${attentionItems}</ul></div>` : ''}
-  ${readyItems ? `<div class="section"><h3>Ready to Implement</h3><ul class="dashboard-list">${readyItems}</ul></div>` : ''}
 </div>${nonce ? kronosActionPanelScript(nonce) : ''}</body>
 </html>`;
 }

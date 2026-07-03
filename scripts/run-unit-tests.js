@@ -7090,6 +7090,13 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     source.includes("      .then(() => {\n        state.reloadAndNotify();\n        return render();\n      })\n      .catch((e: unknown) => { warnUnexpectedPanelIntegrationError(e, 'Kronos panel auto-refresh failed.'); })"),
     'panel auto-refresh should keep state reload inside the guarded render promise',
   );
+  for (const marker of [
+    'const readyItems = dashboardBriefItems',
+    'const attentionItems = dashboardBriefItems',
+    'dashboard-list',
+  ]) {
+    assert.equal(source.includes(marker), false, `Dashboard should rely on Command Center instead of duplicate passive lists: ${marker}`);
+  }
   for (const [label, startMarker, endMarker] of [
     ['Dashboard', "vscode.commands.registerCommand('kronos.openDashboard'", "    vscode.commands.registerCommand('kronos.queueMoveUp'"],
     ['Human Review Inbox', 'function openHumanReviewInbox', 'async function executeHumanReviewAction'],
