@@ -5,9 +5,10 @@ import { AdhocTask } from '../state/types';
 export class TaskTreeProvider implements vscode.TreeDataProvider<TaskTreeItem> {
   private _onDidChangeTreeData = new vscode.EventEmitter<TaskTreeItem | undefined>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
+  private readonly stateSubscription: vscode.Disposable;
 
   constructor(private kronosState: KronosState) {
-    kronosState.onDidChange(() => this._onDidChangeTreeData.fire(undefined));
+    this.stateSubscription = kronosState.onDidChange(() => this._onDidChangeTreeData.fire(undefined));
   }
 
   getTreeItem(element: TaskTreeItem): vscode.TreeItem {
@@ -30,6 +31,11 @@ export class TaskTreeProvider implements vscode.TreeDataProvider<TaskTreeItem> {
     return Object.entries(state.adhoc_tasks).map(
       ([id, task]) => new TaskTreeItem(task.title, id, task)
     );
+  }
+
+  dispose(): void {
+    this.stateSubscription.dispose();
+    this._onDidChangeTreeData.dispose();
   }
 }
 

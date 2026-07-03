@@ -8,9 +8,10 @@ type TreeElement = ProjectItem | DetailItem | DiscoveredItem | WelcomeItem | Fol
 export class ProjectTreeProvider implements vscode.TreeDataProvider<TreeElement> {
   private _onDidChangeTreeData = new vscode.EventEmitter<TreeElement | undefined>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
+  private readonly stateSubscription: vscode.Disposable;
 
   constructor(private kronosState: KronosState) {
-    kronosState.onDidChange(() => this._onDidChangeTreeData.fire(undefined));
+    this.stateSubscription = kronosState.onDidChange(() => this._onDidChangeTreeData.fire(undefined));
   }
 
   getTreeItem(element: TreeElement): vscode.TreeItem { return element; }
@@ -71,6 +72,11 @@ export class ProjectTreeProvider implements vscode.TreeDataProvider<TreeElement>
     }
 
     return [];
+  }
+
+  dispose(): void {
+    this.stateSubscription.dispose();
+    this._onDidChangeTreeData.dispose();
   }
 }
 

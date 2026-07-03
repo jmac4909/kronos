@@ -3388,7 +3388,17 @@ export function activate(context: vscode.ExtensionContext) {
     );
   }
 
-  context.subscriptions.push({ dispose: () => { state.dispose(); sessionTree.dispose(); queueTree.dispose(); reviewTree.dispose(); } });
+  context.subscriptions.push({
+    dispose: () => {
+      projectTree.dispose();
+      ticketTree.dispose();
+      queueTree.dispose();
+      reviewTree.dispose();
+      sessionTree.dispose();
+      taskTree.dispose();
+      state.dispose();
+    },
+  });
 }
 
 async function runSetupWizard(): Promise<void> {

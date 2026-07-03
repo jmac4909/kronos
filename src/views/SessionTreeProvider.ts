@@ -17,9 +17,10 @@ export class SessionTreeProvider implements vscode.TreeDataProvider<SessionTreeI
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
   private _timer: NodeJS.Timeout | undefined;
   private _refreshing = false;
+  private readonly sessionSubscription: vscode.Disposable;
 
   constructor(private kronosState: KronosState) {
-    kronosState.onDidSessionChange(() => this._onDidChangeTreeData.fire(undefined));
+    this.sessionSubscription = kronosState.onDidSessionChange(() => this._onDidChangeTreeData.fire(undefined));
   }
 
   startPolling(intervalMs: number): void {
@@ -57,6 +58,8 @@ export class SessionTreeProvider implements vscode.TreeDataProvider<SessionTreeI
 
   dispose(): void {
     this.stopPolling();
+    this.sessionSubscription.dispose();
+    this._onDidChangeTreeData.dispose();
   }
 
   private async refreshSessionsSafely(): Promise<void> {

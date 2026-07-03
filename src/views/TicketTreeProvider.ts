@@ -12,9 +12,10 @@ export class TicketTreeProvider implements vscode.TreeDataProvider<TicketElement
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
   private filter: TicketFilter = {};
   private groupBy: TicketGroupBy = 'none';
+  private readonly stateSubscription: vscode.Disposable;
 
   constructor(private kronosState: KronosState) {
-    kronosState.onDidChange(() => this._onDidChangeTreeData.fire(undefined));
+    this.stateSubscription = kronosState.onDidChange(() => this._onDidChangeTreeData.fire(undefined));
   }
 
   getTreeItem(element: TicketElement): vscode.TreeItem { return element; }
@@ -122,6 +123,11 @@ export class TicketTreeProvider implements vscode.TreeDataProvider<TicketElement
     }
 
     return [];
+  }
+
+  dispose(): void {
+    this.stateSubscription.dispose();
+    this._onDidChangeTreeData.dispose();
   }
 }
 

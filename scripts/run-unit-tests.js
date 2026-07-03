@@ -6426,6 +6426,7 @@ test('tree providers share action labels and icons', () => {
   const queueTree = readSourceFixture('src', 'views', 'QueueTreeProvider.ts');
   const sessionTree = readSourceFixture('src', 'views', 'SessionTreeProvider.ts');
   const reviewTree = readSourceFixture('src', 'views', 'ReviewTreeProvider.ts');
+  const taskTree = readSourceFixture('src', 'views', 'TaskTreeProvider.ts');
   const extensionSource = readSourceFixture('src', 'extension.ts');
   const nextActionContext = readSourceFixture('src', 'services', 'nextActionContext.ts');
   const actionIcons = readSourceFixture('src', 'views', 'actionIcons.ts');
@@ -6444,6 +6445,18 @@ test('tree providers share action labels and icons', () => {
     'formatRelativeTime(proj.last_polled)',
   ]) {
     assert.ok(projectTree.includes(marker), marker);
+  }
+  for (const [name, source] of [
+    ['ProjectTreeProvider', projectTree],
+    ['TicketTreeProvider', ticketTree],
+    ['QueueTreeProvider', queueTree],
+    ['ReviewTreeProvider', reviewTree],
+    ['TaskTreeProvider', taskTree],
+  ]) {
+    assert.ok(source.includes('private readonly stateSubscription: vscode.Disposable'), `${name} should own its state listener`);
+    assert.ok(source.includes('this.stateSubscription = kronosState.onDidChange'), `${name} should store its state listener`);
+    assert.ok(source.includes('this.stateSubscription.dispose()'), `${name} should dispose its state listener`);
+    assert.ok(source.includes('this._onDidChangeTreeData.dispose()'), `${name} should dispose its tree event emitter`);
   }
 
   for (const marker of [
@@ -6486,6 +6499,10 @@ test('tree providers share action labels and icons', () => {
     "import { formatRunProgress } from '../services/runProgress'",
     "import { unknownErrorMessage } from '../services/errorUtils'",
     'private _refreshing = false',
+    'private readonly sessionSubscription: vscode.Disposable',
+    'this.sessionSubscription = kronosState.onDidSessionChange',
+    'this.sessionSubscription.dispose()',
+    'this._onDidChangeTreeData.dispose()',
     'const safeIntervalMs = Number.isFinite(intervalMs) && intervalMs > 0 ? intervalMs : 5000',
     'void this.refreshSessionsSafely()',
     'private async refreshSessionsSafely(): Promise<void>',
@@ -6517,6 +6534,7 @@ test('tree providers share action labels and icons', () => {
     'private scheduleSpinRefresh(): void',
     'private clearSpinTimer(): void',
     'dispose(): void',
+    'this._onDidChangeNewReviewCount.dispose()',
     'private seedInitialReviewKeys(): void',
     'this.seenReviewKeys = new Set(initialKeys)',
     "this.description = `${isNew ? 'NEW · ' : ''}",
@@ -6528,7 +6546,17 @@ test('tree providers share action labels and icons', () => {
   ]) {
     assert.ok(reviewTree.includes(marker), marker);
   }
-  assert.ok(extensionSource.includes('reviewTree.dispose()'), 'review tree timed spin timer should be disposed with the extension');
+  for (const marker of [
+    'projectTree.dispose()',
+    'ticketTree.dispose()',
+    'queueTree.dispose()',
+    'reviewTree.dispose()',
+    'sessionTree.dispose()',
+    'taskTree.dispose()',
+    'state.dispose()',
+  ]) {
+    assert.ok(extensionSource.includes(marker), marker);
+  }
   assert.equal(reviewTree.includes("ticket.mr.state === 'merged'"), false, 'review tree should not keep merged MRs in the active review inbox');
   assert.ok(actionLabels.includes('export function actionToLabel'), 'action labels should live outside queue planning');
   assert.ok(queuePlanner.includes("export { actionToLabel } from './actionLabels'"), 'queuePlanner should keep a compatibility re-export');

@@ -23,10 +23,11 @@ export class ReviewTreeProvider implements vscode.TreeDataProvider<ReviewItem> {
   private newReviewKeys = new Set<string>();
   private spinningReviewKeys = new Map<string, number>();
   private spinTimer: NodeJS.Timeout | undefined;
+  private readonly stateSubscription: vscode.Disposable;
 
   constructor(private kronosState: KronosState) {
     this.seedInitialReviewKeys();
-    kronosState.onDidChange(() => this.refresh());
+    this.stateSubscription = kronosState.onDidChange(() => this.refresh());
   }
 
   getTreeItem(element: ReviewItem): vscode.TreeItem { return element; }
@@ -175,6 +176,9 @@ export class ReviewTreeProvider implements vscode.TreeDataProvider<ReviewItem> {
 
   dispose(): void {
     this.clearSpinTimer();
+    this.stateSubscription.dispose();
+    this._onDidChangeTreeData.dispose();
+    this._onDidChangeNewReviewCount.dispose();
   }
 }
 

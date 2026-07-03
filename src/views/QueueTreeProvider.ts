@@ -12,9 +12,10 @@ export class QueueTreeProvider implements vscode.TreeDataProvider<QueueTreeItem>
   private _onDidChangeTreeData = new vscode.EventEmitter<QueueTreeItem | undefined>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
   private _timer: NodeJS.Timeout | undefined;
+  private readonly stateSubscription: vscode.Disposable;
 
   constructor(private kronosState: KronosState) {
-    kronosState.onDidChange(() => this._onDidChangeTreeData.fire(undefined));
+    this.stateSubscription = kronosState.onDidChange(() => this._onDidChangeTreeData.fire(undefined));
   }
 
   getTreeItem(element: QueueTreeItem): vscode.TreeItem {
@@ -58,6 +59,8 @@ export class QueueTreeProvider implements vscode.TreeDataProvider<QueueTreeItem>
 
   dispose(): void {
     this.stopPolling();
+    this.stateSubscription.dispose();
+    this._onDidChangeTreeData.dispose();
   }
 }
 
