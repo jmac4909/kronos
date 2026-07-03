@@ -1625,7 +1625,7 @@ for (const marker of [
   'export function requiredScripts',
   'function pythonCandidateAvailable(candidate: string): boolean',
   'Invalid JSON from',
-  'Kronos script missing',
+  'Kronos integration script unavailable:',
 ]) {
   if (!scriptClient.includes(marker)) {
     fail(`Missing script client marker: ${marker}`);

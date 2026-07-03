@@ -25,7 +25,7 @@ export class KronosScriptMissingError extends Error {
   readonly filePath: string;
 
   constructor(scriptName: RequiredScriptName, filePath: string) {
-    super(`Kronos script missing: ${filePath}`);
+    super(`${MISSING_SCRIPT_MESSAGE_PREFIX}${scriptName}. Run Kronos: Doctor for setup details.`);
     Object.setPrototypeOf(this, KronosScriptMissingError.prototype);
     this.name = 'KronosScriptMissingError';
     this.scriptName = scriptName;
@@ -47,6 +47,8 @@ export function isKronosScriptMissingError(error: unknown): error is KronosScrip
 const DEFAULT_TIMEOUT = 60000;
 const DEFAULT_BUFFER = 10 * 1024 * 1024;
 const REQUIRED_SCRIPT_NAMES = new Set<RequiredScriptName>(['kronos_state.py', 'pipeline_monitor.py', 'gitlab_api.py']);
+const MISSING_SCRIPT_MESSAGE_PREFIX = 'Kronos integration script unavailable: ';
+const MISSING_SCRIPT_MESSAGE_SUFFIX = '. Run Kronos: Doctor for setup details.';
 
 export function requiredScripts(): ScriptHealth[] {
   return Array.from(REQUIRED_SCRIPT_NAMES)
@@ -61,9 +63,15 @@ function isRequiredScriptName(value: unknown): value is RequiredScriptName {
 }
 
 function isKronosScriptMissingMessage(value: unknown): boolean {
-  if (typeof value !== 'string' || !value.startsWith('Kronos script missing: ')) { return false; }
-  const normalized = value.replace(/\\/g, '/');
-  return Array.from(REQUIRED_SCRIPT_NAMES).some(name => normalized.endsWith(`/${name}`) || normalized.endsWith(name));
+  if (typeof value !== 'string') { return false; }
+  if (value.startsWith(MISSING_SCRIPT_MESSAGE_PREFIX)) {
+    return Array.from(REQUIRED_SCRIPT_NAMES).some(name => value === `${MISSING_SCRIPT_MESSAGE_PREFIX}${name}${MISSING_SCRIPT_MESSAGE_SUFFIX}`);
+  }
+  if (value.startsWith('Kronos script missing: ')) {
+    const normalized = value.replace(/\\/g, '/');
+    return Array.from(REQUIRED_SCRIPT_NAMES).some(name => normalized.endsWith(`/${name}`) || normalized.endsWith(name));
+  }
+  return false;
 }
 
 function scriptPath(scriptName: RequiredScriptName): string {
