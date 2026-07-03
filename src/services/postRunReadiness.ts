@@ -125,7 +125,7 @@ export function buildRunCompletionEvidenceCheck(run: unknown, ticket?: Ticket): 
   const sonarStatus = ticketSonarStatus(ticket);
   const mr = ticket?.mr || undefined;
   const build = ticket?.build || undefined;
-  const strongSignal = testCount !== undefined || isPassingBuild(build) || isPassingSonar(sonarStatus);
+  const strongSignal = positiveTestCount(testCount) || isPassingBuild(build) || isPassingSonar(sonarStatus);
   const cleanRun = runCompletedForEvidence(record) && (exitCode === undefined || exitCode === 0);
   const summaryParts = [
     `run ${runId} ${status}${exitCode === undefined ? '' : ` exit ${exitCode}`}`,
@@ -381,6 +381,10 @@ function isPassingBuild(build: Ticket['build'] | undefined): boolean {
 
 function isPassingSonar(status: string | undefined): boolean {
   return ['OK', 'PASS', 'PASSED', 'SUCCESS'].includes(String(status || '').trim().toUpperCase());
+}
+
+function positiveTestCount(value: number | undefined): boolean {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0;
 }
 
 function firstStringField(record: Record<string, unknown>, keys: string[]): string | undefined {

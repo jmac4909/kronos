@@ -49,13 +49,25 @@ export function evaluateEvidenceGate(ticketKey: string, ticket: Ticket): Evidenc
 
   const testNotes = notes.filter(note => evidenceString(note, 'kind') === 'test');
   const failedEvidenceChecks = structuredChecks.filter(check => evidenceString(check, 'result') === 'fail');
-  const passingEvidenceChecks = structuredChecks.filter(check => evidenceString(check, 'result') === 'pass' || evidenceString(check, 'result') === 'warn');
+  const passingEvidenceChecks = structuredChecks.filter(check => evidenceString(check, 'result') === 'pass');
+  const warningEvidenceChecks = structuredChecks.filter(check => {
+    const result = evidenceString(check, 'result');
+    return result === 'warn' || result === 'unknown';
+  });
+  const hasPassingTestEvidence = testNotes.length > 0 || passingEvidenceChecks.length > 0;
   if (failedEvidenceChecks.length > 0) {
     checks.push(fail('test', `${failedEvidenceChecks.length} evidence check${failedEvidenceChecks.length === 1 ? '' : 's'} failed`, failedEvidenceChecks.map(check => evidenceString(check, 'name', 'unnamed check')).join('; ')));
   }
-  if (reviewReady && testNotes.length === 0 && passingEvidenceChecks.length === 0) {
-    checks.push(warn('test', 'No test evidence', 'Add at least one test/build/local verification note or structured evidence check before review.'));
-  } else if (testNotes.length > 0 || passingEvidenceChecks.length > 0) {
+  if (warningEvidenceChecks.length > 0 && (!reviewReady || hasPassingTestEvidence)) {
+    checks.push(warn('test', `${warningEvidenceChecks.length} evidence check${warningEvidenceChecks.length === 1 ? '' : 's'} need review`, warningEvidenceChecks.map(check => evidenceString(check, 'name', 'unnamed check')).join('; ')));
+  }
+  if (reviewReady && !hasPassingTestEvidence && failedEvidenceChecks.length === 0) {
+    const title = warningEvidenceChecks.length > 0 ? 'No passing test evidence' : 'No test evidence';
+    const detail = warningEvidenceChecks.length > 0
+      ? `Warning or unknown evidence checks need follow-up: ${warningEvidenceChecks.map(check => evidenceString(check, 'name', 'unnamed check')).join('; ')}.`
+      : 'Add at least one passing test/build/local verification note or structured evidence check before review.';
+    checks.push(warn('test', title, detail));
+  } else if (hasPassingTestEvidence) {
     checks.push(pass('test', `${testNotes.length + passingEvidenceChecks.length} test evidence item${testNotes.length + passingEvidenceChecks.length === 1 ? '' : 's'}`, 'Test evidence is present.'));
   }
 

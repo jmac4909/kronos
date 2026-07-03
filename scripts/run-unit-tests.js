@@ -6009,6 +6009,37 @@ test('evidence gate fails objective blockers and warns on incomplete proof', () 
   assert.equal(structuredOnly.ready, true);
   assert.ok(structuredOnly.checks.some(check => check.kind === 'notes' && check.status === 'warn' && check.title === 'No narrative evidence note'));
   assert.equal(structuredOnly.checks.some(check => check.kind === 'notes' && check.status === 'fail'), false);
+  assert.ok(structuredOnly.checks.some(check => check.kind === 'test' && check.status === 'pass'));
+
+  const warningOnlyCheck = evidenceGate.evaluateEvidenceGate('K-WARN-CHECK', ticket({
+    projects: ['app'],
+    next_action: 'await_review',
+    mr: { iid: 4, state: 'opened', review_status: 'approved', url: 'https://gitlab.example/4' },
+    build: { number: 13, status: 'SUCCESS', url: 'https://jenkins.example/13' },
+    evidence: {
+      notes: [{ at: 'now', kind: 'note', text: 'Implemented retry' }],
+      checks: [{ id: 'check-3', at: 'now', name: 'manual smoke', result: 'warn', summary: 'manual follow-up pending' }],
+    },
+  }));
+  assert.equal(warningOnlyCheck.status, 'warn');
+  assert.equal(warningOnlyCheck.ready, true);
+  assert.ok(warningOnlyCheck.checks.some(check => check.kind === 'test' && check.status === 'warn' && check.title === 'No passing test evidence'));
+  assert.equal(warningOnlyCheck.checks.some(check => check.kind === 'test' && check.status === 'pass'), false);
+
+  const unknownOnlyCheck = evidenceGate.evaluateEvidenceGate('K-UNKNOWN-CHECK', ticket({
+    projects: ['app'],
+    next_action: 'await_review',
+    mr: { iid: 5, state: 'opened', review_status: 'approved', url: 'https://gitlab.example/5' },
+    build: { number: 14, status: 'SUCCESS', url: 'https://jenkins.example/14' },
+    evidence: {
+      notes: [{ at: 'now', kind: 'note', text: 'Implemented retry' }],
+      checks: [{ id: 'check-4', at: 'now', name: 'probe inconclusive', result: 'unknown', summary: 'could not verify' }],
+    },
+  }));
+  assert.equal(unknownOnlyCheck.status, 'warn');
+  assert.equal(unknownOnlyCheck.ready, true);
+  assert.ok(unknownOnlyCheck.checks.some(check => check.kind === 'test' && check.status === 'warn' && check.title === 'No passing test evidence'));
+  assert.equal(unknownOnlyCheck.checks.some(check => check.kind === 'test' && check.status === 'pass'), false);
 });
 
 test('evidence gate tolerates malformed direct evidence entries', () => {
@@ -6236,6 +6267,32 @@ test('post-run readiness distinguishes process completion from handoff readiness
   assert.equal(weakCompletionCheck.result, 'warn');
   assert.equal(weakCompletionCheck.confidence, 'medium');
   assert.match(weakCompletionCheck.summary, /test count not captured/);
+  const zeroTestCompletionCheck = postRunReadiness.buildRunCompletionEvidenceCheck({
+    id: 'run-zero-tests',
+    status: 'completed',
+    exitCode: 0,
+    testsPassed: 0,
+  }, ticket({
+    next_action: 'await_review',
+    projects: ['app'],
+  }));
+  assert.equal(zeroTestCompletionCheck.result, 'warn');
+  assert.equal(zeroTestCompletionCheck.confidence, 'medium');
+  assert.match(zeroTestCompletionCheck.summary, /0 tests/);
+  const zeroTestWithBuildCheck = postRunReadiness.buildRunCompletionEvidenceCheck({
+    id: 'run-zero-tests-with-build',
+    status: 'completed',
+    exitCode: 0,
+    testsPassed: 0,
+  }, ticket({
+    next_action: 'await_review',
+    projects: ['app'],
+    build: { number: 15, status: 'SUCCESS', url: 'https://jenkins.example/15' },
+  }));
+  assert.equal(zeroTestWithBuildCheck.result, 'pass');
+  assert.equal(zeroTestWithBuildCheck.confidence, 'high');
+  assert.match(zeroTestWithBuildCheck.summary, /0 tests/);
+  assert.match(zeroTestWithBuildCheck.summary, /build SUCCESS #15/);
   const cleanupBlockedCompletionCheck = postRunReadiness.buildRunCompletionEvidenceCheck({
     id: 'run-cleanup-needs-human',
     status: 'needs_human',
