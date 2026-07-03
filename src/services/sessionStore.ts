@@ -136,18 +136,18 @@ function readSavedSessionFileResult(filePath: string): { session?: SavedSession;
         return { issue: invalidSessionIssue('invalid_saved_session', filePath, `Saved session ${key} must be a string.`) };
       }
     }
-    if (!Array.isArray(parsed.events)) {
+    if (!Array.isArray(parsed['events'])) {
       return { issue: invalidSessionIssue('invalid_saved_session', filePath, 'Saved session events must be an array.') };
     }
     return {
       session: {
         ...parsed,
-        id: stringOrDefault(parsed.id, 'unknown'),
-        project: stringOrDefault(parsed.project, 'unknown'),
-        skill: stringOrDefault(parsed.skill, 'unknown'),
-        ticket: stringOrDefault(parsed.ticket, ''),
-        startedAt: stringOrDefault(parsed.startedAt, ''),
-        events: normalizeSavedSessionEvents(parsed.events),
+        id: stringOrDefault(parsed['id'], 'unknown'),
+        project: stringOrDefault(parsed['project'], 'unknown'),
+        skill: stringOrDefault(parsed['skill'], 'unknown'),
+        ticket: stringOrDefault(parsed['ticket'], ''),
+        startedAt: stringOrDefault(parsed['startedAt'], ''),
+        events: normalizeSavedSessionEvents(parsed['events']),
       } as SavedSession,
     };
   } catch (e: unknown) {
@@ -170,7 +170,7 @@ function readAggregateStatsResult(): { stats?: AggregateStats; issue?: SessionSt
     if (!isRecord(stats)) {
       return { issue: invalidSessionIssue('invalid_session_stats', STATS_FILE, 'stats.json must be a JSON object.') };
     }
-    if (stats.sessions !== undefined && !Array.isArray(stats.sessions)) {
+    if (stats['sessions'] !== undefined && !Array.isArray(stats['sessions'])) {
       return { issue: invalidSessionIssue('invalid_session_stats', STATS_FILE, 'stats.sessions must be an array.') };
     }
     const { sessions, lastUpdated, ...rest } = stats;
@@ -203,28 +203,28 @@ export function normalizeSavedSessionEvents(value: unknown): SavedSessionEvent[]
 function normalizeSavedSessionEvent(value: unknown): SavedSessionEvent | null {
   if (!isRecord(value)) { return null; }
   return {
-    type: stringOrDefault(value.type, 'unknown'),
-    label: stringOrDefault(value.label, ''),
-    detail: stringOrDefault(value.detail, ''),
-    timestamp: stringOrDefault(value.timestamp, ''),
+    type: stringOrDefault(value['type'], 'unknown'),
+    label: stringOrDefault(value['label'], ''),
+    detail: stringOrDefault(value['detail'], ''),
+    timestamp: stringOrDefault(value['timestamp'], ''),
   };
 }
 
 function normalizeAggregateSession(value: unknown): AggregateSessionStats | null {
   if (!isRecord(value)) { return null; }
   return {
-    id: stringOrDefault(value.id, 'unknown'),
-    project: stringOrDefault(value.project, 'unknown'),
-    skill: stringOrDefault(value.skill, 'unknown'),
-    ticket: stringOrDefault(value.ticket, ''),
-    startedAt: stringOrDefault(value.startedAt, ''),
-    toolCalls: finiteNumber(value.toolCalls),
-    toolErrors: finiteNumber(value.toolErrors),
-    thinkingCount: finiteNumber(value.thinkingCount),
-    filesRead: finiteNumber(value.filesRead),
-    filesEdited: finiteNumber(value.filesEdited),
-    durationSec: finiteNumber(value.durationSec),
-    verdict: stringOrDefault(value.verdict, 'unknown'),
+    id: stringOrDefault(value['id'], 'unknown'),
+    project: stringOrDefault(value['project'], 'unknown'),
+    skill: stringOrDefault(value['skill'], 'unknown'),
+    ticket: stringOrDefault(value['ticket'], ''),
+    startedAt: stringOrDefault(value['startedAt'], ''),
+    toolCalls: finiteNumber(value['toolCalls']),
+    toolErrors: finiteNumber(value['toolErrors']),
+    thinkingCount: finiteNumber(value['thinkingCount']),
+    filesRead: finiteNumber(value['filesRead']),
+    filesEdited: finiteNumber(value['filesEdited']),
+    durationSec: finiteNumber(value['durationSec']),
+    verdict: stringOrDefault(value['verdict'], 'unknown'),
   };
 }
 
