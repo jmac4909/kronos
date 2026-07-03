@@ -65,7 +65,7 @@ import { buildRunCompletionNotification } from './services/runCompletionNotifica
 import { openReviewTicketEntries, reviewBranchTickets as buildReviewBranchTickets, type ReviewBranchTicket, type TicketWithOpenMergeRequest } from './services/reviewWork';
 import { decideReviewMonitorAction, type ReviewMonitorDecision } from './services/reviewMonitor';
 import { decideQueueRemoval } from './services/queueRemovalPolicy';
-import { actionButton, actionRow, kronosActionPanelScript, kronosOperatorPanelCss, operatorCommandRow } from './services/operatorPanel';
+import { actionButton, actionRow, kronosActionPanelScript, kronosOperatorPanelCss, normalizeActionPanelMessage, operatorCommandRow } from './services/operatorPanel';
 import { buildPromptHistoryHtml, buildPromptManagerHtml, buildPromptSmokeTestsHtml } from './services/promptPanelView';
 import { buildRecoveryHtml, buildStateAuditLogHtml } from './services/recoveryPanelView';
 import { buildHumanReviewInboxHtml } from './services/humanReviewPanelView';
@@ -404,19 +404,6 @@ function normalizeBoardMessage(raw: unknown): { command: string; ticket: string;
     command,
     ticket: typeof message['ticket'] === 'string' ? message['ticket'] : '',
     project: typeof message['project'] === 'string' ? message['project'] : '',
-  };
-}
-
-function normalizeActionPanelMessage(raw: unknown, allowed: Set<string>): { command: string; ticket: string; runId: string; planId: string; itemId: string } | null {
-  const command = normalizeWebviewCommand(raw, allowed);
-  if (!command) { return null; }
-  const message = recordFromUnknown(raw);
-  return {
-    command,
-    ticket: typeof message['ticket'] === 'string' ? message['ticket'] : '',
-    runId: typeof message['runId'] === 'string' ? message['runId'] : '',
-    planId: typeof message['planId'] === 'string' ? message['planId'] : '',
-    itemId: typeof message['itemId'] === 'string' ? message['itemId'] : '',
   };
 }
 

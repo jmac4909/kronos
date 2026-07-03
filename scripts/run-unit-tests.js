@@ -2073,6 +2073,35 @@ test('webview security injects CSP and preserves existing nonce policies', () =>
   assert.equal(operatorPanel.operatorCommandRow([]), '');
   assert.match(operatorPanel.actionRow([button]), /inline-actions/);
   assert.match(operatorPanel.operatorCommandRow([button]), /operator-command-row/);
+  const allowedActions = new Set(['openRunRecord']);
+  assert.deepEqual(operatorPanel.normalizeActionPanelMessage({
+    command: 'openRunRecord',
+    ticket: 'K-1',
+    runId: 'run-1',
+    planId: 'plan-1',
+    itemId: 'item-1',
+  }, allowedActions), {
+    command: 'openRunRecord',
+    ticket: 'K-1',
+    runId: 'run-1',
+    planId: 'plan-1',
+    itemId: 'item-1',
+  });
+  assert.deepEqual(operatorPanel.normalizeActionPanelMessage({
+    command: 'openRunRecord',
+    ticket: 42,
+    runId: null,
+    planId: false,
+    itemId: { id: 'bad' },
+  }, allowedActions), {
+    command: 'openRunRecord',
+    ticket: '',
+    runId: '',
+    planId: '',
+    itemId: '',
+  });
+  assert.equal(operatorPanel.normalizeActionPanelMessage({ command: 'unknown' }, allowedActions), null);
+  assert.equal(operatorPanel.normalizeActionPanelMessage(null, allowedActions), null);
   const panelScript = operatorPanel.kronosActionPanelScript('nonce123', 'Kronos Test', true);
   assert.match(panelScript, /script nonce="nonce123"/);
   assert.match(panelScript, /Kronos Test/);
@@ -6101,7 +6130,7 @@ test('extension webviews use shared UI shell and board filtering affordances', (
   const boardHandlerSource = source.slice(boardHandlerStart, boardHandlerEnd);
   for (const marker of [
     "import { createWebviewNonce, webviewReadyPostScript, webviewScriptCspOptions, webviewVsCodeApiScript, withWebviewCsp } from './services/webviewSecurity'",
-    "import { actionButton, actionRow, kronosActionPanelScript, kronosOperatorPanelCss, operatorCommandRow } from './services/operatorPanel'",
+    "import { actionButton, actionRow, kronosActionPanelScript, kronosOperatorPanelCss, normalizeActionPanelMessage, operatorCommandRow } from './services/operatorPanel'",
     "import { buildPromptHistoryHtml, buildPromptManagerHtml, buildPromptSmokeTestsHtml } from './services/promptPanelView'",
     "import { buildRecoveryHtml, buildStateAuditLogHtml } from './services/recoveryPanelView'",
     "import { buildHumanReviewInboxHtml } from './services/humanReviewPanelView'",
@@ -6161,9 +6190,9 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'const TICKET_DETAIL_MESSAGE_COMMANDS = new Set',
     'const RECOVERY_MESSAGE_COMMANDS = new Set',
     'const TICKET_SCOPED_OPERATOR_COMMANDS = new Set',
-    'function normalizeActionPanelMessage',
-    "planId: typeof message['planId'] === 'string' ? message['planId'] : ''",
-    "itemId: typeof message['itemId'] === 'string' ? message['itemId'] : ''",
+    'normalizeActionPanelMessage(msg, EVIDENCE_GATE_MESSAGE_COMMANDS)',
+    'normalizeActionPanelMessage(msg, DASHBOARD_MESSAGE_COMMANDS)',
+    'normalizeActionPanelMessage(msg, AGING_REPORT_MESSAGE_COMMANDS)',
     'await executeOperatorCommandAction(command, ticketKey)',
     "command === 'runCenter' || command === 'recoveryCenter' || command === 'doctor' || command === 'queuePlanner'",
     'const render = (currentChecks: DoctorCheck[]) =>',
@@ -6352,9 +6381,16 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'export function actionButton',
     'export function actionRow',
     'export function operatorCommandRow',
+    'export interface ActionPanelMessage',
+    'export function normalizeActionPanelMessage',
     'export function kronosActionPanelScript',
     'export function kronosOperatorPanelCss',
     'kronosWebviewBaseCss',
+    "const command = message['command']",
+    'ticket: stringField(message,',
+    'runId: stringField(message,',
+    'planId: stringField(message,',
+    'itemId: stringField(message,',
     'webviewActionPostScript(webviewName, [',
     'readyDiagnostic ? { readyCommand: WEBVIEW_READY_COMMAND } : {}',
     "{ messageKey: 'ticket', dataAttribute: 'data-ticket' }",

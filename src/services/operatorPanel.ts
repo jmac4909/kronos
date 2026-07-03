@@ -9,6 +9,14 @@ export interface ActionButtonOptions {
   primary?: boolean;
 }
 
+export interface ActionPanelMessage {
+  command: string;
+  ticket: string;
+  runId: string;
+  planId: string;
+  itemId: string;
+}
+
 export function actionButton(action: string, label: string, options: ActionButtonOptions = {}): string {
   const classes = `kronos-button${options.primary ? ' primary' : ''}`;
   const ticketAttr = options.ticket ? ` data-ticket="${escapeAttr(options.ticket)}"` : '';
@@ -28,6 +36,19 @@ export function operatorCommandRow(buttons: string[]): string {
   return buttons.length > 0
     ? `<div class="kronos-action-row operator-command-row">${buttons.join('')}</div>`
     : '';
+}
+
+export function normalizeActionPanelMessage(raw: unknown, allowed: ReadonlySet<string>): ActionPanelMessage | null {
+  const message = recordFromUnknown(raw);
+  const command = message['command'];
+  if (typeof command !== 'string' || !allowed.has(command)) { return null; }
+  return {
+    command,
+    ticket: stringField(message, 'ticket'),
+    runId: stringField(message, 'runId'),
+    planId: stringField(message, 'planId'),
+    itemId: stringField(message, 'itemId'),
+  };
 }
 
 export function kronosActionPanelScript(nonce: string, webviewName = 'Kronos action panel', readyDiagnostic = true): string {
@@ -95,4 +116,13 @@ export function kronosOperatorPanelCss(): string {
   a { color: var(--k-accent); text-decoration: none; }
   a:hover { text-decoration: underline; }
   li { margin: 4px 0; }`;
+}
+
+function recordFromUnknown(value: unknown): Record<string, unknown> {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value)) ? value as Record<string, unknown> : {};
+}
+
+function stringField(record: Record<string, unknown>, key: string): string {
+  const value = record[key];
+  return typeof value === 'string' ? value : '';
 }
