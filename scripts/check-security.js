@@ -9,6 +9,7 @@ const files = [
   'src/runners/sessionDispatcher.ts',
   'src/state/KronosState.ts',
   'src/services/scriptClient.ts',
+  'src/services/queuePlannerPanelView.ts',
   'src/views/ProjectTreeProvider.ts',
   'src/views/TicketTreeProvider.ts',
 ];
@@ -46,6 +47,7 @@ const runProgress = readSource('src/services/runProgress.ts');
 const runCenterSort = readSource('src/services/runCenterSort.ts');
 const attentionBadge = readSource('src/services/attentionBadge.ts');
 const queuePlanner = readSource('src/services/queuePlanner.ts');
+const queuePlannerPanelView = sources['src/services/queuePlannerPanelView.ts'];
 const agentQualityScore = readSource('src/services/agentQualityScore.ts');
 const integrationManifest = readSource('src/services/integrationManifest.ts');
 const profileManager = readSource('src/services/profileManager.ts');
@@ -167,6 +169,7 @@ for (const requiredIgnore of ['.git/**', '.claude/**', 'node_modules/**', 'scrip
     fail(`.vscodeignore must exclude ${requiredIgnore}`);
   }
 }
+const extensionUiSource = `${extension}\n${queuePlannerPanelView}`;
 for (const marker of [
   'function mockCommandName(command)',
   'function mockCommandLine(command, args)',
@@ -1102,7 +1105,7 @@ for (const marker of [
   'Kronos Prompt Manager',
   'Kronos Doctor',
 ]) {
-  if (!extension.includes(marker)) {
+  if (!extensionUiSource.includes(marker)) {
     fail(`Missing UI/UX marker: ${marker}`);
   }
 }
@@ -2381,6 +2384,28 @@ for (const marker of [
 }
 if (/\bany\b/.test(queuePlanner)) {
   fail('Queue planner should not use any for planner payload normalization.');
+}
+
+for (const marker of [
+  'export function buildQueuePlannerHtml',
+  'export function buildBacklogTriageHtml',
+  'export function buildProjectBatchPlanHtml',
+  'export function buildReleaseBatchPlanHtml',
+  'export function buildCollisionReportHtml',
+  'export function buildQueuePlanModeHtml',
+  'function planActionRow',
+  'function triageActionButtons',
+  "actionButton('startPlan', 'Start'",
+  "actionButton('snoozePlanToday', 'Tomorrow'",
+  "actionButton('addEvidenceCheck', 'Add Check'",
+  "import { escapeClass, escapeHtml } from './webviewHtml'",
+]) {
+  if (!queuePlannerPanelView.includes(marker)) {
+    fail(`Missing queue planner panel view marker: ${marker}`);
+  }
+}
+if (/\bany\b/.test(queuePlannerPanelView)) {
+  fail('Queue planner panel view should keep renderer payloads typed without any.');
 }
 
 for (const marker of [

@@ -63,6 +63,7 @@ const promptPanelView = require('../out/services/promptPanelView.js');
 const recoveryPanelView = require('../out/services/recoveryPanelView.js');
 const humanReviewPanelView = require('../out/services/humanReviewPanelView.js');
 const evidencePanelView = require('../out/services/evidencePanelView.js');
+const queuePlannerPanelView = require('../out/services/queuePlannerPanelView.js');
 const runStatus = require('../out/services/runStatus.js');
 const runProgress = require('../out/services/runProgress.js');
 const relativeTime = require('../out/services/relativeTime.js');
@@ -454,6 +455,33 @@ test('state store validates queue and ticket evidence shapes', () => {
   assert.throws(() => stateStore.validateStateFileShape({
     ...baseState({ 'K-9': ticket({ build: { number: '1', status: 'SUCCESS', url: 'https://jenkins.example/1' } }) }),
   }), /build\.number/);
+});
+
+test('state store reads UTF-8 BOM-prefixed JSON files from Windows tools', () => {
+  const bomState = baseState({
+    'K-BOM': ticket({ summary: 'Loaded despite BOM', next_action: 'fix_build' }),
+  });
+  const bomQueue = {
+    items: [{
+      id: 'bom-queue',
+      ticket: 'K-BOM',
+      projects: ['app'],
+      project_path: '/repo/app',
+      action: 'fix_build',
+      priority_score: 99,
+      reason: 'PowerShell-written queue file',
+    }],
+    last_computed: null,
+  };
+
+  fs.mkdirSync(path.dirname(stateStore.STATE_FILE), { recursive: true });
+  fs.writeFileSync(stateStore.STATE_FILE, `\ufeff${JSON.stringify(bomState, null, 2)}`, 'utf8');
+  fs.writeFileSync(stateStore.QUEUE_FILE, `\ufeff${JSON.stringify(bomQueue, null, 2)}`, 'utf8');
+
+  const stateResult = stateStore.readStateFileWithIssues();
+  assert.equal(stateResult.issues.length, 0);
+  assert.equal(stateResult.state.tickets['K-BOM'].summary, 'Loaded despite BOM');
+  assert.equal(stateStore.readQueueFile().items[0].id, 'bom-queue');
 });
 
 test('state store lists and restores state backups', () => {
@@ -2342,6 +2370,81 @@ test('queue planner groups recommendations into release batch plans', () => {
     assert.ok(queuePlannerSource.includes(marker), marker);
   }
   assert.equal(/\bany\b/.test(queuePlannerSource), false, 'queuePlanner should keep planner payloads typed without any');
+});
+
+test('queue planner panel view renders escaped actions for planning panels', () => {
+  const plan = {
+    planId: 'K-1:implement',
+    ticketKey: 'K-1',
+    action: 'implement',
+    projects: ['web<script>'],
+    score: 42,
+    scoreBreakdown: [{ label: 'Priority <x>', value: 10, detail: 'High & urgent' }],
+    reason: 'Implement <unsafe> & verify',
+    source: 'ticket',
+    ticketSummary: 'Summary <body>',
+  };
+  const queueHtml = queuePlannerPanelView.buildQueuePlannerHtml([plan], 'nonce-queue');
+  assert.ok(queueHtml.includes('Priority &lt;x&gt;'));
+  assert.ok(queueHtml.includes('High &amp; urgent'));
+  assert.ok(queueHtml.includes('Implement &lt;unsafe&gt; &amp; verify'));
+  assert.ok(queueHtml.includes('data-action="startPlan"'));
+  assert.ok(queueHtml.includes('data-action="snoozePlanToday"'));
+  assert.ok(queueHtml.includes('data-plan-id="K-1:implement"'));
+  assert.equal(queueHtml.includes('<script>'), false);
+
+  const backlogHtml = queuePlannerPanelView.buildBacklogTriageHtml({
+    generatedAt: '2026-07-01T12:00:00.000Z',
+    summary: { unlinked: 1, blocked: 0, build_failed: 0, review_ready: 0, evidence_gap: 1, stale: 0, ready_to_plan: 0 },
+    items: [
+      { ticketKey: 'K-HTML', summary: 'Unsafe <summary>', kind: 'unlinked', severity: 'critical', action: 'Link', projects: [], detail: 'Needs <project>' },
+      { ticketKey: 'K-EVID', summary: 'Evidence gap', kind: 'evidence_gap', severity: 'warning', action: 'Evidence', projects: ['api'], detail: 'No notes' },
+    ],
+  }, 'nonce-backlog');
+  assert.ok(backlogHtml.includes('Unsafe &lt;summary&gt;'));
+  assert.ok(backlogHtml.includes('Needs &lt;project&gt;'));
+  assert.ok(backlogHtml.includes('data-action="linkTicket"'));
+  assert.ok(backlogHtml.includes('data-action="addEvidenceCheck"'));
+
+  const projectHtml = queuePlannerPanelView.buildProjectBatchPlanHtml([
+    { project: 'web<app>', plans: [plan], totalScore: 42, estimatedMinutes: 45, actionCounts: { implement: 1 } },
+  ], 'nonce-project');
+  assert.ok(projectHtml.includes('web&lt;app&gt;'));
+  assert.ok(projectHtml.includes('To Do: 1'));
+  assert.ok(projectHtml.includes('45m'));
+
+  const releaseHtml = queuePlannerPanelView.buildReleaseBatchPlanHtml([
+    { release: '2026.07<release>', plans: [plan], totalScore: 42, estimatedMinutes: 45, actionCounts: { implement: 1 } },
+  ], 'nonce-release');
+  assert.ok(releaseHtml.includes('2026.07&lt;release&gt;'));
+  assert.ok(releaseHtml.includes('web&lt;script&gt;'));
+
+  const collisionHtml = queuePlannerPanelView.buildCollisionReportHtml([
+    { plan, collisions: [{ id: 'c1', severity: 'high', kind: 'active_run', title: 'Overlap <run>', detail: 'Same file & branch' }] },
+  ], 'nonce-collision');
+  assert.ok(collisionHtml.includes('Overlap &lt;run&gt;'));
+  assert.ok(collisionHtml.includes('Same file &amp; branch'));
+  assert.ok(collisionHtml.includes('data-action="startPlan"'));
+
+  const windowHtml = queuePlannerPanelView.buildQueuePlanModeHtml('Plan <Now>', '2 <hours>', [plan], 'nonce-window');
+  assert.ok(windowHtml.includes('Plan &lt;Now&gt;'));
+  assert.ok(windowHtml.includes('2 &lt;hours&gt;'));
+
+  const source = readSourceFixture('src', 'services', 'queuePlannerPanelView.ts');
+  for (const marker of [
+    'export function buildQueuePlannerHtml',
+    'export function buildBacklogTriageHtml',
+    'export function buildProjectBatchPlanHtml',
+    'export function buildReleaseBatchPlanHtml',
+    'export function buildCollisionReportHtml',
+    'export function buildQueuePlanModeHtml',
+    'function planActionRow',
+    'function triageActionButtons',
+    "import { escapeClass, escapeHtml } from './webviewHtml'",
+  ]) {
+    assert.ok(source.includes(marker), marker);
+  }
+  assert.equal(/\bany\b/.test(source), false, 'queuePlannerPanelView should keep renderer payloads typed without any');
 });
 
 test('ticket filters match operator search facets and grouped views', () => {
@@ -5313,6 +5416,8 @@ test('extension webviews use shared UI shell and board filtering affordances', (
   const recoveryPanelViewSource = readSourceFixture('src', 'services', 'recoveryPanelView.ts');
   const humanReviewPanelViewSource = readSourceFixture('src', 'services', 'humanReviewPanelView.ts');
   const evidencePanelViewSource = readSourceFixture('src', 'services', 'evidencePanelView.ts');
+  const queuePlannerPanelViewSource = readSourceFixture('src', 'services', 'queuePlannerPanelView.ts');
+  const uiSource = `${source}\n${queuePlannerPanelViewSource}`;
   const boardHandlerStart = source.indexOf('panel.webview.onDidReceiveMessage(async (msg) => {\n        if (logReady(msg)) { return; }\n        const request = normalizeBoardMessage(msg);');
   const boardHandlerEnd = source.indexOf("    vscode.commands.registerCommand('kronos.viewTicket'", boardHandlerStart);
   assert.ok(boardHandlerStart >= 0 && boardHandlerEnd > boardHandlerStart, 'Jira board message handler should be present');
@@ -5324,6 +5429,7 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     "import { buildRecoveryHtml, buildStateAuditLogHtml } from './services/recoveryPanelView'",
     "import { buildHumanReviewInboxHtml } from './services/humanReviewPanelView'",
     "import { buildEvidenceGateHtml, buildEvidenceHandoffHtml, buildEvidencePublishHtml } from './services/evidencePanelView'",
+    "import { buildBacklogTriageHtml, buildCollisionReportHtml, buildProjectBatchPlanHtml, buildQueuePlanModeHtml, buildQueuePlannerHtml, buildReleaseBatchPlanHtml } from './services/queuePlannerPanelView'",
     "import { createWebviewReadyMonitor } from './services/webviewDiagnostics'",
     'const nonce = createWebviewNonce()',
     'webviewScriptCspOptions(panel.webview.cspSource, nonce)',
@@ -5506,9 +5612,7 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'function runQuickPickDetail',
     'This Kronos action needs a ticket context.',
     "if (command === 'evidenceGate' && ticketKey)",
-    'function planActionRow',
     'function executePlanPanelAction',
-    'function triageActionButtons',
     'function executeBacklogTriageAction',
     'function executeDashboardAction',
     'function buildRecoveryInventoryForState',
@@ -5541,7 +5645,7 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'Kronos Prompt Manager',
     'Kronos Doctor',
   ]) {
-    assert.ok(source.includes(marker), marker);
+    assert.ok(uiSource.includes(marker), marker);
   }
   for (const marker of [
     'export function actionButton',

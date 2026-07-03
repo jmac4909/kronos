@@ -75,7 +75,7 @@ const VALID_QUEUE_ACTION_SET = new Set<string>(VALID_QUEUE_ACTIONS);
 
 export function readStateFile(): KronosState | null {
   if (!fs.existsSync(STATE_FILE)) { return null; }
-  const raw = JSON.parse(fs.readFileSync(STATE_FILE, 'utf-8'));
+  const raw = readJsonFile(STATE_FILE);
   const migrated = migrateStateFileShape(raw);
   validateStateFileShape(migrated);
   return migrated;
@@ -84,7 +84,7 @@ export function readStateFile(): KronosState | null {
 export function readStateFileWithIssues(): StateFileReadResult {
   if (!fs.existsSync(STATE_FILE)) { return { state: null, issues: [] }; }
   try {
-    const raw = JSON.parse(fs.readFileSync(STATE_FILE, 'utf-8'));
+    const raw = readJsonFile(STATE_FILE);
     const migrated = migrateStateFileShape(raw);
     const issues = repairStateForUi(migrated);
     try {
@@ -111,10 +111,18 @@ export function readStateFileWithIssues(): StateFileReadResult {
 
 export function readQueueFile(): QueueState | null {
   if (!fs.existsSync(QUEUE_FILE)) { return null; }
-  const raw = JSON.parse(fs.readFileSync(QUEUE_FILE, 'utf-8'));
+  const raw = readJsonFile(QUEUE_FILE);
   const migrated = migrateQueueFileShape(raw);
   validateQueueState(migrated);
   return migrated;
+}
+
+function readJsonFile(filePath: string): unknown {
+  return JSON.parse(stripUtf8Bom(fs.readFileSync(filePath, 'utf-8')));
+}
+
+function stripUtf8Bom(content: string): string {
+  return content.charCodeAt(0) === 0xFEFF ? content.slice(1) : content;
 }
 
 export function migrateStateFileShape(raw: unknown): KronosState {
