@@ -91,7 +91,7 @@ const LIVE_MR_DIFF_LIMIT = 4;
 const LIVE_MR_DIFF_TIMEOUT_MS = 8000;
 
 function jsonForScript(value: unknown): string {
-  const json = JSON.stringify(value);
+  const json = JSON.stringify(value) ?? 'null';
   const replacements: Record<string, string> = {
     '<': '\\u003c',
     '>': '\\u003e',
@@ -99,7 +99,7 @@ function jsonForScript(value: unknown): string {
     '\u2028': '\\u2028',
     '\u2029': '\\u2029',
   };
-  return json.replace(/[<>&\u2028\u2029]/g, c => replacements[c]);
+  return json.replace(/[<>&\u2028\u2029]/g, c => replacements[c] ?? c);
 }
 
 function recordFromUnknown(value: unknown): Record<string, unknown> {
@@ -167,6 +167,7 @@ function notifyNewReviewItems(reviewTree: ReviewTreeProvider, notifiedReviewKeys
   if (freshItems.length === 0) { return; }
 
   const primary = freshItems[0];
+  if (!primary) { return; }
   const mr = primary.mrIid !== undefined ? `MR !${primary.mrIid}` : 'MR';
   const suffix = freshItems.length > 1 ? ` (+${freshItems.length - 1} more)` : '';
   runNotificationCommandAction(
@@ -1013,8 +1014,10 @@ function loadEnvFile(): void {
       const trimmed = line.trim();
       if (trimmed && !trimmed.startsWith('#') && trimmed.includes('=')) {
         const [k, ...rest] = trimmed.split('=');
+        const key = k?.trim();
+        if (!key) { continue; }
         const val = rest.join('=').trim().replace(/^["']|["']$/g, '');
-        if (!process.env[k.trim()]) { process.env[k.trim()] = val; }
+        if (!process.env[key]) { process.env[key] = val; }
       }
     }
   } catch (e: unknown) {
@@ -2306,7 +2309,9 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.window.showWarningMessage(`${ticketKey} is not linked to any project.`);
         return;
       } else if (projs.length === 1) {
-        projectName = projs[0];
+        const onlyProject = projs[0];
+        if (!onlyProject) { return; }
+        projectName = onlyProject;
       } else {
         const pick = await vscode.window.showQuickPick(projs.map(p => ({ label: p })), { placeHolder: `Verify ${ticketKey} in which project?` });
         if (!pick) { return; }
@@ -2615,7 +2620,10 @@ export function activate(context: vscode.ExtensionContext) {
       let projectName = resolveProjectName(state, item);
       if (!projectName || !state.state) {
         const projects = Object.keys(state.state?.projects || {});
-        if (projects.length === 1) { projectName = projects[0]; }
+        if (projects.length === 1) {
+          projectName = projects[0];
+          if (!projectName) { return; }
+        }
         else {
           const pick = await vscode.window.showQuickPick(projects.map(p => ({ label: p })), { placeHolder: 'Verify develop for which project?' });
           if (!pick) { return; }
@@ -2811,7 +2819,11 @@ export function activate(context: vscode.ExtensionContext) {
       const projs = ticket?.projects || [];
       let projectName: string;
       if (projs.length === 0) { return; }
-      else if (projs.length === 1) { projectName = projs[0]; }
+      else if (projs.length === 1) {
+        const onlyProject = projs[0];
+        if (!onlyProject) { return; }
+        projectName = onlyProject;
+      }
       else {
         const pick = await vscode.window.showQuickPick(projs.map(p => ({ label: p })), { placeHolder: `Send back ${ticketKey} to which project?` });
         if (!pick) { return; }
@@ -3064,8 +3076,9 @@ export function activate(context: vscode.ExtensionContext) {
 
       const bySkill: Record<string, typeof sessions> = {};
       for (const s of sessions) {
-        if (!bySkill[s.skill]) { bySkill[s.skill] = []; }
-        bySkill[s.skill].push(s);
+        const bucket = bySkill[s.skill] || [];
+        bucket.push(s);
+        bySkill[s.skill] = bucket;
       }
 
       const skillRows = Object.entries(bySkill).map(([skill, items]) => {
@@ -5120,18 +5133,23 @@ async function pickProjectFromTickets<T extends { key: string; projects: string[
   const byProject: Record<string, T[]> = {};
   for (const t of tickets) {
     for (const p of t.projects) {
-      if (!byProject[p]) { byProject[p] = []; }
-      if (!byProject[p].some(x => x.key === t.key)) { byProject[p].push(t); }
+      const bucket = byProject[p] || [];
+      if (!bucket.some(x => x.key === t.key)) { bucket.push(t); }
+      byProject[p] = bucket;
     }
   }
 
   let projectName: string;
   const projectNames = Object.keys(byProject);
   if (projectNames.length === 0) { return null; }
-  if (projectNames.length === 1) { projectName = projectNames[0]; }
+  if (projectNames.length === 1) {
+    const onlyProject = projectNames[0];
+    if (!onlyProject) { return null; }
+    projectName = onlyProject;
+  }
   else {
     const pick = await vscode.window.showQuickPick(
-      projectNames.map(p => ({ label: p, description: `${byProject[p].length} ${countLabel}` })),
+      projectNames.map(p => ({ label: p, description: `${(byProject[p] || []).length} ${countLabel}` })),
       { placeHolder }
     );
     if (!pick) { return null; }
@@ -5141,7 +5159,7 @@ async function pickProjectFromTickets<T extends { key: string; projects: string[
   const projectPath = getProjectPath(state, projectName);
   if (!projectPath) { return null; }
 
-  return { projectName, projectPath, tickets: byProject[projectName] };
+  return { projectName, projectPath, tickets: byProject[projectName] || [] };
 }
 
 function updateStatusBar(state: KronosState): void {
@@ -5561,7 +5579,9 @@ function buildJiraBoardHtml(state: KronosState, nonce: string): string {
       <div class="card-links">${linkButtons}</div>
       <div class="card-actions">${queueBtn} ${startBtn} ${jiraLink}</div>
     </div>`;
-    columns[col].push(card);
+    const columnCards = columns[col] || [];
+    columnCards.push(card);
+    columns[col] = columnCards;
   }
 
   const colHtml = Object.entries(columns).map(([name, cards]) => {
