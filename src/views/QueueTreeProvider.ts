@@ -12,6 +12,7 @@ export class QueueTreeProvider implements vscode.TreeDataProvider<QueueTreeItem>
   private _onDidChangeTreeData = new vscode.EventEmitter<QueueTreeItem | undefined>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
   private _timer: NodeJS.Timeout | undefined;
+  private hadActiveRuns = false;
   private readonly stateSubscription: vscode.Disposable;
 
   constructor(private kronosState: KronosState) {
@@ -36,6 +37,7 @@ export class QueueTreeProvider implements vscode.TreeDataProvider<QueueTreeItem>
     }
 
     const activeRuns = listRuns().filter(isActiveRun);
+    this.hadActiveRuns = activeRuns.length > 0;
     return queue.items.map((item, idx) => new QueueTreeItem(item, idx, activeRunForQueueItem(item, activeRuns)));
   }
 
@@ -43,9 +45,11 @@ export class QueueTreeProvider implements vscode.TreeDataProvider<QueueTreeItem>
     this.stopPolling();
     const safeIntervalMs = Number.isFinite(intervalMs) && intervalMs > 0 ? intervalMs : 5000;
     this._timer = setInterval(() => {
-      if (listRuns().some(isActiveRun)) {
+      const activeNow = listRuns().some(isActiveRun);
+      if (activeNow || this.hadActiveRuns) {
         this._onDidChangeTreeData.fire(undefined);
       }
+      this.hadActiveRuns = activeNow;
     }, safeIntervalMs);
   }
 

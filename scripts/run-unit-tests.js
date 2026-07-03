@@ -6760,6 +6760,11 @@ test('tree providers share action labels and icons', () => {
     "import { isActiveRun } from '../services/runStatus'",
     "import { formatRunProgress } from '../services/runProgress'",
     'const activeRuns = listRuns().filter(isActiveRun)',
+    'private hadActiveRuns = false',
+    'this.hadActiveRuns = activeRuns.length > 0',
+    'const activeNow = listRuns().some(isActiveRun)',
+    'if (activeNow || this.hadActiveRuns)',
+    'this.hadActiveRuns = activeNow',
     'new QueueTreeItem(item, idx, activeRunForQueueItem(item, activeRuns))',
     'startPolling(intervalMs: number): void',
     'const safeIntervalMs = Number.isFinite(intervalMs) && intervalMs > 0 ? intervalMs : 5000',
@@ -6858,6 +6863,95 @@ test('tree providers share action labels and icons', () => {
   assert.ok(nextActionContext.includes("import { actionToLabel } from './actionLabels'"), 'next action context should import action labels directly');
   assert.equal(ticketTree.includes('function actionToLabel'), false, 'ticket tree should not duplicate action labels');
   assert.equal(queueTree.includes('function actionIcon'), false, 'queue tree should not duplicate action icons');
+});
+
+test('queue tree polling clears active-run decorations after runs finish', async () => {
+  const Module = require('node:module');
+  const originalLoad = Module._load;
+  let runs = [{
+    id: 'run-1',
+    status: 'running',
+    ticket: 'K-1',
+    project: 'app',
+    skill: 'implement',
+    startedAt: '2026-07-01T00:00:00.000Z',
+  }];
+  class EventEmitter {
+    constructor() {
+      this.listeners = [];
+      this.event = (listener) => {
+        this.listeners.push(listener);
+        return { dispose: () => { this.listeners = this.listeners.filter(item => item !== listener); } };
+      };
+    }
+    fire(value) { this.listeners.forEach(listener => listener(value)); }
+    dispose() { this.listeners = []; }
+  }
+  class TreeItem {
+    constructor(label, collapsibleState) {
+      this.label = label;
+      this.collapsibleState = collapsibleState;
+    }
+  }
+  class ThemeColor {
+    constructor(id) { this.id = id; }
+  }
+  class ThemeIcon {
+    constructor(id, color) {
+      this.id = id;
+      this.color = color;
+    }
+  }
+  class MarkdownString {
+    constructor(value) { this.value = value; }
+  }
+  Module._load = function patchedLoad(request, parent, isMain) {
+    if (request === 'vscode') {
+      return {
+        EventEmitter,
+        TreeItem,
+        ThemeColor,
+        ThemeIcon,
+        MarkdownString,
+        TreeItemCollapsibleState: { None: 0 },
+      };
+    }
+    if (request.endsWith('/runners/sessionDispatcher') || request.endsWith('\\runners\\sessionDispatcher') || request === '../runners/sessionDispatcher') {
+      return { listRuns: () => runs };
+    }
+    return originalLoad.call(this, request, parent, isMain);
+  };
+  try {
+    const queueTreePath = require.resolve('../out/views/QueueTreeProvider.js');
+    delete require.cache[queueTreePath];
+    const { QueueTreeProvider } = require(queueTreePath);
+    const provider = new QueueTreeProvider({
+      queue: {
+        items: [{
+          id: 'q1',
+          projects: ['app'],
+          project_path: '/repo/app',
+          ticket: 'K-1',
+          action: 'implement',
+          priority_score: 10,
+          reason: 'active work',
+        }],
+      },
+      onDidChange: () => ({ dispose() {} }),
+    });
+    let fired = 0;
+    const eventSubscription = provider.onDidChangeTreeData(() => { fired += 1; });
+    provider.getChildren();
+    runs = [];
+    provider.startPolling(5);
+    await new Promise(resolve => setTimeout(resolve, 20));
+    provider.stopPolling();
+    eventSubscription.dispose();
+    provider.dispose();
+    assert.equal(fired > 0, true, 'queue tree should refresh once after the last active run disappears');
+  } finally {
+    Module._load = originalLoad;
+  }
 });
 
 test('action icon helpers preserve ticket and queue icon semantics', () => {
