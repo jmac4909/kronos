@@ -66,7 +66,9 @@ export function isDeployMonitorRunMatch(run: DeployMonitorRunLike, match: Deploy
   if (run.skill !== 'deploy-monitor' || run.ticket !== match.ticketKey) { return false; }
   if (run.project !== match.projectName && run.projectPath !== match.projectPath) { return false; }
   const runMrIid = promptMetadataMergeRequestIid(run.promptMetadata);
-  return runMrIid === undefined || match.mrIid === undefined || runMrIid === match.mrIid;
+  if (match.mrIid === undefined) { return true; }
+  if (runMrIid === undefined) { return false; }
+  return runMrIid === match.mrIid;
 }
 
 export function isHandledDeployMonitorRun(run: DeployMonitorRunLike): boolean {

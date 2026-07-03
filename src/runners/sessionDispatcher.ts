@@ -7,7 +7,7 @@ import { createHash } from 'crypto';
 import { RUNS_DIR, appendRunLog as appendRunLogFile, markRunCancelled, readRunRecord, readRuns, writeRunPrompt, writeRunRecord } from '../services/runStore';
 import { readStateFile } from '../services/stateStore';
 import { RunFailureKind, classifyRunFailure, type PostRunReadiness } from '../services/postRunReadiness';
-import { stopProcessTree } from '../services/processTree';
+import { stopProcessTree, supportsProcessTreeSuspend } from '../services/processTree';
 import { createWebviewReadyMonitor } from '../services/webviewDiagnostics';
 import { WEBVIEW_ACTION_PANEL_SCRIPT, WEBVIEW_READY_COMMAND, createWebviewNonce, webviewActionScriptTag, webviewScriptCspOptions, withWebviewCsp } from '../services/webviewSecurity';
 import { currentGitCommit, currentGitRef, inspectTrackedWorktree, prepareManagedWorktree, removeWorktreeSafely } from '../services/gitWorkspace';
@@ -1266,9 +1266,10 @@ function runCenterActionButtons(run: KronosRun): string {
     return '<span class="muted">No action</span>';
   }
   const status = stringOrDefault(run.status, 'unknown');
-  const pausable = status === 'running' || status === 'preflight';
+  const canSuspend = supportsProcessTreeSuspend();
+  const pausable = canSuspend && (status === 'running' || status === 'preflight');
   const stoppable = isFreshActiveRun(run) && status !== 'paused';
-  const paused = status === 'paused';
+  const paused = canSuspend && status === 'paused';
   const hasWorkspace = Boolean(run.worktreePath || run.cwd || run.projectPath);
   const hasPrompt = Boolean(run.promptPath);
   const hasLog = Boolean(run.logPath);

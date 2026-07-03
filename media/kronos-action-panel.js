@@ -48,6 +48,21 @@
     }
   }
 
+  function claimKronosActionHandler() {
+    var actionHandlerKey = Symbol.for('kronos.actionHandlerAttached');
+    var root = typeof globalThis === 'object' ? globalThis : window;
+    if (root[actionHandlerKey]) {
+      try {
+        document.documentElement.setAttribute('data-kronos-actions-ready', 'true');
+      } catch (error) {
+        console.warn('Kronos webview could not mark action readiness', error);
+      }
+      return false;
+    }
+    root[actionHandlerKey] = true;
+    return true;
+  }
+
   function markReady() {
     try {
       document.documentElement.setAttribute('data-kronos-script-ready', 'true');
@@ -107,6 +122,10 @@
 
   parseFields();
   markReady();
+  if (!claimKronosActionHandler()) {
+    setTimeout(postReady, 0);
+    return;
+  }
   window.addEventListener('error', function(event) {
     console.error('Kronos webview script error', webviewName, event.message, event.filename, event.lineno, event.colno);
   });

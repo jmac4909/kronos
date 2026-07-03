@@ -53,7 +53,7 @@ import { computeAttentionBadge } from './services/attentionBadge';
 import { configIntervalMs, configIntervalSeconds, configIntervalSecondsMs, parsePositiveNumberInput, positiveConfigNumber } from './services/intervalConfig';
 import { buildNextActionContext, buildNextActionStartDecision, skillForAction } from './services/nextActionContext';
 import { createWorkspaceDiffArtifact, firstRemoteBranchMatching, originProjectPath } from './services/gitWorkspace';
-import { signalProcessTree, stopProcessTree } from './services/processTree';
+import { signalProcessTree, stopProcessTree, supportsProcessTreeSuspend } from './services/processTree';
 import { createWebviewReadyMonitor } from './services/webviewDiagnostics';
 import { WEBVIEW_ACTION_PANEL_SCRIPT, WEBVIEW_JIRA_BOARD_SCRIPT, WEBVIEW_READY_COMMAND, createWebviewNonce, webviewScriptCspOptions, withWebviewCsp } from './services/webviewSecurity';
 import { escapeAttr, escapeClass, escapeHtml, kronosWebviewBaseCss, safeHttpHref } from './services/webviewHtml';
@@ -768,6 +768,10 @@ async function archiveFinishedRuns(): Promise<void> {
 
 async function pauseSelectedRun(run: KronosRun): Promise<void> {
   const processPid = runProcessPid(run);
+  if (!supportsProcessTreeSuspend()) {
+    vscode.window.showWarningMessage('Pausing Kronos runs is not supported on Windows. Use Stop to cancel the run, or let it continue.');
+    return;
+  }
   const confirm = await vscode.window.showWarningMessage(
     `Pause run ${run.id}? Kronos will send SIGSTOP to its process tree and keep the run visible as paused.`,
     'Pause Run',
@@ -777,12 +781,11 @@ async function pauseSelectedRun(run: KronosRun): Promise<void> {
 
   try {
     const signalResult = signalProcessTree(processPid, 'SIGSTOP');
-    markRunPaused(
-      run.id,
-      signalResult.signalled
-        ? `Paused by operator. ${signalResult.method} SIGSTOP sent.`
-        : `Paused by operator. No process signal was sent${signalResult.error ? `: ${signalResult.error}` : '.'}`,
-    );
+    if (!signalResult.signalled) {
+      vscode.window.showWarningMessage(`Run ${run.id} was not paused because no process signal was sent${signalResult.error ? `: ${signalResult.error}` : '.'}`);
+      return;
+    }
+    markRunPaused(run.id, `Paused by operator. ${signalResult.method} SIGSTOP sent.`);
     vscode.window.showInformationMessage(`Paused run ${run.id}.`);
   } catch (e: unknown) {
     vscode.window.showErrorMessage(unknownErrorMessage(e, 'Failed to pause run.'));
@@ -791,6 +794,10 @@ async function pauseSelectedRun(run: KronosRun): Promise<void> {
 
 async function continueSelectedRun(run: KronosRun): Promise<void> {
   const processPid = runProcessPid(run);
+  if (!supportsProcessTreeSuspend()) {
+    vscode.window.showWarningMessage('Continuing paused Kronos runs is not supported on Windows. Use Resume or Retry for saved run artifacts.');
+    return;
+  }
   const confirm = await vscode.window.showWarningMessage(
     `Continue run ${run.id}? Kronos will send SIGCONT to its process tree and mark it running.`,
     'Continue Run',
@@ -800,12 +807,11 @@ async function continueSelectedRun(run: KronosRun): Promise<void> {
 
   try {
     const signalResult = signalProcessTree(processPid, 'SIGCONT');
-    markRunContinued(
-      run.id,
-      signalResult.signalled
-        ? `Continued by operator. ${signalResult.method} SIGCONT sent.`
-        : `Continued by operator. No process signal was sent${signalResult.error ? `: ${signalResult.error}` : '.'}`,
-    );
+    if (!signalResult.signalled) {
+      vscode.window.showWarningMessage(`Run ${run.id} was not continued because no process signal was sent${signalResult.error ? `: ${signalResult.error}` : '.'}`);
+      return;
+    }
+    markRunContinued(run.id, `Continued by operator. ${signalResult.method} SIGCONT sent.`);
     vscode.window.showInformationMessage(`Continued run ${run.id}.`);
   } catch (e: unknown) {
     vscode.window.showErrorMessage(unknownErrorMessage(e, 'Failed to continue run.'));
@@ -912,6 +918,16 @@ function kronosJiraBoardScriptUri(panel: vscode.WebviewPanel, extensionUri?: vsc
     throw new Error('Kronos Jira Board requires a packaged webview script URI.');
   }
   return scriptUri;
+}
+
+function kronosMediaScriptInlineFallback(extensionUri: vscode.Uri | undefined, scriptFile: string): string {
+  if (!extensionUri || extensionUri.scheme !== 'file') { return ''; }
+  try {
+    return fs.readFileSync(vscode.Uri.joinPath(extensionUri, 'media', scriptFile).fsPath, 'utf8');
+  } catch (e: unknown) {
+    console.warn(unknownErrorMessage(e, `Could not read Kronos webview fallback script ${scriptFile}.`));
+    return '';
+  }
 }
 
 function kronosMediaScriptUri(panel: vscode.WebviewPanel, extensionUri: vscode.Uri | undefined, scriptFile: string): string | undefined {
@@ -1715,9 +1731,10 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.ViewColumn.One, kronosScriptableWebviewOptions(context.extensionUri)
       );
       const nonce = createWebviewNonce();
+      const inlineFallbackScript = kronosMediaScriptInlineFallback(context.extensionUri, WEBVIEW_JIRA_BOARD_SCRIPT);
       const renderBoard = () => {
         const scriptUri = kronosJiraBoardScriptUri(panel, context.extensionUri);
-        panel.webview.html = withWebviewCsp(buildJiraBoardHtml(state, nonce, scriptUri), webviewScriptCspOptions(panel.webview.cspSource, nonce));
+        panel.webview.html = withWebviewCsp(buildJiraBoardHtml(state, nonce, scriptUri, inlineFallbackScript), webviewScriptCspOptions(panel.webview.cspSource, nonce));
       };
       const logReady = createWebviewReadyMonitor(panel, 'Kronos Jira Board');
       const hasTicket = (ticketKey: string) => Boolean(state.state?.tickets?.[ticketKey]);
@@ -5805,7 +5822,7 @@ function buildDiffHtml(data: MergeRequestDiffResult): string {
 </div></body></html>`;
 }
 
-function buildJiraBoardHtml(state: KronosState, nonce: string, scriptUri: string): string {
+function buildJiraBoardHtml(state: KronosState, nonce: string, scriptUri: string, inlineFallbackScript = ''): string {
   const esc = escapeHtml;
   const attr = escapeAttr;
   const tickets = state.state?.tickets || {};
@@ -5914,6 +5931,9 @@ function buildJiraBoardHtml(state: KronosState, nonce: string, scriptUri: string
   }).join('');
 
   const ticketJsonRaw = escapeHtml(JSON.stringify(ticketData));
+  const inlineFallback = inlineFallbackScript
+    ? `<script nonce="${escapeAttr(nonce)}" data-kronos-inline-fallback="jira-board" data-kronos-webview-name="Kronos Jira Board" data-kronos-ready-command="${escapeAttr(WEBVIEW_READY_COMMAND)}">\n${sanitizeInlineScript(inlineFallbackScript)}\n</script>`
+    : '';
 
   return `<!DOCTYPE html>
 <html><head>
@@ -5998,6 +6018,7 @@ function buildJiraBoardHtml(state: KronosState, nonce: string, scriptUri: string
   }
 </style>
 <script nonce="${escapeAttr(nonce)}" defer src="${escapeAttr(scriptUri)}" data-kronos-webview-name="Kronos Jira Board" data-kronos-ready-command="${escapeAttr(WEBVIEW_READY_COMMAND)}"></script>
+${inlineFallback}
 </head><body><div class="kronos-shell board-shell">
   <textarea id="kronos-jira-ticket-data" class="kronos-data-payload" hidden aria-hidden="true">${ticketJsonRaw}</textarea>
   <div class="kronos-header">
@@ -6032,6 +6053,10 @@ function buildJiraBoardHtml(state: KronosState, nonce: string, scriptUri: string
     </div>
   </div>
 </div></body></html>`;
+}
+
+function sanitizeInlineScript(script: string): string {
+  return script.replace(/<\/script/gi, '<\\/script');
 }
 
 function buildTicketHtml(key: string, ticket: Ticket, state: KronosState, nonce?: string): string {

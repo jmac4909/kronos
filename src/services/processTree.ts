@@ -67,7 +67,7 @@ export function signalProcessTree(
 ): ProcessTreeResult {
   const processPid = normalizePid(pid);
   if (!processPid) { return result(false, false, 'none', false); }
-  if ((options.platform || process.platform) === 'win32') {
+  if (!supportsProcessTreeSuspend(options.platform || process.platform)) {
     return result(true, false, 'unsupported', false, `${signal} is not supported on Windows.`);
   }
 
@@ -83,6 +83,10 @@ export function signalProcessTree(
       return result(true, false, 'process', true, unknownErrorMessage(fallbackError, unknownErrorMessage(e, 'process signal failed')));
     }
   }
+}
+
+export function supportsProcessTreeSuspend(platform: NodeJS.Platform | string = process.platform): boolean {
+  return platform !== 'win32';
 }
 
 function fallbackKill(pid: number, kill: ProcessKillRunner, cause: unknown): ProcessTreeResult {

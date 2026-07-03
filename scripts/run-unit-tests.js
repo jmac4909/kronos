@@ -1327,7 +1327,10 @@ test('deploy monitor handoff resolves projects and only suppresses handled runs'
   ], match), false);
   assert.equal(deployMonitorHandoff.hasHandledDeployMonitorRun([
     { skill: 'deploy-monitor', ticket: 'K-13', project: 'app', status: 'completed' },
-  ], match), true);
+  ], match), false);
+  assert.equal(deployMonitorHandoff.hasHandledDeployMonitorRun([
+    { skill: 'deploy-monitor', ticket: 'K-13', project: 'app', status: 'completed' },
+  ], { projectName: 'app', projectPath: '/repo/app', ticketKey: 'K-13' }), true);
 
   const issueTicket = ticket({
     mr: merged.mr,
@@ -2042,6 +2045,8 @@ test('process tree service centralizes stop and pause signaling behavior', () =>
   assert.equal(unsupported.signalled, false);
   assert.equal(unsupported.method, 'unsupported');
   assert.match(unsupported.error, /not supported/);
+  assert.equal(processTree.supportsProcessTreeSuspend('win32'), false);
+  assert.equal(processTree.supportsProcessTreeSuspend('linux'), true);
 
   assert.equal(processTree.stopProcessTree(undefined).attempted, false);
   assert.equal(processTree.signalProcessTree(-1, 'SIGSTOP').attempted, false);
@@ -2051,6 +2056,7 @@ test('process tree service centralizes stop and pause signaling behavior', () =>
     "import { unknownErrorMessage } from './errorUtils'",
     'catch (e: unknown)',
     'catch (fallbackError: unknown)',
+    'export function supportsProcessTreeSuspend',
     "console.warn(unknownErrorMessage(e, 'Delayed process-group SIGKILL failed.'))",
     "unknownErrorMessage(fallbackError, unknownErrorMessage(e, 'process signal failed'))",
     "unknownErrorMessage(fallbackError, unknownErrorMessage(cause, 'process stop failed'))",
@@ -2151,6 +2157,7 @@ test('webview security injects CSP and preserves existing nonce policies', () =>
   assert.match(actionScript, /document\.addEventListener\('click', postKronosAction, true\)/);
   assert.match(actionScript, /DOMContentLoaded/);
   assert.match(actionScript, /data-kronos-actions-ready/);
+  assert.match(actionScript, /Symbol\.for\('kronos\.actionHandlerAttached'\)/);
   assert.match(actionScript, /message\[field\.messageKey\]/);
   assert.match(actionScript, /kronosVsCodeApi\(\)\.postMessage/);
   assert.match(actionScript, /function closestKronosActionTarget/);
@@ -2227,7 +2234,7 @@ test('webview security injects CSP and preserves existing nonce policies', () =>
     },
   };
   assert.doesNotThrow(() => vm.runInNewContext(`${actionScript}\n${actionScript}`, duplicateSandbox));
-  assert.equal(duplicateListeners.length, 2);
+  assert.equal(duplicateListeners.length, 1);
   duplicateListeners.forEach(handler => handler({ target: fakeButton, preventDefault() {} }));
   assert.equal(duplicateAcquireCalls, 1);
   const diagnosticActionScript = webviewSecurity.webviewActionPostScript('Kronos Actions', [
@@ -2240,16 +2247,19 @@ test('webview security injects CSP and preserves existing nonce policies', () =>
   const externalScriptTag = webviewSecurity.webviewActionScriptTag('nonce<1>', 'Kronos External', [
     { messageKey: 'runId', dataAttribute: 'data-run-id' },
   ], { readyCommand: webviewSecurity.WEBVIEW_READY_COMMAND, scriptUri: 'vscode-resource://kronos/action.js?x=1&y=<2>' });
-  assert.match(externalScriptTag, /<script nonce="nonce&lt;1&gt;" src="vscode-resource:\/\/kronos\/action\.js\?x=1&amp;y=&lt;2&gt;"/);
+  assert.match(externalScriptTag, /<script nonce="nonce&lt;1&gt;"\s+src="vscode-resource:\/\/kronos\/action\.js\?x=1&amp;y=&lt;2&gt;"/);
   assert.match(externalScriptTag, /data-kronos-webview-name="Kronos External"/);
   assert.match(externalScriptTag, /data-kronos-action-fields="\[\{&quot;messageKey&quot;:&quot;runId&quot;,&quot;dataAttribute&quot;:&quot;data-run-id&quot;\}\]"/);
   assert.match(externalScriptTag, /data-kronos-ready-command="__kronosWebviewReady"/);
-  assert.doesNotMatch(externalScriptTag, /function postKronosAction/);
+  assert.match(externalScriptTag, /data-kronos-inline-fallback="action-panel"/);
+  assert.match(externalScriptTag, /function postKronosAction/);
 
   const externalActionScript = readSourceFixture('media', webviewSecurity.WEBVIEW_ACTION_PANEL_SCRIPT);
   assert.match(externalActionScript, /document\.currentScript/);
   assert.match(externalActionScript, /data-kronos-action-fields/);
   assert.match(externalActionScript, /function postKronosAction/);
+  assert.match(externalActionScript, /function claimKronosActionHandler/);
+  assert.match(externalActionScript, /Symbol\.for\('kronos\.actionHandlerAttached'\)/);
   assert.doesNotMatch(externalActionScript, /const vscode =/);
   const externalPostedMessages = [];
   const externalDocumentListeners = {};
@@ -2300,6 +2310,8 @@ test('webview security injects CSP and preserves existing nonce policies', () =>
   const jiraBoardScript = readSourceFixture('media', webviewSecurity.WEBVIEW_JIRA_BOARD_SCRIPT);
   assert.match(jiraBoardScript, /document\.currentScript/);
   assert.match(jiraBoardScript, /function initKronosJiraBoard/);
+  assert.match(jiraBoardScript, /function claimKronosJiraBoard/);
+  assert.match(jiraBoardScript, /Symbol\.for\('kronos\.jiraBoardAttached'\)/);
   assert.match(jiraBoardScript, /kronos-jira-ticket-data/);
   assert.match(jiraBoardScript, /data-kronos-actions-ready/);
   assert.match(jiraBoardScript, /Kronos webview script ready/);
@@ -4022,8 +4034,10 @@ test('dispatcher records branch and permission metadata for persisted runs', () 
     "import { sortedRunCenterRuns } from '../services/runCenterSort'",
     'const sortedRuns = sortedRunCenterRuns(runs)',
     'sorted by status and time',
-    "const pausable = status === 'running' || status === 'preflight'",
+    'const canSuspend = supportsProcessTreeSuspend()',
+    "const pausable = canSuspend && (status === 'running' || status === 'preflight')",
     "const stoppable = isFreshActiveRun(run) && status !== 'paused'",
+    "const paused = canSuspend && status === 'paused'",
     'if (stoppable) {',
     "if (pausable) { buttons.push(runCenterActionButton('pauseRun', 'Pause', runId)); }",
     "runCenterActionButton('cancelRun', 'Stop'",
@@ -6891,11 +6905,16 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'class="kronos-data-payload"',
     'WEBVIEW_JIRA_BOARD_SCRIPT',
     'function kronosJiraBoardScriptUri',
+    'function kronosMediaScriptInlineFallback',
+    "fs.readFileSync(vscode.Uri.joinPath(extensionUri, 'media', scriptFile).fsPath, 'utf8')",
     "vscode.Uri.joinPath(extensionUri, 'media', scriptFile)",
-    'buildJiraBoardHtml(state, nonce, scriptUri)',
+    'buildJiraBoardHtml(state, nonce, scriptUri, inlineFallbackScript)',
     'defer src="${escapeAttr(scriptUri)}"',
+    'data-kronos-inline-fallback="jira-board"',
+    'function sanitizeInlineScript(script: string): string',
     'data-kronos-ready-command="${escapeAttr(WEBVIEW_READY_COMMAND)}"',
     'function initKronosJiraBoard',
+    'function claimKronosJiraBoard',
     "document.addEventListener('DOMContentLoaded', initKronosJiraBoard)",
     "document.documentElement.setAttribute('data-kronos-actions-ready', 'true')",
     'function applyBoardFilter',
@@ -7533,6 +7552,9 @@ test('extension run recovery helpers use typed run records', () => {
     'async function resumeSelectedRun(state: KronosState, run: KronosRun)',
     'async function pauseSelectedRun(run: KronosRun)',
     'async function continueSelectedRun(run: KronosRun)',
+    'supportsProcessTreeSuspend()',
+    'Run ${run.id} was not paused because no process signal was sent',
+    'Run ${run.id} was not continued because no process signal was sent',
     'async function cancelSelectedRun(run: KronosRun)',
     'async function openRunDiffArtifact(run: KronosRun)',
     "await openRunArtifactFileIfExists(run.logPath, 'Run log not found.')",

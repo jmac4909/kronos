@@ -381,12 +381,16 @@ for (const marker of [
 }
 
 for (const marker of [
-  'buildJiraBoardHtml(state, nonce, scriptUri)',
+  'buildJiraBoardHtml(state, nonce, scriptUri, inlineFallbackScript)',
   'webviewScriptCspOptions(panel.webview.cspSource, nonce)',
   'WEBVIEW_JIRA_BOARD_SCRIPT',
   'function kronosJiraBoardScriptUri',
+  'function kronosMediaScriptInlineFallback',
+  "fs.readFileSync(vscode.Uri.joinPath(extensionUri, 'media', scriptFile).fsPath, 'utf8')",
   "vscode.Uri.joinPath(extensionUri, 'media', scriptFile)",
   'defer src="${escapeAttr(scriptUri)}"',
+  'data-kronos-inline-fallback="jira-board"',
+  'function sanitizeInlineScript(script: string): string',
   'id="kronos-jira-ticket-data"',
   'class="kronos-data-payload"',
   "import { createWebviewReadyMonitor } from './services/webviewDiagnostics'",
@@ -695,6 +699,9 @@ for (const marker of [
   'kronos.resumeRun',
   'async function pauseSelectedRun',
   'async function continueSelectedRun',
+  'supportsProcessTreeSuspend()',
+  'Run ${run.id} was not paused because no process signal was sent',
+  'Run ${run.id} was not continued because no process signal was sent',
   'signalProcessTree(processPid',
   'Pause Run',
   'Continue Run',
@@ -840,6 +847,8 @@ for (const marker of [
   'HANDLED_DEPLOY_MONITOR_STATUSES',
   "'completed', 'waiting_for_review'",
   'promptMetadataMergeRequestIid',
+  'if (match.mrIid === undefined) { return true; }',
+  'if (runMrIid === undefined) { return false; }',
   'DEPLOY_MONITOR_HANDOFF_CHECK_PREFIX',
   'hasDeployMonitorHandoffIssue',
 ]) {
@@ -1617,8 +1626,10 @@ for (const marker of [
   "import { sortedRunCenterRuns } from '../services/runCenterSort'",
   'const sortedRuns = sortedRunCenterRuns(runs)',
   'sorted by status and time',
-  "const pausable = status === 'running' || status === 'preflight'",
+  'const canSuspend = supportsProcessTreeSuspend()',
+  "const pausable = canSuspend && (status === 'running' || status === 'preflight')",
   "const stoppable = isFreshActiveRun(run) && status !== 'paused'",
+  "const paused = canSuspend && status === 'paused'",
   'if (stoppable) {',
   "if (pausable) { buttons.push(runCenterActionButton('pauseRun', 'Pause', runId)); }",
   'writeSavedSession(session)',
@@ -2032,6 +2043,7 @@ if (gitWorkspace.includes('} catch {}')) {
 for (const marker of [
   'export function stopProcessTree',
   'export function signalProcessTree',
+  'export function supportsProcessTreeSuspend',
   "import { unknownErrorMessage } from './errorUtils'",
   'catch (e: unknown)',
   'catch (fallbackError: unknown)',
@@ -2250,12 +2262,14 @@ for (const marker of [
   "document.addEventListener('click', postKronosAction, true)",
   "document.addEventListener('DOMContentLoaded', attachKronosActionHandler, { once: true })",
   "document.documentElement.setAttribute('data-kronos-actions-ready', 'true')",
+  "Symbol.for('kronos.actionHandlerAttached')",
   'message[field.messageKey]',
   'options.readyCommand ? webviewReadyPostScript(webviewName, options.readyCommand) :',
   'export function webviewActionScriptTag',
   'data-kronos-webview-name',
   'data-kronos-action-fields',
   'data-kronos-ready-command',
+  'data-kronos-inline-fallback="action-panel"',
   'options.scriptUri',
   'cspSource?: string',
   'options.cspSource?.trim()',
@@ -2292,6 +2306,7 @@ for (const marker of [
   "typeof acquireVsCodeApi !== 'function'",
   "document.documentElement.setAttribute('data-kronos-script-ready', 'true')",
   "document.documentElement.setAttribute('data-kronos-actions-ready', 'true')",
+  "Symbol.for('kronos.actionHandlerAttached')",
   "console.info('Kronos webview script ready', webviewName, navigator.userAgent)",
   "console.error('Kronos webview script error', webviewName",
   "console.error('Kronos webview unhandled rejection', webviewName",
@@ -2303,6 +2318,15 @@ for (const marker of [
 ]) {
   if (!webviewActionPanelScript.includes(marker)) {
     fail(`Missing packaged webview action script marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  'function claimKronosJiraBoard()',
+  "Symbol.for('kronos.jiraBoardAttached')",
+]) {
+  if (!jiraBoardScript.includes(marker)) {
+    fail(`Missing packaged Jira board script guard marker: ${marker}`);
   }
 }
 for (const marker of [

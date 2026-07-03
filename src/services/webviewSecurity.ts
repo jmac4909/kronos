@@ -112,6 +112,13 @@ export function webviewActionPostScript(webviewName: string, fields: WebviewActi
     webviewVsCodeApiScript(webviewName),
     options.readyCommand ? webviewReadyPostScript(webviewName, options.readyCommand) : '',
     '(function() {',
+    "  const actionHandlerKey = Symbol.for('kronos.actionHandlerAttached');",
+    '  const root = typeof globalThis === \'object\' ? globalThis : window;',
+    '  if (root[actionHandlerKey]) {',
+    '    try { document.documentElement.setAttribute(\'data-kronos-actions-ready\', \'true\'); } catch (error) {}',
+    '    return;',
+    '  }',
+    '  root[actionHandlerKey] = true;',
     `  const fields = ${fieldsLiteral};`,
     '  function closestKronosActionTarget(target) {',
     '    if (!target) { return null; }',
@@ -170,7 +177,10 @@ ${webviewActionPostScript(webviewName, fields, options)}
     `src="${escapeAttr(options.scriptUri)}"`,
     `data-kronos-webview-name="${escapeAttr(webviewName)}"`,
     `data-kronos-action-fields="${escapeAttr(JSON.stringify(fields))}"${readyAttr}></script>`,
-  ].join(' ');
+    `<script nonce="${escapeAttr(nonce)}" data-kronos-inline-fallback="action-panel">`,
+    webviewActionPostScript(webviewName, fields, options),
+    '</script>',
+  ].join('\n');
 }
 
 export function webviewCspMeta(options: WebviewCspOptions = {}): string {

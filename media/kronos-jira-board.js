@@ -123,6 +123,21 @@
     }
   }
 
+  function claimKronosJiraBoard() {
+    var boardHandlerKey = Symbol.for('kronos.jiraBoardAttached');
+    var root = typeof globalThis === 'object' ? globalThis : window;
+    if (root[boardHandlerKey]) {
+      try {
+        document.documentElement.setAttribute('data-kronos-actions-ready', 'true');
+      } catch (error) {
+        console.warn('Kronos Jira Board could not mark action readiness', error);
+      }
+      return false;
+    }
+    root[boardHandlerKey] = true;
+    return true;
+  }
+
   function showModal(key) {
     var t = ticketData[key];
     if (!t) { return; }
@@ -328,6 +343,10 @@
   }
 
   function initKronosJiraBoard() {
+    if (!claimKronosJiraBoard()) {
+      setTimeout(postReady, 0);
+      return;
+    }
     ticketData = readTicketData();
     if (!attachBoardHandlers()) { return; }
     attachCommentHandler();
