@@ -626,15 +626,9 @@ for (const marker of [
   }
 }
 for (const marker of [
-  "import { SafetyPlan, assessSafetyGate, type SafetyRisk } from './services/safetyGate'",
-  'const TRUST_REQUIRED_RISKS = new Set<SafetyRisk>',
-  "  'repo-write',",
-  "  'branch-switch',",
-  "  'destructive',",
-  "  'external-publish',",
-  'function requiresWorkspaceTrust(risks: SafetyRisk[]): boolean',
-  'function workspaceTrustRiskSummary(risks: SafetyRisk[]): string',
-  'requiresWorkspaceTrust(assessment.risks) && !vscode.workspace.isTrusted',
+  "import { SafetyPlan, assessSafetyGate } from './services/safetyGate'",
+  'assessment.requiresWorkspaceTrust && !vscode.workspace.isTrusted',
+  'assessment.workspaceTrustSummary',
   'Manage Workspace Trust',
   "vscode.commands.executeCommand('workbench.trust.manage')",
   "unknownErrorMessage(e, 'Could not open Workspace Trust management.')",
@@ -2764,6 +2758,10 @@ for (const marker of [
   'branch-switch',
   'external-publish',
   'requiresConfirmation',
+  'requiresWorkspaceTrust: boolean',
+  'workspaceTrustSummary: string',
+  'const TRUST_REQUIRED_RISKS = new Set<SafetyRisk>',
+  'function workspaceTrustRiskSummary(risks: SafetyRisk[]): string',
 ]) {
   if (!safetyGate.includes(marker)) {
     fail(`Missing safety gate marker: ${marker}`);

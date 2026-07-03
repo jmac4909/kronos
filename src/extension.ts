@@ -36,7 +36,7 @@ import { DashboardWorklistLane, buildDashboardWorklist } from './services/dashbo
 import { INTEGRATION_MANIFEST_FILE, auditIntegrationManifest, readIntegrationManifest, writeIntegrationManifestSnapshot } from './services/integrationManifest';
 import { KronosProfile, listProfiles, resolveDefaultBaseBranch, resolveProfile, sanitizeBranch as sanitizeProfileBranch } from './services/profileManager';
 import { AgingThresholds, analyzeAging } from './services/agingAnalyzer';
-import { SafetyPlan, assessSafetyGate, type SafetyRisk } from './services/safetyGate';
+import { SafetyPlan, assessSafetyGate } from './services/safetyGate';
 import { computeTrendMetrics } from './services/trendMetrics';
 import { TicketFilter, TicketGroupBy, TICKET_FILTER_PRESETS, describeTicketFilter } from './services/ticketFilters';
 import { buildRunResumePrompt, readRunLogTail } from './services/runRecovery';
@@ -458,9 +458,9 @@ function trendWindowDaysFromConfig(): number {
 
 async function confirmSafetyGate(plan: SafetyPlan): Promise<boolean> {
   const assessment = assessSafetyGate(plan);
-  if (requiresWorkspaceTrust(assessment.risks) && !vscode.workspace.isTrusted) {
+  if (assessment.requiresWorkspaceTrust && !vscode.workspace.isTrusted) {
     const action = await vscode.window.showWarningMessage(
-      `Kronos is running in Restricted Mode. Trust this workspace before ${assessment.title}; this action can ${workspaceTrustRiskSummary(assessment.risks)}.`,
+      `Kronos is running in Restricted Mode. Trust this workspace before ${assessment.title}; this action can ${assessment.workspaceTrustSummary}.`,
       'Manage Workspace Trust',
       'Cancel'
     );
@@ -481,25 +481,6 @@ async function confirmSafetyGate(plan: SafetyPlan): Promise<boolean> {
     'Cancel'
   );
   return action === assessment.confirmationLabel;
-}
-
-const TRUST_REQUIRED_RISKS = new Set<SafetyRisk>([
-  'repo-write',
-  'branch-switch',
-  'destructive',
-  'external-publish',
-]);
-
-function requiresWorkspaceTrust(risks: SafetyRisk[]): boolean {
-  return risks.some(risk => TRUST_REQUIRED_RISKS.has(risk));
-}
-
-function workspaceTrustRiskSummary(risks: SafetyRisk[]): string {
-  if (risks.includes('destructive')) { return 'remove files or clean managed worktrees'; }
-  if (risks.includes('branch-switch')) { return 'change branches or worktree state'; }
-  if (risks.includes('external-publish')) { return 'publish evidence or update external systems'; }
-  if (risks.includes('repo-write')) { return 'modify repository files or launch an agent in a project workspace'; }
-  return 'change Kronos state';
 }
 
 async function openTextFileIfExists(filePath: string, missingMessage: string): Promise<void> {

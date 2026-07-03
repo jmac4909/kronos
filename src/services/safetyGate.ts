@@ -23,6 +23,8 @@ export interface SafetyAssessment {
   risks: SafetyRisk[];
   highestRisk: SafetyRisk;
   requiresConfirmation: boolean;
+  requiresWorkspaceTrust: boolean;
+  workspaceTrustSummary: string;
   modal: boolean;
   confirmationLabel: string;
   message: string;
@@ -37,12 +39,20 @@ const RISK_WEIGHT: Record<SafetyRisk, number> = {
   'destructive': 5,
 };
 
+const TRUST_REQUIRED_RISKS = new Set<SafetyRisk>([
+  'repo-write',
+  'branch-switch',
+  'destructive',
+  'external-publish',
+]);
+
 export function assessSafetyGate(plan: SafetyPlan): SafetyAssessment {
   const risks = normalizeRisks(plan.risks);
   const highestRisk = risks.reduce((highest, risk) => (
     RISK_WEIGHT[risk] > RISK_WEIGHT[highest] ? risk : highest
   ), 'read-only' as SafetyRisk);
   const requiresConfirmation = risks.some(risk => risk !== 'read-only');
+  const requiresWorkspaceTrust = risks.some(risk => TRUST_REQUIRED_RISKS.has(risk));
   const modal = ['branch-switch', 'destructive', 'external-publish'].includes(highestRisk);
   const confirmationLabel = plan.confirmationLabel || defaultConfirmationLabel(highestRisk);
   const assessment: SafetyAssessment = {
@@ -51,6 +61,8 @@ export function assessSafetyGate(plan: SafetyPlan): SafetyAssessment {
     risks,
     highestRisk,
     requiresConfirmation,
+    requiresWorkspaceTrust,
+    workspaceTrustSummary: workspaceTrustRiskSummary(risks),
     modal,
     confirmationLabel,
     message: buildSafetyMessage(plan, risks, highestRisk),
@@ -72,6 +84,14 @@ function defaultConfirmationLabel(risk: SafetyRisk): string {
   if (risk === 'repo-write') { return 'Start'; }
   if (risk === 'state-write') { return 'Update State'; }
   return 'Open';
+}
+
+function workspaceTrustRiskSummary(risks: SafetyRisk[]): string {
+  if (risks.includes('destructive')) { return 'remove files or clean managed worktrees'; }
+  if (risks.includes('branch-switch')) { return 'change branches or worktree state'; }
+  if (risks.includes('external-publish')) { return 'publish evidence or update external systems'; }
+  if (risks.includes('repo-write')) { return 'modify repository files or launch an agent in a project workspace'; }
+  return 'change Kronos state';
 }
 
 function buildSafetyMessage(plan: SafetyPlan, risks: SafetyRisk[], highestRisk: SafetyRisk): string {

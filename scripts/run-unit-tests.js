@@ -5489,6 +5489,8 @@ test('safety gate classifies risk, confirmation, and operator prompt text', () =
     changes: ['Open a read-only panel.'],
   });
   assert.equal(readOnly.requiresConfirmation, false);
+  assert.equal(readOnly.requiresWorkspaceTrust, false);
+  assert.equal(readOnly.workspaceTrustSummary, 'change Kronos state');
   assert.equal(readOnly.modal, false);
   assert.equal(readOnly.highestRisk, 'read-only');
 
@@ -5502,10 +5504,12 @@ test('safety gate classifies risk, confirmation, and operator prompt text', () =
     confirmationLabel: 'Remove Clean Worktrees',
   });
   assert.equal(destructive.requiresConfirmation, true);
+  assert.equal(destructive.requiresWorkspaceTrust, true);
   assert.equal(destructive.modal, true);
   assert.equal(destructive.highestRisk, 'destructive');
   assert.deepEqual(destructive.risks, ['destructive', 'repo-write', 'state-write']);
   assert.equal(destructive.confirmationLabel, 'Remove Clean Worktrees');
+  assert.equal(destructive.workspaceTrustSummary, 'remove files or clean managed worktrees');
   assert.match(destructive.message, /Kronos Safety Gate: Cleanup Stale Worktrees/);
   assert.match(destructive.message, /Highest risk: destructive/);
   assert.match(destructive.message, /Remove clean worktrees/);
@@ -6699,22 +6703,31 @@ test('extension declares limited Restricted Mode support and blocks trust-sensit
 
   const source = readSourceFixture('src', 'extension.ts');
   for (const marker of [
-    "import { SafetyPlan, assessSafetyGate, type SafetyRisk } from './services/safetyGate'",
-    'const TRUST_REQUIRED_RISKS = new Set<SafetyRisk>',
-    "  'repo-write',",
-    "  'branch-switch',",
-    "  'destructive',",
-    "  'external-publish',",
-    'function requiresWorkspaceTrust(risks: SafetyRisk[]): boolean',
-    'return risks.some(risk => TRUST_REQUIRED_RISKS.has(risk));',
-    'function workspaceTrustRiskSummary(risks: SafetyRisk[]): string',
-    'requiresWorkspaceTrust(assessment.risks) && !vscode.workspace.isTrusted',
+    "import { SafetyPlan, assessSafetyGate } from './services/safetyGate'",
+    'assessment.requiresWorkspaceTrust && !vscode.workspace.isTrusted',
+    'this action can ${assessment.workspaceTrustSummary}',
     'Trust this workspace before ${assessment.title}',
     'Manage Workspace Trust',
     "vscode.commands.executeCommand('workbench.trust.manage')",
     "unknownErrorMessage(e, 'Could not open Workspace Trust management.')",
   ]) {
     assert.ok(source.includes(marker), marker);
+  }
+
+  const safetyGateSource = readSourceFixture('src', 'services', 'safetyGate.ts');
+  for (const marker of [
+    'requiresWorkspaceTrust: boolean',
+    'workspaceTrustSummary: string',
+    'const TRUST_REQUIRED_RISKS = new Set<SafetyRisk>',
+    "  'repo-write',",
+    "  'branch-switch',",
+    "  'destructive',",
+    "  'external-publish',",
+    'const requiresWorkspaceTrust = risks.some(risk => TRUST_REQUIRED_RISKS.has(risk));',
+    'workspaceTrustSummary: workspaceTrustRiskSummary(risks)',
+    'function workspaceTrustRiskSummary(risks: SafetyRisk[]): string',
+  ]) {
+    assert.ok(safetyGateSource.includes(marker), marker);
   }
 });
 
