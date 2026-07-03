@@ -3220,7 +3220,7 @@ test('dispatcher records branch and permission metadata for persisted runs', () 
     'trackActiveWorktree(projectPath, worktreePath, ticket)',
     'untrackActiveWorktree(worktreePath)',
     'Active worktree registry needs manual review before creating a worktree',
-    'registryIssue: registry.issue',
+    'if (registry.issue) { report.registryIssue = registry.issue; }',
     "const failureDetail = unknownErrorMessage(e, 'Git worktree setup failed.')",
     "vscode.window.showWarningMessage('Git worktree setup failed; run marked failed before launch.')",
     "label: 'Git worktree setup failed'",

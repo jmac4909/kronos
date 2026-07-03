@@ -1250,8 +1250,10 @@ for (const marker of [
   'function buildRunPermissionMetadata',
   'function buildRunBranchMetadata',
   "from '../services/gitWorkspace'",
-  'currentRef: currentGitRef(input.cwd)',
-  'currentCommit: currentGitCommit(input.cwd)',
+  'const currentRef = currentGitRef(input.cwd)',
+  'if (currentRef) { metadata.currentRef = currentRef; }',
+  'const currentCommit = currentGitCommit(input.cwd)',
+  'if (currentCommit) { metadata.currentCommit = currentCommit; }',
   'function resolveCliPath',
   'spawn(CLAUDE_PATH, claudeArgs',
   "permissions: buildRunPermissionMetadata(['~/.claude'])",
@@ -1991,7 +1993,7 @@ for (const marker of [
   'trackActiveWorktree(projectPath, worktreePath, ticket)',
   'untrackActiveWorktree(worktreePath)',
   'Active worktree registry needs manual review before creating a worktree',
-  'registryIssue: registry.issue',
+  'if (registry.issue) { report.registryIssue = registry.issue; }',
 ]) {
   if (!dispatcher.includes(marker)) {
     fail(`Missing worktree cleanup safety marker: ${marker}`);

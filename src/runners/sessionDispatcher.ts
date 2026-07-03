@@ -124,12 +124,14 @@ function resolveBaseRef(projectPath: string): BaseRefResolution {
     }
   }
 
-  return {
+  const result: BaseRefResolution = {
     branch: base,
     ref: `origin/${base}`,
     source,
-    warning: warnings.join('\n') || undefined,
   };
+  const warning = warnings.join('\n');
+  if (warning) { result.warning = warning; }
+  return result;
 }
 
 function configuredStateBaseBranch(projectPath: string): { branch?: string; warning?: string } {
@@ -322,12 +324,12 @@ function createRun(project: string, projectPath: string, skill: string, ticket: 
     promptHash: hashText(prompt),
     promptPreview: prompt.substring(0, 500),
     promptPath,
-    promptMetadata,
     startedAt: new Date().toISOString(),
     cwd,
     logPath,
     events: [],
   };
+  if (promptMetadata) { run.promptMetadata = promptMetadata; }
   writeRun(run);
   return run;
 }
@@ -433,27 +435,30 @@ function buildRunPermissionMetadata(addDirs: string[]): RunPermissionMetadata {
 
 function buildRunBranchMetadata(input: {
   cwd: string;
-  projectBaseRef?: string;
-  projectBaseBranch?: string;
-  projectBaseSource?: string;
-  projectBaseWarning?: string;
-  requestedWorktreeBranch?: string;
-  resolvedWorktreeRef?: string;
-  checkoutRef?: string;
+  projectBaseRef?: string | undefined;
+  projectBaseBranch?: string | undefined;
+  projectBaseSource?: string | undefined;
+  projectBaseWarning?: string | undefined;
+  requestedWorktreeBranch?: string | undefined;
+  resolvedWorktreeRef?: string | undefined;
+  checkoutRef?: string | undefined;
   managedWorktree?: boolean;
 }): RunBranchMetadata {
-  return {
-    projectBaseRef: input.projectBaseRef,
-    projectBaseBranch: input.projectBaseBranch,
-    projectBaseSource: input.projectBaseSource,
-    projectBaseWarning: input.projectBaseWarning,
-    requestedWorktreeBranch: input.requestedWorktreeBranch,
-    resolvedWorktreeRef: input.resolvedWorktreeRef,
-    checkoutRef: input.checkoutRef,
-    currentRef: currentGitRef(input.cwd),
-    currentCommit: currentGitCommit(input.cwd),
+  const metadata: RunBranchMetadata = {
     managedWorktree: Boolean(input.managedWorktree),
   };
+  if (input.projectBaseRef) { metadata.projectBaseRef = input.projectBaseRef; }
+  if (input.projectBaseBranch) { metadata.projectBaseBranch = input.projectBaseBranch; }
+  if (input.projectBaseSource) { metadata.projectBaseSource = input.projectBaseSource; }
+  if (input.projectBaseWarning) { metadata.projectBaseWarning = input.projectBaseWarning; }
+  if (input.requestedWorktreeBranch) { metadata.requestedWorktreeBranch = input.requestedWorktreeBranch; }
+  if (input.resolvedWorktreeRef) { metadata.resolvedWorktreeRef = input.resolvedWorktreeRef; }
+  if (input.checkoutRef) { metadata.checkoutRef = input.checkoutRef; }
+  const currentRef = currentGitRef(input.cwd);
+  if (currentRef) { metadata.currentRef = currentRef; }
+  const currentCommit = currentGitCommit(input.cwd);
+  if (currentCommit) { metadata.currentCommit = currentCommit; }
+  return metadata;
 }
 
 export async function ensureAuth(): Promise<boolean> {
@@ -511,14 +516,15 @@ export function cleanupStaleWorktrees(options: { remove?: boolean } = {}): Workt
     }
     results.push(inspected);
   }
-  return {
+  const report: WorktreeCleanupReport = {
     results,
     removable: results.filter(r => r.status === 'removable' || r.status === 'missing').length,
     removed: results.filter(r => r.status === 'removed').length,
     blocked: results.filter(r => r.status === 'blocked' || r.status === 'error').length,
     registryPath: ACTIVE_WORKTREES_FILE,
-    registryIssue: registry.issue,
   };
+  if (registry.issue) { report.registryIssue = registry.issue; }
+  return report;
 }
 
 export function openRunCenter(options: RunCenterOptions = {}): void {
@@ -575,8 +581,11 @@ export async function dispatchClaudeSession(
   customPrompt?: string
 ): Promise<void> {
   const opts: DispatchOptions = typeof onCompleteOrOpts === 'function'
-    ? { onComplete: onCompleteOrOpts, customPrompt }
+    ? { onComplete: onCompleteOrOpts }
     : (onCompleteOrOpts || {});
+  if (typeof onCompleteOrOpts === 'function' && customPrompt) {
+    opts.customPrompt = customPrompt;
+  }
 
   const prompt = opts.customPrompt || (ticket ? `/${skill} ${ticket}` : `/${skill}`);
   const projectName = opts.projectNameOverride || projectPath.split(/[\\/]/).pop() || 'project';
@@ -616,9 +625,8 @@ export async function dispatchClaudeSession(
     promptMetadata.appendSystemPromptHash = hashText(opts.appendSystemPrompt);
   }
   const run = createRun(projectName, projectPath, skill, ticket || '', model, prompt, cwd, promptMetadata);
-  updateRun(run, {
+  const initialPatch: Partial<KronosRun> = {
     cwd,
-    worktreePath: worktreePath || undefined,
     branch: buildRunBranchMetadata({
       cwd,
       projectBaseRef,
@@ -629,7 +637,9 @@ export async function dispatchClaudeSession(
       managedWorktree: false,
     }),
     permissions: buildRunPermissionMetadata(['~/.claude']),
-  });
+  };
+  if (worktreePath) { initialPatch.worktreePath = worktreePath; }
+  updateRun(run, initialPatch);
   const setupEvent = events[0];
   if (setupEvent) {
     addRunEvent(run, setupEvent);
@@ -767,7 +777,9 @@ export async function dispatchClaudeSession(
     checkoutRef,
     managedWorktree: Boolean(managedWorktreePath),
   });
-  updateRun(run, { cwd, worktreePath: worktreePath || undefined, permissions, branch });
+  const launchPatch: Partial<KronosRun> = { cwd, permissions, branch };
+  if (worktreePath) { launchPatch.worktreePath = worktreePath; }
+  updateRun(run, launchPatch);
 
   let proc: ClaudeProcess;
   try {
@@ -798,7 +810,9 @@ export async function dispatchClaudeSession(
     await runCompletionCallback(opts, 1, run, { projectName, skill, ticket: ticket || '', events, panel });
     return;
   }
-  updateRun(run, { status: 'running', cwd, processPid: proc.pid });
+  const runningPatch: Partial<KronosRun> = { status: 'running', cwd };
+  if (proc.pid !== undefined) { runningPatch.processPid = proc.pid; }
+  updateRun(run, runningPatch);
 
   let buffer = '';
   let processClosed = false;
@@ -872,11 +886,15 @@ export async function dispatchClaudeSession(
     const wasCancelled = persisted?.status === 'cancelled';
     if (wasCancelled && persisted) {
       run.status = 'cancelled';
-      run.failureReason = persisted.failureReason;
-      run.endedAt = persisted.endedAt;
+      if (persisted.failureReason !== undefined) { run.failureReason = persisted.failureReason; }
+      else { delete run.failureReason; }
+      if (persisted.endedAt !== undefined) { run.endedAt = persisted.endedAt; }
+      else { delete run.endedAt; }
       run.events = Array.isArray(persisted.events) ? persisted.events : run.events;
-      run.recoveryActions = persisted.recoveryActions;
-      run.processPid = persisted.processPid;
+      if (persisted.recoveryActions !== undefined) { run.recoveryActions = persisted.recoveryActions; }
+      else { delete run.recoveryActions; }
+      if (persisted.processPid !== undefined) { run.processPid = persisted.processPid; }
+      else { delete run.processPid; }
     }
     const finalEvent = {
       type: wasCancelled ? 'error' : code === 0 ? 'done' : 'error',
@@ -888,13 +906,14 @@ export async function dispatchClaudeSession(
     addRunEvent(run, finalEvent);
     const finalStatus = wasCancelled ? 'cancelled' : code === 0 ? 'completed' : 'failed';
     const finalFailureReason = wasCancelled ? persisted?.failureReason : code === 0 ? undefined : `Process exited with code ${code}`;
-    updateRun(run, {
+    const finalPatch: Partial<KronosRun> = {
       status: finalStatus,
       endedAt: persisted?.endedAt || new Date().toISOString(),
       exitCode: code,
-      failureReason: finalFailureReason,
       failureKind: classifyRunFailure({ ...run, status: finalStatus, failureReason: finalFailureReason }),
-    });
+    };
+    if (finalFailureReason !== undefined) { finalPatch.failureReason = finalFailureReason; }
+    updateRun(run, finalPatch);
     panel.webview.html = withWebviewCsp(buildProgressHtml(projectName, skill, ticket || '', events));
     saveSession(projectName, skill, ticket || '', events);
 
