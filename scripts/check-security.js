@@ -1158,7 +1158,6 @@ for (const marker of [
   'continue-run',
   "run.failureKind = run.failureKind || 'unknown'",
   "run.failureKind = 'cancelled'",
-  'export function readArchivedRuns',
   "import { unknownErrorMessage } from './errorUtils'",
   'catch (e: unknown)',
   "unknownErrorMessage(e, 'Unable to parse JSON.')",

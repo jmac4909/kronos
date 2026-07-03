@@ -13,10 +13,6 @@ export interface EvidenceExport {
   filePath: string;
 }
 
-export function hasEvidence(ticket: Ticket): boolean {
-  return evidenceNotes(ticket).length + evidenceChecks(ticket).length + evidenceEnvironmentResults(ticket).length > 0;
-}
-
 export function formatEvidenceMarkdown(ticketKey: string, ticket: Ticket): string {
   const lines = [
     `# Evidence for ${ticketKey}`,

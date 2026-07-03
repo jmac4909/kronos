@@ -2814,7 +2814,6 @@ test('evidence store formats markdown and compact comment handoff', () => {
   assert.match(comment, /\[pass\] checkout retry smoke/);
   assert.match(comment, /Environment results:/);
   assert.match(comment, /\[test\] npm test passed/);
-  assert.equal(evidenceStore.hasEvidence(t), true);
 });
 
 test('evidence store keeps long ticket keys in bounded distinct filenames', () => {
@@ -3004,7 +3003,7 @@ test('run store archives run record, log, and prompt artifacts', () => {
   assert.equal(fs.existsSync(archived.promptPath), true);
   assert.equal(fs.readFileSync(archived.promptPath, 'utf8'), 'saved prompt');
   assert.equal(runStore.readRuns().some(r => r.id === run.id), false);
-  assert.equal(runStore.readArchivedRuns().some(r => r.id === run.id), true);
+  assert.equal(JSON.parse(fs.readFileSync(archived.runPath, 'utf8')).id, run.id);
 });
 
 test('run store reads UTF-8 BOM-prefixed JSON files from Windows tools', () => {
@@ -3101,7 +3100,7 @@ test('run store normalizes terminal active records on read and archive', () => {
   const archivedRun = JSON.parse(fs.readFileSync(archived.runPath, 'utf8'));
   assert.equal(archivedRun.status, 'failed');
   assert.equal(runStore.readRuns().some(run => run.id === failed.id), false);
-  assert.equal(runStore.readArchivedRuns().find(run => run.id === failed.id).status, 'failed');
+  assert.equal(archivedRun.id, failed.id);
 });
 
 test('run store archive does not overwrite existing archived records or artifacts', () => {
