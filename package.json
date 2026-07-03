@@ -956,11 +956,6 @@
           "default": 300,
           "description": "How often to poll review merge requests for status changes (seconds)"
         },
-        "kronos.useWorktrees": {
-          "type": "boolean",
-          "default": false,
-          "description": "Use git worktrees for dispatched sessions. Only enable for custom prompts that do not manage their own branches."
-        },
         "kronos.profile": {
           "type": "string",
           "default": "enterprise-gitlab-jira",

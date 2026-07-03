@@ -365,7 +365,6 @@ export interface DispatchOptions {
   onComplete?: (code: number, run: KronosRun) => void | Promise<void>;
   customPrompt?: string;
   promptMetadata?: PromptRunMetadata;
-  noWorktree?: boolean;
   parallel?: boolean;
   appendSystemPrompt?: string;
   worktreeBranch?: string;

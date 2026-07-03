@@ -94,6 +94,7 @@ const webviewHtml = readSource('src/services/webviewHtml.ts');
 const relativeTime = readSource('src/services/relativeTime.ts');
 const unitTests = readSource('scripts/run-unit-tests.js');
 const vscodeIgnore = readSource('.vscodeignore');
+const packageManifest = readSource('package.json');
 const extension = sources['src/extension.ts'];
 
 function fail(message) {
@@ -121,6 +122,10 @@ assertAbsent(/const\s+KRONOS_DIR\s*=\s*path\.join\(os\.homedir\(\),\s*['"]\.clau
 assertAbsent(/source ~\/\.bashrc/, 'Dispatched Claude sessions must not use shell startup files.');
 assertAbsent(/function shellQuote/, 'Dispatched Claude sessions must use argv spawning instead of shell quoting.');
 assertAbsent(/spawn\(BASH_PATH,\s*\[\s*['"]--login['"],\s*['"]-c['"]/, 'Dispatched Claude sessions must not run through bash -c.');
+assertAbsent(/noWorktree/, 'Do not reintroduce unused noWorktree dispatch options; managed worktrees are controlled by parallel.');
+if (packageManifest.includes('kronos.useWorktrees')) {
+  fail('Do not contribute stale kronos.useWorktrees settings without implemented behavior.');
+}
 if (/execFile(?:Sync)?\(\s*['"]python['"]/.test(nonScriptClientSource)) {
   fail('External Python scripts must be invoked through scriptClient.');
 }

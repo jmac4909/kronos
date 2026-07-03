@@ -553,7 +553,6 @@ async function retryRunFromPrompt(state: KronosState, run: KronosRun): Promise<v
     customPrompt: prompt,
     promptMetadata: retryMetadata,
     projectNameOverride: projectName,
-    noWorktree: true,
     onComplete: refreshAfterDispatch(state, projectName, ticketKey),
   });
 }
@@ -605,7 +604,6 @@ async function resumeSelectedRun(state: KronosState, run: KronosRun): Promise<vo
     await startClaudeDispatch(projectPath, run.skill || 'continue-work', ticketKey, {
       customPrompt: resumePrompt,
       promptMetadata: resumeMetadata,
-      noWorktree: true,
       workspaceCwd: workspace,
       projectNameOverride: projectName,
       appendSystemPrompt: getImplementPrompt(state),
@@ -1411,7 +1409,6 @@ export function activate(context: vscode.ExtensionContext) {
       if (projectPath) {
         const dispatchOptions: DispatchOptions = {
           onComplete: refreshAfterDispatch(state, projectName, ticketKey),
-          noWorktree: true,
         };
         if (projectName) { dispatchOptions.projectNameOverride = projectName; }
         await startClaudeDispatch(projectPath, 'deploy-monitor', ticketKey, dispatchOptions);
@@ -1427,7 +1424,6 @@ export function activate(context: vscode.ExtensionContext) {
       if (projectPath) {
         await startClaudeDispatch(projectPath, 'verify-fix', ticketKey, {
           onComplete: refreshAfterDispatch(state, projectName, ticketKey),
-          noWorktree: true,
         });
       } else {
         vscode.window.showWarningMessage('No project linked. Link the ticket to a project first.');
@@ -2221,7 +2217,6 @@ export function activate(context: vscode.ExtensionContext) {
             await startClaudeDispatch(projectPath, 'init-project', undefined, {
               onComplete: refreshAfterDispatch(state, projectName),
               customPrompt: setupPrompt,
-              noWorktree: true,
             });
           }
         } catch (e: unknown) {
@@ -2410,7 +2405,6 @@ export function activate(context: vscode.ExtensionContext) {
         onComplete: refreshAfterDispatch(state, projectName, ticketKey),
         customPrompt: verifyPrompt.text,
         promptMetadata: verifyPrompt.metadata,
-        noWorktree: true,
       });
     }),
 
@@ -2452,7 +2446,6 @@ export function activate(context: vscode.ExtensionContext) {
         },
         customPrompt: scanPrompt.text,
         promptMetadata: scanPrompt.metadata,
-        noWorktree: true,
       });
     }),
 
@@ -2583,7 +2576,6 @@ export function activate(context: vscode.ExtensionContext) {
         onComplete: refreshAfterDispatch(state, projectName),
         customPrompt: fixPrompt.text,
         promptMetadata: fixPrompt.metadata,
-        noWorktree: true,
         appendSystemPrompt: getImplementPrompt(state),
       });
     }),
@@ -2693,7 +2685,6 @@ export function activate(context: vscode.ExtensionContext) {
         onComplete: refreshAfterDispatch(state, projectName),
         customPrompt: prompt.text,
         promptMetadata: prompt.metadata,
-        noWorktree: true,
         appendSystemPrompt: getImplementPrompt(state),
       });
     }),
@@ -2754,7 +2745,6 @@ export function activate(context: vscode.ExtensionContext) {
         },
         customPrompt: prompt.text,
         promptMetadata: prompt.metadata,
-        noWorktree: true,
       });
     }),
 
@@ -2793,7 +2783,6 @@ export function activate(context: vscode.ExtensionContext) {
         onComplete: refreshAfterDispatch(state, projectName),
         customPrompt: prompt.text,
         promptMetadata: prompt.metadata,
-        noWorktree: true,
       });
     }),
 
@@ -2846,7 +2835,6 @@ export function activate(context: vscode.ExtensionContext) {
         onComplete: refreshAfterDispatch(state, projectName),
         customPrompt: prompt.text,
         promptMetadata: prompt.metadata,
-        noWorktree: true,
       });
     }),
 
@@ -2890,7 +2878,6 @@ export function activate(context: vscode.ExtensionContext) {
         onComplete: refreshAfterDispatch(state, projectName),
         customPrompt: combinedPrompt.text,
         promptMetadata: combinedPrompt.metadata,
-        noWorktree: true,
       });
     }),
 
@@ -2941,7 +2928,6 @@ export function activate(context: vscode.ExtensionContext) {
         onComplete: refreshAfterDispatch(state, projectName, ticketKey),
         customPrompt: continuePrompt.text,
         promptMetadata: continuePrompt.metadata,
-        noWorktree: true,
         appendSystemPrompt: getImplementPrompt(state),
       });
     }),
@@ -5207,7 +5193,6 @@ async function startDeployMonitorForMergedTicket(state: KronosState, ticketKey: 
   if (hasActiveDeployMonitorRun(projectName, projectPath, ticketKey)) { return; }
   const started = await startClaudeDispatch(projectPath, 'deploy-monitor', ticketKey, {
     onComplete: refreshAfterDispatch(state, projectName, ticketKey),
-    noWorktree: true,
     projectNameOverride: projectName,
   });
   if (!started) {
