@@ -48,7 +48,7 @@ function unique(values: Array<string | undefined>): string[] {
   return result;
 }
 
-export function gitBashCandidatePaths(env: NodeJS.ProcessEnv = process.env): string[] {
+function gitBashCandidatePaths(env: NodeJS.ProcessEnv = process.env): string[] {
   const programFiles = envValue(env, ['ProgramFiles', 'PROGRAMFILES']) || 'C:\\Program Files';
   const programFilesX86 = envValue(env, ['ProgramFiles(x86)', 'PROGRAMFILES(X86)']) || 'C:\\Program Files (x86)';
   const localAppData = envValue(env, ['LocalAppData', 'LOCALAPPDATA']);
@@ -64,13 +64,13 @@ export function gitBashCandidatePaths(env: NodeJS.ProcessEnv = process.env): str
   ]);
 }
 
-export function findGitBashPath(deps: TerminalProfileDeps = {}): string | undefined {
+function findGitBashPath(deps: TerminalProfileDeps = {}): string | undefined {
   const env = deps.env || process.env;
   const existsSync = deps.existsSync || fs.existsSync;
   return gitBashCandidatePaths(env).find((candidate) => existsSync(candidate));
 }
 
-export function isGitBashShell(shellPath?: string): boolean {
+function isGitBashShell(shellPath?: string): boolean {
   if (!shellPath) {
     return false;
   }

@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 
-export interface ActionThemeIcon {
+interface ActionThemeIcon {
   id: string;
   color?: vscode.ThemeColor;
 }

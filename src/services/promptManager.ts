@@ -124,7 +124,7 @@ const STARTER_PROMPT_VARIABLES: Record<string, string[]> = {
   'continue-work': ['TICKET_KEY', 'BRANCH', 'FEEDBACK'],
 };
 
-export function promptDirs(projectPath?: string): Array<{ dir: string; source: 'project' | 'global' }> {
+function promptDirs(projectPath?: string): Array<{ dir: string; source: 'project' | 'global' }> {
   const dirs: Array<{ dir: string; source: 'project' | 'global' }> = [];
   if (projectPath) {
     dirs.push({ dir: path.join(projectPath, '.claude', 'prompts'), source: 'project' });
@@ -294,7 +294,7 @@ export function diffPromptHistorySnapshots(current: PromptHistorySnapshot, previ
   return diff;
 }
 
-export function diffPromptTemplates(previous: PromptHistoryTemplate[], current: PromptHistoryTemplate[]): PromptHistoryChange[] {
+function diffPromptTemplates(previous: PromptHistoryTemplate[], current: PromptHistoryTemplate[]): PromptHistoryChange[] {
   const previousByKey = new Map(previous.map(template => [promptHistoryKey(template), template]));
   const currentByKey = new Map(current.map(template => [promptHistoryKey(template), template]));
   const keys = new Set([...previousByKey.keys(), ...currentByKey.keys()]);
@@ -333,7 +333,7 @@ export function repairRequiredPromptTemplates(
   return result;
 }
 
-export function findPrompt(name: string, projectPath?: string): PromptTemplateInfo | null {
+function findPrompt(name: string, projectPath?: string): PromptTemplateInfo | null {
   const fileName = safePromptFileName(name);
   for (const { dir, source } of promptDirs(projectPath)) {
     const promptPath = path.join(dir, fileName);

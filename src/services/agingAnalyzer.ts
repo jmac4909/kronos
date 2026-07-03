@@ -1,7 +1,7 @@
 import { Ticket } from '../state/types';
 
-export type AgingSeverity = 'critical' | 'warning' | 'info';
-export type AgingKind = 'review' | 'build' | 'blocked' | 'verification' | 'ticket';
+type AgingSeverity = 'critical' | 'warning' | 'info';
+type AgingKind = 'review' | 'build' | 'blocked' | 'verification' | 'ticket';
 
 export interface AgingThresholds {
   reviewDays: number;
@@ -11,7 +11,7 @@ export interface AgingThresholds {
   ticketDays: number;
 }
 
-export interface AgingItem {
+interface AgingItem {
   id: string;
   ticketKey: string;
   kind: AgingKind;

@@ -56,7 +56,7 @@ function unique(values: Array<string | undefined>): string[] {
   return result;
 }
 
-export function gcloudCandidateCommands(env: NodeJS.ProcessEnv = process.env): string[] {
+function gcloudCandidateCommands(env: NodeJS.ProcessEnv = process.env): string[] {
   const cloudSdkRoot = envValue(env, ['CLOUDSDK_ROOT_DIR', 'GCLOUD_ROOT_DIR']);
   const localAppData = envValue(env, ['LocalAppData', 'LOCALAPPDATA']);
   const programFiles = envValue(env, ['ProgramFiles', 'PROGRAMFILES']) || 'C:\\Program Files';
@@ -90,7 +90,7 @@ export function commandNeedsCmdWrapper(command: string, platform = process.platf
   return platform === 'win32' && /\.(cmd|bat)$/i.test(command);
 }
 
-export function quoteWindowsCmdToken(value: string): string {
+function quoteWindowsCmdToken(value: string): string {
   const escaped = String(value)
     .replace(/%/g, '%%')
     .replace(/(["^&|<>()])/g, '^$1');

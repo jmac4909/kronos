@@ -76,7 +76,7 @@ export function runAttentionDetail(run: unknown): string {
   return summarizeRunAttention(run).detail;
 }
 
-export function runFailureKindLabel(kind: RunFailureKind, status = ''): string {
+function runFailureKindLabel(kind: RunFailureKind, status = ''): string {
   const label = FAILURE_KIND_LABELS[kind];
   if (label) { return label; }
   if (status === 'needs_human') { return 'Needs human review'; }

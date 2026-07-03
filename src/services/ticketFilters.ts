@@ -94,7 +94,7 @@ export function groupTicketEntries(entries: Array<[string, Ticket]>, groupBy: Ti
   return Array.from(groups.entries()).sort((a, b) => a[0].localeCompare(b[0]));
 }
 
-export function ticketGroupLabel(ticket: Ticket, groupBy: TicketGroupBy): string {
+function ticketGroupLabel(ticket: Ticket, groupBy: TicketGroupBy): string {
   if (groupBy === 'action') { return ticket.next_action || 'No action'; }
   if (groupBy === 'priority') { return ticket.priority || 'No priority'; }
   if (groupBy === 'project') { return ticket.projects?.[0] || 'Unlinked'; }

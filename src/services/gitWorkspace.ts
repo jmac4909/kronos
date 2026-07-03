@@ -59,7 +59,7 @@ export interface ManagedWorktreeResult {
   pullWarning?: string;
 }
 
-export function runGit(args: string[], options: GitCommandOptions): string {
+function runGit(args: string[], options: GitCommandOptions): string {
   return execFileSync('git', args, {
     cwd: options.cwd,
     encoding: 'utf-8',

@@ -407,7 +407,7 @@ function normalizeReleaseKey(value: string): string | undefined {
   return normalized;
 }
 
-export function planIdFor(ticketKey: string | null, action: string): string {
+function planIdFor(ticketKey: string | null, action: string): string {
   return `${ticketKey || 'refresh'}:${action || 'implement'}`;
 }
 
@@ -505,7 +505,7 @@ function isPlanSuppressed(decision: QueueDecision | undefined, now: Date): boole
   return false;
 }
 
-export function scoreAction(action: string): number {
+function scoreAction(action: string): number {
   switch (action) {
     case 'fix_build': return 95;
     case 'verify': return 85;
@@ -518,7 +518,7 @@ export function scoreAction(action: string): number {
   }
 }
 
-export function scorePriority(priority: string): number {
+function scorePriority(priority: string): number {
   const p = String(priority || '').toLowerCase();
   if (p.includes('blocker') || p.includes('critical') || p.includes('highest') || p === 'p0' || p === 'p1') { return 25; }
   if (p.includes('high') || p === 'p2') { return 15; }

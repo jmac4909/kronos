@@ -75,7 +75,7 @@ export interface RunCenterActionRequest {
   runId: string;
 }
 
-export interface RunCenterOptions {
+interface RunCenterOptions {
   onAction?: (request: RunCenterActionRequest) => Promise<void> | void;
   pollIntervalMs?: number;
 }
@@ -249,13 +249,13 @@ export interface PromptRunMetadata {
   retryOfRunId?: string;
 }
 
-export interface WorktreeCleanupResult {
+interface WorktreeCleanupResult {
   entry: ActiveWorktreeEntry;
   status: 'missing' | 'removable' | 'removed' | 'blocked' | 'error';
   reason: string;
 }
 
-export interface WorktreeCleanupReport {
+interface WorktreeCleanupReport {
   results: WorktreeCleanupResult[];
   removable: number;
   removed: number;
@@ -1105,7 +1105,7 @@ function shortenPath(p: string): string {
   return `.../${parts.slice(-3).join('/')}`;
 }
 
-export function buildProgressHtml(project: string, skill: string, ticket: string, events: ProgressEvent[]): string {
+function buildProgressHtml(project: string, skill: string, ticket: string, events: ProgressEvent[]): string {
   const filesEdited = new Set<string>();
   const filesRead = new Set<string>();
   let lastThinking = '';

@@ -4,7 +4,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { unknownErrorField, unknownErrorMessage } from './errorUtils';
 
-export const SCRIPTS_DIR = process.env['KRONOS_SCRIPTS_DIR'] || path.join(os.homedir(), '.claude', 'scripts');
+const SCRIPTS_DIR = process.env['KRONOS_SCRIPTS_DIR'] || path.join(os.homedir(), '.claude', 'scripts');
 const PYTHON = findPython();
 
 export type RequiredScriptName = 'kronos_state.py' | 'pipeline_monitor.py' | 'gitlab_api.py';
@@ -31,11 +31,11 @@ export function requiredScripts(): ScriptHealth[] {
     });
 }
 
-export function scriptPath(scriptName: RequiredScriptName): string {
+function scriptPath(scriptName: RequiredScriptName): string {
   return path.join(SCRIPTS_DIR, scriptName);
 }
 
-export function runPythonScriptSync(scriptName: RequiredScriptName, args: string[], options: ScriptRunOptions = {}): string {
+function runPythonScriptSync(scriptName: RequiredScriptName, args: string[], options: ScriptRunOptions = {}): string {
   const filePath = assertScriptAvailable(scriptName);
   try {
     return execFileSync(PYTHON, [filePath, ...args], {
@@ -49,7 +49,7 @@ export function runPythonScriptSync(scriptName: RequiredScriptName, args: string
   }
 }
 
-export function runPythonScript(scriptName: RequiredScriptName, args: string[], options: ScriptRunOptions = {}): Promise<string> {
+function runPythonScript(scriptName: RequiredScriptName, args: string[], options: ScriptRunOptions = {}): Promise<string> {
   const filePath = assertScriptAvailable(scriptName);
   return new Promise((resolve, reject) => {
     execFile(PYTHON, [filePath, ...args], {
