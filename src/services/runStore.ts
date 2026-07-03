@@ -202,7 +202,7 @@ function readRunFileResult(filePath: string, scope: RunStoreIssue['scope']): { r
     if (!isRecord(parsed)) {
       return { issue: invalidRunRecordIssue(scope, filePath, 'Run record must be a JSON object.') };
     }
-    if (typeof parsed.id !== 'string' || parsed.id.trim().length === 0) {
+    if (typeof parsed['id'] !== 'string' || parsed['id'].trim().length === 0) {
       return { issue: invalidRunRecordIssue(scope, filePath, 'Run record id must be a non-empty string.') };
     }
     return { run: parsed as RunRecord };
@@ -251,9 +251,9 @@ function terminalRunOutcomeFromActiveLog(run: RunRecord): string | undefined {
     if (!trimmed.startsWith('{')) { continue; }
     try {
       const parsed = JSON.parse(trimmed);
-      if (isRecord(parsed) && parsed.type === 'result') {
-        const subtype = stringField(parsed.subtype).toLowerCase();
-        return parsed.is_error === true || subtype.includes('error') || subtype.includes('fail')
+      if (isRecord(parsed) && parsed['type'] === 'result') {
+        const subtype = stringField(parsed['subtype']).toLowerCase();
+        return parsed['is_error'] === true || subtype.includes('error') || subtype.includes('fail')
           ? 'failed'
           : 'completed';
       }

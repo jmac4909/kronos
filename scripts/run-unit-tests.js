@@ -5469,7 +5469,7 @@ test('post-run readiness distinguishes process completion from handoff readiness
     'matchedProjectTickets.length === 1',
     'function ticketLinkedToProject(ticket: Ticket, projectName: string): boolean',
     'function trimmedString(value: unknown): string | undefined',
-    "runString(record.skill) === 'implement'",
+    "runString(record['skill']) === 'implement'",
     "input.ticket.next_action === 'await_review'",
     'evidenceNotes(input.ticket).length === 0',
     'export function buildRunCompletionEvidenceText',
