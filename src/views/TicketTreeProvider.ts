@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { KronosState } from '../state/KronosState';
 import { Ticket } from '../state/types';
 import { actionToLabel } from '../services/actionLabels';
+import { evidenceRecordCount } from '../services/evidenceData';
 import { TicketFilter, TicketGroupBy, describeTicketFilter, filterTickets, groupTicketEntries, hasTicketFilter } from '../services/ticketFilters';
 import { themeIcon, ticketActionIcon } from './actionIcons';
 
@@ -82,7 +83,7 @@ export class TicketTreeProvider implements vscode.TreeDataProvider<TicketElement
       }
       items.push(new TicketDetailItem('Link to project...', '', 'link_action', element.ticketKey));
 
-      const evidenceCount = evidenceItemCount(t);
+      const evidenceCount = evidenceRecordCount(t);
       if (evidenceCount > 0) {
         const evidenceItem = new TicketDetailItem(`${evidenceCount} evidence item${evidenceCount === 1 ? '' : 's'}`, '', 'evidence_info', element.ticketKey);
         evidenceItem.iconPath = new vscode.ThemeIcon('notebook', new vscode.ThemeColor('charts.blue'));
@@ -216,13 +217,4 @@ class TicketDetailItem extends vscode.TreeItem {
       this.command = { command: 'kronos.openExternalUrl', title: 'Open', arguments: [url] };
     }
   }
-}
-
-function evidenceItemCount(ticket: Ticket): number {
-  const notes = Array.isArray(ticket.evidence?.notes) ? ticket.evidence.notes.length : 0;
-  const checks = Array.isArray(ticket.evidence?.checks) ? ticket.evidence.checks.length : 0;
-  const environments = ticket.evidence?.environment_results && typeof ticket.evidence.environment_results === 'object'
-    ? Object.keys(ticket.evidence.environment_results).length
-    : 0;
-  return notes + checks + environments;
 }

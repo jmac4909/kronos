@@ -2615,7 +2615,8 @@ test('queue planner groups recommendations into release batch plans', () => {
     'QueueItem, QueueState, Ticket',
     'queueItem?: QueueItem',
     'export function planToQueueItem(input: PlannerInput, plan: PlannedAction): QueueItem',
-    'function evidenceItemCount(ticket: Ticket): number',
+    "import { evidenceRecordCount } from './evidenceData'",
+    'evidenceRecordCount(ticket)',
     'function releaseKeysForPlan(ticket?: Ticket, queueItem?: unknown): string[]',
     'function releaseField(source: unknown, field: string): unknown',
     'function collectReleaseValues(target: string[], value: unknown): void',
@@ -6800,8 +6801,10 @@ test('tree providers share action labels and icons', () => {
 
   for (const marker of [
     "import { actionToLabel } from '../services/actionLabels'",
+    "import { evidenceRecordCount } from '../services/evidenceData'",
     "import { themeIcon, ticketActionIcon } from './actionIcons'",
     'themeIcon(ticketActionIcon(action))',
+    'evidenceRecordCount(t)',
   ]) {
     assert.ok(ticketTree.includes(marker), marker);
   }
@@ -6935,6 +6938,7 @@ test('tree providers share action labels and icons', () => {
   assert.ok(extensionSource.includes("import { actionToLabel } from './services/actionLabels'"), 'extension should import action labels directly');
   assert.ok(nextActionContext.includes("import { actionToLabel } from './actionLabels'"), 'next action context should import action labels directly');
   assert.equal(ticketTree.includes('function actionToLabel'), false, 'ticket tree should not duplicate action labels');
+  assert.equal(ticketTree.includes('function evidenceItemCount'), false, 'ticket tree should not duplicate evidence counting');
   assert.equal(queueTree.includes('function actionIcon'), false, 'queue tree should not duplicate action icons');
 });
 

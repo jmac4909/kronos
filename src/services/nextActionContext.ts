@@ -148,7 +148,7 @@ function preflightForPlan(plan: PlannedAction, ticket: Ticket | undefined): stri
     checks.push('Collision detector checks active runs, queued work, open MRs, and likely touched files.');
   }
   if (PROOF_SENSITIVE_ACTIONS.has(plan.action)) {
-    const evidenceCount = evidenceItemCount(ticket);
+    const evidenceCount = evidenceRecordCount(ticket);
     checks.push(evidenceCount > 0
       ? `Evidence ledger has ${evidenceCount} item(s).`
       : 'Evidence ledger is empty; add proof before handoff.');
@@ -174,8 +174,4 @@ function blockersForPlan(plan: PlannedAction, input: NextActionContextInput): st
     blockers.push(`Missing project config: ${missingProjects.join(', ')}.`);
   }
   return blockers;
-}
-
-function evidenceItemCount(ticket: Ticket | undefined): number {
-  return evidenceRecordCount(ticket);
 }

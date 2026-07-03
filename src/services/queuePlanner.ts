@@ -117,7 +117,7 @@ export function planNextActions(input: PlannerInput): PlannedAction[] {
     const buildScore = ticket.build?.status === 'FAILURE' ? 25 : ticket.build?.status === 'SUCCESS' ? 5 : 0;
     const mrScore = ticket.mr?.review_status === 'changes_requested' ? 20 : ticket.mr?.review_status === 'approved' ? 10 : 0;
     const linkScore = (ticket.projects || []).length > 0 ? 10 : -30;
-    const evidenceCount = evidenceItemCount(ticket);
+    const evidenceCount = evidenceRecordCount(ticket);
     const evidenceScore = evidenceCount === 0 && ['verify', 'await_review', 'deploy_monitor'].includes(ticket.next_action) ? 5 : 0;
     const scoreBreakdown = [
       { label: 'Action', value: actionScore, detail: actionToLabel(ticket.next_action) },
@@ -217,7 +217,7 @@ export function buildBacklogTriageReport(input: PlannerInput): BacklogTriageRepo
   for (const [ticketKey, ticket] of Object.entries(tickets)) {
     if (ticket.next_action === 'done') { continue; }
     const projects = ticket.projects || [];
-    const evidenceCount = evidenceItemCount(ticket);
+    const evidenceCount = evidenceRecordCount(ticket);
     const ageDays = ticketAgeDays(ticket, now);
     const issueCountBeforeTicket = items.length;
 
@@ -270,10 +270,6 @@ export function planToQueueItem(input: PlannerInput, plan: PlannedAction): Queue
   };
   if (plan.ticketSummary) { item.ticket_summary = plan.ticketSummary; }
   return item;
-}
-
-function evidenceItemCount(ticket: Ticket): number {
-  return evidenceRecordCount(ticket);
 }
 
 function ticketAgeDays(ticket: Ticket, now: Date): number | undefined {

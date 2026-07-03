@@ -1,6 +1,6 @@
 import { Ticket } from '../state/types';
 import { extractCriterionTexts } from './acceptanceCriteria';
-import { evidenceAcceptanceCriteria, evidenceChecked, evidenceChecks, evidenceEnvironmentResults, evidenceNotes, evidenceString } from './evidenceData';
+import { evidenceAcceptanceCriteria, evidenceChecked, evidenceChecks, evidenceEnvironmentResults, evidenceNotes, evidenceRecordCount, evidenceString } from './evidenceData';
 
 export type EvidenceGateStatus = 'pass' | 'warn' | 'fail';
 export type EvidenceGateCheckKind = 'project' | 'notes' | 'test' | 'acceptance' | 'build' | 'mr' | 'risk' | 'environment';
@@ -28,7 +28,7 @@ export function evaluateEvidenceGate(ticketKey: string, ticket: Ticket): Evidenc
   const notes = evidenceNotes(ticket);
   const structuredChecks = evidenceChecks(ticket);
   const environmentResults = evidenceEnvironmentResults(ticket);
-  const evidenceRecordCount = notes.length + structuredChecks.length + environmentResults.length;
+  const evidenceCount = evidenceRecordCount(ticket);
   const criteria = evidenceAcceptanceCriteria(ticket);
   const apparentCriteria = extractCriterionTexts(ticket.description || '');
 
@@ -38,9 +38,9 @@ export function evaluateEvidenceGate(ticketKey: string, ticket: Ticket): Evidenc
     checks.push(pass('project', 'Project link present', ticket.projects.join(', ')));
   }
 
-  if (evidenceRecordCount === 0 && reviewReady) {
+  if (evidenceCount === 0 && reviewReady) {
     checks.push(fail('notes', 'No evidence records', `Ticket action is ${ticket.next_action}; add verification or implementation evidence.`));
-  } else if (evidenceRecordCount === 0) {
+  } else if (evidenceCount === 0) {
     checks.push(warn('notes', 'No evidence records yet', 'Add notes as soon as implementation or verification starts.'));
   } else if (notes.length === 0) {
     checks.push(warn('notes', 'No narrative evidence note', `${structuredChecks.length + environmentResults.length} structured evidence record${structuredChecks.length + environmentResults.length === 1 ? '' : 's'} present.`));

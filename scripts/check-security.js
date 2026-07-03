@@ -31,6 +31,7 @@ const sessionTreeProvider = readSource('src/views/SessionTreeProvider.ts');
 const queueTreeProvider = readSource('src/views/QueueTreeProvider.ts');
 const reviewTreeProvider = readSource('src/views/ReviewTreeProvider.ts');
 const projectTreeProvider = sources['src/views/ProjectTreeProvider.ts'];
+const ticketTreeProvider = sources['src/views/TicketTreeProvider.ts'];
 const dispatcher = sources['src/runners/sessionDispatcher.ts'];
 const scriptClient = sources['src/services/scriptClient.ts'];
 const acceptanceCriteria = readSource('src/services/acceptanceCriteria.ts');
@@ -1725,6 +1726,18 @@ if (queueTreeProvider.includes('activeRuns.find(run => runMatchesQueueTicket(run
 }
 
 for (const marker of [
+  "import { evidenceRecordCount } from '../services/evidenceData'",
+  'evidenceRecordCount(t)',
+]) {
+  if (!ticketTreeProvider.includes(marker)) {
+    fail(`Missing ticket tree evidence-count marker: ${marker}`);
+  }
+}
+if (ticketTreeProvider.includes('function evidenceItemCount')) {
+  fail('Ticket tree must not duplicate evidence counting.');
+}
+
+for (const marker of [
   'readonly onDidChangeNewReviewCount',
   'const NEW_REVIEW_SPIN_MS = 6000',
   'private currentReviewKeys = new Set<string>()',
@@ -2243,7 +2256,8 @@ for (const marker of [
   'export function evaluateEvidenceGates',
   'REVIEW_READY_ACTIONS',
   'No evidence records',
-  'const evidenceRecordCount = notes.length + structuredChecks.length + environmentResults.length',
+  'evidenceRecordCount, evidenceString',
+  'const evidenceCount = evidenceRecordCount(ticket)',
   'No narrative evidence note',
   'Build #',
   'changes requested',
@@ -2370,7 +2384,6 @@ for (const marker of [
   'QueueItem, QueueState, Ticket',
   'queueItem?: QueueItem',
   'export function planToQueueItem(input: PlannerInput, plan: PlannedAction): QueueItem',
-  'function evidenceItemCount(ticket: Ticket): number',
   'function releaseKeysForPlan(ticket?: Ticket, queueItem?: unknown): string[]',
   'function releaseField(source: unknown, field: string): unknown',
   'function unknownArray(value: unknown): unknown[]',
