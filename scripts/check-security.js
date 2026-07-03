@@ -2381,10 +2381,10 @@ for (const marker of [
 }
 
 for (const marker of [
-  'export function normalizeChangedFilePath',
+  'function normalizeChangedFilePath',
   'export function changedFilePaths',
   'export function primaryChangedFilePath',
-  'export function normalizeChangedFile',
+  'function normalizeChangedFile',
   'export function normalizeChangedFiles',
   'file.new_path',
   'file.old_path',

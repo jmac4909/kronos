@@ -2690,7 +2690,9 @@ test('changed file helpers normalize GitLab path variants', () => {
   ]);
   assert.equal(changedFiles.primaryChangedFilePath({ filename: 'src/orders/create.ts' }), 'src/orders/create.ts');
   assert.deepEqual(changedFiles.changedFilePaths('src/app.ts'), ['src/app.ts']);
-  assert.equal(changedFiles.normalizeChangedFilePath(42), '');
+  assert.deepEqual(changedFiles.normalizeChangedFiles([42]), []);
+  assert.equal(changedFiles.normalizeChangedFilePath, undefined);
+  assert.equal(changedFiles.normalizeChangedFile, undefined);
   assert.deepEqual(changedFiles.normalizeChangedFiles([
     null,
     ' ./src\\app.ts ',

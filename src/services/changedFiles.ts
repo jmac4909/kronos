@@ -4,7 +4,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
-export function normalizeChangedFilePath(value: unknown): string {
+function normalizeChangedFilePath(value: unknown): string {
   if (typeof value !== 'string') { return ''; }
   return value.trim().replace(/\\/g, '/').replace(/^\.\/+/, '').trim();
 }
@@ -27,7 +27,7 @@ export function primaryChangedFilePath(file: MergeRequestChangedFile | string | 
   return changedFilePaths(file)[0] || '';
 }
 
-export function normalizeChangedFile(file: unknown): MergeRequestChangedFile | null {
+function normalizeChangedFile(file: unknown): MergeRequestChangedFile | null {
   if (typeof file === 'string') {
     const path = normalizeChangedFilePath(file);
     return path ? { path } : null;
