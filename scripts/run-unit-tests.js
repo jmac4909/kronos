@@ -6685,6 +6685,39 @@ test('extension activation tracks long-lived disposables', () => {
   );
 });
 
+test('extension declares limited Restricted Mode support and blocks trust-sensitive actions', () => {
+  const manifest = JSON.parse(readSourceFixture('package.json'));
+  assert.equal(manifest.capabilities?.untrustedWorkspaces?.supported, 'limited');
+  assert.match(
+    manifest.capabilities.untrustedWorkspaces.description,
+    /Read-only Kronos dashboards and review panels are available in Restricted Mode/,
+  );
+  assert.match(
+    manifest.capabilities.untrustedWorkspaces.description,
+    /Dispatching agents, modifying repositories, publishing evidence, and destructive cleanup require workspace trust/,
+  );
+
+  const source = readSourceFixture('src', 'extension.ts');
+  for (const marker of [
+    "import { SafetyPlan, assessSafetyGate, type SafetyRisk } from './services/safetyGate'",
+    'const TRUST_REQUIRED_RISKS = new Set<SafetyRisk>',
+    "  'repo-write',",
+    "  'branch-switch',",
+    "  'destructive',",
+    "  'external-publish',",
+    'function requiresWorkspaceTrust(risks: SafetyRisk[]): boolean',
+    'return risks.some(risk => TRUST_REQUIRED_RISKS.has(risk));',
+    'function workspaceTrustRiskSummary(risks: SafetyRisk[]): string',
+    'requiresWorkspaceTrust(assessment.risks) && !vscode.workspace.isTrusted',
+    'Trust this workspace before ${assessment.title}',
+    'Manage Workspace Trust',
+    "vscode.commands.executeCommand('workbench.trust.manage')",
+    "unknownErrorMessage(e, 'Could not open Workspace Trust management.')",
+  ]) {
+    assert.ok(source.includes(marker), marker);
+  }
+});
+
 test('extension run recovery helpers use typed run records', () => {
   const source = readSourceFixture('src', 'extension.ts');
   const runActionStart = source.indexOf('async function resumeSelectedRun');

@@ -90,6 +90,16 @@ if (missing.length || extra.length) {
   process.exit(1);
 }
 
+const untrustedWorkspaces = manifest.capabilities?.untrustedWorkspaces;
+if (untrustedWorkspaces?.supported !== 'limited') {
+  console.error('Kronos must declare limited untrusted workspace support so read-only operator panels remain available in Restricted Mode.');
+  process.exit(1);
+}
+if (!String(untrustedWorkspaces.description || '').includes('Dispatching agents')) {
+  console.error('Kronos untrusted workspace support must describe which actions require workspace trust.');
+  process.exit(1);
+}
+
 const iconProblems = [];
 for (const command of manifest.contributes.commands || []) {
   if (!command.icon) {

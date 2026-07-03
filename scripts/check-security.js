@@ -626,6 +626,24 @@ for (const marker of [
   }
 }
 for (const marker of [
+  "import { SafetyPlan, assessSafetyGate, type SafetyRisk } from './services/safetyGate'",
+  'const TRUST_REQUIRED_RISKS = new Set<SafetyRisk>',
+  "  'repo-write',",
+  "  'branch-switch',",
+  "  'destructive',",
+  "  'external-publish',",
+  'function requiresWorkspaceTrust(risks: SafetyRisk[]): boolean',
+  'function workspaceTrustRiskSummary(risks: SafetyRisk[]): string',
+  'requiresWorkspaceTrust(assessment.risks) && !vscode.workspace.isTrusted',
+  'Manage Workspace Trust',
+  "vscode.commands.executeCommand('workbench.trust.manage')",
+  "unknownErrorMessage(e, 'Could not open Workspace Trust management.')",
+]) {
+  if (!extension.includes(marker)) {
+    fail(`Missing workspace trust marker: ${marker}`);
+  }
+}
+for (const marker of [
   'export type ReviewMonitorDecisionKind',
   'export interface ReviewMonitorDecision',
   'export function decideReviewMonitorAction',

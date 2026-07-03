@@ -22,6 +22,12 @@
     "onStartupFinished"
   ],
   "main": "./out/extension.js",
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "Read-only Kronos dashboards and review panels are available in Restricted Mode. Dispatching agents, modifying repositories, publishing evidence, and destructive cleanup require workspace trust."
+    }
+  },
   "contributes": {
     "viewsContainers": {
       "activitybar": [
