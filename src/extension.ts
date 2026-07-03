@@ -521,13 +521,75 @@ async function openTextFileIfExists(filePath: string, missingMessage: string): P
     vscode.window.showWarningMessage(missingMessage);
     return;
   }
+  try {
+    if (!fs.statSync(filePath).isFile()) {
+      vscode.window.showWarningMessage(missingMessage);
+      return;
+    }
+  } catch (e: unknown) {
+    console.warn(unknownErrorMessage(e, `Could not inspect text file ${filePath}.`));
+    vscode.window.showWarningMessage(missingMessage);
+    return;
+  }
   const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(filePath));
   await vscode.window.showTextDocument(doc, { preview: false });
 }
 
+type RunArtifactPathResult =
+  | { ok: true; filePath: string }
+  | { ok: false; reason: 'missing' | 'outside-runs-dir' };
+
+function isPathInsideDirectory(filePath: string, directoryPath: string): boolean {
+  try {
+    const realDirectory = fs.realpathSync(directoryPath);
+    const realPath = fs.realpathSync(filePath);
+    const relative = path.relative(realDirectory, realPath);
+    return relative === '' || (!!relative && !relative.startsWith('..') && !path.isAbsolute(relative));
+  } catch (e: unknown) {
+    console.warn(unknownErrorMessage(e, `Could not resolve artifact path ${filePath}.`));
+    return false;
+  }
+}
+
+function resolveRunArtifactFile(filePath: string | undefined): RunArtifactPathResult {
+  if (typeof filePath !== 'string' || !filePath.trim() || !fs.existsSync(filePath)) {
+    return { ok: false, reason: 'missing' };
+  }
+  try {
+    if (!fs.statSync(filePath).isFile()) {
+      return { ok: false, reason: 'missing' };
+    }
+  } catch (e: unknown) {
+    console.warn(unknownErrorMessage(e, `Could not inspect run artifact ${filePath}.`));
+    return { ok: false, reason: 'missing' };
+  }
+  if (!isPathInsideDirectory(filePath, RUNS_DIR)) {
+    return { ok: false, reason: 'outside-runs-dir' };
+  }
+  return { ok: true, filePath };
+}
+
+function warnForRunArtifactPath(result: Extract<RunArtifactPathResult, { ok: false }>, missingMessage: string): void {
+  vscode.window.showWarningMessage(
+    result.reason === 'outside-runs-dir'
+      ? 'Refusing to open run artifact outside Kronos runs directory.'
+      : missingMessage
+  );
+}
+
+async function openRunArtifactFileIfExists(filePath: string | undefined, missingMessage: string): Promise<void> {
+  const resolved = resolveRunArtifactFile(filePath);
+  if (!resolved.ok) {
+    warnForRunArtifactPath(resolved, missingMessage);
+    return;
+  }
+  await openTextFileIfExists(resolved.filePath, missingMessage);
+}
+
 async function retryRunFromPrompt(state: KronosState, run: KronosRun): Promise<void> {
-  if (!run?.promptPath || !fs.existsSync(run.promptPath)) {
-    vscode.window.showWarningMessage('Run prompt artifact not found.');
+  const promptPath = resolveRunArtifactFile(run?.promptPath);
+  if (!promptPath.ok) {
+    warnForRunArtifactPath(promptPath, 'Run prompt artifact not found.');
     return;
   }
   if (!run.projectPath || !fs.existsSync(run.projectPath)) {
@@ -542,7 +604,7 @@ async function retryRunFromPrompt(state: KronosState, run: KronosRun): Promise<v
   );
   if (confirm !== 'Retry') { return; }
 
-  const prompt = fs.readFileSync(run.promptPath, 'utf-8');
+  const prompt = fs.readFileSync(promptPath.filePath, 'utf-8');
   const projectName = run.project || path.basename(run.projectPath);
   const ticketKey = run.ticket || undefined;
   const retryMetadata = {
@@ -589,10 +651,12 @@ async function resumeSelectedRun(state: KronosState, run: KronosRun): Promise<vo
   if (confirm !== 'Resume Run') { return; }
 
   try {
-    const originalPrompt = run.promptPath && fs.existsSync(run.promptPath)
-      ? fs.readFileSync(run.promptPath, 'utf-8')
+    const promptPath = resolveRunArtifactFile(run.promptPath);
+    const logPath = resolveRunArtifactFile(run.logPath);
+    const originalPrompt = promptPath.ok
+      ? fs.readFileSync(promptPath.filePath, 'utf-8')
       : '';
-    const logTail = readRunLogTail(run.logPath);
+    const logTail = logPath.ok ? readRunLogTail(logPath.filePath) : '';
     const resumePrompt = buildRunResumePrompt(run, originalPrompt, logTail);
     const resumeMetadata: PromptRunMetadata = {
       ...(run.promptMetadata || {}),
@@ -626,7 +690,7 @@ async function archiveSelectedRun(runId: string): Promise<void> {
     const archived = archiveRun(runId);
     const action = await vscode.window.showInformationMessage(`Archived run ${runId}.`, 'Open Archived Record');
     if (action === 'Open Archived Record') {
-      await openTextFileIfExists(archived.runPath, 'Archived run record not found.');
+      await openRunArtifactFileIfExists(archived.runPath, 'Archived run record not found.');
     }
   } catch (e: unknown) {
     vscode.window.showErrorMessage(unknownErrorMessage(e, 'Failed to archive run.'));
@@ -753,7 +817,7 @@ async function openRunDiffArtifact(run: KronosRun): Promise<void> {
   }
   try {
     const artifact = createWorkspaceDiffArtifact(run, RUNS_DIR);
-    await openTextFileIfExists(artifact.filePath, 'Run diff artifact not found.');
+    await openRunArtifactFileIfExists(artifact.filePath, 'Run diff artifact not found.');
   } catch (e: unknown) {
     vscode.window.showErrorMessage(unknownErrorMessage(e, 'Failed to open run diff.'));
   }
@@ -818,16 +882,16 @@ async function executeRunCenterAction(state: KronosState, request: RunCenterActi
   }
   const run = findRunById(request.runId);
   if (request.command === 'openRunRecord') {
-    await openTextFileIfExists(runRecordPath(request.runId), 'Run record not found.');
+    await openRunArtifactFileIfExists(runRecordPath(request.runId), 'Run record not found.');
     return;
   }
   if (!run) {
     vscode.window.showWarningMessage('Run record not found.');
     return;
   } else if (request.command === 'openRunLog') {
-    await openTextFileIfExists(run.logPath || '', 'Run log not found.');
+    await openRunArtifactFileIfExists(run.logPath, 'Run log not found.');
   } else if (request.command === 'openRunPrompt') {
-    await openTextFileIfExists(run.promptPath || '', 'Run prompt artifact not found.');
+    await openRunArtifactFileIfExists(run.promptPath, 'Run prompt artifact not found.');
   } else if (request.command === 'openRunWorkspace') {
     const cwd = run.worktreePath || run.cwd || run.projectPath;
     if (cwd && fs.existsSync(cwd)) {
@@ -3232,11 +3296,11 @@ export function activate(context: vscode.ExtensionContext) {
       if (!action) { return; }
 
       if (action === 'Open Log') {
-        await openTextFileIfExists(picked.run.logPath, 'Run log not found.');
+        await openRunArtifactFileIfExists(picked.run.logPath, 'Run log not found.');
       } else if (action === 'Open Prompt') {
-        await openTextFileIfExists(picked.run.promptPath || '', 'Run prompt artifact not found.');
+        await openRunArtifactFileIfExists(picked.run.promptPath, 'Run prompt artifact not found.');
       } else if (action === 'Open Run Record') {
-        await openTextFileIfExists(runRecordPath(picked.run.id), 'Run record not found.');
+        await openRunArtifactFileIfExists(runRecordPath(picked.run.id), 'Run record not found.');
       } else if (action === 'Open Workspace Terminal') {
         const cwd = picked.run.worktreePath || picked.run.cwd || picked.run.projectPath;
         if (cwd && fs.existsSync(cwd)) {
@@ -3265,7 +3329,7 @@ export function activate(context: vscode.ExtensionContext) {
     }),
 
     vscode.commands.registerCommand('kronos.retryRun', async () => {
-      const runs = listRuns().filter(run => run.promptPath && fs.existsSync(run.promptPath));
+      const runs = listRuns().filter(run => resolveRunArtifactFile(run.promptPath).ok);
       if (runs.length === 0) {
         vscode.window.showInformationMessage('No runs with saved prompt artifacts found.');
         return;
@@ -3282,7 +3346,7 @@ export function activate(context: vscode.ExtensionContext) {
     }),
 
     vscode.commands.registerCommand('kronos.resumeRun', async () => {
-      const runs = listRuns().filter(run => run.promptPath || run.logPath);
+      const runs = listRuns().filter(run => resolveRunArtifactFile(run.promptPath).ok || resolveRunArtifactFile(run.logPath).ok);
       if (runs.length === 0) {
         vscode.window.showInformationMessage('No resumable Kronos runs found.');
         return;
@@ -3863,12 +3927,12 @@ async function executeRecoveryAction(item: RecoveryItem, state: KronosState, bac
   }
   if (item.action === 'openRunLog') {
     const run = listRuns().find(r => r.id === item.runId);
-    await openTextFileIfExists(run?.logPath || '', 'Run log not found.');
+    await openRunArtifactFileIfExists(run?.logPath, 'Run log not found.');
     return;
   }
   if (item.action === 'openRunPrompt') {
     const run = listRuns().find(r => r.id === item.runId);
-    await openTextFileIfExists(run?.promptPath || '', 'Run prompt artifact not found.');
+    await openRunArtifactFileIfExists(run?.promptPath, 'Run prompt artifact not found.');
     return;
   }
   if (item.action === 'linkMrToTicket') {
