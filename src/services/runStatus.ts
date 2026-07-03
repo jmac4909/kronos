@@ -45,11 +45,11 @@ export function effectiveRunStatus(run: RunStatusLike | unknown): string {
   return terminalRunOutcome(run) || status;
 }
 
-export function activeRunSummary(runs: Array<RunStatusLike | unknown>): string {
+export function activeRunSummary(runs: Array<RunStatusLike | unknown>, now = new Date()): string {
   const counts = new Map<string, number>();
   for (const run of runs) {
     const status = runStatus(run);
-    if (!isFreshActiveRun(run)) { continue; }
+    if (!isFreshActiveRun(run, now)) { continue; }
     counts.set(status, (counts.get(status) || 0) + 1);
   }
   return ['running', 'preflight', 'queued', 'paused']

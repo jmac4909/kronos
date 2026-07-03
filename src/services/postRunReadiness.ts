@@ -1,7 +1,7 @@
 import { Ticket } from '../state/types';
 import { isHandoffAction } from './actionSemantics';
 import { EvidenceGateResult, evaluateEvidenceGate } from './evidenceGate';
-import { evidenceNotes } from './evidenceData';
+import { evidenceChecks, evidenceNotes, evidenceString } from './evidenceData';
 import { runProgressSummary } from './runProgress';
 import { terminalRunOutcome } from './runStatus';
 
@@ -27,6 +27,7 @@ export interface RunCompletionEvidenceCheck {
   name: string;
   result: 'pass' | 'warn';
   environment: string;
+  command?: string;
   summary: string;
   confidence: 'medium' | 'high';
 }
@@ -85,10 +86,11 @@ function postRunTicketResolution(ticketKey: string | undefined): PostRunTicketRe
 export function shouldRecordRunCompletionEvidence(input: { run: unknown; ticket?: Ticket }): boolean {
   if (!input.ticket) { return false; }
   const record = runRecord(input.run);
+  const runId = completionEvidenceRunId(record);
   return runCompletedForEvidence(record)
     && runString(record['skill']) === 'implement'
     && input.ticket.next_action === 'await_review'
-    && evidenceNotes(input.ticket).length === 0;
+    && !hasRunCompletionEvidence(input.ticket, runId);
 }
 
 export function buildRunCompletionEvidenceText(run: unknown, ticket?: Ticket): string {
@@ -139,6 +141,7 @@ export function buildRunCompletionEvidenceCheck(run: unknown, ticket?: Ticket): 
     name: 'Kronos implement completion',
     result: cleanRun && strongSignal ? 'pass' : 'warn',
     environment: 'kronos',
+    command: runCompletionEvidenceCommand(runId),
     confidence: strongSignal ? 'high' : 'medium',
     summary: summaryParts.join('; '),
   };
@@ -273,6 +276,34 @@ function runRecord(value: unknown): Record<string, unknown> {
 function runCompletedForEvidence(record: Record<string, unknown>): boolean {
   const status = runString(record['status']);
   return SUCCESS_RUN_STATUSES.has(status) || (status === 'needs_human' && terminalRunOutcome(record) === 'completed');
+}
+
+function completionEvidenceRunId(record: Record<string, unknown>): string {
+  return runString(record['id']) || 'unknown run';
+}
+
+function hasRunCompletionEvidence(ticket: Ticket, runId: string): boolean {
+  const command = runCompletionEvidenceCommand(runId);
+  return evidenceChecks(ticket).some(check => evidenceCheckMatchesRunCompletion(check, runId, command))
+    || evidenceNotes(ticket).some(note => evidenceNoteMatchesRunCompletion(note, runId));
+}
+
+function evidenceCheckMatchesRunCompletion(check: object, runId: string, command: string): boolean {
+  if (evidenceString(check, 'name') !== 'Kronos implement completion') { return false; }
+  if (runId === 'unknown run') { return true; }
+  return evidenceString(check, 'command') === command
+    || evidenceString(check, 'summary').includes(`run ${runId}`);
+}
+
+function evidenceNoteMatchesRunCompletion(note: object, runId: string): boolean {
+  const text = evidenceString(note, 'text');
+  return runId === 'unknown run'
+    ? text.startsWith('Kronos implement run unknown run completed.')
+    : text.startsWith(`Kronos implement run ${runId} completed.`);
+}
+
+function runCompletionEvidenceCommand(runId: string): string {
+  return `kronos run ${runId}`;
 }
 
 function runString(value: unknown): string {

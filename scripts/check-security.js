@@ -47,6 +47,7 @@ const queueRemovalPolicy = readSource('src/services/queueRemovalPolicy.ts');
 const collisionDetector = readSource('src/services/collisionDetector.ts');
 const runStatus = readSource('src/services/runStatus.ts');
 const runProgress = readSource('src/services/runProgress.ts');
+const activeRunDisplay = readSource('src/services/activeRunDisplay.ts');
 const runCompletionNotification = readSource('src/services/runCompletionNotification.ts');
 const runCenterSort = readSource('src/services/runCenterSort.ts');
 const attentionBadge = readSource('src/services/attentionBadge.ts');
@@ -2634,6 +2635,18 @@ for (const marker of [
 }
 
 for (const marker of [
+  "import { formatRunProgress } from './runProgress'",
+  "import { activeRunSummary, isFreshActiveRun, runStatus } from './runStatus'",
+  'export function activeRunStatusBarSummary',
+  'activeRuns.length === 1',
+  'activeRunTooltipLine',
+]) {
+  if (!activeRunDisplay.includes(marker)) {
+    fail(`Missing active run display marker: ${marker}`);
+  }
+}
+
+for (const marker of [
   'export type RunCompletionNotificationKind',
   'export interface RunCompletionNotification',
   'export function buildRunCompletionNotification',
@@ -3037,7 +3050,7 @@ for (const marker of [
   'export function evaluatePostRunReadiness',
   'run: unknown',
   "import { runProgressSummary } from './runProgress'",
-  "import { evidenceNotes } from './evidenceData'",
+  "import { evidenceChecks, evidenceNotes, evidenceString } from './evidenceData'",
   'export function shouldRecordRunCompletionEvidence',
   'export function resolvePostRunTicket',
   'interface PostRunTicketResolution',
@@ -3052,7 +3065,13 @@ for (const marker of [
   'function trimmedString(value: unknown): string | undefined',
   "runString(record['skill']) === 'implement'",
   "input.ticket.next_action === 'await_review'",
-  'evidenceNotes(input.ticket).length === 0',
+  '!hasRunCompletionEvidence(input.ticket, runId)',
+  'function completionEvidenceRunId(record: Record<string, unknown>): string',
+  'function hasRunCompletionEvidence(ticket: Ticket, runId: string): boolean',
+  'function evidenceCheckMatchesRunCompletion(check: object, runId: string, command: string): boolean',
+  'function evidenceNoteMatchesRunCompletion(note: object, runId: string): boolean',
+  'function runCompletionEvidenceCommand(runId: string): string',
+  "command: runCompletionEvidenceCommand(runId)",
   'export function buildRunCompletionEvidenceText',
   'export function buildRunCompletionEvidenceCheck',
   'interface RunCompletionEvidenceCheck',

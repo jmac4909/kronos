@@ -60,7 +60,8 @@ import { escapeAttr, escapeClass, escapeHtml, kronosWebviewBaseCss, safeHttpHref
 import { kronosTerminalOptions } from './services/terminalProfiles';
 import { unknownErrorCode, unknownErrorMessage } from './services/errorUtils';
 import { isKronosScriptMissingError } from './services/scriptClient';
-import { activeRunSummary, isFreshActiveRun } from './services/runStatus';
+import { activeRunStatusBarSummary } from './services/activeRunDisplay';
+import { isFreshActiveRun } from './services/runStatus';
 import { isAttentionRunStatus, runAttentionDetail, runAttentionLine } from './services/runAttention';
 import { buildRunCompletionNotification } from './services/runCompletionNotification';
 import { openReviewTicketEntries, reviewBranchTickets as buildReviewBranchTickets, type ReviewBranchTicket, type TicketWithOpenMergeRequest } from './services/reviewWork';
@@ -5422,11 +5423,10 @@ function updateStatusBar(state: KronosState): void {
   const projects = state.state.projects;
   const count = Object.keys(projects).length;
   const sessions = state.sessions.length;
-  const activeRuns = listRuns().filter(run => isFreshActiveRun(run));
-  if (activeRuns.length > 0) {
-    const activeSummary = activeRunSummary(activeRuns) || `${activeRuns.length} active`;
-    statusBarItem.text = `$(sync~spin) Kronos: ${activeSummary}`;
-    statusBarItem.tooltip = `Kronos active runs: ${activeSummary}`;
+  const activeRunDisplay = activeRunStatusBarSummary(listRuns());
+  if (activeRunDisplay) {
+    statusBarItem.text = `$(sync~spin) Kronos: ${activeRunDisplay.text}`;
+    statusBarItem.tooltip = activeRunDisplay.tooltip;
     statusBarItem.command = 'kronos.runCenter';
     return;
   }

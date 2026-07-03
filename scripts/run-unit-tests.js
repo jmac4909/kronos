@@ -136,6 +136,7 @@ const queuePlannerPanelView = require('../out/services/queuePlannerPanelView.js'
 const operationsReportPanelView = require('../out/services/operationsReportPanelView.js');
 const runStatus = require('../out/services/runStatus.js');
 const runProgress = require('../out/services/runProgress.js');
+const activeRunDisplay = require('../out/services/activeRunDisplay.js');
 const relativeTime = require('../out/services/relativeTime.js');
 const runAttention = require('../out/services/runAttention.js');
 const runCompletionNotification = require('../out/services/runCompletionNotification.js');
@@ -4669,6 +4670,46 @@ test('run progress helper summarizes active run activity', () => {
   }
 });
 
+test('active run display summarizes status bar text and tooltip progress', () => {
+  const now = new Date('2026-07-02T00:05:30.000Z');
+  const single = activeRunDisplay.activeRunStatusBarSummary([{
+    status: 'running',
+    project: 'app',
+    ticket: 'K-1',
+    skill: 'implement',
+    startedAt: '2026-07-02T00:00:00.000Z',
+    events: [
+      { type: 'tool', label: 'Reading src/app.ts', timestamp: '2026-07-02T00:01:00.000Z' },
+      { type: 'tool', label: 'Editing src/app.ts', timestamp: '2026-07-02T00:02:00.000Z' },
+    ],
+  }], now);
+  assert.equal(single.count, 1);
+  assert.match(single.text, /^1 running - 2 tools \| 1 changed \| /);
+  assert.match(single.tooltip, /app K-1 implement: running - 2 tools \| 1 changed \| /);
+
+  const multiple = activeRunDisplay.activeRunStatusBarSummary([
+    { status: 'running', project: 'app', ticket: 'K-1', skill: 'implement' },
+    { status: 'paused', project: 'api', ticket: 'K-2', skill: 'verify' },
+    { status: 'completed', project: 'api', ticket: 'K-3', skill: 'verify' },
+  ], now);
+  assert.equal(multiple.count, 2);
+  assert.equal(multiple.text, '1 running, 1 paused');
+  assert.match(multiple.tooltip, /Kronos active runs: 1 running, 1 paused/);
+  assert.match(multiple.tooltip, /api K-2 verify: paused - 0 tools \| 0 changed \| 0s/);
+  assert.equal(activeRunDisplay.activeRunStatusBarSummary([{ status: 'completed' }]), null);
+
+  const source = readSourceFixture('src', 'services', 'activeRunDisplay.ts');
+  for (const marker of [
+    "import { formatRunProgress } from './runProgress'",
+    "import { activeRunSummary, isFreshActiveRun, runStatus } from './runStatus'",
+    'export function activeRunStatusBarSummary',
+    'activeRuns.length === 1',
+    'activeRunTooltipLine',
+  ]) {
+    assert.ok(source.includes(marker), marker);
+  }
+});
+
 test('relative time formatter handles invalid, past, and future timestamps', () => {
   const now = new Date('2026-07-02T12:00:00.000Z');
 
@@ -6217,6 +6258,28 @@ test('post-run readiness distinguishes process completion from handoff readiness
   assert.equal(postRunReadiness.shouldRecordRunCompletionEvidence({
     run: { id: 'run-1', skill: 'implement', status: 'completed' },
     ticket: readyTicket,
+  }), true);
+  assert.equal(postRunReadiness.shouldRecordRunCompletionEvidence({
+    run: { id: 'run-1', skill: 'implement', status: 'completed' },
+    ticket: ticket({
+      next_action: 'await_review',
+      projects: ['app'],
+      evidence: {
+        notes: [{ at: 'now', kind: 'note', text: 'Kronos implement run run-1 completed.' }],
+        checks: [{ id: 'check-1', at: 'now', name: 'smoke', result: 'pass' }],
+      },
+    }),
+  }), false);
+  assert.equal(postRunReadiness.shouldRecordRunCompletionEvidence({
+    run: { id: 'run-1', skill: 'implement', status: 'completed' },
+    ticket: ticket({
+      next_action: 'await_review',
+      projects: ['app'],
+      evidence: {
+        notes: [{ at: 'now', kind: 'test', text: 'smoke passed' }],
+        checks: [{ id: 'check-1', at: 'now', name: 'Kronos implement completion', result: 'pass', command: 'kronos run run-1' }],
+      },
+    }),
   }), false);
   assert.equal(postRunReadiness.shouldRecordRunCompletionEvidence({
     run: { id: 'run-1', skill: 'verify-local', status: 'completed' },
@@ -6311,6 +6374,7 @@ test('post-run readiness distinguishes process completion from handoff readiness
   assert.equal(completionCheck.name, 'Kronos implement completion');
   assert.equal(completionCheck.result, 'pass');
   assert.equal(completionCheck.environment, 'kronos');
+  assert.equal(completionCheck.command, 'kronos run run-1');
   assert.equal(completionCheck.confidence, 'high');
   assert.match(completionCheck.summary, /105 tests/);
   assert.match(completionCheck.summary, /SonarQube OK/);
@@ -6404,7 +6468,7 @@ test('post-run readiness distinguishes process completion from handoff readiness
     'run: unknown',
     "import { runProgressSummary } from './runProgress'",
     "import { terminalRunOutcome } from './runStatus'",
-    "import { evidenceNotes } from './evidenceData'",
+    "import { evidenceChecks, evidenceNotes, evidenceString } from './evidenceData'",
     'export function shouldRecordRunCompletionEvidence',
     'export function resolvePostRunTicket',
     'interface PostRunTicketResolution',
@@ -6419,7 +6483,13 @@ test('post-run readiness distinguishes process completion from handoff readiness
     'function trimmedString(value: unknown): string | undefined',
     "runString(record['skill']) === 'implement'",
     "input.ticket.next_action === 'await_review'",
-    'evidenceNotes(input.ticket).length === 0',
+    '!hasRunCompletionEvidence(input.ticket, runId)',
+    'function completionEvidenceRunId(record: Record<string, unknown>): string',
+    'function hasRunCompletionEvidence(ticket: Ticket, runId: string): boolean',
+    'function evidenceCheckMatchesRunCompletion(check: object, runId: string, command: string): boolean',
+    'function evidenceNoteMatchesRunCompletion(note: object, runId: string): boolean',
+    'function runCompletionEvidenceCommand(runId: string): string',
+    "command: runCompletionEvidenceCommand(runId)",
     'export function buildRunCompletionEvidenceText',
     'export function buildRunCompletionEvidenceCheck',
     'interface RunCompletionEvidenceCheck',
@@ -6765,12 +6835,13 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'MR merged, but no linked project was found for deploy monitoring.',
     'has no registered path for deploy monitoring.',
     'run.project === projectName || run.projectPath === projectPath',
-    "import { activeRunSummary, isFreshActiveRun } from './services/runStatus'",
-    'const activeRuns = listRuns().filter(run => isFreshActiveRun(run))',
+    "import { activeRunStatusBarSummary } from './services/activeRunDisplay'",
+    "import { isFreshActiveRun } from './services/runStatus'",
+    'const activeRunDisplay = activeRunStatusBarSummary(listRuns())',
     "statusBarItem.command = 'kronos.runCenter'",
     "statusBarItem.command = 'kronos.openDashboard'",
-    'const activeSummary = activeRunSummary(activeRuns)',
-    '$(sync~spin) Kronos: ${activeSummary}',
+    '$(sync~spin) Kronos: ${activeRunDisplay.text}',
+    'statusBarItem.tooltip = activeRunDisplay.tooltip',
     'queueTree.startPolling(sessionPollMs)',
     'queueTree.dispose()',
     'ticket && shouldRecordRunCompletionEvidence({ run, ticket })',
