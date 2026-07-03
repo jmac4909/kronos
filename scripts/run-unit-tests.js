@@ -6402,6 +6402,7 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     "const pollIntervalMs = configIntervalSecondsMs(config.get<number>('reviewPollIntervalSec', fallbackSec), fallbackSec, 60)",
     'function updatePositiveNumberSetting',
     'parsePositiveNumberInput(input)',
+    "console.warn(unknownErrorMessage(e, 'Review MR polling failed.'))",
     'void poll();',
     'function pollReviewMergeRequests',
     'state.reloadAndNotify();',

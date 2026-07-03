@@ -5165,6 +5165,8 @@ function startReviewAutomation(context: vscode.ExtensionContext, state: KronosSt
     running = true;
     try {
       await pollReviewMergeRequests(state);
+    } catch (e: unknown) {
+      console.warn(unknownErrorMessage(e, 'Review MR polling failed.'));
     } finally {
       running = false;
     }
