@@ -49,6 +49,7 @@ import { primaryChangedFilePath } from './services/changedFiles';
 import { buildSonarReport, type SonarIssue } from './services/sonarReportView';
 import { buildAgingReportHtml } from './services/agingReportView';
 import { computeAttentionBadge } from './services/attentionBadge';
+import { configIntervalMs, configIntervalSeconds, configIntervalSecondsMs, parsePositiveNumberInput, positiveConfigNumber } from './services/intervalConfig';
 import { buildNextActionContext, buildNextActionStartDecision, skillForAction } from './services/nextActionContext';
 import { createWorkspaceDiffArtifact, firstRemoteBranchMatching, originProjectPath } from './services/gitWorkspace';
 import { signalProcessTree, stopProcessTree } from './services/processTree';
@@ -198,7 +199,7 @@ function startActiveRunPanelRefresh(
   state: KronosState,
   render: () => void | Promise<void>,
 ): void {
-  const pollIntervalMs = Math.max(1000, vscode.workspace.getConfiguration('kronos').get<number>('sessionPollIntervalMs', 5000));
+  const pollIntervalMs = configIntervalMs(vscode.workspace.getConfiguration('kronos').get<number>('sessionPollIntervalMs', 5000), 5000, 1000);
   let wasActive = listRuns().some(isActiveRun);
   let rendering = false;
   const pollTimer = setInterval(() => {
@@ -1113,13 +1114,12 @@ export function activate(context: vscode.ExtensionContext) {
   );
 
   const config = vscode.workspace.getConfiguration('kronos');
-  const sessionPollMs = config.get<number>('sessionPollIntervalMs', 5000);
+  const sessionPollMs = configIntervalMs(config.get<number>('sessionPollIntervalMs', 5000), 5000, 1000);
   sessionTree.startPolling(sessionPollMs);
   queueTree.startPolling(sessionPollMs);
 
   // Background poll (uses same throttle — won't double-refresh)
-  const pollSec = config.get<number>('pollIntervalSec', 300);
-  const pollTimer = setInterval(throttledRefresh, pollSec * 1000);
+  const pollTimer = setInterval(throttledRefresh, configIntervalSecondsMs(config.get<number>('pollIntervalSec', 300), 300, 1));
   context.subscriptions.push({ dispose: () => clearInterval(pollTimer) });
   startReviewAutomation(context, state);
 
@@ -3450,8 +3450,8 @@ async function runSettingsMenu(state: KronosState): Promise<void> {
   const pick = await vscode.window.showQuickPick([
     { label: '$(settings) Profile', description: getActiveProfile().label, detail: 'Provider/default-branch behavior profile' },
     { label: '$(cloud) Dispatch Model', description: config.get('dispatchModel', 'claude-opus-4-6'), detail: 'Claude model for dispatched sessions' },
-    { label: '$(clock) Poll Interval', description: `${config.get('pollIntervalSec', 300)}s`, detail: 'How often to auto-refresh project status' },
-    { label: '$(pulse) Session Poll', description: `${config.get('sessionPollIntervalMs', 5000)}ms`, detail: 'How often to check for active Claude sessions' },
+    { label: '$(clock) Poll Interval', description: `${configIntervalSeconds(config.get<number>('pollIntervalSec', 300), 300, 1)}s`, detail: 'How often to auto-refresh project status' },
+    { label: '$(pulse) Session Poll', description: `${configIntervalMs(config.get<number>('sessionPollIntervalMs', 5000), 5000, 1000)}ms`, detail: 'How often to check for active Claude sessions' },
     { label: '$(folder) Scan Directories', description: 'Edit scan dirs for project discovery', detail: 'Which directories to scan for repos' },
     { label: '$(key) Run Auth Check', description: 'Verify GCP + Claude access', detail: 'Check gcloud auth and model permissions' },
   ], { placeHolder: 'Kronos Settings' });
@@ -3484,10 +3484,10 @@ async function runSettingsMenu(state: KronosState): Promise<void> {
     }
   } else if (pick.label.includes('Poll Interval')) {
     const val = await vscode.window.showInputBox({ prompt: 'Refresh interval in seconds', value: String(config.get('pollIntervalSec', 300)) });
-    if (val) { await config.update('pollIntervalSec', parseInt(val), vscode.ConfigurationTarget.Global); }
+    await updatePositiveNumberSetting(config, 'pollIntervalSec', val, 'Refresh interval must be a positive number of seconds.');
   } else if (pick.label.includes('Session Poll')) {
     const val = await vscode.window.showInputBox({ prompt: 'Session poll interval in ms', value: String(config.get('sessionPollIntervalMs', 5000)) });
-    if (val) { await config.update('sessionPollIntervalMs', parseInt(val), vscode.ConfigurationTarget.Global); }
+    await updatePositiveNumberSetting(config, 'sessionPollIntervalMs', val, 'Session poll interval must be a positive number of milliseconds.');
   } else if (pick.label.includes('Scan Directories')) {
     const currentState = state.state;
     const val = await vscode.window.showInputBox({
@@ -3507,6 +3507,21 @@ async function runSettingsMenu(state: KronosState): Promise<void> {
   } else if (pick.label.includes('Auth Check')) {
     await vscode.commands.executeCommand('kronos.setup');
   }
+}
+
+async function updatePositiveNumberSetting(
+  config: vscode.WorkspaceConfiguration,
+  key: string,
+  input: string | undefined,
+  invalidMessage: string,
+): Promise<void> {
+  const parsed = parsePositiveNumberInput(input);
+  if (parsed.kind === 'empty') { return; }
+  if (parsed.kind === 'invalid') {
+    vscode.window.showWarningMessage(invalidMessage);
+    return;
+  }
+  await config.update(key, parsed.value, vscode.ConfigurationTarget.Global);
 }
 
 function openPromptManager(state: KronosState): void {
@@ -4993,7 +5008,7 @@ function resolveTaskId(item: unknown): string | undefined {
 function startReviewAutomation(context: vscode.ExtensionContext, state: KronosState): void {
   const config = vscode.workspace.getConfiguration('kronos');
   const fallbackSec = positiveConfigNumber(config.get<number>('pollIntervalSec', 300), 300);
-  const pollSec = Math.max(60, positiveConfigNumber(config.get<number>('reviewPollIntervalSec', fallbackSec), fallbackSec));
+  const pollIntervalMs = configIntervalSecondsMs(config.get<number>('reviewPollIntervalSec', fallbackSec), fallbackSec, 60);
   let running = false;
   const poll = async () => {
     if (running) { return; }
@@ -5005,12 +5020,8 @@ function startReviewAutomation(context: vscode.ExtensionContext, state: KronosSt
     }
   };
   void poll();
-  const timer = setInterval(() => { void poll(); }, pollSec * 1000);
+  const timer = setInterval(() => { void poll(); }, pollIntervalMs);
   context.subscriptions.push({ dispose: () => clearInterval(timer) });
-}
-
-function positiveConfigNumber(value: unknown, fallback: number): number {
-  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : fallback;
 }
 
 async function pollReviewMergeRequests(state: KronosState): Promise<void> {

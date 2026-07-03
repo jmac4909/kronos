@@ -71,6 +71,7 @@ const relativeTime = require('../out/services/relativeTime.js');
 const runAttention = require('../out/services/runAttention.js');
 const runCenterSort = require('../out/services/runCenterSort.js');
 const attentionBadge = require('../out/services/attentionBadge.js');
+const intervalConfig = require('../out/services/intervalConfig.js');
 const cliProbes = require('../out/services/cliProbes.js');
 const errorUtils = require('../out/services/errorUtils.js');
 const combinedVerification = require('../out/services/combinedVerification.js');
@@ -3923,6 +3924,30 @@ test('relative time formatter handles invalid, past, and future timestamps', () 
   }
 });
 
+test('interval config helpers clamp invalid polling values and parse settings input', () => {
+  assert.equal(intervalConfig.positiveConfigNumber(250, 5000), 250);
+  assert.equal(intervalConfig.positiveConfigNumber(0, 5000), 5000);
+  assert.equal(intervalConfig.positiveConfigNumber(Number.NaN, 5000), 5000);
+  assert.equal(intervalConfig.positiveConfigNumber(100, 0), 100);
+  assert.equal(intervalConfig.positiveConfigNumber(0, 0), 1);
+
+  assert.equal(intervalConfig.configIntervalMs(250, 5000, 1000), 1000);
+  assert.equal(intervalConfig.configIntervalMs(2500, 5000, 1000), 2500);
+  assert.equal(intervalConfig.configIntervalMs(-1, 5000, 1000), 5000);
+  assert.equal(intervalConfig.configIntervalMs(999999999999, 5000, 1000), 2147483647);
+  assert.equal(intervalConfig.configIntervalSeconds(30, 300, 60), 60);
+  assert.equal(intervalConfig.configIntervalSeconds(90, 300, 60), 90);
+  assert.equal(intervalConfig.configIntervalSeconds(999999999, 300, 60), 2147483);
+  assert.equal(intervalConfig.configIntervalSecondsMs(90, 300, 60), 90000);
+
+  assert.deepEqual(intervalConfig.parsePositiveNumberInput(undefined), { kind: 'empty' });
+  assert.deepEqual(intervalConfig.parsePositiveNumberInput('  '), { kind: 'empty' });
+  assert.deepEqual(intervalConfig.parsePositiveNumberInput('15'), { kind: 'value', value: 15 });
+  assert.deepEqual(intervalConfig.parsePositiveNumberInput('2.5'), { kind: 'value', value: 2.5 });
+  assert.deepEqual(intervalConfig.parsePositiveNumberInput('0'), { kind: 'invalid', raw: '0' });
+  assert.deepEqual(intervalConfig.parsePositiveNumberInput('abc'), { kind: 'invalid', raw: 'abc' });
+});
+
 test('run center sort orders active work first and failed or cancelled runs last', () => {
   const ordered = runCenterSort.sortedRunCenterRuns([
     { id: 'queued-new', status: 'queued', startedAt: '2026-07-02T10:00:00.000Z' },
@@ -5650,13 +5675,17 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     "'kronos.cleanupWorktrees',",
     "'Failed to open Kronos worktree cleanup.'",
     "import { computeAttentionBadge } from './services/attentionBadge'",
+    "import { configIntervalMs, configIntervalSeconds, configIntervalSecondsMs, parsePositiveNumberInput, positiveConfigNumber } from './services/intervalConfig'",
     'const updateAttentionBadge = () =>',
     'newReviewItems: reviewTree.getNewReviewCount()',
     'attentionBadgeTarget.badge = summary.count > 0',
     'reviewTree.onDidChangeNewReviewCount(updateAttentionBadge)',
     'startReviewAutomation(context, state)',
-    'positiveConfigNumber(config.get<number>(\'reviewPollIntervalSec\', fallbackSec), fallbackSec)',
-    'function positiveConfigNumber',
+    "const sessionPollMs = configIntervalMs(config.get<number>('sessionPollIntervalMs', 5000), 5000, 1000)",
+    "setInterval(throttledRefresh, configIntervalSecondsMs(config.get<number>('pollIntervalSec', 300), 300, 1))",
+    "const pollIntervalMs = configIntervalSecondsMs(config.get<number>('reviewPollIntervalSec', fallbackSec), fallbackSec, 60)",
+    'function updatePositiveNumberSetting',
+    'parsePositiveNumberInput(input)',
     'void poll();',
     'function pollReviewMergeRequests',
     'gitlabAdapter.mergeRequestStatus',
