@@ -41,17 +41,17 @@ export function normalizeChangedFile(file: unknown): MergeRequestChangedFile | n
       normalized[key] = value;
     }
   }
-  if (typeof file.diff === 'string') {
-    normalized.diff = file.diff;
+  if (typeof file['diff'] === 'string') {
+    normalized.diff = file['diff'];
   }
-  if (typeof file.new_file === 'boolean') {
-    normalized.new_file = file.new_file;
+  if (typeof file['new_file'] === 'boolean') {
+    normalized.new_file = file['new_file'];
   }
-  if (typeof file.deleted_file === 'boolean') {
-    normalized.deleted_file = file.deleted_file;
+  if (typeof file['deleted_file'] === 'boolean') {
+    normalized.deleted_file = file['deleted_file'];
   }
-  if (typeof file.renamed_file === 'boolean') {
-    normalized.renamed_file = file.renamed_file;
+  if (typeof file['renamed_file'] === 'boolean') {
+    normalized.renamed_file = file['renamed_file'];
   }
 
   return changedFilePaths(normalized).length > 0 || normalized.diff ? normalized : null;

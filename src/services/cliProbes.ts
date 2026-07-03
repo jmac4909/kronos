@@ -98,7 +98,7 @@ export function quoteWindowsCmdToken(value: string): string {
 }
 
 export function windowsCmdFileInvocation(command: string, args: string[], env: NodeJS.ProcessEnv = process.env): { command: string; args: string[] } {
-  const cmd = env.ComSpec || env.COMSPEC || 'cmd.exe';
+  const cmd = envValue(env, ['ComSpec', 'COMSPEC']) || 'cmd.exe';
   const shellLine = [command, ...args].map(quoteWindowsCmdToken).join(' ');
   return {
     command: cmd,
@@ -127,7 +127,7 @@ export function defaultCliProbeCommandRunner(command: string, args: string[], op
 
 export function readableGoogleApplicationCredentials(options: Pick<CliProbeOptions, 'env' | 'accessSync'> = {}): string | undefined {
   const env = options.env || process.env;
-  const filePath = env.GOOGLE_APPLICATION_CREDENTIALS;
+  const filePath = envValue(env, ['GOOGLE_APPLICATION_CREDENTIALS']);
   if (!filePath) { return undefined; }
   const accessSync = options.accessSync || fs.accessSync;
   try {

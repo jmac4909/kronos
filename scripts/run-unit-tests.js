@@ -6510,7 +6510,7 @@ test('merge request diff rendering uses normalized adapter results', () => {
     assert.equal(extensionSource.includes(marker), false, marker);
   }
   assert.ok(integrationAdapters.includes('export interface MergeRequestDiffResult'));
-  assert.ok(integrationAdapters.includes('files: normalizeChangedFiles(data.files)'));
+  assert.ok(integrationAdapters.includes("files: normalizeChangedFiles(data['files'])"));
   assert.ok(integrationAdapters.includes('[key: string]: unknown'));
 });
 

@@ -1912,7 +1912,7 @@ for (const marker of [
   'file.newPath',
   'file.oldPath',
   'file.filename',
-  "typeof file.diff === 'string'",
+  "typeof file['diff'] === 'string'",
 ]) {
   if (!changedFiles.includes(marker)) {
     fail(`Missing changed files marker: ${marker}`);
@@ -2746,12 +2746,12 @@ for (const marker of [
   'function normalizeMergeRequestComment',
   'mergeRequestDiff',
   'mergeRequestStatus',
-  'normalizeChangedFiles(data.files)',
-  'isRecord(data.mr)',
+  "normalizeChangedFiles(data['files'])",
+  "isRecord(data['mr'])",
   'last_comment_at',
   'export function normalizeSonarBranches',
   'function normalizeSonarBranch',
-  'normalizeSonarBranches(data.branches)',
+  "normalizeSonarBranches(data['branches'])",
   'runPipelineJson<unknown>',
   'ticketComments',
   'Jira comments for ${ticketKey}',
