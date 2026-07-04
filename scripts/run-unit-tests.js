@@ -4337,6 +4337,18 @@ test('ticket filters match operator search facets and grouped views', () => {
   assert.deepEqual(ticketFilters.filterTickets(entries, { project: 'web', mrState: 'approved' }, now).map(([key]) => key), ['K-2']);
   assert.deepEqual(ticketFilters.filterTickets(entries, { linked: 'unlinked', staleDays: 7 }, now).map(([key]) => key), ['K-3']);
   assert.match(ticketFilters.describeTicketFilter({ query: 'retry', staleDays: 7 }), /search "retry".*stale 7\+ days/);
+  assert.deepEqual(ticketFilters.cleanTicketFilter({
+    query: ' retry ',
+    project: ' ',
+    action: 'await_review',
+    staleDays: 0,
+    linked: 'unlinked',
+  }), { query: 'retry', action: 'await_review', linked: 'unlinked' });
+  const mutableFilter = {};
+  ticketFilters.setTicketFilterString(mutableFilter, 'project', ' api ');
+  ticketFilters.setTicketFilterString(mutableFilter, 'priority', ' ');
+  assert.deepEqual(mutableFilter, { project: 'api' });
+  assert.deepEqual(ticketFilters.uniqueTicketFilterValues([' web ', 'api', '', 'web', 'api']), ['api', 'web']);
 
   const grouped = ticketFilters.groupTicketEntries(entries, 'project');
   assert.ok(grouped.some(([label, groupEntries]) => label === 'Unlinked' && groupEntries.length === 1));

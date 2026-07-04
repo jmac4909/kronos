@@ -81,6 +81,36 @@ export function describeTicketFilter(filter: TicketFilter = {}): string {
   return parts.length > 0 ? parts.join(', ') : 'all tickets';
 }
 
+export type TicketFilterStringField = 'query' | 'project' | 'action' | 'priority' | 'label' | 'mrState' | 'buildStatus';
+
+export function setTicketFilterString<K extends TicketFilterStringField>(
+  filter: TicketFilter,
+  key: K,
+  value: string | undefined,
+): void {
+  const trimmed = value?.trim();
+  if (trimmed) { filter[key] = trimmed; }
+  else { delete filter[key]; }
+}
+
+export function cleanTicketFilter(filter: TicketFilter): TicketFilter {
+  const cleaned: TicketFilter = {};
+  if (filter.query?.trim()) { cleaned.query = filter.query.trim(); }
+  if (filter.project?.trim()) { cleaned.project = filter.project.trim(); }
+  if (filter.action?.trim()) { cleaned.action = filter.action.trim(); }
+  if (filter.priority?.trim()) { cleaned.priority = filter.priority.trim(); }
+  if (filter.label?.trim()) { cleaned.label = filter.label.trim(); }
+  if (filter.mrState?.trim()) { cleaned.mrState = filter.mrState.trim(); }
+  if (filter.buildStatus?.trim()) { cleaned.buildStatus = filter.buildStatus.trim(); }
+  if (filter.staleDays && filter.staleDays > 0) { cleaned.staleDays = filter.staleDays; }
+  if (filter.linked) { cleaned.linked = filter.linked; }
+  return cleaned;
+}
+
+export function uniqueTicketFilterValues(values: string[]): string[] {
+  return Array.from(new Set(values.map(value => String(value || '').trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+}
+
 export function groupTicketEntries(entries: Array<[string, Ticket]>, groupBy: TicketGroupBy): Array<[string, Array<[string, Ticket]>]> {
   if (groupBy === 'none') {
     return [['Tickets', entries]];

@@ -3763,6 +3763,9 @@ for (const marker of [
   'TICKET_FILTER_PRESETS',
   'filterTickets',
   'ticketMatchesFilter',
+  'cleanTicketFilter',
+  'setTicketFilterString',
+  'uniqueTicketFilterValues',
   'groupTicketEntries',
   'staleDays',
 ]) {

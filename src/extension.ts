@@ -38,7 +38,15 @@ import { KronosProfile, listProfiles, resolveDefaultBaseBranch, resolveProfile, 
 import { AgingThresholds, analyzeAging } from './services/agingAnalyzer';
 import { SafetyPlan, assessSafetyGate } from './services/safetyGate';
 import { computeTrendMetrics } from './services/trendMetrics';
-import { TicketFilter, TicketGroupBy, TICKET_FILTER_PRESETS, describeTicketFilter } from './services/ticketFilters';
+import {
+  TicketFilter,
+  TicketGroupBy,
+  TICKET_FILTER_PRESETS,
+  cleanTicketFilter,
+  describeTicketFilter,
+  setTicketFilterString,
+  uniqueTicketFilterValues,
+} from './services/ticketFilters';
 import { buildRunResumePrompt, readRunLogTail } from './services/runRecovery';
 import { addTicketEvidenceCheck, addTicketEvidenceNote, addTicketRunCompletionEvidence, linkMergeRequestToTicket, previewLinkMergeRequestToTicket, reconcileTerminalMergeRequestState, recordTicketEnvironmentResult, replaceTicketAcceptanceCriteria, updateTicketAcceptanceCriteria, updateTicketMergeRequestStatus, type TicketEvidenceCheckInput } from './services/ticketMutations';
 import { addPlanToQueue as addPlanToQueueState, addTicketToQueue, linkTicketToProject, recordPlanQueueDecision, removeTicketFromQueue as removeTicketFromQueueState, reorderQueueItem, selectNextQueueItem, unlinkTicketFromProject } from './services/queueMutations';
@@ -926,18 +934,18 @@ async function promptTicketView(
   if (picked.id === 'query') {
     setTicketFilterString(filter, 'query', await promptOptionalText('Ticket search text', filter.query));
   } else if (picked.id === 'project') {
-    setTicketFilterString(filter, 'project', await promptOptionalChoice('Project', filter.project, uniqueStrings([
+    setTicketFilterString(filter, 'project', await promptOptionalChoice('Project', filter.project, uniqueTicketFilterValues([
       ...Object.keys(state.state?.projects || {}),
       ...tickets.flatMap(ticket => ticket.projects || []),
     ])));
   } else if (picked.id === 'action') {
-    setTicketFilterString(filter, 'action', await promptOptionalChoice('Action status', filter.action, uniqueStrings(tickets.map(ticket => ticket.next_action))));
+    setTicketFilterString(filter, 'action', await promptOptionalChoice('Action status', filter.action, uniqueTicketFilterValues(tickets.map(ticket => ticket.next_action))));
   } else if (picked.id === 'priority') {
-    setTicketFilterString(filter, 'priority', await promptOptionalChoice('Priority', filter.priority, uniqueStrings(tickets.map(ticket => ticket.priority))));
+    setTicketFilterString(filter, 'priority', await promptOptionalChoice('Priority', filter.priority, uniqueTicketFilterValues(tickets.map(ticket => ticket.priority))));
   } else if (picked.id === 'label') {
-    setTicketFilterString(filter, 'label', await promptOptionalChoice('Label', filter.label, uniqueStrings(tickets.flatMap(ticket => ticket.labels || []))));
+    setTicketFilterString(filter, 'label', await promptOptionalChoice('Label', filter.label, uniqueTicketFilterValues(tickets.flatMap(ticket => ticket.labels || []))));
   } else if (picked.id === 'mrState') {
-    setTicketFilterString(filter, 'mrState', await promptOptionalChoice('MR state', filter.mrState, uniqueStrings([
+    setTicketFilterString(filter, 'mrState', await promptOptionalChoice('MR state', filter.mrState, uniqueTicketFilterValues([
       'none',
       'opened',
       'merged',
@@ -948,7 +956,7 @@ async function promptTicketView(
       ...tickets.flatMap(ticket => ticket.mr ? [ticket.mr.state, ticket.mr.review_status] : []),
     ])));
   } else if (picked.id === 'buildStatus') {
-    setTicketFilterString(filter, 'buildStatus', await promptOptionalChoice('Build status', filter.buildStatus, uniqueStrings([
+    setTicketFilterString(filter, 'buildStatus', await promptOptionalChoice('Build status', filter.buildStatus, uniqueTicketFilterValues([
       'none',
       ...tickets.map(ticket => ticket.build?.status || ''),
     ])));
@@ -988,34 +996,6 @@ async function promptOptionalChoice(placeHolder: string, current: string | undef
   const picked = await vscode.window.showQuickPick(options, { placeHolder });
   if (!picked) { return current; }
   return picked.label === 'Any' ? undefined : picked.label;
-}
-
-function setTicketFilterString<K extends 'query' | 'project' | 'action' | 'priority' | 'label' | 'mrState' | 'buildStatus'>(
-  filter: TicketFilter,
-  key: K,
-  value: string | undefined,
-): void {
-  const trimmed = value?.trim();
-  if (trimmed) { filter[key] = trimmed; }
-  else { delete filter[key]; }
-}
-
-function cleanTicketFilter(filter: TicketFilter): TicketFilter {
-  const cleaned: TicketFilter = {};
-  if (filter.query?.trim()) { cleaned.query = filter.query.trim(); }
-  if (filter.project?.trim()) { cleaned.project = filter.project.trim(); }
-  if (filter.action?.trim()) { cleaned.action = filter.action.trim(); }
-  if (filter.priority?.trim()) { cleaned.priority = filter.priority.trim(); }
-  if (filter.label?.trim()) { cleaned.label = filter.label.trim(); }
-  if (filter.mrState?.trim()) { cleaned.mrState = filter.mrState.trim(); }
-  if (filter.buildStatus?.trim()) { cleaned.buildStatus = filter.buildStatus.trim(); }
-  if (filter.staleDays && filter.staleDays > 0) { cleaned.staleDays = filter.staleDays; }
-  if (filter.linked) { cleaned.linked = filter.linked; }
-  return cleaned;
-}
-
-function uniqueStrings(values: string[]): string[] {
-  return Array.from(new Set(values.map(value => String(value || '').trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b));
 }
 
 function getImplementPrompt(state: KronosState): string {
