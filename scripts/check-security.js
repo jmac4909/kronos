@@ -88,6 +88,7 @@ const queuePlanner = readSource('src/services/queuePlanner.ts');
 const actionCatalog = readSource('src/services/actionCatalog.ts');
 const actionSemantics = readSource('src/services/actionSemantics.ts');
 const severityRank = readSource('src/services/severityRank.ts');
+const records = readSource('src/services/records.ts');
 const queuePlannerPanelView = sources['src/services/queuePlannerPanelView.ts'];
 const operationsReportPanelView = sources['src/services/operationsReportPanelView.ts'];
 const agentQualityScore = readSource('src/services/agentQualityScore.ts');
@@ -1860,7 +1861,7 @@ for (const marker of [
   'function progressEventTimeLabel',
   'function progressDateTimeLabel',
   'function stringOrDefault',
-  'function isRecord(value: unknown): value is Record<string, unknown>',
+  "import { isRecord } from '../services/records'",
   'function recordField(record: Record<string, unknown>, key: string): Record<string, unknown>',
   'function arrayField(record: Record<string, unknown>, key: string): unknown[]',
   'function streamString(value: unknown): string',
@@ -2146,6 +2147,38 @@ for (const [name, source] of [
   }
   if (source.includes('function severityWeight')) {
     fail(`${name} must not carry local severityWeight helper.`);
+  }
+}
+
+for (const marker of [
+  'export function isRecord(value: unknown): value is Record<string, unknown>',
+  "typeof value === 'object'",
+  '!Array.isArray(value)',
+]) {
+  if (!records.includes(marker)) {
+    fail(`Missing record helper marker: ${marker}`);
+  }
+}
+for (const [name, source, marker] of [
+  ['src/services/changedFiles.ts', changedFiles, "import { isRecord } from './records'"],
+  ['src/services/integrationAdapters.ts', integrationAdapters, "import { isRecord } from './records'"],
+  ['src/services/runStatus.ts', runStatus, "import { isRecord } from './records'"],
+  ['src/services/runStore.ts', runStore, "import { isRecord } from './records'"],
+  ['src/services/sessionStore.ts', sessionStore, "import { isRecord } from './records'"],
+  ['src/services/sonarReportView.ts', sonarReportView, "import { isRecord } from './records'"],
+  ['src/services/trendMetrics.ts', trendMetrics, "import { isRecord } from './records'"],
+  ['src/services/stateStore.ts', stateStore, "import { isRecord as isPlainObject } from './records'"],
+  ['src/services/stateScriptAdapter.ts', stateScriptAdapter, "import { isRecord as isPlainObject } from './records'"],
+  ['src/runners/sessionDispatcher.ts', dispatcher, "import { isRecord } from '../services/records'"],
+]) {
+  if (!source.includes(marker)) {
+    fail(`${name} must import the shared record guard.`);
+  }
+  if (source.includes('function isRecord')) {
+    fail(`${name} must not carry a local isRecord helper.`);
+  }
+  if (source.includes('function isPlainObject')) {
+    fail(`${name} must not carry a local isPlainObject helper.`);
   }
 }
 
@@ -2909,7 +2942,7 @@ for (const marker of [
   'function validateMergeRequest',
   'function validateBuildStatus',
   'function validateEvidenceNote',
-  'function isPlainObject',
+  "import { isRecord as isPlainObject } from './records'",
   'function requireFiniteNumber',
   "validateActionValue(t['next_action']",
   'validateActionValue(item.action',
@@ -3596,6 +3629,7 @@ for (const marker of [
   'Verification pass rate',
   'Average cycle time',
   'Review health',
+  "import { isRecord } from './records'",
   'const rawRuns = Array.isArray(input.runs) ? input.runs : []',
   '.filter(isRecord)',
   'evidenceChecks(ticket)',
@@ -3603,7 +3637,6 @@ for (const marker of [
   "evidenceString(check, 'result')",
   'function hasRetryMetadata',
   'function runString',
-  'function isRecord',
 ]) {
   if (!trendMetrics.includes(marker)) {
     fail(`Missing trend metrics marker: ${marker}`);

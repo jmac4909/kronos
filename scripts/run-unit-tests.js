@@ -158,6 +158,7 @@ const queuePlanner = require('../out/services/queuePlanner.js');
 const actionCatalog = require('../out/services/actionCatalog.js');
 const actionSemantics = require('../out/services/actionSemantics.js');
 const severityRank = require('../out/services/severityRank.js');
+const records = require('../out/services/records.js');
 const evidenceStore = require('../out/services/evidenceStore.js');
 const evidenceHandoff = require('../out/services/evidenceHandoff.js');
 const evidencePublisher = require('../out/services/evidencePublisher.js');
@@ -1412,6 +1413,11 @@ test('deploy monitor handoff resolves projects and only suppresses handled runs'
   });
 
   assert.deepEqual(deployMonitorHandoff.resolveDeployMonitorProject(state, 'K-13', merged), {
+    kind: 'ok',
+    projectName: 'app',
+    projectPath: '/repo/app',
+  });
+  assert.deepEqual(deployMonitorHandoff.resolveDeployMonitorProject(state, 'K-DUPE', ticket({ projects: [' ', 'app', 'app'], mr: merged.mr })), {
     kind: 'ok',
     projectName: 'app',
     projectPath: '/repo/app',
@@ -3391,6 +3397,35 @@ test('severity rank helper centralizes attention ordering vocabularies', () => {
   }
 });
 
+test('record guard helper centralizes unknown object narrowing', () => {
+  assert.equal(records.isRecord({ ok: true }), true);
+  assert.equal(records.isRecord(Object.create(null)), true);
+  assert.equal(records.isRecord([]), false);
+  assert.equal(records.isRecord(null), false);
+  assert.equal(records.isRecord('value'), false);
+
+  for (const [file, marker] of [
+    ['changedFiles.ts', "import { isRecord } from './records'"],
+    ['integrationAdapters.ts', "import { isRecord } from './records'"],
+    ['runStatus.ts', "import { isRecord } from './records'"],
+    ['runStore.ts', "import { isRecord } from './records'"],
+    ['sessionStore.ts', "import { isRecord } from './records'"],
+    ['sonarReportView.ts', "import { isRecord } from './records'"],
+    ['trendMetrics.ts', "import { isRecord } from './records'"],
+    ['stateStore.ts', "import { isRecord as isPlainObject } from './records'"],
+    ['stateScriptAdapter.ts', "import { isRecord as isPlainObject } from './records'"],
+  ]) {
+    const source = readSourceFixture('src', 'services', file);
+    assert.ok(source.includes(marker), `${file} should import shared record guard`);
+    assert.equal(source.includes('function isRecord'), false, `${file} should not carry a local isRecord helper`);
+    assert.equal(source.includes('function isPlainObject'), false, `${file} should not carry a local isPlainObject helper`);
+  }
+
+  const dispatcherSource = readSourceFixture('src', 'runners', 'sessionDispatcher.ts');
+  assert.ok(dispatcherSource.includes("import { isRecord } from '../services/records'"));
+  assert.equal(dispatcherSource.includes('function isRecord'), false);
+});
+
 test('review work service centralizes open review merge request semantics', () => {
   const tickets = {
     'K-OPEN': ticket({
@@ -4983,7 +5018,7 @@ test('dispatcher records branch and permission metadata for persisted runs', () 
     'function progressEventTimeLabel',
     'function progressDateTimeLabel',
     'function stringOrDefault',
-    'function isRecord(value: unknown): value is Record<string, unknown>',
+    "import { isRecord } from '../services/records'",
     'function recordField(record: Record<string, unknown>, key: string): Record<string, unknown>',
     'function arrayField(record: Record<string, unknown>, key: string): unknown[]',
     'function streamString(value: unknown): string',
@@ -6456,7 +6491,7 @@ test('state script adapter keeps raw JSON payloads unknown until normalized', ()
   for (const marker of [
     '[key: string]: unknown',
     'function parseStateScriptJson(raw: string, label: string): unknown',
-    'function isPlainObject(value: unknown): value is Record<string, unknown>',
+    "import { isRecord as isPlainObject } from './records'",
     "import { stripUtf8Bom } from './jsonFiles'",
     'const content = stripUtf8Bom(raw)',
     "import { unknownErrorMessage } from './errorUtils'",
@@ -6791,7 +6826,7 @@ test('integration adapters keep raw provider payloads unknown until normalized',
     "import { stripUtf8Bom } from './jsonFiles'",
     'const content = stripUtf8Bom(raw)',
     'catch (e: unknown)',
-    'function isRecord(value: unknown): value is Record<string, unknown>',
+    "import { isRecord } from './records'",
     "import { unknownErrorMessage } from './errorUtils'",
     'async function runMergeRequestStatusJson',
     "runner.runScript(['--mr-status', ticketKey], options)",
@@ -9867,6 +9902,7 @@ test('trend metrics report rework, build pass, verification pass, and cycle time
   for (const marker of [
     'runs: unknown[]',
     'type RunMetricRecord = Record<string, unknown>',
+    "import { isRecord } from './records'",
     'const rawRuns = Array.isArray(input.runs) ? input.runs : []',
     '.filter(isRecord)',
   ]) {

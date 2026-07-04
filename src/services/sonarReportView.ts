@@ -1,5 +1,6 @@
 import { escapeAttr, escapeClass, escapeHtml, kronosWebviewBaseCss } from './webviewHtml';
 import { webviewVsCodeApiScript } from './webviewSecurity';
+import { isRecord } from './records';
 
 interface SonarReportRenderInput {
   projectName: string;
@@ -63,10 +64,6 @@ function buildSonarDashboardUrl(host: string | undefined, sonarKey: string, bran
 
 function formatSonarMetricName(key: string): string {
   return key.replace(/_/g, ' ').replace(/\bnew\b/g, 'New').replace(/\b\w/g, c => c.toUpperCase());
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
 function projectStatusRecord(gate: unknown): Record<string, unknown> {

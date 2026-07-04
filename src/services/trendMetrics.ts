@@ -1,5 +1,6 @@
 import { Ticket } from '../state/types';
 import { evidenceChecks, evidenceEnvironmentResults, evidenceString } from './evidenceData';
+import { isRecord } from './records';
 
 interface TrendMetricsInput {
   runs: unknown[];
@@ -179,10 +180,6 @@ function hasRetryMetadata(run: RunMetricRecord): boolean {
 function runString(run: RunMetricRecord, key: string): string {
   const value = run[key];
   return typeof value === 'string' ? value.trim() : '';
-}
-
-function isRecord(value: unknown): value is RunMetricRecord {
-  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
 function parseDate(value: string | null | undefined): Date | null {

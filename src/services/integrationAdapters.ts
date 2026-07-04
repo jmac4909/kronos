@@ -3,6 +3,7 @@ import { MergeRequest, MergeRequestChangedFile, MergeRequestComment } from '../s
 import { normalizeChangedFiles } from './changedFiles';
 import { unknownErrorMessage } from './errorUtils';
 import { stripUtf8Bom } from './jsonFiles';
+import { isRecord } from './records';
 import { sortMergeRequestCommentsByCreated } from './mergeRequestComments';
 
 interface KronosScriptRunner {
@@ -367,10 +368,6 @@ function parseJson(raw: string, label: string): unknown {
   } catch (e: unknown) {
     throw new Error(`Invalid JSON from ${label}: ${unknownErrorMessage(e, 'parse failed')}`);
   }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
 }
 
 function firstDefined(...values: unknown[]): unknown {

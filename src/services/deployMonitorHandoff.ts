@@ -49,10 +49,7 @@ export function resolveDeployMonitorProject(
       reason: `${ticketKey} MR merged, but it is linked to multiple projects (${linkedProjects.join(', ')}). Pick the deploy project before starting deploy monitoring.`,
     };
   }
-  const projectName = linkedProjects[0];
-  if (!projectName) {
-    return { kind: 'blocked', reason: `${ticketKey} MR merged, but no linked project was found for deploy monitoring.` };
-  }
+  const [projectName] = linkedProjects as [string];
   const projectPath = state?.projects?.[projectName]?.path;
   if (!projectPath) {
     return { kind: 'blocked', reason: `${ticketKey} MR merged, but ${projectName} has no registered path for deploy monitoring.` };

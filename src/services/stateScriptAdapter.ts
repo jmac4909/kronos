@@ -1,6 +1,7 @@
 import { ScriptRunOptions, runKronosStateScript } from './scriptClient';
 import { unknownErrorMessage } from './errorUtils';
 import { stripUtf8Bom } from './jsonFiles';
+import { isRecord as isPlainObject } from './records';
 import { DiscoveredProject } from '../state/types';
 
 type StateScriptRunner = (args: string[], options?: ScriptRunOptions) => string;
@@ -114,10 +115,6 @@ function parseStateScriptJson(raw: string, label: string): unknown {
     const preview = content.trim().substring(0, 300);
     throw new Error(`Invalid JSON from ${label}: ${unknownErrorMessage(e, 'parse failed')}${preview ? `; output: ${preview}` : ''}`);
   }
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
 }
 
 function arrayOrEmpty(value: unknown): unknown[] {

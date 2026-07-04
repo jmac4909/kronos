@@ -1,3 +1,5 @@
+import { isRecord } from './records';
+
 const ACTIVE_RUN_STATUSES = new Set(['preflight', 'running', 'paused']);
 const STALEABLE_ACTIVE_RUN_STATUSES = new Set(['preflight', 'running']);
 const DEFAULT_STALE_ACTIVE_RUN_MS = 12 * 60 * 60 * 1000;
@@ -121,10 +123,6 @@ function hasLiveProcess(value: unknown): boolean {
 function numericPid(value: unknown): number | undefined {
   const parsed = typeof value === 'string' || typeof value === 'number' ? Number(value) : Number.NaN;
   return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
 }
 
 function hasDateLikeValue(value: unknown): boolean {

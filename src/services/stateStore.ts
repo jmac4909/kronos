@@ -5,6 +5,7 @@ import { KronosState, QueueDecision, QueueItem, QueueState, Ticket, TicketEviden
 import { unknownErrorCode, unknownErrorMessage } from './errorUtils';
 import { readJsonFile } from './jsonFiles';
 import { QUEUE_ACTIONS, TICKET_ACTIONS } from './actionCatalog';
+import { isRecord as isPlainObject } from './records';
 
 export const KRONOS_DIR = process.env['KRONOS_DIR'] || path.join(os.homedir(), '.claude', 'kronos');
 export const STATE_FILE = path.join(KRONOS_DIR, 'state.json');
@@ -824,10 +825,6 @@ function validateActionValue(value: unknown, allowed: Set<string>, label: string
   if (typeof value !== 'string' || !allowed.has(value)) {
     throw new Error(`${label} has unsupported action "${String(value)}"`);
   }
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
 }
 
 function requireString(value: unknown, label: string): void {

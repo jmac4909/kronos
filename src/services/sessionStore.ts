@@ -4,6 +4,7 @@ import { safeFileStem } from './fileNames';
 import { KRONOS_DIR } from './stateStore';
 import { unknownErrorMessage } from './errorUtils';
 import { readJsonFile } from './jsonFiles';
+import { isRecord } from './records';
 
 const SESSIONS_DIR = path.join(KRONOS_DIR, 'sessions');
 const STATS_FILE = path.join(KRONOS_DIR, 'stats.json');
@@ -227,10 +228,6 @@ function normalizeAggregateSession(value: unknown): AggregateSessionStats | null
     durationSec: finiteNumber(value['durationSec']),
     verdict: stringOrDefault(value['verdict'], 'unknown'),
   };
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
 }
 
 function stringOrDefault(value: unknown, fallback: string): string {

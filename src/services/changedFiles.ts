@@ -1,8 +1,5 @@
 import { MergeRequestChangedFile } from '../state/types';
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
-}
+import { isRecord } from './records';
 
 function normalizeChangedFilePath(value: unknown): string {
   if (typeof value !== 'string') { return ''; }

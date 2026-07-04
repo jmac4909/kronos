@@ -24,6 +24,7 @@ import { runProgressSummary } from '../services/runProgress';
 import { isAttentionRunStatus, runAttentionDetail } from '../services/runAttention';
 import { sortedRunCenterRuns } from '../services/runCenterSort';
 import { readJsonFile } from '../services/jsonFiles';
+import { isRecord } from '../services/records';
 import type { KronosState as KronosStateFile } from '../state/types';
 export { getAggregateStats, listSavedSessions, listSessionStoreIssues } from '../services/sessionStore';
 
@@ -1221,10 +1222,6 @@ function progressEventTimeLabel(value: unknown): string {
 
 function progressDateTimeLabel(value: unknown, fallback = 'Unknown'): string {
   return toValidDate(value)?.toLocaleString() || fallback;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
 }
 
 function stringOrDefault(value: unknown, fallback: string): string {

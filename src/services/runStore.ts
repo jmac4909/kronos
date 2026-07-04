@@ -5,6 +5,7 @@ import { KRONOS_DIR } from './stateStore';
 import { unknownErrorCode, unknownErrorMessage } from './errorUtils';
 import { effectiveRunStatus, isActiveRunStatus, isStaleActiveRun } from './runStatus';
 import { readJsonFile } from './jsonFiles';
+import { isRecord } from './records';
 
 export const RUNS_DIR = path.join(KRONOS_DIR, 'runs');
 const ARCHIVED_RUNS_DIR = path.join(RUNS_DIR, 'archive');
@@ -420,10 +421,6 @@ function processIsGone(pid: number): boolean {
   } catch (e: unknown) {
     return unknownErrorCode(e) === 'ESRCH';
   }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
 }
 
 function stringField(value: unknown): string {
