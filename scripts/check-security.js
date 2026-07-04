@@ -87,6 +87,7 @@ const attentionBadge = readSource('src/services/attentionBadge.ts');
 const queuePlanner = readSource('src/services/queuePlanner.ts');
 const actionCatalog = readSource('src/services/actionCatalog.ts');
 const actionSemantics = readSource('src/services/actionSemantics.ts');
+const severityRank = readSource('src/services/severityRank.ts');
 const queuePlannerPanelView = sources['src/services/queuePlannerPanelView.ts'];
 const operationsReportPanelView = sources['src/services/operationsReportPanelView.ts'];
 const agentQualityScore = readSource('src/services/agentQualityScore.ts');
@@ -2108,16 +2109,43 @@ if (scriptClient.includes('export class KronosScriptMissingError')) {
 }
 
 for (const marker of [
-  "import { isActionCode, isActionProofSensitive } from './actionCatalog'",
-  'return isActionCode(action)',
-  'return isActionProofSensitive(action)',
-  'export function isCodeAction',
-  'export function isProofSensitiveAction',
-  'export function isReviewReadyAction',
-  'export function isHandoffAction',
+  'export {',
+  'isActionCode as isCodeAction',
+  'isActionProofSensitive as isProofSensitiveAction',
+  'isActionProofSensitive as isReviewReadyAction',
+  'isActionProofSensitive as isHandoffAction',
+  "} from './actionCatalog';",
 ]) {
   if (!actionSemantics.includes(marker)) {
     fail(`Missing action semantics marker: ${marker}`);
+  }
+}
+if (actionSemantics.includes('export function')) {
+  fail('Action semantics should stay a re-export layer over actionCatalog.');
+}
+
+for (const marker of [
+  "export type RankedSeverity = 'critical' | 'high' | 'warning' | 'medium' | 'info' | 'low'",
+  'export function severityRank(severity: RankedSeverity): number',
+  "severity === 'critical' || severity === 'high'",
+  "severity === 'warning' || severity === 'medium'",
+]) {
+  if (!severityRank.includes(marker)) {
+    fail(`Missing severity rank marker: ${marker}`);
+  }
+}
+for (const [name, source] of [
+  ['src/services/humanReviewInbox.ts', humanReviewInbox],
+  ['src/services/collisionDetector.ts', collisionDetector],
+  ['src/services/agingAnalyzer.ts', agingAnalyzer],
+  ['src/services/recoveryCenter.ts', recoveryCenter],
+  ['src/services/queuePlanner.ts', queuePlanner],
+]) {
+  if (!source.includes("import { severityRank } from './severityRank'")) {
+    fail(`${name} must use shared severityRank helper.`);
+  }
+  if (source.includes('function severityWeight')) {
+    fail(`${name} must not carry local severityWeight helper.`);
   }
 }
 

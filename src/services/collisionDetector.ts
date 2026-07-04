@@ -2,6 +2,7 @@ import { MergeRequestChangedFile, QueueState, Ticket } from '../state/types';
 import { isCodeAction } from './actionSemantics';
 import { changedFilePaths } from './changedFiles';
 import { isActiveRun, isStaleActiveRun } from './runStatus';
+import { severityRank } from './severityRank';
 
 type CollisionSeverity = 'high' | 'medium' | 'low';
 type CollisionKind = 'active_run' | 'queued_ticket' | 'queued_project' | 'open_mr' | 'recent_file' | 'ticket_area' | 'mr_file';
@@ -303,11 +304,5 @@ function dedupeCollisions(collisions: DispatchCollision[]): DispatchCollision[] 
 }
 
 function compareCollisions(a: DispatchCollision, b: DispatchCollision): number {
-  return severityWeight(b.severity) - severityWeight(a.severity) || a.title.localeCompare(b.title);
-}
-
-function severityWeight(severity: CollisionSeverity): number {
-  if (severity === 'high') { return 3; }
-  if (severity === 'medium') { return 2; }
-  return 1;
+  return severityRank(b.severity) - severityRank(a.severity) || a.title.localeCompare(b.title);
 }

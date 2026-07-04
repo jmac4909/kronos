@@ -1,5 +1,6 @@
 import type { RunStoreIssue } from './runStore';
 import { runAttentionDetail } from './runAttention';
+import { severityRank } from './severityRank';
 
 type RecoverySeverity = 'critical' | 'warning' | 'info';
 type RecoveryKind = 'run' | 'worktree' | 'backup' | 'integration' | 'merge_request';
@@ -167,7 +168,7 @@ export function buildRecoveryInventory(input: RecoveryInventoryInput): RecoveryI
     });
   }
 
-  items.sort((a, b) => severityWeight(b.severity) - severityWeight(a.severity) || a.kind.localeCompare(b.kind));
+  items.sort((a, b) => severityRank(b.severity) - severityRank(a.severity) || a.kind.localeCompare(b.kind));
 
   return {
     generatedAt: now.toISOString(),
@@ -329,10 +330,4 @@ function isStaleRun(startedAt: string | undefined, now: Date, staleRunMs: number
   const started = new Date(startedAt).getTime();
   if (!Number.isFinite(started)) { return false; }
   return now.getTime() - started >= staleRunMs;
-}
-
-function severityWeight(severity: RecoverySeverity): number {
-  if (severity === 'critical') { return 3; }
-  if (severity === 'warning') { return 2; }
-  return 1;
 }

@@ -3,6 +3,7 @@ import { actionEstimateMinutes, actionPlanningScore } from './actionCatalog';
 import { actionDisplayLabel as actionToLabel } from './actionCatalog';
 import { isCodeAction } from './actionSemantics';
 import { evidenceRecordCount } from './evidenceData';
+import { severityRank } from './severityRank';
 
 interface PlannerInput {
   state: KronosStateType | null;
@@ -312,12 +313,6 @@ function compareTriageItems(a: BacklogTriageItem, b: BacklogTriageItem): number 
   const ageDiff = (b.ageDays || 0) - (a.ageDays || 0);
   if (ageDiff !== 0) { return ageDiff; }
   return a.ticketKey.localeCompare(b.ticketKey);
-}
-
-function severityRank(severity: BacklogTriageItem['severity']): number {
-  if (severity === 'critical') { return 3; }
-  if (severity === 'warning') { return 2; }
-  return 1;
 }
 
 function summarizeTriage(items: BacklogTriageItem[]): Record<BacklogTriageKind, number> {

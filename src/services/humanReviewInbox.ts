@@ -3,6 +3,7 @@ import { isReviewReadyAction } from './actionSemantics';
 import { RecoveryCheck, RecoveryWorktreeReport } from './recoveryCenter';
 import { evaluateEvidenceGate } from './evidenceGate';
 import { runAttentionDetail } from './runAttention';
+import { severityRank } from './severityRank';
 
 type HumanReviewSeverity = 'critical' | 'warning' | 'info';
 type HumanReviewKind = 'run' | 'ticket' | 'evidence' | 'integration' | 'worktree' | 'queue';
@@ -165,13 +166,7 @@ function dedupeItems(items: HumanReviewItem[]): HumanReviewItem[] {
 }
 
 function compareItems(a: HumanReviewItem, b: HumanReviewItem): number {
-  return severityWeight(b.severity) - severityWeight(a.severity) || a.kind.localeCompare(b.kind) || a.title.localeCompare(b.title);
-}
-
-function severityWeight(severity: HumanReviewSeverity): number {
-  if (severity === 'critical') { return 3; }
-  if (severity === 'warning') { return 2; }
-  return 1;
+  return severityRank(b.severity) - severityRank(a.severity) || a.kind.localeCompare(b.kind) || a.title.localeCompare(b.title);
 }
 
 function runId(run: HumanReviewRunRecord): string {

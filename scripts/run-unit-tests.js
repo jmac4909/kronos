@@ -157,6 +157,7 @@ const stateStore = require('../out/services/stateStore.js');
 const queuePlanner = require('../out/services/queuePlanner.js');
 const actionCatalog = require('../out/services/actionCatalog.js');
 const actionSemantics = require('../out/services/actionSemantics.js');
+const severityRank = require('../out/services/severityRank.js');
 const evidenceStore = require('../out/services/evidenceStore.js');
 const evidenceHandoff = require('../out/services/evidenceHandoff.js');
 const evidencePublisher = require('../out/services/evidencePublisher.js');
@@ -3353,8 +3354,12 @@ test('action semantics centralize code and handoff action groups', () => {
   assert.equal(actionCatalog.actionEstimateMinutes('refresh'), 10);
   assert.equal(actionCatalog.actionPlanningScore('fix_build'), 95);
   const actionCatalogSource = readSourceFixture('src', 'services', 'actionCatalog.ts');
+  const actionSemanticsSource = readSourceFixture('src', 'services', 'actionSemantics.ts');
   assert.equal(actionCatalogSource.includes('export type TicketAction'), false, 'unused ticket action alias should stay private or absent');
   assert.equal(actionCatalogSource.includes('export type QueueAction'), false, 'unused queue action alias should stay private or absent');
+  assert.ok(actionSemanticsSource.includes('isActionCode as isCodeAction'));
+  assert.ok(actionSemanticsSource.includes('isActionProofSensitive as isHandoffAction'));
+  assert.equal(actionSemanticsSource.includes('function isCodeAction'), false);
   assert.equal(actionSemantics.isCodeAction('implement'), true);
   assert.equal(actionSemantics.isCodeAction('in_progress'), true);
   assert.equal(actionSemantics.isCodeAction('fix_build'), true);
@@ -3364,6 +3369,26 @@ test('action semantics centralize code and handoff action groups', () => {
   assert.equal(actionSemantics.isReviewReadyAction('deploy_monitor'), true);
   assert.equal(actionSemantics.isHandoffAction('done'), true);
   assert.equal(actionSemantics.isHandoffAction(undefined), false);
+});
+
+test('severity rank helper centralizes attention ordering vocabularies', () => {
+  assert.equal(severityRank.severityRank('critical'), 3);
+  assert.equal(severityRank.severityRank('high'), 3);
+  assert.equal(severityRank.severityRank('warning'), 2);
+  assert.equal(severityRank.severityRank('medium'), 2);
+  assert.equal(severityRank.severityRank('info'), 1);
+  assert.equal(severityRank.severityRank('low'), 1);
+  for (const file of [
+    'humanReviewInbox.ts',
+    'collisionDetector.ts',
+    'agingAnalyzer.ts',
+    'recoveryCenter.ts',
+    'queuePlanner.ts',
+  ]) {
+    const source = readSourceFixture('src', 'services', file);
+    assert.ok(source.includes("import { severityRank } from './severityRank'"), `${file} should use shared severity ranking`);
+    assert.equal(source.includes('function severityWeight'), false, `${file} should not carry a local severityWeight helper`);
+  }
 });
 
 test('review work service centralizes open review merge request semantics', () => {

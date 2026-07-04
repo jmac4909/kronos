@@ -1,5 +1,6 @@
 import { Ticket } from '../state/types';
 import { isOpenReviewTicket } from './reviewWork';
+import { severityRank } from './severityRank';
 
 type AgingSeverity = 'critical' | 'warning' | 'info';
 type AgingKind = 'review' | 'build' | 'blocked' | 'verification' | 'ticket';
@@ -120,7 +121,7 @@ export function analyzeAging(input: {
     }
   }
 
-  const sorted = items.sort((a, b) => severityWeight(b.severity) - severityWeight(a.severity) || b.ageDays - a.ageDays || a.ticketKey.localeCompare(b.ticketKey));
+  const sorted = items.sort((a, b) => severityRank(b.severity) - severityRank(a.severity) || b.ageDays - a.ageDays || a.ticketKey.localeCompare(b.ticketKey));
   return {
     generatedAt: now.toISOString(),
     summary: {
@@ -181,10 +182,4 @@ function daysBetween(from: Date, to: Date): number {
 function isFailedBuild(ticket: Ticket): boolean {
   const status = String(ticket.build?.status || '').toUpperCase();
   return ['FAILURE', 'FAILED', 'ERROR'].includes(status);
-}
-
-function severityWeight(severity: AgingSeverity): number {
-  if (severity === 'critical') { return 3; }
-  if (severity === 'warning') { return 2; }
-  return 1;
 }
