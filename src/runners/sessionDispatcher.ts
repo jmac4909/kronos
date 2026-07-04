@@ -980,8 +980,7 @@ export async function dispatchClaudeSession(
       const trimmed = line.trim();
       if (!trimmed || !trimmed.startsWith('{')) { continue; }
       try {
-        const pe = parseStreamEvent(JSON.parse(trimmed));
-        if (pe) {
+        for (const pe of parseStreamEvents(JSON.parse(trimmed))) {
           events.push(pe);
           addRunEvent(run, pe);
           panel.webview.html = withWebviewCsp(buildProgressHtml(projectName, skill, ticket || '', events, run));
@@ -1186,62 +1185,71 @@ function streamString(value: unknown): string {
 }
 
 export function parseStreamEvent(event: unknown): ProgressEvent | null {
+  return parseStreamEvents(event)[0] || null;
+}
+
+export function parseStreamEvents(event: unknown): ProgressEvent[] {
   const now = new Date();
   const payload = isRecord(event) ? event : {};
   if (payload['type'] === 'assistant') {
     const message = recordField(payload, 'message');
-    for (const rawBlock of arrayField(message, 'content')) {
-      const block = isRecord(rawBlock) ? rawBlock : {};
-      const blockType = streamString(block['type']);
-      if (blockType === 'tool_use') {
-        const name = streamString(block['name']);
-        const input = recordField(block, 'input');
-        let label = '';
-        let detail = '';
-        if (name === 'Read') {
-          label = `Reading ${shortenPath(streamString(input['file_path']))}`;
-        } else if (name === 'Edit') {
-          label = `Editing ${shortenPath(streamString(input['file_path']))}`;
-          const oldString = streamString(input['old_string']);
-          detail = oldString ? `replacing: ${oldString.substring(0, 60)}...` : '';
-        } else if (name === 'Write') {
-          label = `Writing ${shortenPath(streamString(input['file_path']))}`;
-        } else if (name === 'Bash' || name === 'PowerShell') {
-          label = `Running: ${streamString(input['command']).substring(0, 80)}`;
-          detail = streamString(input['description']);
-        } else if (name === 'Grep') {
-          label = `Searching for "${streamString(input['pattern'])}"`;
-          const pathValue = streamString(input['path']);
-          detail = pathValue ? `in ${shortenPath(pathValue)}` : '';
-        } else if (name === 'Glob') {
-          label = `Finding files: ${streamString(input['pattern'])}`;
-        } else if (name === 'Skill') {
-          label = `Invoking /${streamString(input['skill'])}`;
-        } else {
-          label = `${name}`;
-          detail = JSON.stringify(input).substring(0, 80);
-        }
-        return { type: 'tool', label, detail, timestamp: now };
-      }
-      if (blockType === 'thinking') {
-        const text = streamString(block['thinking']).substring(0, 120);
-        if (text.length > 10) {
-          return { type: 'thinking', label: text, detail: '', timestamp: now };
-        }
-      }
-      if (blockType === 'text') {
-        const text = streamString(block['text']).trim();
-        if (text.length > 5) {
-          return { type: 'text', label: text.substring(0, 150), detail: '', timestamp: now };
-        }
-      }
-    }
+    return arrayField(message, 'content')
+      .map(rawBlock => parseAssistantContentBlock(rawBlock, now))
+      .filter((progressEvent): progressEvent is ProgressEvent => Boolean(progressEvent));
   }
   if (payload['type'] === 'result') {
     const result = streamString(payload['result']);
     const rawDurationMs = typeof payload['duration_ms'] === 'number' ? payload['duration_ms'] : Number.NaN;
     const duration = Number.isFinite(rawDurationMs) ? `${(rawDurationMs / 1000).toFixed(1)}s` : '';
-    return { type: 'done', label: `Complete — ${duration}`, detail: result, timestamp: now };
+    return [{ type: 'done', label: `Complete — ${duration}`, detail: result, timestamp: now }];
+  }
+  return [];
+}
+
+function parseAssistantContentBlock(rawBlock: unknown, now: Date): ProgressEvent | null {
+  const block = isRecord(rawBlock) ? rawBlock : {};
+  const blockType = streamString(block['type']);
+  if (blockType === 'tool_use') {
+    const name = streamString(block['name']);
+    const input = recordField(block, 'input');
+    let label = '';
+    let detail = '';
+    if (name === 'Read') {
+      label = `Reading ${shortenPath(streamString(input['file_path']))}`;
+    } else if (name === 'Edit') {
+      label = `Editing ${shortenPath(streamString(input['file_path']))}`;
+      const oldString = streamString(input['old_string']);
+      detail = oldString ? `replacing: ${oldString.substring(0, 60)}...` : '';
+    } else if (name === 'Write') {
+      label = `Writing ${shortenPath(streamString(input['file_path']))}`;
+    } else if (name === 'Bash' || name === 'PowerShell') {
+      label = `Running: ${streamString(input['command']).substring(0, 80)}`;
+      detail = streamString(input['description']);
+    } else if (name === 'Grep') {
+      label = `Searching for "${streamString(input['pattern'])}"`;
+      const pathValue = streamString(input['path']);
+      detail = pathValue ? `in ${shortenPath(pathValue)}` : '';
+    } else if (name === 'Glob') {
+      label = `Finding files: ${streamString(input['pattern'])}`;
+    } else if (name === 'Skill') {
+      label = `Invoking /${streamString(input['skill'])}`;
+    } else {
+      label = `${name}`;
+      detail = JSON.stringify(input).substring(0, 80);
+    }
+    return { type: 'tool', label, detail, timestamp: now };
+  }
+  if (blockType === 'thinking') {
+    const text = streamString(block['thinking']).substring(0, 120);
+    if (text.length > 10) {
+      return { type: 'thinking', label: text, detail: '', timestamp: now };
+    }
+  }
+  if (blockType === 'text') {
+    const text = streamString(block['text']).trim();
+    if (text.length > 5) {
+      return { type: 'text', label: text.substring(0, 150), detail: '', timestamp: now };
+    }
   }
   return null;
 }

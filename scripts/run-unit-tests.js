@@ -4551,6 +4551,42 @@ test('dispatcher completion callback refreshes progress panel after successful m
   assert.ok(successCallbackBlock, 'successful post-run callback should persist and re-render mutated run state');
 });
 
+test('dispatcher parses every assistant content block for progress metrics', async () => {
+  const vscodeStub = createVscodeTestModule();
+  await withPatchedModuleLoad(request => request === 'vscode' ? vscodeStub.vscode : undefined, async () => {
+    const dispatcherPath = require.resolve('../out/runners/sessionDispatcher.js');
+    delete require.cache[dispatcherPath];
+    const dispatcher = require(dispatcherPath);
+    const payload = {
+      type: 'assistant',
+      message: {
+        content: [
+          { type: 'tool_use', name: 'Read', input: { file_path: 'src/app.ts' } },
+          { type: 'tool_use', name: 'Edit', input: { file_path: 'src/run.ts', old_string: 'const oldValue = true;' } },
+          { type: 'thinking', thinking: 'checking the live run state before patching' },
+          { type: 'text', text: 'Queued the next validation step.' },
+        ],
+      },
+    };
+
+    const events = dispatcher.parseStreamEvents(payload);
+    assert.deepEqual(events.map(event => event.type), ['tool', 'tool', 'thinking', 'text']);
+    assert.deepEqual(events.map(event => event.label), [
+      'Reading src/app.ts',
+      'Editing src/run.ts',
+      'checking the live run state before patching',
+      'Queued the next validation step.',
+    ]);
+    assert.equal(dispatcher.parseStreamEvent(payload).label, 'Reading src/app.ts');
+    const progress = runProgress.runProgressSummary({ events });
+    assert.equal(progress.toolCalls, 2);
+    assert.equal(progress.toolErrors, 0);
+    assert.equal(progress.filesRead, 1);
+    assert.equal(progress.filesChanged, 1);
+    assert.equal(progress.elapsedSeconds, 0);
+  });
+});
+
 test('dispatcher records branch and permission metadata for persisted runs', () => {
   const source = readSourceFixture('src', 'runners', 'sessionDispatcher.ts');
   for (const marker of [
@@ -4647,8 +4683,11 @@ test('dispatcher records branch and permission metadata for persisted runs', () 
     'function arrayField(record: Record<string, unknown>, key: string): unknown[]',
     'function streamString(value: unknown): string',
     'export function parseStreamEvent(event: unknown): ProgressEvent | null',
+    'export function parseStreamEvents(event: unknown): ProgressEvent[]',
+    'function parseAssistantContentBlock(rawBlock: unknown, now: Date): ProgressEvent | null',
     'const payload = isRecord(event) ? event : {}',
-    "for (const rawBlock of arrayField(message, 'content'))",
+    "arrayField(message, 'content')",
+    'for (const pe of parseStreamEvents(JSON.parse(trimmed)))',
     'const sessionStart = progressDateOr(session.startedAt, new Date())',
     'timestamp: progressDateOr(e.timestamp, sessionStart)',
     'const progress = runProgressSummary({ events })',
