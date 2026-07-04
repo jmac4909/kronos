@@ -38,6 +38,15 @@ interface DoctorCommandOptions {
 }
 
 type DoctorCommandRunner = (command: string, args: string[], options: DoctorCommandOptions) => string;
+type DoctorReachabilityProbe = (
+  targets: ProviderReachabilityTarget[],
+  options: ProviderReachabilityOptions,
+) => Promise<Array<{ name: string; status: DoctorCheck['status']; detail: string }>>;
+
+interface DoctorReachabilityOptions extends ProviderReachabilityOptions {
+  manifest?: IntegrationManifest;
+  providerProbe?: DoctorReachabilityProbe;
+}
 
 const COMMAND_TIMEOUT_MS = 5000;
 const TOKEN_TIMEOUT_MS = 10000;
@@ -175,7 +184,7 @@ export function runDoctorChecks(input: DoctorChecksInput): DoctorCheck[] {
   return checks;
 }
 
-export function buildDoctorReachabilityTargets(input: DoctorChecksInput, manifest: IntegrationManifest | undefined = readIntegrationManifest().manifest): ProviderReachabilityTarget[] {
+function buildDoctorReachabilityTargets(input: DoctorChecksInput, manifest: IntegrationManifest | undefined = readIntegrationManifest().manifest): ProviderReachabilityTarget[] {
   const env = input.env || process.env;
   return [
     reachabilityTarget(
@@ -235,9 +244,10 @@ function reachabilityTarget(name: string, enabled: boolean, url: string | undefi
   return target;
 }
 
-export async function runDoctorReachabilityChecks(input: DoctorChecksInput, options: ProviderReachabilityOptions = { timeoutMs: 5000 }): Promise<DoctorCheck[]> {
+export async function runDoctorReachabilityChecks(input: DoctorChecksInput, options: DoctorReachabilityOptions = { timeoutMs: 5000 }): Promise<DoctorCheck[]> {
+  const { manifest, providerProbe = probeProviderReachability, ...providerOptions } = options;
   try {
-    const results = await probeProviderReachability(buildDoctorReachabilityTargets(input), options);
+    const results = await providerProbe(buildDoctorReachabilityTargets(input, manifest), providerOptions);
     return results.map(result => ({
       name: result.name,
       status: result.status,
@@ -252,7 +262,7 @@ export async function runDoctorReachabilityChecks(input: DoctorChecksInput, opti
   }
 }
 
-export function projectConfigGaps(state: KronosState | null, profile: KronosProfile): string[] {
+function projectConfigGaps(state: KronosState | null, profile: KronosProfile): string[] {
   const gaps: string[] = [];
   for (const [name, project] of Object.entries(state?.projects || {})) {
     const config = project.config || {};

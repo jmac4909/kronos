@@ -2702,9 +2702,9 @@ for (const [file, source, marker] of [
 
 for (const marker of [
   'export function runDoctorChecks',
-  'export function buildDoctorReachabilityTargets',
+  'function buildDoctorReachabilityTargets',
   'export async function runDoctorReachabilityChecks',
-  'export function projectConfigGaps',
+  'function projectConfigGaps',
   'credentialCheck',
   'Claude CLI compatible version',
   'Project config completeness',

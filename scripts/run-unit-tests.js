@@ -6804,7 +6804,7 @@ test('provider reachability keeps request and URL errors unknown', () => {
   }
 });
 
-test('doctor checks centralize command, credential, project config, and reachability inputs', () => {
+test('doctor checks centralize command, credential, project config, and reachability inputs', async () => {
   fs.writeFileSync(path.join(process.env.KRONOS_SCRIPTS_DIR, 'kronos_state.py'), 'print("{}")\n');
   const state = baseState({
     'K-1': ticket({ summary: 'Doctor ticket' }),
@@ -6953,8 +6953,8 @@ test('doctor checks centralize command, credential, project config, and reachabi
   assert.match(blockedReviewByName['Review MR polling prerequisites'].detail, /missing GITLAB_TOKEN/);
   assert.match(blockedReviewByName['Review MR polling prerequisites'].detail, /K-BLOCKED\/app: missing gitlab_project_id/);
 
-  assert.deepEqual(doctorChecks.projectConfigGaps(state, profile), ['app: missing jenkins_url']);
-  const targets = doctorChecks.buildDoctorReachabilityTargets({
+  let targets = [];
+  const reachabilityChecks = await doctorChecks.runDoctorReachabilityChecks({
     state,
     queue: null,
     profile,
@@ -6963,13 +6963,26 @@ test('doctor checks centralize command, credential, project config, and reachabi
     env,
     commandRunner,
   }, {
-    providers: {
-      jira: { baseUrl: 'https://manifest-jira.example' },
-      gitlab: { baseUrl: 'https://manifest-gitlab.example' },
-      jenkins: { baseUrl: 'https://manifest-jenkins.example' },
-      sonar: { baseUrl: 'https://manifest-sonar.example' },
+    timeoutMs: 1234,
+    manifest: {
+      providers: {
+        jira: { baseUrl: 'https://manifest-jira.example' },
+        gitlab: { baseUrl: 'https://manifest-gitlab.example' },
+        jenkins: { baseUrl: 'https://manifest-jenkins.example' },
+        sonar: { baseUrl: 'https://manifest-sonar.example' },
+      },
+    },
+    providerProbe: async (providerTargets, options) => {
+      targets = providerTargets;
+      assert.equal(options.timeoutMs, 1234);
+      return providerTargets.map(target => ({
+        name: target.name,
+        status: 'pass',
+        detail: target.url || 'Provider disabled by active profile.',
+      }));
     },
   });
+  assert.equal(reachabilityChecks.find(check => check.name === 'Jira network reachability').detail, 'https://jira.example');
   assert.equal(targets.find(target => target.name === 'Jira network reachability').url, 'https://jira.example');
   assert.equal(targets.find(target => target.name === 'GitLab network reachability').url, 'gitlab.example');
   assert.equal(targets.find(target => target.name === 'Jenkins network reachability').url, 'https://manifest-jenkins.example');
@@ -6993,10 +7006,20 @@ test('doctor checks centralize command, credential, project config, and reachabi
   assert.equal(githubByName['GitHub Actions credentials'].status, 'pass');
   assert.doesNotMatch(githubByName['GitHub Actions credentials'].detail, /github-secret/);
   assert.match(githubByName['Project config completeness'].detail, /app: missing github_repository/);
-  assert.deepEqual(doctorChecks.projectConfigGaps(githubState, githubProfile), ['app: missing github_repository']);
   githubState.projects.app.config.github_repository = 'owner/app';
-  assert.deepEqual(doctorChecks.projectConfigGaps(githubState, githubProfile), []);
-  const githubTargets = doctorChecks.buildDoctorReachabilityTargets({
+  const completeGithubChecks = doctorChecks.runDoctorChecks({
+    state: githubState,
+    queue: null,
+    profile: githubProfile,
+    requiredPrompts: [],
+    dispatchModel: 'claude-opus-4-6',
+    env: { GH_TOKEN: 'github-secret', GITHUB_API_URL: 'https://github.enterprise.example/api/v3' },
+    commandRunner,
+    kronosDir: process.env.KRONOS_DIR,
+  });
+  assert.equal(Object.fromEntries(completeGithubChecks.map(check => [check.name, check]))['Project config completeness'].status, 'pass');
+  let githubTargets = [];
+  await doctorChecks.runDoctorReachabilityChecks({
     state: githubState,
     queue: null,
     profile: githubProfile,
@@ -7004,6 +7027,15 @@ test('doctor checks centralize command, credential, project config, and reachabi
     dispatchModel: 'claude-opus-4-6',
     env: { GITHUB_API_URL: 'https://github.enterprise.example/api/v3' },
     commandRunner,
+  }, {
+    providerProbe: async providerTargets => {
+      githubTargets = providerTargets;
+      return providerTargets.map(target => ({
+        name: target.name,
+        status: 'pass',
+        detail: target.url || 'Provider disabled by active profile.',
+      }));
+    },
   });
   assert.equal(githubTargets.find(target => target.name === 'GitHub API network reachability').enabled, true);
   assert.equal(githubTargets.find(target => target.name === 'GitHub API network reachability').url, 'https://github.enterprise.example/api/v3');
