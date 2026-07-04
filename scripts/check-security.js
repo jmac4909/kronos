@@ -83,6 +83,7 @@ const runStatus = readSource('src/services/runStatus.ts');
 const runProgress = readSource('src/services/runProgress.ts');
 const activeRunDisplay = readSource('src/services/activeRunDisplay.ts');
 const runCompletionNotification = readSource('src/services/runCompletionNotification.ts');
+const runAttention = readSource('src/services/runAttention.ts');
 const runCenterSort = readSource('src/services/runCenterSort.ts');
 const attentionBadge = readSource('src/services/attentionBadge.ts');
 const queuePlanner = readSource('src/services/queuePlanner.ts');
@@ -2157,7 +2158,9 @@ for (const [name, source] of [
 
 for (const marker of [
   'export function isRecord(value: unknown): value is Record<string, unknown>',
+  'export function recordFromUnknown(value: unknown): Record<string, unknown>',
   'export function recordString(record: Record<string, unknown>, key: string): string',
+  'return isRecord(value) ? value : {}',
   "typeof value === 'object'",
   '!Array.isArray(value)',
   "typeof value === 'string' ? value.trim() : ''",
@@ -2283,7 +2286,29 @@ for (const [name, source, marker] of [
 }
 
 for (const [name, source, marker] of [
-  ['src/services/activeRunDisplay.ts', activeRunDisplay, "import { recordString } from './records'"],
+  ['src/services/activeRunDisplay.ts', activeRunDisplay, "import { recordFromUnknown, recordString } from './records'"],
+  ['src/services/operatorPanel.ts', operatorPanel, "import { recordFromUnknown } from './records'"],
+  ['src/services/runAttention.ts', runAttention, "import { recordFromUnknown } from './records'"],
+  ['src/services/runCompletionNotification.ts', runCompletionNotification, "import { recordFromUnknown, recordString } from './records'"],
+  ['src/services/runProgress.ts', runProgress, "import { isRecord, recordFromUnknown } from './records'"],
+]) {
+  if (!source.includes(marker)) {
+    fail(`${name} must import the shared unknown-record helper.`);
+  }
+  if (
+    source.includes('function runRecord(value: unknown): Record<string, unknown>')
+    || source.includes('function objectRecord(value: unknown): Record<string, unknown>')
+    || source.includes('function objectRecordOrNull(value: unknown): value is Record<string, unknown>')
+  ) {
+    fail(`${name} must not carry a local unknown-record helper.`);
+  }
+}
+if (operatorPanel.includes('function recordFromUnknown(value: unknown): Record<string, unknown>')) {
+  fail('Operator panel must use the shared unknown-record helper.');
+}
+
+for (const [name, source, marker] of [
+  ['src/services/activeRunDisplay.ts', activeRunDisplay, "import { recordFromUnknown, recordString } from './records'"],
   ['src/services/agentQualityScore.ts', agentQualityScore, "import { recordString } from './records'"],
   ['src/services/dashboardWorklist.ts', dashboardWorklist, "import { recordString } from './records'"],
   ['src/services/humanReviewInbox.ts', humanReviewInbox, "import { recordString } from './records'"],
@@ -3372,6 +3397,7 @@ for (const marker of [
   "import { isActiveRunStatus } from './runStatus'",
   'export function runProgressSummary',
   'export function formatRunProgress',
+  "import { isRecord, recordFromUnknown } from './records'",
   'function elapsedRunSeconds',
   'function fileCount',
   'function formatElapsed',
@@ -3386,6 +3412,7 @@ for (const marker of [
 for (const marker of [
   "import { formatRunProgress } from './runProgress'",
   "import { activeRunSummary, isFreshActiveRun, runStatus } from './runStatus'",
+  "import { recordFromUnknown, recordString } from './records'",
   'export function activeRunStatusBarSummary',
   'activeRuns.length === 1',
   'activeRunTooltipLine',
@@ -3398,6 +3425,7 @@ for (const marker of [
 for (const marker of [
   'type RunCompletionNotificationKind',
   'interface RunCompletionNotification',
+  "import { recordFromUnknown, recordString } from './records'",
   'export function buildRunCompletionNotification',
   "status === 'waiting_for_review'",
   "kind: 'review_ready'",

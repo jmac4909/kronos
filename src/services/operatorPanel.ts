@@ -1,5 +1,6 @@
 import { WEBVIEW_READY_COMMAND, webviewActionScriptTag } from './webviewSecurity';
 import { escapeAttr, escapeHtml, kronosWebviewBaseCss } from './webviewHtml';
+import { recordFromUnknown } from './records';
 
 interface ActionButtonOptions {
   ticket?: string;
@@ -121,10 +122,6 @@ export function kronosOperatorPanelCss(): string {
   a { color: var(--k-accent); text-decoration: none; }
   a:hover { text-decoration: underline; }
   li { margin: 4px 0; }`;
-}
-
-function recordFromUnknown(value: unknown): Record<string, unknown> {
-  return Boolean(value && typeof value === 'object' && !Array.isArray(value)) ? value as Record<string, unknown> : {};
 }
 
 function stringField(record: Record<string, unknown>, key: string): string {

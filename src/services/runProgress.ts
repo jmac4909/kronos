@@ -1,4 +1,5 @@
 import { isActiveRunStatus } from './runStatus';
+import { isRecord, recordFromUnknown } from './records';
 
 interface RunProgressSummary {
   toolCalls: number;
@@ -11,7 +12,7 @@ interface RunProgressSummary {
 }
 
 export function runProgressSummary(run: unknown, now = new Date()): RunProgressSummary {
-  const record = objectRecord(run);
+  const record = recordFromUnknown(run);
   const events = runEvents(record);
   const toolCalls = events.filter(event => eventString(event, 'type') === 'tool').length;
   const toolErrors = events.filter(event => eventString(event, 'type') === 'error').length;
@@ -56,7 +57,7 @@ function elapsedRunSeconds(record: Record<string, unknown>, events: Array<Record
 
 function runEvents(record: Record<string, unknown>): Array<Record<string, unknown>> {
   return Array.isArray(record['events'])
-    ? record['events'].filter(objectRecordOrNull)
+    ? record['events'].filter(isRecord)
     : [];
 }
 
@@ -99,12 +100,4 @@ function validDate(value: unknown): Date | null {
 function eventString(record: Record<string, unknown>, key: string): string {
   const value = record[key];
   return typeof value === 'string' || typeof value === 'number' ? String(value) : '';
-}
-
-function objectRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
-}
-
-function objectRecordOrNull(value: unknown): value is Record<string, unknown> {
-  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
 }

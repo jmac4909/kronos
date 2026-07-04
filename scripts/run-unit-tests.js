@@ -3407,6 +3407,8 @@ test('record guard helper centralizes unknown object narrowing', () => {
   assert.equal(records.isRecord([]), false);
   assert.equal(records.isRecord(null), false);
   assert.equal(records.isRecord('value'), false);
+  assert.deepEqual(records.recordFromUnknown({ ok: true }), { ok: true });
+  assert.deepEqual(records.recordFromUnknown(null), {});
   assert.equal(records.recordString({ ticket: ' K-1 ' }, 'ticket'), 'K-1');
   assert.equal(records.recordString({ ticket: 42 }, 'ticket'), '');
 
@@ -3431,6 +3433,22 @@ test('record guard helper centralizes unknown object narrowing', () => {
   assert.ok(dispatcherSource.includes("import { isRecord } from '../services/records'"));
   assert.equal(dispatcherSource.includes('function isRecord'), false);
 
+  for (const [file, marker] of [
+    ['activeRunDisplay.ts', "import { recordFromUnknown, recordString } from './records'"],
+    ['operatorPanel.ts', "import { recordFromUnknown } from './records'"],
+    ['runAttention.ts', "import { recordFromUnknown } from './records'"],
+    ['runCompletionNotification.ts', "import { recordFromUnknown, recordString } from './records'"],
+    ['runProgress.ts', "import { isRecord, recordFromUnknown } from './records'"],
+  ]) {
+    const source = readSourceFixture('src', 'services', file);
+    assert.ok(source.includes(marker), `${file} should import shared unknown-record helper`);
+    assert.equal(source.includes('function runRecord(value: unknown): Record<string, unknown>'), false, `${file} should not carry a local runRecord helper`);
+    assert.equal(source.includes('function objectRecord(value: unknown): Record<string, unknown>'), false, `${file} should not carry a local objectRecord helper`);
+    assert.equal(source.includes('function objectRecordOrNull(value: unknown): value is Record<string, unknown>'), false, `${file} should not carry a local objectRecordOrNull helper`);
+  }
+  const operatorPanelSource = readSourceFixture('src', 'services', 'operatorPanel.ts');
+  assert.equal(operatorPanelSource.includes('function recordFromUnknown(value: unknown): Record<string, unknown>'), false, 'operatorPanel should not carry a local recordFromUnknown helper');
+
   for (const file of [
     'activeRunDisplay.ts',
     'agentQualityScore.ts',
@@ -3439,7 +3457,10 @@ test('record guard helper centralizes unknown object narrowing', () => {
     'ticketTimeline.ts',
   ]) {
     const source = readSourceFixture('src', 'services', file);
-    assert.ok(source.includes("import { recordString } from './records'"), `${file} should import shared record string helper`);
+    const marker = file === 'activeRunDisplay.ts'
+      ? "import { recordFromUnknown, recordString } from './records'"
+      : "import { recordString } from './records'";
+    assert.ok(source.includes(marker), `${file} should import shared record string helper`);
     assert.equal(source.includes('function runString'), false, `${file} should not carry a local runString helper`);
   }
 });
@@ -6023,6 +6044,7 @@ test('run progress helper summarizes active run activity', () => {
   const source = readSourceFixture('src', 'services', 'runProgress.ts');
   for (const marker of [
     "import { isActiveRunStatus } from './runStatus'",
+    "import { isRecord, recordFromUnknown } from './records'",
     'export function runProgressSummary',
     'export function formatRunProgress',
     'function elapsedRunSeconds',
@@ -6067,6 +6089,7 @@ test('active run display summarizes status bar text and tooltip progress', () =>
   for (const marker of [
     "import { formatRunProgress } from './runProgress'",
     "import { activeRunSummary, isFreshActiveRun, runStatus } from './runStatus'",
+    "import { recordFromUnknown, recordString } from './records'",
     'export function activeRunStatusBarSummary',
     'activeRuns.length === 1',
     'activeRunTooltipLine',

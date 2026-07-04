@@ -1,4 +1,5 @@
 import { classifyRunFailure, type RunFailureKind } from './postRunReadiness';
+import { recordFromUnknown } from './records';
 
 type RunAttentionSource =
   | 'failureReason'
@@ -38,7 +39,7 @@ export function isAttentionRunStatus(status: unknown): boolean {
 }
 
 function summarizeRunAttention(run: unknown): RunAttentionSummary {
-  const record = runRecord(run);
+  const record = recordFromUnknown(run);
   const status = runText(record['status']) || 'unknown';
   const failureKind = coerceRunFailureKind(runText(record['failureKind'])) || classifyRunFailure(run);
   const label = runFailureKindLabel(failureKind, status);
@@ -97,7 +98,7 @@ function runFailureKindLabel(kind: RunFailureKind, status = ''): string {
 }
 
 function firstRunAttentionReason(record: Record<string, unknown>): { value: string; source: RunAttentionSource } | undefined {
-  const readiness = runRecord(record['readiness']);
+  const readiness = recordFromUnknown(record['readiness']);
   const candidates: Array<{ value: unknown; source: RunAttentionSource }> = [
     { value: record['failureReason'], source: 'failureReason' },
     { value: readiness['summary'], source: 'readiness' },
@@ -126,7 +127,7 @@ function composeRunAttentionDetail(label: string, reason: string): string {
 function latestEventField(events: unknown, field: 'detail' | 'label'): unknown {
   if (!Array.isArray(events)) { return undefined; }
   for (let i = events.length - 1; i >= 0; i -= 1) {
-    const event = runRecord(events[i]);
+    const event = recordFromUnknown(events[i]);
     const value = runText(event[field]);
     if (value) { return value; }
   }
@@ -143,10 +144,6 @@ function isRunFailureKind(value: string): value is RunFailureKind {
 
 function normalizeText(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-}
-
-function runRecord(value: unknown): Record<string, unknown> {
-  return Boolean(value && typeof value === 'object' && !Array.isArray(value)) ? value as Record<string, unknown> : {};
 }
 
 function runText(value: unknown): string {

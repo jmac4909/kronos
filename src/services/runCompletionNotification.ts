@@ -1,5 +1,6 @@
 import type { Ticket } from '../state/types';
 import { isAttentionRunStatus, runAttentionLine } from './runAttention';
+import { recordFromUnknown, recordString } from './records';
 
 type RunCompletionNotificationKind = 'review_ready' | 'attention';
 type RunCompletionNotificationSeverity = 'info' | 'warning';
@@ -18,9 +19,9 @@ export function buildRunCompletionNotification(
   ticket: Ticket | undefined,
   run: unknown,
 ): RunCompletionNotification | null {
-  const record = runRecord(run);
-  const status = runString(record['status']);
-  const skill = runString(record['skill']) || 'run';
+  const record = recordFromUnknown(run);
+  const status = recordString(record, 'status');
+  const skill = recordString(record, 'skill') || 'run';
 
   if (status === 'waiting_for_review') {
     const hasMr = Boolean(ticket?.mr);
@@ -46,12 +47,4 @@ export function buildRunCompletionNotification(
     message: `${ticketKey} ${skill} ${statusLabel}${detail ? ` - ${detail}` : ''}.`,
     actions: ['Run Center'],
   };
-}
-
-function runRecord(value: unknown): Record<string, unknown> {
-  return Boolean(value && typeof value === 'object' && !Array.isArray(value)) ? value as Record<string, unknown> : {};
-}
-
-function runString(value: unknown): string {
-  return typeof value === 'string' && value.trim() ? value.trim() : '';
 }
