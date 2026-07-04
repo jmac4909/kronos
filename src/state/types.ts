@@ -9,13 +9,13 @@ export interface KronosState {
   discovered_projects: DiscoveredProject[];
 }
 
-export interface KronosSettings {
+interface KronosSettings {
   scan_dirs: string[];
   jira_project_key?: string;
   overnight: OvernightSettings;
 }
 
-export interface OvernightSettings {
+interface OvernightSettings {
   enabled: boolean;
   max_concurrent: number;
   max_open_mrs_per_project: number;
@@ -111,7 +111,7 @@ export interface TicketEnvironmentResult {
   artifact_path?: string;
 }
 
-export interface TicketEvidenceRiskNote {
+interface TicketEvidenceRiskNote {
   at: string;
   text: string;
   severity?: 'low' | 'medium' | 'high';
@@ -170,7 +170,7 @@ export interface MergeRequestChangedFile {
   renamed_file?: boolean;
 }
 
-export interface BuildStatus {
+interface BuildStatus {
   number: number;
   status: string;
   url: string;
@@ -185,12 +185,12 @@ export interface AdhocTask {
   completed_at?: string;
 }
 
-export interface OvernightState {
+interface OvernightState {
   enabled: boolean;
   last_run: OvernightRun | null;
 }
 
-export interface OvernightRun {
+interface OvernightRun {
   id: string;
   status: string;
   tickets_implemented?: number;

@@ -471,7 +471,7 @@ export interface DispatchOptions {
   projectNameOverride?: string;
 }
 
-export interface DispatchLaunchResult {
+interface DispatchLaunchResult {
   runId?: string;
   launched: boolean;
   status?: KronosRun['status'] | 'failed';
