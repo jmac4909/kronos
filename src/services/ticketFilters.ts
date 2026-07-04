@@ -1,4 +1,5 @@
 import { Ticket } from '../state/types';
+import { toValidDate } from './dateValues';
 
 export type TicketGroupBy = 'none' | 'action' | 'project' | 'priority';
 
@@ -114,9 +115,8 @@ function matchesBuildStatus(ticket: Ticket, status: string): boolean {
 }
 
 function isStale(updated: string | undefined, staleDays: number, now: Date): boolean {
-  if (!updated) { return false; }
-  const parsed = new Date(updated);
-  if (!Number.isFinite(parsed.getTime())) { return false; }
+  const parsed = toValidDate(updated);
+  if (!parsed) { return false; }
   return now.getTime() - parsed.getTime() >= staleDays * 24 * 60 * 60 * 1000;
 }
 
