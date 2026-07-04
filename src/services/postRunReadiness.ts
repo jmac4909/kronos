@@ -39,6 +39,19 @@ interface RunCompletionEvidenceCheck {
   confidence: 'medium' | 'high';
 }
 
+interface RunCompletionEvidenceContext {
+  record: Record<string, unknown>;
+  runId: string;
+  status: string;
+  exitCode: number | undefined;
+  progress: ReturnType<typeof runProgressSummary>;
+  mr: Ticket['mr'] | undefined;
+  build: Ticket['build'] | undefined;
+  mrChangedFiles: number | undefined;
+  sonarStatus: string | undefined;
+  testCount: number | undefined;
+}
+
 interface PostRunTicketResolution {
   ticketKey?: string;
   ticket?: Ticket;
@@ -102,56 +115,57 @@ export function shouldRecordRunCompletionEvidence(input: { run: unknown; ticket?
 }
 
 export function buildRunCompletionEvidenceText(run: unknown, ticket?: Ticket): string {
-  const record = runRecord(run);
-  const runId = runString(record['id']) || 'unknown run';
-  const status = runString(record['status']) || 'unknown';
-  const exitCode = Number.isFinite(Number(record['exitCode'])) ? `, exit ${Number(record['exitCode'])}` : '';
-  const progress = runProgressSummary(run);
-  const mr = ticket?.mr || undefined;
-  const build = ticket?.build || undefined;
-  const mrChangedFiles = mergeRequestChangedFileCount(ticket);
-  const sonarStatus = ticketSonarStatus(ticket);
-  const testCount = firstNumberField(record, ['testCount', 'tests', 'testsPassed', 'passedTests']);
+  const context = runCompletionEvidenceContext(run, ticket);
+  const exitCode = context.exitCode === undefined ? '' : `, exit ${context.exitCode}`;
   const lines = [
-    `Kronos implement run ${runId} completed.`,
-    `Run result: ${status}${exitCode}.`,
-    `Progress: ${progress.label}.`,
-    `Files changed: ${progress.filesChanged} from run events; ${mrChangedFiles === undefined ? 'MR file list not captured' : `${mrChangedFiles} in MR`}.`,
-    `Test count: ${testCount === undefined ? 'not captured in run metadata' : testCount}.`,
-    `SonarQube: ${sonarStatus || 'not captured in ticket state'}.`,
-    mr ? `MR: !${mr.iid} ${mr.state}/${mr.review_status}${mr.url ? ` - ${mr.url}` : ''}.` : 'MR: not linked at completion time.',
-    build ? `Build: ${build.status} #${build.number}${build.url ? ` - ${build.url}` : ''}.` : 'Build: not captured in ticket state.',
+    `Kronos implement run ${context.runId} completed.`,
+    `Run result: ${context.status}${exitCode}.`,
+    `Progress: ${context.progress.label}.`,
+    `Files changed: ${context.progress.filesChanged} from run events; ${context.mrChangedFiles === undefined ? 'MR file list not captured' : `${context.mrChangedFiles} in MR`}.`,
+    `Test count: ${context.testCount === undefined ? 'not captured in run metadata' : context.testCount}.`,
+    `SonarQube: ${context.sonarStatus || 'not captured in ticket state'}.`,
+    context.mr ? `MR: !${context.mr.iid} ${context.mr.state}/${context.mr.review_status}${context.mr.url ? ` - ${context.mr.url}` : ''}.` : 'MR: not linked at completion time.',
+    context.build ? `Build: ${context.build.status} #${context.build.number}${context.build.url ? ` - ${context.build.url}` : ''}.` : 'Build: not captured in ticket state.',
   ];
   return lines.join('\n');
 }
 
 export function buildRunCompletionEvidenceCheck(run: unknown, ticket?: Ticket): RunCompletionEvidenceCheck {
-  const record = runRecord(run);
-  const runId = runString(record['id']) || 'unknown run';
-  const status = runString(record['status']) || 'unknown';
-  const exitCode = Number.isFinite(Number(record['exitCode'])) ? Number(record['exitCode']) : undefined;
-  const progress = runProgressSummary(run);
-  const testCount = firstNumberField(record, ['testCount', 'tests', 'testsPassed', 'passedTests']);
-  const sonarStatus = ticketSonarStatus(ticket);
-  const mr = ticket?.mr || undefined;
-  const build = ticket?.build || undefined;
-  const strongSignal = positiveTestCount(testCount) || isPassingBuild(build) || isPassingSonar(sonarStatus);
-  const cleanRun = runCompletedForEvidence(record) && (exitCode === undefined || exitCode === 0);
+  const context = runCompletionEvidenceContext(run, ticket);
+  const strongSignal = positiveTestCount(context.testCount) || isPassingBuild(context.build) || isPassingSonar(context.sonarStatus);
+  const cleanRun = runCompletedForEvidence(context.record) && (context.exitCode === undefined || context.exitCode === 0);
   const summaryParts = [
-    `run ${runId} ${status}${exitCode === undefined ? '' : ` exit ${exitCode}`}`,
-    `${progress.filesChanged} changed file${progress.filesChanged === 1 ? '' : 's'} from run events`,
-    testCount === undefined ? 'test count not captured' : `${testCount} test${testCount === 1 ? '' : 's'}`,
-    sonarStatus ? `SonarQube ${sonarStatus}` : 'SonarQube not captured',
-    mr ? `MR !${mr.iid} ${mr.state}/${mr.review_status}` : 'MR not linked',
-    build ? `build ${build.status} #${build.number}` : 'build not captured',
+    `run ${context.runId} ${context.status}${context.exitCode === undefined ? '' : ` exit ${context.exitCode}`}`,
+    `${context.progress.filesChanged} changed file${context.progress.filesChanged === 1 ? '' : 's'} from run events`,
+    context.testCount === undefined ? 'test count not captured' : `${context.testCount} test${context.testCount === 1 ? '' : 's'}`,
+    context.sonarStatus ? `SonarQube ${context.sonarStatus}` : 'SonarQube not captured',
+    context.mr ? `MR !${context.mr.iid} ${context.mr.state}/${context.mr.review_status}` : 'MR not linked',
+    context.build ? `build ${context.build.status} #${context.build.number}` : 'build not captured',
   ];
   return {
     name: 'Kronos implement completion',
     result: cleanRun && strongSignal ? 'pass' : 'warn',
     environment: 'kronos',
-    command: runCompletionEvidenceCommand(runId),
+    command: runCompletionEvidenceCommand(context.runId),
     confidence: strongSignal ? 'high' : 'medium',
     summary: summaryParts.join('; '),
+  };
+}
+
+function runCompletionEvidenceContext(run: unknown, ticket?: Ticket): RunCompletionEvidenceContext {
+  const record = runRecord(run);
+  const exitCode = Number(record['exitCode']);
+  return {
+    record,
+    runId: runString(record['id']) || 'unknown run',
+    status: runString(record['status']) || 'unknown',
+    exitCode: Number.isFinite(exitCode) ? exitCode : undefined,
+    progress: runProgressSummary(run),
+    mr: ticket?.mr || undefined,
+    build: ticket?.build || undefined,
+    mrChangedFiles: mergeRequestChangedFileCount(ticket),
+    sonarStatus: ticketSonarStatus(ticket),
+    testCount: firstNumberField(record, ['testCount', 'tests', 'testsPassed', 'passedTests']),
   };
 }
 
