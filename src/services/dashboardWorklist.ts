@@ -6,6 +6,7 @@ import { formatRunProgress } from './runProgress';
 import { isFreshActiveRun } from './runStatus';
 import { recordString } from './records';
 import { toValidDate } from './dateValues';
+import { isRunLikeRecord, type RunLikeRecord } from './runRecords';
 
 type DashboardWorklistKind = 'needs_human' | 'active_runs' | 'failing_gates' | 'recent_completed' | 'stale_items';
 type DashboardWorklistSeverity = 'critical' | 'warning' | 'info' | 'ok';
@@ -35,10 +36,10 @@ interface DashboardWorklistInput {
 }
 
 const COMPLETED_RUN_STATUSES = new Set(['completed', 'waiting_for_review']);
-type DashboardRunRecord = RunRecord & Record<string, unknown>;
 
 export function buildDashboardWorklist(input: DashboardWorklistInput, limit = 5): DashboardWorklistLane[] {
-  const runs = (Array.isArray(input.runs) ? input.runs : []).filter(isRunRecord);
+  const rawRuns: unknown[] = Array.isArray(input.runs) ? input.runs : [];
+  const runs = rawRuns.filter(isRunLikeRecord);
   return [
     {
       kind: 'needs_human',
@@ -127,15 +128,15 @@ function dashboardWorklistItem(
   return item;
 }
 
-function sortRuns(runs: DashboardRunRecord[], timestampField: 'startedAt' | 'endedAt'): DashboardRunRecord[] {
+function sortRuns(runs: RunLikeRecord[], timestampField: 'startedAt' | 'endedAt'): RunLikeRecord[] {
   return [...runs].sort((a, b) => timestampValue(recordString(b, timestampField)) - timestampValue(recordString(a, timestampField)) || runId(a).localeCompare(runId(b)));
 }
 
-function isDashboardActiveRun(run: DashboardRunRecord): boolean {
+function isDashboardActiveRun(run: RunLikeRecord): boolean {
   return isFreshActiveRun(run);
 }
 
-function activeRunDetail(run: DashboardRunRecord, status: string, ticketKey: string): string {
+function activeRunDetail(run: RunLikeRecord, status: string, ticketKey: string): string {
   const target = ticketKey ? ` for ${ticketKey}` : '';
   return `${status}${target}; ${formatRunProgress(run)}`;
 }
@@ -150,10 +151,6 @@ function evidenceStatusForRun(gates: EvidenceGateResult[], ticketKey: unknown): 
   return gate ? `; evidence gate ${gate.status}` : '';
 }
 
-function runId(run: DashboardRunRecord): string {
+function runId(run: RunLikeRecord): string {
   return recordString(run, 'id') || 'run';
-}
-
-function isRunRecord(value: unknown): value is DashboardRunRecord {
-  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }

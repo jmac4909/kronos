@@ -3,6 +3,7 @@ import { evidenceChecks, evidenceEnvironmentResults, evidenceNotes, evidenceStri
 import { isAttentionRunStatus, runAttentionDetail } from './runAttention';
 import { recordString } from './records';
 import { toValidDate } from './dateValues';
+import { isRunLikeRecord, type RunLikeRecord } from './runRecords';
 
 type TimelineSource = 'jira' | 'queue' | 'run' | 'evidence' | 'mr' | 'build' | 'ticket';
 type TimelineSeverity = 'info' | 'success' | 'warning' | 'failure';
@@ -39,12 +40,12 @@ interface TicketTimelineInput {
   queue?: QueueState | null;
   runs?: TimelineRun[];
 }
-type TimelineRunRecord = TimelineRun & Record<string, unknown>;
 
 export function buildTicketTimeline(input: TicketTimelineInput): TimelineEvent[] {
   const { ticketKey, ticket } = input;
   const events: TimelineEvent[] = [];
-  const runs = (Array.isArray(input.runs) ? input.runs : []).filter(isRunRecord);
+  const rawRuns: unknown[] = Array.isArray(input.runs) ? input.runs : [];
+  const runs = rawRuns.filter(isRunLikeRecord);
 
   if (ticket.updated) {
     events.push(timelineEvent({
@@ -208,7 +209,7 @@ function severityForRun(status: string | undefined): TimelineSeverity {
   return 'info';
 }
 
-function runDetail(run: TimelineRunRecord): string {
+function runDetail(run: RunLikeRecord): string {
   const promptHash = recordString(run, 'promptHash');
   const status = recordString(run, 'status');
   const attentionDetail = isAttentionRunStatus(status) ? runAttentionDetail(run) : '';
@@ -222,10 +223,6 @@ function runDetail(run: TimelineRunRecord): string {
   return parts.join(' | ');
 }
 
-function runId(run: TimelineRunRecord): string {
+function runId(run: RunLikeRecord): string {
   return recordString(run, 'id') || 'run';
-}
-
-function isRunRecord(value: unknown): value is TimelineRunRecord {
-  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }

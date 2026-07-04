@@ -5,6 +5,7 @@ import { evaluateEvidenceGate } from './evidenceGate';
 import { runAttentionDetail } from './runAttention';
 import { severityRank } from './severityRank';
 import { recordString } from './records';
+import { isRunLikeRecord, type RunLikeRecord } from './runRecords';
 
 type HumanReviewSeverity = 'critical' | 'warning' | 'info';
 type HumanReviewKind = 'run' | 'ticket' | 'evidence' | 'integration' | 'worktree' | 'queue';
@@ -43,12 +44,11 @@ export interface HumanReviewInbox {
   items: HumanReviewItem[];
 }
 
-type HumanReviewRunRecord = HumanReviewRun & Record<string, unknown>;
-
 export function buildHumanReviewInbox(input: HumanReviewInboxInput): HumanReviewInbox {
   const items: HumanReviewItem[] = [];
   const tickets = input.state?.tickets || {};
-  const runs = (Array.isArray(input.runs) ? input.runs : []).filter(isRunRecord);
+  const rawRuns: unknown[] = Array.isArray(input.runs) ? input.runs : [];
+  const runs = rawRuns.filter(isRunLikeRecord);
 
   for (const run of runs) {
     const status = recordString(run, 'status');
@@ -170,10 +170,6 @@ function compareItems(a: HumanReviewItem, b: HumanReviewItem): number {
   return severityRank(b.severity) - severityRank(a.severity) || a.kind.localeCompare(b.kind) || a.title.localeCompare(b.title);
 }
 
-function runId(run: HumanReviewRunRecord): string {
+function runId(run: RunLikeRecord): string {
   return recordString(run, 'id') || 'run';
-}
-
-function isRunRecord(value: unknown): value is HumanReviewRunRecord {
-  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }

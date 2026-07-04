@@ -6157,10 +6157,14 @@ test('ticket timeline combines queue, runs, evidence, MR, build, and ticket even
   assert.equal(events.some(event => event.id.includes('other-run')), false);
 
   const source = readSourceFixture('src', 'services', 'ticketTimeline.ts');
-  assert.ok(source.includes('type TimelineRunRecord = TimelineRun & Record<string, unknown>'));
+  assert.ok(source.includes("import { isRunLikeRecord, type RunLikeRecord } from './runRecords'"));
+  assert.ok(source.includes('const rawRuns: unknown[] = Array.isArray(input.runs) ? input.runs : []'));
+  assert.ok(source.includes('const runs = rawRuns.filter(isRunLikeRecord)'));
   assert.ok(source.includes("import { isAttentionRunStatus, runAttentionDetail } from './runAttention'"));
   assert.ok(source.includes('const attentionDetail = isAttentionRunStatus(status) ? runAttentionDetail(run) :'));
+  assert.equal(source.includes('type TimelineRunRecord = TimelineRun & Record<string, unknown>'), false);
   assert.equal(source.includes('type TimelineRunRecord = TimelineRun & Record<string, any>'), false);
+  assert.equal(source.includes('function isRunRecord'), false);
 });
 
 test('run status helper centralizes active persisted run semantics', () => {
@@ -7893,8 +7897,12 @@ test('human review inbox aggregates runs, tickets, evidence gaps, integrations, 
   assert.ok(inbox.items.some(item => item.id === 'worktree:/repo/app/.claude/worktrees/K-2' && item.worktreePath === '/repo/app/.claude/worktrees/K-2'));
 
   const source = readSourceFixture('src', 'services', 'humanReviewInbox.ts');
-  assert.ok(source.includes('type HumanReviewRunRecord = HumanReviewRun & Record<string, unknown>'));
+  assert.ok(source.includes("import { isRunLikeRecord, type RunLikeRecord } from './runRecords'"));
+  assert.ok(source.includes('const rawRuns: unknown[] = Array.isArray(input.runs) ? input.runs : []'));
+  assert.ok(source.includes('const runs = rawRuns.filter(isRunLikeRecord)'));
+  assert.equal(source.includes('type HumanReviewRunRecord = HumanReviewRun & Record<string, unknown>'), false);
   assert.equal(source.includes('type HumanReviewRunRecord = HumanReviewRun & Record<string, any>'), false);
+  assert.equal(source.includes('function isRunRecord'), false);
 
   const html = humanReviewPanelView.buildHumanReviewInboxHtml(inbox, {
     tickets: state.tickets,
@@ -10316,12 +10324,16 @@ test('dashboard worklist builds command-center lanes from review, run, gate, and
   const source = readSourceFixture('src', 'services', 'dashboardWorklist.ts');
   assert.ok(source.includes("import { formatRunProgress } from './runProgress'"));
   assert.ok(source.includes("import { isFreshActiveRun } from './runStatus'"));
+  assert.ok(source.includes("import { isRunLikeRecord, type RunLikeRecord } from './runRecords'"));
+  assert.ok(source.includes('const rawRuns: unknown[] = Array.isArray(input.runs) ? input.runs : []'));
+  assert.ok(source.includes('const runs = rawRuns.filter(isRunLikeRecord)'));
   assert.ok(source.includes('function isDashboardActiveRun'));
   assert.ok(source.includes('return isFreshActiveRun(run);'));
-  assert.ok(source.includes('function activeRunDetail(run: DashboardRunRecord, status: string, ticketKey: string): string'));
+  assert.ok(source.includes('function activeRunDetail(run: RunLikeRecord, status: string, ticketKey: string): string'));
   assert.ok(source.includes('formatRunProgress(run)'));
-  assert.ok(source.includes('type DashboardRunRecord = RunRecord & Record<string, unknown>'));
+  assert.equal(source.includes('type DashboardRunRecord = RunRecord & Record<string, unknown>'), false);
   assert.equal(source.includes('type DashboardRunRecord = RunRecord & Record<string, any>'), false);
+  assert.equal(source.includes('function isRunRecord'), false);
 });
 
 test('agent quality score combines run outcomes, evidence gates, builds, reviews, and retries', () => {

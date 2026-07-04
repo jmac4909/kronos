@@ -3446,17 +3446,22 @@ for (const marker of [
   'isReviewReadyAction(ticket.next_action)',
   'needs_human',
   "status === 'cancelled'",
-  'type HumanReviewRunRecord = HumanReviewRun & Record<string, unknown>',
-  'const runs = (Array.isArray(input.runs) ? input.runs : []).filter(isRunRecord)',
+  "import { isRunLikeRecord, type RunLikeRecord } from './runRecords'",
+  'const rawRuns: unknown[] = Array.isArray(input.runs) ? input.runs : []',
+  'const runs = rawRuns.filter(isRunLikeRecord)',
   "import { recordString } from './records'",
-  'function isRunRecord',
 ]) {
   if (!humanReviewInbox.includes(marker)) {
     fail(`Missing human review inbox marker: ${marker}`);
   }
 }
-if (humanReviewInbox.includes('type HumanReviewRunRecord = HumanReviewRun & Record<string, any>')) {
-  fail('Human review run records must preserve unknown extension fields.');
+for (const forbidden of [
+  'type HumanReviewRunRecord',
+  'function isRunRecord',
+]) {
+  if (humanReviewInbox.includes(forbidden)) {
+    fail(`Human review inbox must use shared run record helpers: ${forbidden}`);
+  }
 }
 
 for (const marker of [
@@ -3992,43 +3997,53 @@ for (const marker of [
   'evidenceStatusForRun',
   "import { formatRunProgress } from './runProgress'",
   "import { isFreshActiveRun } from './runStatus'",
+  "import { isRunLikeRecord, type RunLikeRecord } from './runRecords'",
+  'const rawRuns: unknown[] = Array.isArray(input.runs) ? input.runs : []',
+  'const runs = rawRuns.filter(isRunLikeRecord)',
   'function isDashboardActiveRun',
   'return isFreshActiveRun(run);',
-  'function activeRunDetail(run: DashboardRunRecord, status: string, ticketKey: string): string',
+  'function activeRunDetail(run: RunLikeRecord, status: string, ticketKey: string): string',
   'formatRunProgress(run)',
-  'type DashboardRunRecord = RunRecord & Record<string, unknown>',
-  'const runs = (Array.isArray(input.runs) ? input.runs : []).filter(isRunRecord)',
   "recordString(run, 'status')",
   'function runId',
-  'function isRunRecord',
 ]) {
   if (!dashboardWorklist.includes(marker)) {
     fail(`Missing dashboard worklist marker: ${marker}`);
   }
 }
-if (dashboardWorklist.includes('type DashboardRunRecord = RunRecord & Record<string, any>')) {
-  fail('Dashboard worklist run records must preserve unknown extension fields.');
+for (const forbidden of [
+  'type DashboardRunRecord',
+  'function isRunRecord',
+]) {
+  if (dashboardWorklist.includes(forbidden)) {
+    fail(`Dashboard worklist must use shared run record helpers: ${forbidden}`);
+  }
 }
 
 for (const marker of [
   'export function buildTicketTimeline',
-  'type TimelineRunRecord = TimelineRun & Record<string, unknown>',
+  "import { isRunLikeRecord, type RunLikeRecord } from './runRecords'",
   "import { isAttentionRunStatus, runAttentionDetail } from './runAttention'",
-  'const runs = (Array.isArray(input.runs) ? input.runs : []).filter(isRunRecord)',
+  'const rawRuns: unknown[] = Array.isArray(input.runs) ? input.runs : []',
+  'const runs = rawRuns.filter(isRunLikeRecord)',
   'const notes = evidenceNotes(ticket)',
   'const checks = evidenceChecks(ticket)',
   'const environmentResults = evidenceEnvironmentResults(ticket)',
   "recordString(run, 'promptHash')",
   'const attentionDetail = isAttentionRunStatus(status) ? runAttentionDetail(run) :',
   'function runDetail',
-  'function isRunRecord',
 ]) {
   if (!ticketTimeline.includes(marker)) {
     fail(`Missing ticket timeline marker: ${marker}`);
   }
 }
-if (ticketTimeline.includes('type TimelineRunRecord = TimelineRun & Record<string, any>')) {
-  fail('Ticket timeline run records must preserve unknown extension fields.');
+for (const forbidden of [
+  'type TimelineRunRecord',
+  'function isRunRecord',
+]) {
+  if (ticketTimeline.includes(forbidden)) {
+    fail(`Ticket timeline must use shared run record helpers: ${forbidden}`);
+  }
 }
 
 for (const marker of [
