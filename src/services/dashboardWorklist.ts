@@ -5,6 +5,7 @@ import { RunRecord } from './runStore';
 import { formatRunProgress } from './runProgress';
 import { isFreshActiveRun } from './runStatus';
 import { recordString } from './records';
+import { toValidDate } from './dateValues';
 
 type DashboardWorklistKind = 'needs_human' | 'active_runs' | 'failing_gates' | 'recent_completed' | 'stale_items';
 type DashboardWorklistSeverity = 'critical' | 'warning' | 'info' | 'ok';
@@ -140,9 +141,7 @@ function activeRunDetail(run: DashboardRunRecord, status: string, ticketKey: str
 }
 
 function timestampValue(value: unknown): number {
-  if (!value) { return 0; }
-  const parsed = new Date(String(value));
-  return Number.isFinite(parsed.getTime()) ? parsed.getTime() : 0;
+  return toValidDate(value)?.getTime() || 0;
 }
 
 function evidenceStatusForRun(gates: EvidenceGateResult[], ticketKey: unknown): string {
