@@ -49,7 +49,10 @@ export function buildSonarDashboardUrl(host: string | undefined, sonarKey: strin
     if (base.protocol !== 'http:' && base.protocol !== 'https:') {
       return undefined;
     }
-    const url = new URL('/dashboard', host);
+    base.pathname = `${base.pathname.replace(/\/+$/, '')}/`;
+    base.search = '';
+    base.hash = '';
+    const url = new URL('dashboard', base);
     url.searchParams.set('id', sonarKey);
     url.searchParams.set('branch', branch);
     return url.toString();

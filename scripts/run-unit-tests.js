@@ -2862,7 +2862,7 @@ test('sonar report view renders escaped report data and command buttons', () => 
   });
 
   assert.equal(report.issueList.length, 1);
-  assert.equal(report.dashboardUrl, 'https://sonar.example/dashboard?id=proj%3Akey&branch=feature%2F%3Cx%3E');
+  assert.equal(report.dashboardUrl, 'https://sonar.example/base/dashboard?id=proj%3Akey&branch=feature%2F%3Cx%3E');
   assert.match(report.html, /script nonce="nonce123"/);
   assert.match(report.html, /kronosVsCodeApi\(\)\.postMessage\(\{ command: 'fixSonar' \}\)/);
   assert.match(report.html, /Open in SonarQube/);

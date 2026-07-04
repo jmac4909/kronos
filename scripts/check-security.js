@@ -2541,6 +2541,8 @@ for (const marker of [
   'export function buildSonarDashboardUrl',
   'const base = new URL(host)',
   "base.protocol !== 'http:' && base.protocol !== 'https:'",
+  'base.pathname = `${base.pathname.replace(/\\/+$/, \'\')}/`',
+  "const url = new URL('dashboard', base)",
   'export function formatSonarMetricName',
   'export function sonarGateStatus',
   'export function sonarConditionList',
