@@ -1,4 +1,5 @@
 import { TicketAcceptanceCriterion } from '../state/types';
+import { evidenceChecked, evidenceString } from './evidenceData';
 
 export interface ExistingAcceptanceCriterion {
   id?: string;
@@ -87,6 +88,20 @@ export function setAcceptanceCriteriaChecked(criteria: TicketAcceptanceCriterion
     ...criterion,
     checked: checked.has(criterion.id),
   }));
+}
+
+export function existingAcceptanceCriterion(record: object): ExistingAcceptanceCriterion | undefined {
+  const text = evidenceString(record, 'text');
+  if (!text) { return undefined; }
+  const source = evidenceString(record, 'source');
+  const criterion: ExistingAcceptanceCriterion = {
+    text,
+    checked: evidenceChecked(record),
+  };
+  const id = evidenceString(record, 'id');
+  if (id) { criterion.id = id; }
+  if (source === 'description' || source === 'manual') { criterion.source = source; }
+  return criterion;
 }
 
 function cleanCriterionText(text: string): string {

@@ -28,7 +28,7 @@ import { RecoveryInventory, RecoveryItem, buildRecoveryInventory, type RecoveryI
 import { DispatchCollision, detectDispatchCollisions, type DispatchCollisionInput } from './services/collisionDetector';
 import { gitlabAdapter, jiraAdapter, sonarAdapter } from './services/integrationAdapters';
 import { buildRunCompletionEvidenceCheck, buildRunCompletionEvidenceText, evaluatePostRunReadiness, postRunReadinessRunPatch, resolvePostRunTicket, shouldRecordRunCompletionEvidence } from './services/postRunReadiness';
-import { extractAcceptanceCriteria } from './services/acceptanceCriteria';
+import { existingAcceptanceCriterion, extractAcceptanceCriteria } from './services/acceptanceCriteria';
 import type { ExistingAcceptanceCriterion } from './services/acceptanceCriteria';
 import { buildHumanReviewInbox } from './services/humanReviewInbox';
 import { EvidenceGateResult, evaluateEvidenceGate, evaluateEvidenceGates } from './services/evidenceGate';
@@ -4404,20 +4404,6 @@ function minutesUntilTomorrow(): number {
   tomorrow.setDate(now.getDate() + 1);
   tomorrow.setHours(0, 0, 0, 0);
   return Math.max(1, Math.ceil((tomorrow.getTime() - now.getTime()) / (60 * 1000)));
-}
-
-function existingAcceptanceCriterion(record: object): ExistingAcceptanceCriterion | undefined {
-  const text = evidenceString(record, 'text');
-  if (!text) { return undefined; }
-  const source = evidenceString(record, 'source');
-  const criterion: ExistingAcceptanceCriterion = {
-    text,
-    checked: evidenceChecked(record),
-  };
-  const id = evidenceString(record, 'id');
-  if (id) { criterion.id = id; }
-  if (source === 'description' || source === 'manual') { criterion.source = source; }
-  return criterion;
 }
 
 async function removeTicketFromQueue(state: KronosState, ticketKey: string, interactive: boolean, extensionUri?: vscode.Uri): Promise<boolean> {

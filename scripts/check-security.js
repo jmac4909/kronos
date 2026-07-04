@@ -3531,6 +3531,8 @@ for (const marker of [
   'Given|When|Then|And|But',
   'criterionId',
   'setAcceptanceCriteriaChecked',
+  'export function existingAcceptanceCriterion(record: object)',
+  "if (source === 'description' || source === 'manual')",
 ]) {
   if (!acceptanceCriteria.includes(marker)) {
     fail(`Missing acceptance criteria marker: ${marker}`);

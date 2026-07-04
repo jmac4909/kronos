@@ -10534,18 +10534,22 @@ test('ticket detail rendering uses typed tickets and evidence records', () => {
   const extensionSource = readSourceFixture('src', 'extension.ts');
   const ticketPanelViewSource = readSourceFixture('src', 'services', 'ticketPanelView.ts');
   const evidenceData = readSourceFixture('src', 'services', 'evidenceData.ts');
+  const acceptanceCriteriaSource = readSourceFixture('src', 'services', 'acceptanceCriteria.ts');
   for (const marker of [
     'import type { DiscoveredProject, QueueItem, Ticket }',
     'function evidenceRecordCount(ticket: Ticket | null | undefined): number',
     "import { buildTicketHtml } from './services/ticketPanelView'",
     'buildTicketHtml(ticketKey, freshTicket, {',
     'runs: listRuns()',
-    'function existingAcceptanceCriterion(record: object)',
   ]) {
     assert.ok(marker.startsWith('function evidenceRecordCount')
       ? evidenceData.includes(marker)
       : extensionSource.includes(marker), marker);
   }
+  assert.ok(
+    acceptanceCriteriaSource.includes('export function existingAcceptanceCriterion(record: object)'),
+    'export function existingAcceptanceCriterion(record: object)',
+  );
   for (const marker of [
     'export function buildTicketHtml(key: string, ticket: Ticket',
     'export function buildTicketGateHtml',
