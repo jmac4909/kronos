@@ -4517,34 +4517,71 @@ function attachOperatorCommandHandler(panel: vscode.WebviewPanel, webviewName: s
   return logReady;
 }
 
-function openQueuePlannerPanel(state: KronosState, extensionUri?: vscode.Uri): void {
+interface PlanActionPanelRenderResult {
+  plans: PlannedAction[];
+  html: string;
+}
+
+interface PlanActionPanelOptions {
+  viewType: string;
+  title: string;
+  readyName?: string;
+  invalidActionWarning: string;
+  failureWarning: string;
+  render: (nonce: string, actionScriptUri: string) => PlanActionPanelRenderResult;
+}
+
+function openPlanActionPanel(state: KronosState, extensionUri: vscode.Uri | undefined, options: PlanActionPanelOptions): void {
   const panel = vscode.window.createWebviewPanel(
-    'kronosQueuePlanner',
-    'Kronos Queue Planner',
+    options.viewType,
+    options.title,
     vscode.ViewColumn.One,
     kronosScriptableWebviewOptions(extensionUri)
   );
   const nonce = createWebviewNonce();
   const actionScriptUri = kronosActionPanelScriptUri(panel, extensionUri);
   let currentPlans: PlannedAction[] = [];
-  const logReady = createWebviewReadyMonitor(panel, 'Kronos Queue Planner');
+  const logReady = createWebviewReadyMonitor(panel, options.readyName || options.title);
   const render = () => {
-    currentPlans = planNextActions(state).slice(0, 50);
+    const result = options.render(nonce, actionScriptUri);
+    currentPlans = result.plans;
     logReady.arm();
-    panel.webview.html = withWebviewCsp(buildQueuePlannerHtml(currentPlans, nonce, actionScriptUri), webviewScriptCspOptions(panel.webview.cspSource, nonce));
+    panel.webview.html = withWebviewCsp(result.html, webviewScriptCspOptions(panel.webview.cspSource, nonce));
   };
-  render();
   panel.webview.onDidReceiveMessage(async msg => {
     if (logReady(msg)) { return; }
     const request = normalizeActionPanelMessage(msg, PLAN_MESSAGE_COMMANDS);
     if (!request) {
-      vscode.window.showWarningMessage('Ignored invalid Kronos queue planner action.');
+      vscode.window.showWarningMessage(options.invalidActionWarning);
       return;
     }
     await runWebviewPanelAction(async () => {
       await executePlanPanelAction(state, currentPlans, request);
-      render();
-    }, 'Kronos queue planner action failed.');
+      if (shouldRerenderPlanPanelAfterAction(request.command)) {
+        render();
+      }
+    }, options.failureWarning);
+  });
+  render();
+}
+
+function shouldRerenderPlanPanelAfterAction(command: string): boolean {
+  return command !== 'startPlan' && command !== 'viewTicket' && command !== 'addEvidence';
+}
+
+function openQueuePlannerPanel(state: KronosState, extensionUri?: vscode.Uri): void {
+  openPlanActionPanel(state, extensionUri, {
+    viewType: 'kronosQueuePlanner',
+    title: 'Kronos Queue Planner',
+    invalidActionWarning: 'Ignored invalid Kronos queue planner action.',
+    failureWarning: 'Kronos queue planner action failed.',
+    render: (nonce, actionScriptUri) => {
+      const plans = planNextActions(state).slice(0, 50);
+      return {
+        plans,
+        html: buildQueuePlannerHtml(plans, nonce, actionScriptUri),
+      };
+    },
   });
 }
 
@@ -4633,66 +4670,36 @@ async function executeBacklogTriageAction(state: KronosState, command: string, t
 }
 
 function openProjectBatchPlanPanel(state: KronosState, extensionUri?: vscode.Uri): void {
-  const panel = vscode.window.createWebviewPanel(
-    'kronosProjectBatchPlan',
-    'Kronos Project Batch Plan',
-    vscode.ViewColumn.One,
-    kronosScriptableWebviewOptions(extensionUri)
-  );
-  const nonce = createWebviewNonce();
-  const actionScriptUri = kronosActionPanelScriptUri(panel, extensionUri);
-  let currentPlans: PlannedAction[] = [];
-  const logReady = createWebviewReadyMonitor(panel, 'Kronos Project Batch Plan');
-  const render = () => {
-    currentPlans = planNextActions(state);
-    const batches = planByProject(currentPlans, 5).slice(0, 20);
-    logReady.arm();
-    panel.webview.html = withWebviewCsp(buildProjectBatchPlanHtml(batches, nonce, actionScriptUri), webviewScriptCspOptions(panel.webview.cspSource, nonce));
-  };
-  render();
-  panel.webview.onDidReceiveMessage(async msg => {
-    if (logReady(msg)) { return; }
-    const request = normalizeActionPanelMessage(msg, PLAN_MESSAGE_COMMANDS);
-    if (!request) {
-      vscode.window.showWarningMessage('Ignored invalid Kronos project batch action.');
-      return;
-    }
-    await runWebviewPanelAction(async () => {
-      await executePlanPanelAction(state, currentPlans, request);
-      render();
-    }, 'Kronos project batch action failed.');
+  openPlanActionPanel(state, extensionUri, {
+    viewType: 'kronosProjectBatchPlan',
+    title: 'Kronos Project Batch Plan',
+    invalidActionWarning: 'Ignored invalid Kronos project batch action.',
+    failureWarning: 'Kronos project batch action failed.',
+    render: (nonce, actionScriptUri) => {
+      const plans = planNextActions(state);
+      const batches = planByProject(plans, 5).slice(0, 20);
+      return {
+        plans,
+        html: buildProjectBatchPlanHtml(batches, nonce, actionScriptUri),
+      };
+    },
   });
 }
 
 function openReleaseBatchPlanPanel(state: KronosState, extensionUri?: vscode.Uri): void {
-  const panel = vscode.window.createWebviewPanel(
-    'kronosReleaseBatchPlan',
-    'Kronos Release Batch Plan',
-    vscode.ViewColumn.One,
-    kronosScriptableWebviewOptions(extensionUri)
-  );
-  const nonce = createWebviewNonce();
-  const actionScriptUri = kronosActionPanelScriptUri(panel, extensionUri);
-  let currentPlans: PlannedAction[] = [];
-  const logReady = createWebviewReadyMonitor(panel, 'Kronos Release Batch Plan');
-  const render = () => {
-    currentPlans = planNextActions(state);
-    const batches = planByRelease(currentPlans, 8).slice(0, 20);
-    logReady.arm();
-    panel.webview.html = withWebviewCsp(buildReleaseBatchPlanHtml(batches, nonce, actionScriptUri), webviewScriptCspOptions(panel.webview.cspSource, nonce));
-  };
-  render();
-  panel.webview.onDidReceiveMessage(async msg => {
-    if (logReady(msg)) { return; }
-    const request = normalizeActionPanelMessage(msg, PLAN_MESSAGE_COMMANDS);
-    if (!request) {
-      vscode.window.showWarningMessage('Ignored invalid Kronos release batch action.');
-      return;
-    }
-    await runWebviewPanelAction(async () => {
-      await executePlanPanelAction(state, currentPlans, request);
-      render();
-    }, 'Kronos release batch action failed.');
+  openPlanActionPanel(state, extensionUri, {
+    viewType: 'kronosReleaseBatchPlan',
+    title: 'Kronos Release Batch Plan',
+    invalidActionWarning: 'Ignored invalid Kronos release batch action.',
+    failureWarning: 'Kronos release batch action failed.',
+    render: (nonce, actionScriptUri) => {
+      const plans = planNextActions(state);
+      const batches = planByRelease(plans, 8).slice(0, 20);
+      return {
+        plans,
+        html: buildReleaseBatchPlanHtml(batches, nonce, actionScriptUri),
+      };
+    },
   });
 }
 
@@ -4785,77 +4792,47 @@ async function loadMrFileHints(state: KronosState, targets: Array<{ ticketKey?: 
 }
 
 function openQueuePlanWindowPanel(state: KronosState, extensionUri?: vscode.Uri): void {
-  const panel = vscode.window.createWebviewPanel(
-    'kronosPlanNextTwoHours',
-    'Kronos Plan Next 2 Hours',
-    vscode.ViewColumn.One,
-    kronosScriptableWebviewOptions(extensionUri)
-  );
-  const nonce = createWebviewNonce();
-  const actionScriptUri = kronosActionPanelScriptUri(panel, extensionUri);
-  let currentPlans: PlannedAction[] = [];
-  const logReady = createWebviewReadyMonitor(panel, 'Kronos Planning Window');
-  const render = () => {
-    const window = planForMinutes(planNextActions(state), 120);
-    currentPlans = window.plans;
-    logReady.arm();
-    panel.webview.html = withWebviewCsp(buildQueuePlanModeHtml(
-      'Kronos Plan Next 2 Hours',
-      `${window.plans.length} action(s), estimated ${window.estimatedMinutes} minutes`,
-      window.plans,
-      nonce,
-      actionScriptUri,
-    ), webviewScriptCspOptions(panel.webview.cspSource, nonce));
-  };
-  render();
-  panel.webview.onDidReceiveMessage(async msg => {
-    if (logReady(msg)) { return; }
-    const request = normalizeActionPanelMessage(msg, PLAN_MESSAGE_COMMANDS);
-    if (!request) {
-      vscode.window.showWarningMessage('Ignored invalid Kronos planning action.');
-      return;
-    }
-    await runWebviewPanelAction(async () => {
-      await executePlanPanelAction(state, currentPlans, request);
-      render();
-    }, 'Kronos planning action failed.');
+  openPlanActionPanel(state, extensionUri, {
+    viewType: 'kronosPlanNextTwoHours',
+    title: 'Kronos Plan Next 2 Hours',
+    readyName: 'Kronos Planning Window',
+    invalidActionWarning: 'Ignored invalid Kronos planning action.',
+    failureWarning: 'Kronos planning action failed.',
+    render: (nonce, actionScriptUri) => {
+      const planWindow = planForMinutes(planNextActions(state), 120);
+      return {
+        plans: planWindow.plans,
+        html: buildQueuePlanModeHtml(
+          'Kronos Plan Next 2 Hours',
+          `${planWindow.plans.length} action(s), estimated ${planWindow.estimatedMinutes} minutes`,
+          planWindow.plans,
+          nonce,
+          actionScriptUri,
+        ),
+      };
+    },
   });
 }
 
 function openOvernightCandidatesPanel(state: KronosState, extensionUri?: vscode.Uri): void {
-  const panel = vscode.window.createWebviewPanel(
-    'kronosOvernightCandidates',
-    'Kronos Overnight Candidates',
-    vscode.ViewColumn.One,
-    kronosScriptableWebviewOptions(extensionUri)
-  );
-  const nonce = createWebviewNonce();
-  const actionScriptUri = kronosActionPanelScriptUri(panel, extensionUri);
-  let currentPlans: PlannedAction[] = [];
-  const logReady = createWebviewReadyMonitor(panel, 'Kronos Overnight Candidates');
-  const render = () => {
-    currentPlans = overnightCandidatePlans(planNextActions(state), 20);
-    logReady.arm();
-    panel.webview.html = withWebviewCsp(buildQueuePlanModeHtml(
-      'Kronos Overnight Candidates',
-      `${currentPlans.length} linked implementation/build candidate(s)`,
-      currentPlans,
-      nonce,
-      actionScriptUri,
-    ), webviewScriptCspOptions(panel.webview.cspSource, nonce));
-  };
-  render();
-  panel.webview.onDidReceiveMessage(async msg => {
-    if (logReady(msg)) { return; }
-    const request = normalizeActionPanelMessage(msg, PLAN_MESSAGE_COMMANDS);
-    if (!request) {
-      vscode.window.showWarningMessage('Ignored invalid Kronos overnight candidate action.');
-      return;
-    }
-    await runWebviewPanelAction(async () => {
-      await executePlanPanelAction(state, currentPlans, request);
-      render();
-    }, 'Kronos overnight candidate action failed.');
+  openPlanActionPanel(state, extensionUri, {
+    viewType: 'kronosOvernightCandidates',
+    title: 'Kronos Overnight Candidates',
+    invalidActionWarning: 'Ignored invalid Kronos overnight candidate action.',
+    failureWarning: 'Kronos overnight candidate action failed.',
+    render: (nonce, actionScriptUri) => {
+      const plans = overnightCandidatePlans(planNextActions(state), 20);
+      return {
+        plans,
+        html: buildQueuePlanModeHtml(
+          'Kronos Overnight Candidates',
+          `${plans.length} linked implementation/build candidate(s)`,
+          plans,
+          nonce,
+          actionScriptUri,
+        ),
+      };
+    },
   });
 }
 
