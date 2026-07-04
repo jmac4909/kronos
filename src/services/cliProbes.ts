@@ -3,14 +3,14 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { unknownErrorMessage } from './errorUtils';
 
-export interface CliProbeCommandOptions {
+interface CliProbeCommandOptions {
   timeoutMs: number;
   maxBuffer?: number;
 }
 
-export type CliProbeCommandRunner = (command: string, args: string[], options: CliProbeCommandOptions) => string;
+type CliProbeCommandRunner = (command: string, args: string[], options: CliProbeCommandOptions) => string;
 
-export interface CliProbeOptions {
+interface CliProbeOptions {
   timeoutMs?: number;
   maxBuffer?: number;
   commandRunner?: CliProbeCommandRunner;
@@ -20,13 +20,13 @@ export interface CliProbeOptions {
   accessSync?: (filePath: string, mode?: number) => void;
 }
 
-export interface CliProbeResult {
+interface CliProbeResult {
   ok: boolean;
   output: string;
   error?: string;
 }
 
-export interface CliCommandResolution {
+interface CliCommandResolution {
   command: string;
   available: boolean;
 }

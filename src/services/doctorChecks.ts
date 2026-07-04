@@ -18,7 +18,7 @@ export interface DoctorCheck {
   detail: string;
 }
 
-export interface DoctorChecksInput {
+interface DoctorChecksInput {
   state: KronosState | null;
   queue: QueueState | null;
   stateLoadErrors?: Array<{ target: 'state.json' | 'queue.json' | string; filePath?: string; detail: string }>;
@@ -33,11 +33,11 @@ export interface DoctorChecksInput {
   commandRunner?: DoctorCommandRunner;
 }
 
-export interface DoctorCommandOptions {
+interface DoctorCommandOptions {
   timeoutMs: number;
 }
 
-export type DoctorCommandRunner = (command: string, args: string[], options: DoctorCommandOptions) => string;
+type DoctorCommandRunner = (command: string, args: string[], options: DoctorCommandOptions) => string;
 
 const COMMAND_TIMEOUT_MS = 5000;
 const TOKEN_TIMEOUT_MS = 10000;

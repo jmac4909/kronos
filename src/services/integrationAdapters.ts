@@ -4,7 +4,7 @@ import { normalizeChangedFiles } from './changedFiles';
 import { unknownErrorMessage } from './errorUtils';
 import { stripUtf8Bom } from './jsonFiles';
 
-export interface KronosScriptRunner {
+interface KronosScriptRunner {
   runScript(args: string[], options?: ScriptRunOptions): Promise<string>;
 }
 
@@ -51,7 +51,7 @@ interface MergeRequestDiscussionStats {
   last_discussion_at?: string;
 }
 
-export interface SonarBranch {
+interface SonarBranch {
   name: string;
   isMain: boolean;
   status?: {
@@ -59,7 +59,7 @@ export interface SonarBranch {
   };
 }
 
-export interface SonarBranchSummary {
+interface SonarBranchSummary {
   branches: SonarBranch[];
 }
 
