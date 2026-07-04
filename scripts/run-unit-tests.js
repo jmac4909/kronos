@@ -7,8 +7,31 @@ const path = require('node:path');
 const test = require('node:test');
 const vm = require('node:vm');
 
-process.env.KRONOS_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'kronos-home-'));
-process.env.KRONOS_SCRIPTS_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'kronos-scripts-'));
+const trackedTempDirs = new Set();
+
+function makeTempDir(prefix) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  trackedTempDirs.add(dir);
+  return dir;
+}
+
+function cleanupTrackedTempDirs() {
+  const dirs = [...trackedTempDirs].sort((a, b) => b.length - a.length);
+  trackedTempDirs.clear();
+  for (const dir of dirs) {
+    try {
+      fs.rmSync(dir, { recursive: true, force: true });
+    } catch (e) {
+      console.warn(`Could not remove test temp dir ${dir}:`, e);
+    }
+  }
+}
+
+test.after(cleanupTrackedTempDirs);
+process.once('exit', cleanupTrackedTempDirs);
+
+process.env.KRONOS_DIR = makeTempDir('kronos-home-');
+process.env.KRONOS_SCRIPTS_DIR = makeTempDir('kronos-scripts-');
 
 function readSourceFixture(...segments) {
   return fs.readFileSync(path.join(__dirname, '..', ...segments), 'utf8').replace(/\r\n/g, '\n');
@@ -160,7 +183,7 @@ const worktreeRegistry = require('../out/services/worktreeRegistry.js');
 const terminalProfiles = require('../out/services/terminalProfiles.js');
 
 function makeTempProject() {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'kronos-test-'));
+  const root = makeTempDir('kronos-test-');
   fs.mkdirSync(path.join(root, '.claude', 'prompts'), { recursive: true });
   return root;
 }
@@ -1535,7 +1558,7 @@ test('queue mutation helpers centralize queue membership and ticket project link
 });
 
 test('project mutation helpers centralize project config, scan dirs, and removal', () => {
-  const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'kronos-project-'));
+  const projectRoot = makeTempDir('kronos-project-');
   fs.mkdirSync(path.join(projectRoot, '.claude'), { recursive: true });
   fs.writeFileSync(path.join(projectRoot, '.claude', 'project.json'), '{}\n');
   const initial = baseState({
@@ -1749,8 +1772,8 @@ test('next action context explains command, risk, preflight, and blockers', () =
 });
 
 test('git workspace service owns origin parsing, branch lookup, and diff artifacts', () => {
-  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'kronos-git-workspace-'));
-  const outputDir = fs.mkdtempSync(path.join(os.tmpdir(), 'kronos-runs-'));
+  const workspace = makeTempDir('kronos-git-workspace-');
+  const outputDir = makeTempDir('kronos-runs-');
   const calls = [];
   const runner = (args, options) => {
     calls.push({ args, options });
@@ -1786,8 +1809,8 @@ test('git workspace service owns origin parsing, branch lookup, and diff artifac
 });
 
 test('git workspace diff artifacts keep long run ids in bounded distinct filenames', () => {
-  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'kronos-git-workspace-'));
-  const outputDir = fs.mkdtempSync(path.join(os.tmpdir(), 'kronos-runs-'));
+  const workspace = makeTempDir('kronos-git-workspace-');
+  const outputDir = makeTempDir('kronos-runs-');
   const runner = args => {
     const joined = args.join(' ');
     if (joined === 'status --short' || joined === 'diff --' || joined === 'diff --cached --') { return ''; }
@@ -1811,8 +1834,8 @@ test('git workspace diff artifacts keep long run ids in bounded distinct filenam
 });
 
 test('git workspace service owns branch metadata and safe worktree lifecycle commands', () => {
-  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'kronos-worktree-'));
-  const projectPath = fs.mkdtempSync(path.join(os.tmpdir(), 'kronos-project-'));
+  const workspace = makeTempDir('kronos-worktree-');
+  const projectPath = makeTempDir('kronos-project-');
   const calls = [];
   const runner = (args, options) => {
     calls.push({ args, options });
@@ -1889,7 +1912,7 @@ test('git workspace service owns branch metadata and safe worktree lifecycle com
   });
   assert.equal(onlyClaudeArtifacts.status, 'removable');
 
-  const generatedClaudeWorkspace = fs.mkdtempSync(path.join(os.tmpdir(), 'kronos-worktree-generated-'));
+  const generatedClaudeWorkspace = makeTempDir('kronos-worktree-generated-');
   fs.mkdirSync(path.join(generatedClaudeWorkspace, '.claude'), { recursive: true });
   fs.writeFileSync(path.join(generatedClaudeWorkspace, '.claude', 'settings.local.json'), '{}\n');
   const generatedWarning = gitWorkspace.removeWorktreeSafely(projectPath, generatedClaudeWorkspace, {
@@ -1906,7 +1929,7 @@ test('git workspace service owns branch metadata and safe worktree lifecycle com
   });
   assert.equal(generatedWarning, null);
 
-  const trackedClaudeWorkspace = fs.mkdtempSync(path.join(os.tmpdir(), 'kronos-worktree-tracked-'));
+  const trackedClaudeWorkspace = makeTempDir('kronos-worktree-tracked-');
   fs.mkdirSync(path.join(trackedClaudeWorkspace, '.claude'), { recursive: true });
   fs.writeFileSync(path.join(trackedClaudeWorkspace, '.claude', 'project.json'), '{}\n');
   fs.writeFileSync(path.join(trackedClaudeWorkspace, '.claude', 'settings.local.json'), '{}\n');
@@ -2000,7 +2023,7 @@ test('git workspace service owns branch metadata and safe worktree lifecycle com
 });
 
 test('worktree registry tracks, deduplicates, and untracks entries safely', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kronos-worktree-registry-'));
+  const dir = makeTempDir('kronos-worktree-registry-');
   const registryPath = path.join(dir, 'active-worktrees.json');
 
   worktreeRegistry.trackActiveWorktree('/repo/app', '/repo/app/.claude/worktrees/K-1', 'K-1', new Date('2026-07-01T10:00:00.000Z'), registryPath);
@@ -2019,7 +2042,7 @@ test('worktree registry tracks, deduplicates, and untracks entries safely', () =
 });
 
 test('worktree registry refuses to overwrite malformed registry files', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kronos-worktree-registry-bad-'));
+  const dir = makeTempDir('kronos-worktree-registry-bad-');
   const registryPath = path.join(dir, 'active-worktrees.json');
   const malformed = JSON.stringify({ entries: [] }, null, 2);
   fs.writeFileSync(registryPath, malformed);
@@ -2859,7 +2882,7 @@ test('CLI probes resolve gcloud.cmd on Windows', () => {
 });
 
 test('CLI probes accept readable GOOGLE_APPLICATION_CREDENTIALS without running gcloud', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kronos-gac-'));
+  const dir = makeTempDir('kronos-gac-');
   const credentialsPath = path.join(dir, 'service-account.json');
   fs.writeFileSync(credentialsPath, '{}');
   const result = cliProbes.checkGcloudApplicationDefaultAuth({
@@ -3968,7 +3991,7 @@ test('run store returns normalized active views and repairs only on explicit req
     status: 'running',
     logPath: path.join(runStore.RUNS_DIR, 'run-terminal-log.log'),
   };
-  const externalLog = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'kronos-external-run-log-')), 'external.log');
+  const externalLog = path.join(makeTempDir('kronos-external-run-log-'), 'external.log');
   const unsafeLog = {
     id: 'run-terminal-external-log',
     project: 'app',
@@ -4147,7 +4170,7 @@ test('run store keeps long run ids in bounded distinct filenames', () => {
 });
 
 test('run store archive refuses to move artifacts outside runs directory', () => {
-  const externalDir = fs.mkdtempSync(path.join(os.tmpdir(), 'kronos-external-artifact-'));
+  const externalDir = makeTempDir('kronos-external-artifact-');
   const externalLog = path.join(externalDir, 'external.log');
   const externalPrompt = path.join(externalDir, 'external.prompt.txt');
   fs.writeFileSync(externalLog, 'external log\n');
@@ -4177,7 +4200,7 @@ test('run store archive refuses to move artifacts outside runs directory', () =>
 });
 
 test('run store refuses to append logs outside active runs directory', () => {
-  const externalDir = fs.mkdtempSync(path.join(os.tmpdir(), 'kronos-external-log-'));
+  const externalDir = makeTempDir('kronos-external-log-');
   const externalLog = path.join(externalDir, 'run.log');
   const archivedLog = path.join(runStore.ARCHIVED_RUNS_DIR, 'old.log');
   fs.mkdirSync(runStore.ARCHIVED_RUNS_DIR, { recursive: true });
@@ -4742,7 +4765,7 @@ test('session store normalizes aggregate stats rows for rendering', () => {
 });
 
 test('run recovery builds resume prompts from saved prompt and log tail', () => {
-  const logPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'kronos-run-log-')), 'run.log');
+  const logPath = path.join(makeTempDir('kronos-run-log-'), 'run.log');
   fs.writeFileSync(logPath, `${'x'.repeat(40)}\nrecent failure line\n`);
 
   const logTail = runRecovery.readRunLogTail(logPath, 24);
@@ -6600,7 +6623,7 @@ test('doctor checks centralize command, credential, project config, and reachabi
 });
 
 test('doctor checks skip gcloud commands when GOOGLE_APPLICATION_CREDENTIALS is readable', () => {
-  const credentialsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'kronos-gac-doctor-'));
+  const credentialsDir = makeTempDir('kronos-gac-doctor-');
   const credentialsPath = path.join(credentialsDir, 'credentials.json');
   fs.writeFileSync(credentialsPath, '{}');
   const calls = [];

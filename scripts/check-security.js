@@ -330,6 +330,25 @@ for (const marker of [
 if (unitTests.includes("const joined = [command, ...args].join(' ');")) {
   fail('Unit test command mocks must normalize command names so gcloud.cmd works on Windows.');
 }
+for (const marker of [
+  'const trackedTempDirs = new Set();',
+  'function makeTempDir(prefix)',
+  'test.after(cleanupTrackedTempDirs);',
+  "process.once('exit', cleanupTrackedTempDirs);",
+  "process.env.KRONOS_DIR = makeTempDir('kronos-home-');",
+  "process.env.KRONOS_SCRIPTS_DIR = makeTempDir('kronos-scripts-');",
+]) {
+  if (!unitTests.includes(marker)) {
+    fail(`Missing unit-test temp cleanup marker: ${marker}`);
+  }
+}
+const mkdtempCalls = unitTests.match(/fs\.mkdtempSync\(path\.join\(os\.tmpdir\(\),/g) || [];
+if (mkdtempCalls.length !== 1 || !unitTests.includes('fs.mkdtempSync(path.join(os.tmpdir(), prefix))')) {
+  fail('Unit tests must create temp dirs through makeTempDir so tracked directories are removed.');
+}
+if (unitTests.includes("fs.mkdtempSync(path.join(os.tmpdir(), '")) {
+  fail('Unit tests must not create untracked kronos temp dirs directly.');
+}
 
 assertExplicitWebviewScriptPolicy('src/extension.ts', extension);
 assertExplicitWebviewScriptPolicy('src/runners/sessionDispatcher.ts', dispatcher);
