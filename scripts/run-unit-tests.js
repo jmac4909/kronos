@@ -85,6 +85,43 @@ function createVscodeTestModule() {
       ThemeIcon,
       MarkdownString,
       TreeItemCollapsibleState: { None: 0 },
+      ViewColumn: { One: 1 },
+      window: {
+        createWebviewPanel() {
+          const disposeListeners = [];
+          return {
+            webview: { html: '' },
+            onDidDispose(listener) {
+              disposeListeners.push(listener);
+              return { dispose() {} };
+            },
+            dispose() {
+              for (const listener of disposeListeners) {
+                listener();
+              }
+            },
+          };
+        },
+        showWarningMessage() { return Promise.resolve(undefined); },
+        showErrorMessage() { return Promise.resolve(undefined); },
+        showInformationMessage() { return Promise.resolve(undefined); },
+        createTerminal() {
+          return { sendText() {}, show() {}, dispose() {} };
+        },
+      },
+      workspace: {
+        isTrusted: true,
+        getConfiguration() {
+          return { get(_key, fallback) { return fallback; } };
+        },
+        onDidChangeConfiguration() { return { dispose() {} }; },
+      },
+      env: {
+        openExternal() { return Promise.resolve(true); },
+        clipboard: {
+          writeText() { return Promise.resolve(); },
+        },
+      },
     },
     EventEmitter,
     TreeItem,
@@ -4529,6 +4566,80 @@ test('dispatcher completion callback refreshes progress panel after successful m
   const source = readSourceFixture('src', 'runners', 'sessionDispatcher.ts');
   const successCallbackBlock = /try \{\n    await opts\.onComplete\(code, run\);\n    writeRun\(run\);\n    context\.panel\.webview\.html = withWebviewCsp\(buildProgressHtml\(context\.projectName, context\.skill, context\.ticket, context\.events, run\)\);\n    saveSession\(context\.projectName, context\.skill, context\.ticket, context\.events\);\n  \} catch/.exec(source);
   assert.ok(successCallbackBlock, 'successful post-run callback should persist and re-render mutated run state');
+});
+
+test('dispatcher marks run failed when managed worktree setup fails before launch', async () => {
+  fs.rmSync(runStore.RUNS_DIR, { recursive: true, force: true });
+  const projectPath = makeTempProject();
+  const credentialsDir = makeTempDir('kronos-gcloud-creds-');
+  const credentialsPath = path.join(credentialsDir, 'application-default.json');
+  fs.writeFileSync(credentialsPath, '{}\n');
+  const previousCredentials = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+  process.env.GOOGLE_APPLICATION_CREDENTIALS = credentialsPath;
+
+  const vscodeStub = createVscodeTestModule();
+  const gitWorkspaceStub = {
+    ...gitWorkspace,
+    currentGitRef: () => 'main',
+    currentGitCommit: () => 'abc123',
+    prepareManagedWorktree() {
+      throw new Error('git worktree add timed out');
+    },
+  };
+  const completionCalls = [];
+
+  try {
+    await withPatchedModuleLoad(request => {
+      if (request === 'vscode') {
+        return vscodeStub.vscode;
+      }
+      if (
+        request === '../services/gitWorkspace' ||
+        request.endsWith('/services/gitWorkspace') ||
+        request.endsWith('\\services\\gitWorkspace')
+      ) {
+        return gitWorkspaceStub;
+      }
+      return undefined;
+    }, async () => {
+      const dispatcherPath = require.resolve('../out/runners/sessionDispatcher.js');
+      delete require.cache[dispatcherPath];
+      const dispatcher = require(dispatcherPath);
+      const result = await dispatcher.dispatchClaudeSession(projectPath, 'implement', 'K-WT-FAIL', {
+        parallel: true,
+        onComplete: (code, run) => {
+          completionCalls.push({ code, status: run.status, failureReason: run.failureReason });
+        },
+      });
+
+      assert.equal(result.launched, false);
+      assert.equal(result.status, 'failed');
+      assert.match(result.failureReason, /Git worktree setup failed: git worktree add timed out/);
+
+      const runs = runStore.readRuns();
+      assert.equal(runs.length, 1);
+      const run = runs[0];
+      assert.equal(run.status, 'failed');
+      assert.equal(run.exitCode, 1);
+      assert.equal(run.failureKind, 'git');
+      assert.ok(run.endedAt);
+      assert.match(run.failureReason, /Git worktree setup failed: git worktree add timed out/);
+      assert.ok(run.events.some(event => event.label === 'Git worktree setup failed'));
+      assert.equal(completionCalls.length, 1);
+      assert.deepEqual(completionCalls[0], {
+        code: 1,
+        status: 'failed',
+        failureReason: run.failureReason,
+      });
+      assert.equal(worktreeRegistry.loadActiveWorktreeRegistry().entries.length, 0);
+    });
+  } finally {
+    if (previousCredentials === undefined) {
+      delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
+    } else {
+      process.env.GOOGLE_APPLICATION_CREDENTIALS = previousCredentials;
+    }
+  }
 });
 
 test('dispatcher parses every assistant content block for progress metrics', async () => {
