@@ -90,6 +90,7 @@ const actionSemantics = readSource('src/services/actionSemantics.ts');
 const severityRank = readSource('src/services/severityRank.ts');
 const records = readSource('src/services/records.ts');
 const dateValues = readSource('src/services/dateValues.ts');
+const regexp = readSource('src/services/regexp.ts');
 const queuePlannerPanelView = sources['src/services/queuePlannerPanelView.ts'];
 const operationsReportPanelView = sources['src/services/operationsReportPanelView.ts'];
 const agentQualityScore = readSource('src/services/agentQualityScore.ts');
@@ -2172,6 +2173,27 @@ for (const marker of [
   }
 }
 
+for (const marker of [
+  'export function escapeRegExp(value: string): string',
+  "value.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')",
+]) {
+  if (!regexp.includes(marker)) {
+    fail(`Missing regexp helper marker: ${marker}`);
+  }
+}
+
+for (const [name, source] of [
+  ['src/services/promptManager.ts', promptManager],
+  ['src/services/postRunReadiness.ts', postRunReadiness],
+]) {
+  if (!source.includes("import { escapeRegExp } from './regexp'")) {
+    fail(`${name} must import the shared regexp escaping helper.`);
+  }
+  if (source.includes('function escapeRegExp')) {
+    fail(`${name} must not carry a local escapeRegExp helper.`);
+  }
+}
+
 for (const [name, source, marker] of [
   ['src/services/runCenterSort.ts', runCenterSort, "import { toValidDate } from './dateValues'"],
   ['src/runners/sessionDispatcher.ts', dispatcher, "import { toValidDate } from '../services/dateValues'"],
@@ -3740,7 +3762,7 @@ for (const marker of [
   'function resolveTicketFromRunRecord(tickets: Record<string, Ticket>, run: unknown): PostRunTicketResolution | undefined',
   'function runSearchStrings(record: Record<string, unknown>): string[]',
   'function ticketKeyAppearsInStrings(ticketKey: string, values: string[]): boolean',
-  'function escapeRegExp(value: string): string',
+  "import { escapeRegExp } from './regexp'",
   'function trimmedString(value: unknown): string | undefined',
   "runString(record['skill']) === 'implement'",
   "input.ticket.next_action === 'await_review'",

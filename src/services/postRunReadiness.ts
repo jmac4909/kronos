@@ -4,6 +4,7 @@ import { EvidenceGateResult, evaluateEvidenceGate } from './evidenceGate';
 import { evidenceChecks, evidenceNotes, evidenceString } from './evidenceData';
 import { runProgressSummary } from './runProgress';
 import { terminalRunOutcome } from './runStatus';
+import { escapeRegExp } from './regexp';
 
 type PostRunReadinessStatus = 'ready' | 'needs_human' | 'blocked' | 'not_ready' | 'unknown';
 export type RunFailureKind = 'none' | 'auth' | 'model' | 'script' | 'git' | 'build' | 'test' | 'sonar' | 'timeout' | 'cancelled' | 'unknown';
@@ -423,10 +424,6 @@ function runSearchStrings(record: Record<string, unknown>): string[] {
 function ticketKeyAppearsInStrings(ticketKey: string, values: string[]): boolean {
   const pattern = new RegExp(`(^|[^A-Za-z0-9])${escapeRegExp(ticketKey)}($|[^A-Za-z0-9])`, 'i');
   return values.some(value => pattern.test(value));
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function ticketLinkedToProject(ticket: Ticket, projectName: string): boolean {

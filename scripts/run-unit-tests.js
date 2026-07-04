@@ -160,6 +160,7 @@ const actionSemantics = require('../out/services/actionSemantics.js');
 const severityRank = require('../out/services/severityRank.js');
 const records = require('../out/services/records.js');
 const dateValues = require('../out/services/dateValues.js');
+const regexp = require('../out/services/regexp.js');
 const evidenceStore = require('../out/services/evidenceStore.js');
 const evidenceHandoff = require('../out/services/evidenceHandoff.js');
 const evidencePublisher = require('../out/services/evidencePublisher.js');
@@ -3442,6 +3443,18 @@ test('date value helper centralizes valid date coercion', () => {
   const dispatcherSource = readSourceFixture('src', 'runners', 'sessionDispatcher.ts');
   assert.ok(dispatcherSource.includes("import { toValidDate } from '../services/dateValues'"));
   assert.equal(dispatcherSource.includes('function toValidDate'), false);
+});
+
+test('regexp helper centralizes regex literal escaping', () => {
+  const escaped = regexp.escapeRegExp('EDIPVR-3413 (a+b)[x]? ^$.*\\');
+  assert.equal(escaped, 'EDIPVR-3413 \\(a\\+b\\)\\[x\\]\\? \\^\\$\\.\\*\\\\');
+  assert.equal(new RegExp(escaped).test('prefix EDIPVR-3413 (a+b)[x]? ^$.*\\ suffix'), true);
+
+  for (const file of ['promptManager.ts', 'postRunReadiness.ts']) {
+    const source = readSourceFixture('src', 'services', file);
+    assert.ok(source.includes("import { escapeRegExp } from './regexp'"), `${file} should import shared regexp escaping`);
+    assert.equal(source.includes('function escapeRegExp'), false, `${file} should not carry a local escapeRegExp helper`);
+  }
 });
 
 test('review work service centralizes open review merge request semantics', () => {
@@ -8138,7 +8151,7 @@ test('post-run readiness distinguishes process completion from handoff readiness
     'function resolveTicketFromRunRecord(tickets: Record<string, Ticket>, run: unknown): PostRunTicketResolution | undefined',
     'function runSearchStrings(record: Record<string, unknown>): string[]',
     'function ticketKeyAppearsInStrings(ticketKey: string, values: string[]): boolean',
-    'function escapeRegExp(value: string): string',
+    "import { escapeRegExp } from './regexp'",
     'function trimmedString(value: unknown): string | undefined',
     "runString(record['skill']) === 'implement'",
     "input.ticket.next_action === 'await_review'",

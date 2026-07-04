@@ -5,6 +5,7 @@ import { safeFileStem, safePromptFileName } from './fileNames';
 import { KRONOS_DIR } from './stateStore';
 import { unknownErrorMessage } from './errorUtils';
 import { readJsonFile } from './jsonFiles';
+import { escapeRegExp } from './regexp';
 
 const GLOBAL_PROMPTS_DIR = path.join(KRONOS_DIR, 'prompts');
 const PROMPT_HISTORY_DIR = path.join(KRONOS_DIR, 'prompt-history');
@@ -367,10 +368,6 @@ function extractVariables(text: string): string[] {
 
 function hashText(text: string): string {
   return createHash('sha256').update(text).digest('hex');
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function promptSnapshotPath(snapshotId: string): string {
