@@ -2,9 +2,11 @@ import * as vscode from 'vscode';
 import { KronosState } from '../state/KronosState';
 import { Ticket } from '../state/types';
 import { TicketFilter, describeTicketFilter, hasTicketFilter, ticketMatchesFilter } from '../services/ticketFilters';
-import { TicketWithOpenMergeRequest, openReviewTicketEntries } from '../services/reviewWork';
+import { openReviewTicketEntries } from '../services/reviewWork';
 
 const NEW_REVIEW_SPIN_MS = 6000;
+
+type TicketWithOpenMergeRequest = ReturnType<typeof openReviewTicketEntries>[number][1];
 
 export interface NewReviewItemSummary {
   ticketKey: string;

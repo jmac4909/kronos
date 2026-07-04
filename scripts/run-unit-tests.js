@@ -8051,9 +8051,9 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     "const actions = decision.url ? ['Open MR', 'Open Review'] : ['Open Review']",
     "action === 'Open MR' && decision.url",
     'openExternalHttpUrl(decision.url)',
-    "import { openReviewTicketEntries, reviewBranchTickets as buildReviewBranchTickets, type ReviewBranchTicket, type TicketWithOpenMergeRequest } from './services/reviewWork'",
+    "import { openReviewTicketEntries, reviewBranchTickets as buildReviewBranchTickets } from './services/reviewWork'",
     'return openReviewTicketEntries(state.state?.tickets)',
-    'function reviewBranchTickets(state: KronosState): ReviewBranchTicket[]',
+    'function reviewBranchTickets(state: KronosState)',
     'return buildReviewBranchTickets(state.state?.tickets)',
     "vscode.window.showInformationMessage('No open review MRs to fix.')",
     "vscode.window.showInformationMessage('Need at least 2 open review MRs to resolve conflicts.')",
@@ -9274,7 +9274,8 @@ test('tree providers share action labels and icons', () => {
     "new vscode.ThemeIcon('sync~spin', new vscode.ThemeColor('charts.yellow'))",
     "new vscode.ThemeIcon('circle-filled'",
     "new vscode.ThemeIcon('git-pull-request', color)",
-    "import { TicketWithOpenMergeRequest, openReviewTicketEntries } from '../services/reviewWork'",
+    "import { openReviewTicketEntries } from '../services/reviewWork'",
+    'type TicketWithOpenMergeRequest = ReturnType<typeof openReviewTicketEntries>[number][1]',
     'return openReviewTicketEntries(state.tickets)',
   ]) {
     assert.ok(reviewTree.includes(marker), marker);

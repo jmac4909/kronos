@@ -64,7 +64,7 @@ import { activeRunStatusBarSummary } from './services/activeRunDisplay';
 import { isFreshActiveRun } from './services/runStatus';
 import { isAttentionRunStatus, runAttentionDetail, runAttentionLine } from './services/runAttention';
 import { buildRunCompletionNotification } from './services/runCompletionNotification';
-import { openReviewTicketEntries, reviewBranchTickets as buildReviewBranchTickets, type ReviewBranchTicket, type TicketWithOpenMergeRequest } from './services/reviewWork';
+import { openReviewTicketEntries, reviewBranchTickets as buildReviewBranchTickets } from './services/reviewWork';
 import { decideReviewMonitorAction } from './services/reviewMonitor';
 import { decideQueueRemoval } from './services/queueRemovalPolicy';
 import { deployMonitorAttentionIssue, deployMonitorHandoffCheckName, hasDeployMonitorHandoffIssue, hasHandledDeployMonitorRun, resolveDeployMonitorProject } from './services/deployMonitorHandoff';
@@ -5704,12 +5704,12 @@ function notifyReviewMonitorDecision(decision: ReturnType<typeof decideReviewMon
   });
 }
 
-function reviewMergeRequestCandidates(state: KronosState): Array<{ ticketKey: string; ticket: TicketWithOpenMergeRequest }> {
+function reviewMergeRequestCandidates(state: KronosState) {
   return openReviewTicketEntries(state.state?.tickets)
     .map(([ticketKey, ticket]) => ({ ticketKey, ticket }));
 }
 
-function reviewBranchTickets(state: KronosState): ReviewBranchTicket[] {
+function reviewBranchTickets(state: KronosState) {
   return buildReviewBranchTickets(state.state?.tickets);
 }
 

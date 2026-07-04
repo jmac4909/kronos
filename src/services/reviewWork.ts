@@ -1,8 +1,8 @@
 import { Ticket } from '../state/types';
 
-export type TicketWithOpenMergeRequest = Ticket & { mr: NonNullable<Ticket['mr']> };
+type TicketWithOpenMergeRequest = Ticket & { mr: NonNullable<Ticket['mr']> };
 
-export interface ReviewBranchTicket {
+interface ReviewBranchTicket {
   key: string;
   summary: string;
   mr: TicketWithOpenMergeRequest['mr'];
