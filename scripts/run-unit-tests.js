@@ -5947,6 +5947,7 @@ test('provider reachability keeps request and URL errors unknown', () => {
 });
 
 test('doctor checks centralize command, credential, project config, and reachability inputs', () => {
+  fs.writeFileSync(path.join(process.env.KRONOS_SCRIPTS_DIR, 'kronos_state.py'), 'print("{}")\n');
   const state = baseState({
     'K-1': ticket({ summary: 'Doctor ticket' }),
   });
@@ -6004,6 +6005,59 @@ test('doctor checks centralize command, credential, project config, and reachabi
   assert.equal(byName['queue.json parse'].detail, '1 queue item(s)');
   assert.equal(byName['Session store integrity'].status, 'pass');
   assert.equal(byName['Dispatch model setting'].status, 'fail');
+  assert.equal(byName['Review MR polling prerequisites'].status, 'pass');
+  assert.match(byName['Review MR polling prerequisites'].detail, /No open review merge requests/);
+
+  const reviewState = baseState({
+    'K-REVIEW': ticket({
+      summary: 'Review ticket',
+      next_action: 'await_review',
+      projects: ['app'],
+      mr: { iid: 7, state: 'opened', review_status: 'pending_review', url: 'https://gitlab.example/mr/7' },
+    }),
+  });
+  reviewState.projects.app.config = { default_branch: 'main', gitlab_project_id: 42 };
+  const reviewChecks = doctorChecks.runDoctorChecks({
+    state: reviewState,
+    queue: null,
+    profile,
+    requiredPrompts: [],
+    dispatchModel: 'claude-opus-4-6',
+    env,
+    platform: 'win32',
+    gcloudExistsSync: filePath => filePath === gcloudCmd,
+    commandRunner,
+    kronosDir: process.env.KRONOS_DIR,
+  });
+  const reviewByName = Object.fromEntries(reviewChecks.map(check => [check.name, check]));
+  assert.equal(reviewByName['Review MR polling prerequisites'].status, 'pass');
+  assert.match(reviewByName['Review MR polling prerequisites'].detail, /1 open review MR\(s\) ready/);
+
+  const blockedReviewState = baseState({
+    'K-BLOCKED': ticket({
+      summary: 'Blocked review ticket',
+      next_action: 'await_review',
+      projects: ['app'],
+      mr: { iid: 8, state: 'opened', review_status: 'pending_review', url: 'https://gitlab.example/mr/8' },
+    }),
+  });
+  blockedReviewState.projects.app.config = { default_branch: 'main' };
+  const blockedReviewChecks = doctorChecks.runDoctorChecks({
+    state: blockedReviewState,
+    queue: null,
+    profile,
+    requiredPrompts: [],
+    dispatchModel: 'claude-opus-4-6',
+    env: { ...env, GITLAB_TOKEN: undefined },
+    platform: 'win32',
+    gcloudExistsSync: filePath => filePath === gcloudCmd,
+    commandRunner,
+    kronosDir: process.env.KRONOS_DIR,
+  });
+  const blockedReviewByName = Object.fromEntries(blockedReviewChecks.map(check => [check.name, check]));
+  assert.equal(blockedReviewByName['Review MR polling prerequisites'].status, 'warn');
+  assert.match(blockedReviewByName['Review MR polling prerequisites'].detail, /missing GITLAB_TOKEN/);
+  assert.match(blockedReviewByName['Review MR polling prerequisites'].detail, /K-BLOCKED\/app: missing gitlab_project_id/);
 
   assert.deepEqual(doctorChecks.projectConfigGaps(state, profile), ['app: missing jenkins_url']);
   const targets = doctorChecks.buildDoctorReachabilityTargets({
@@ -6106,6 +6160,8 @@ test('doctor checks centralize command, credential, project config, and reachabi
   assert.equal(loadErrorByName['Session store integrity'].status, 'warn');
   assert.match(loadErrorByName['Session store integrity'].detail, /invalid_saved_session/);
   assert.match(loadErrorByName['Session store integrity'].detail, /invalid_session_stats/);
+  assert.equal(loadErrorByName['Review MR polling prerequisites'].status, 'warn');
+  assert.match(loadErrorByName['Review MR polling prerequisites'].detail, /No readable state loaded/);
 
   const fallbackChecks = doctorChecks.runDoctorChecks({
     state,
@@ -6138,6 +6194,9 @@ test('doctor checks centralize command, credential, project config, and reachabi
     "unknownErrorMessage(e, 'Provider reachability checks failed.')",
     "unknownErrorMessage(e, `${command} unavailable`)",
     "unknownErrorMessage(e, 'claude unavailable')",
+    'function addReviewPollingPrerequisiteCheck',
+    "'Review MR polling prerequisites'",
+    "ticket.next_action === 'await_review' && ticket.mr?.state === 'opened'",
   ]) {
     assert.ok(source.includes(marker), marker);
   }

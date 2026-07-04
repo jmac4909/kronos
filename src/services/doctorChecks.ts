@@ -57,7 +57,8 @@ export function runDoctorChecks(input: DoctorChecksInput): DoctorCheck[] {
   const manifestStatus = readIntegrationManifest();
   const manifestAudit = auditIntegrationManifest(manifestStatus);
   const manifestScripts = manifestStatus.manifest?.scripts || {};
-  for (const script of requiredScripts()) {
+  const scripts = requiredScripts();
+  for (const script of scripts) {
     const entry = manifestScripts[script.name];
     const version = entry?.version ? `version ${entry.version}` : 'version unknown';
     add(script.name, script.present ? 'pass' : 'fail', `${script.path} (${version})`);
@@ -110,6 +111,7 @@ export function runDoctorChecks(input: DoctorChecksInput): DoctorCheck[] {
   credentialCheck(checks, env, 'Jenkins credentials', input.profile.providers.jenkins, ['JENKINS_URL']);
   credentialCheck(checks, env, 'SonarQube credentials', input.profile.providers.sonar, ['SONAR_HOST_URL', 'SONAR_TOKEN']);
   credentialAnyCheck(checks, env, 'GitHub Actions credentials', input.profile.providers.githubActions, ['GITHUB_TOKEN', 'GH_TOKEN']);
+  addReviewPollingPrerequisiteCheck(checks, input.state, input.profile, env, scripts);
 
   if (readableGacFile) {
     add('GCP application default auth', 'pass', 'GOOGLE_APPLICATION_CREDENTIALS file is readable; skipped gcloud token command.');
@@ -314,6 +316,53 @@ function credentialAnyCheck(checks: DoctorCheck[], env: Record<string, string | 
     detail: present.length > 0
       ? `1 credential source configured. Values are not displayed.`
       : `Missing one of ${vars.join(', ')}. Values are not displayed.`,
+  });
+}
+
+function addReviewPollingPrerequisiteCheck(
+  checks: DoctorCheck[],
+  state: KronosState | null,
+  profile: KronosProfile,
+  env: Record<string, string | undefined>,
+  scripts: ReturnType<typeof requiredScripts>,
+): void {
+  if (!profile.providers.gitlab) {
+    checks.push({ name: 'Review MR polling prerequisites', status: 'pass', detail: 'GitLab provider disabled by active profile.' });
+    return;
+  }
+  if (!state) {
+    checks.push({ name: 'Review MR polling prerequisites', status: 'warn', detail: 'No readable state loaded; review MR polling candidates cannot be evaluated.' });
+    return;
+  }
+  const openReviewTickets = Object.entries(state.tickets || {})
+    .filter(([, ticket]) => ticket.next_action === 'await_review' && ticket.mr?.state === 'opened');
+  if (openReviewTickets.length === 0) {
+    checks.push({ name: 'Review MR polling prerequisites', status: 'pass', detail: 'No open review merge requests require polling.' });
+    return;
+  }
+
+  const issues: string[] = [];
+  if (!scripts.find(script => script.name === 'kronos_state.py')?.present) {
+    issues.push('missing kronos_state.py');
+  }
+  if (!env['GITLAB_TOKEN']) {
+    issues.push('missing GITLAB_TOKEN');
+  }
+  for (const [ticketKey, ticket] of openReviewTickets) {
+    for (const projectName of ticket.projects || []) {
+      const project = state.projects?.[projectName];
+      if (!project?.config?.gitlab_project_id) {
+        issues.push(`${ticketKey}/${projectName}: missing gitlab_project_id`);
+      }
+    }
+  }
+
+  checks.push({
+    name: 'Review MR polling prerequisites',
+    status: issues.length === 0 ? 'pass' : 'warn',
+    detail: issues.length === 0
+      ? `${openReviewTickets.length} open review MR(s) ready for background polling.`
+      : `${openReviewTickets.length} open review MR(s); ${issues.slice(0, 6).join('; ')}${issues.length > 6 ? `; and ${issues.length - 6} more` : ''}`,
   });
 }
 
