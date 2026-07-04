@@ -2069,6 +2069,16 @@ test('process tree service centralizes stop and pause signaling behavior', () =>
   assert.equal(windows.method, 'taskkill');
   assert.deepEqual(taskkillCalls[0].args, ['/PID', '55', '/T', '/F']);
 
+  const failedWindowsStop = processTree.stopProcessTree(56, {
+    platform: 'win32',
+    commandRunner: () => { throw new Error('taskkill failed'); },
+    kill: () => { throw new Error('process kill failed'); },
+  });
+  assert.equal(failedWindowsStop.attempted, true);
+  assert.equal(failedWindowsStop.signalled, false);
+  assert.equal(failedWindowsStop.fallbackUsed, true);
+  assert.equal(failedWindowsStop.error, 'process kill failed');
+
   const signalCalls = [];
   const signalFallback = processTree.signalProcessTree(88, 'SIGSTOP', {
     platform: 'linux',
@@ -7903,6 +7913,8 @@ test('extension run recovery helpers use typed run records', () => {
     'Run ${run.id} was not paused because no process signal was sent',
     'Run ${run.id} was not continued because no process signal was sent',
     'async function cancelSelectedRun(run: KronosRun)',
+    'if (stopResult.attempted && !stopResult.signalled) {',
+    'Run ${run.id} was not cancelled because process stop failed',
     'async function openRunDiffArtifact(run: KronosRun)',
     "await openRunArtifactFileIfExists(run.logPath, 'Run log not found.')",
     "await openRunArtifactFileIfExists(run.promptPath, 'Run prompt artifact not found.')",

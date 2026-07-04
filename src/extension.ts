@@ -946,6 +946,10 @@ async function cancelSelectedRun(run: KronosRun): Promise<void> {
 
   try {
     const stopResult = stopProcessTree(processPid);
+    if (stopResult.attempted && !stopResult.signalled) {
+      vscode.window.showWarningMessage(`Run ${run.id} was not cancelled because process stop failed${stopResult.error ? `: ${stopResult.error}` : '.'}`);
+      return;
+    }
     markRunCancelled(
       run.id,
       stopResult.signalled
