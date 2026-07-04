@@ -14,11 +14,11 @@ import { isReviewReadyAction } from './actionSemantics';
 import { setAcceptanceCriteriaChecked } from './acceptanceCriteria';
 import { decideEvidenceHandoff } from './evidenceGatePolicy';
 
-export type EvidenceNoteKind = TicketEvidenceNote['kind'];
-export type EvidenceResult = TicketEvidenceCheck['result'];
-export type EvidenceConfidence = NonNullable<TicketEvidenceCheck['confidence']>;
+type EvidenceNoteKind = TicketEvidenceNote['kind'];
+type EvidenceResult = TicketEvidenceCheck['result'];
+type EvidenceConfidence = NonNullable<TicketEvidenceCheck['confidence']>;
 
-export interface TicketEvidenceNoteInput {
+interface TicketEvidenceNoteInput {
   kind: EvidenceNoteKind;
   text: string;
   now?: Date;
@@ -35,7 +35,7 @@ export interface TicketEvidenceCheckInput {
   now?: Date;
 }
 
-export interface TicketEnvironmentResultInput {
+interface TicketEnvironmentResultInput {
   environment: string;
   status: TicketEnvironmentResult['status'];
   detail: string;
@@ -43,19 +43,19 @@ export interface TicketEnvironmentResultInput {
   now?: Date;
 }
 
-export interface TicketRunCompletionEvidenceInput {
+interface TicketRunCompletionEvidenceInput {
   note: TicketEvidenceNoteInput;
   check: TicketEvidenceCheckInput;
 }
 
-export interface LinkMergeRequestInput {
+interface LinkMergeRequestInput {
   orphanKey: string;
   targetTicketKey: string;
   jiraBaseUrl?: string;
   allowReviewHandoffWithWarnings?: boolean;
 }
 
-export interface LinkMergeRequestPreview {
+interface LinkMergeRequestPreview {
   orphanKey: string;
   targetTicketKey: string;
   ticket: Ticket;
@@ -63,7 +63,7 @@ export interface LinkMergeRequestPreview {
   reviewReady: boolean;
 }
 
-export interface MergeRequestStatusInput {
+interface MergeRequestStatusInput {
   ticketKey: string;
   status: Partial<MergeRequest>;
   now?: Date;
@@ -78,7 +78,7 @@ export interface MergeRequestStatusUpdate {
   previousMr: MergeRequest | null;
 }
 
-export interface TerminalMergeRequestReconciliation {
+interface TerminalMergeRequestReconciliation {
   ticketKey: string;
   ticket: Ticket;
   action: 'deploy_monitor' | 'blocked';
