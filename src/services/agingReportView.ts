@@ -1,4 +1,5 @@
 import { AgingReport } from './agingAnalyzer';
+import { toValidDate } from './dateValues';
 import { escapeClass, escapeHtml, kronosWebviewBaseCss, safeHttpHref } from './webviewHtml';
 
 interface AgingReportHtmlOptions {
@@ -50,6 +51,5 @@ export function buildAgingReportHtml(report: AgingReport, options: AgingReportHt
 
 function formatDateTime(value: unknown): string {
   if (typeof value !== 'string' && typeof value !== 'number') { return 'N/A'; }
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? 'N/A' : date.toLocaleString();
+  return toValidDate(value)?.toLocaleString() || 'N/A';
 }
