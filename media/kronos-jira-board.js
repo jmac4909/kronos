@@ -200,7 +200,7 @@
     if (actionsEl && hasProjects) {
       actionsEl.appendChild(makeButton('Start Work', 'primary', function() { post('start', { ticket: currentModalKey }); closeModal(); }));
       actionsEl.appendChild(makeButton(t.isQueued ? 'Remove from Queue' : 'Add to Queue', '', function() {
-        post(t.isQueued ? 'removeFromQueue' : 'addToQueueFromModal', { ticket: currentModalKey });
+        post(t.isQueued ? 'removeFromQueue' : 'addToQueue', { ticket: currentModalKey });
         closeModal();
       }));
     } else if (actionsEl) {

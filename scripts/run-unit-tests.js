@@ -8473,7 +8473,7 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     "makeButton(t.isQueued ? 'Remove from Queue' : 'Add to Queue'",
     'function normalizeCommentsPayload',
     "console.warn('Kronos Jira Board could not parse comments payload', error)",
-    "post(t.isQueued ? 'removeFromQueue' : 'addToQueueFromModal'",
+    "post(t.isQueued ? 'removeFromQueue' : 'addToQueue'",
     "await startTicketFromActionPanel(state, ticket);",
     "unknownErrorMessage(e, 'Failed to link ticket.')",
     "unknownErrorMessage(e, 'Failed to unlink ticket.')",
@@ -8776,6 +8776,7 @@ test('extension webviews use shared UI shell and board filtering affordances', (
   ]) {
     assert.ok(uiSource.includes(marker), marker);
   }
+  assert.equal(uiSource.includes('addToQueueFromModal'), false, 'Jira board modal should use the standard addToQueue command');
   for (const marker of [
     'function kronosMediaScriptInlineFallback',
     'inlineFallbackScript',

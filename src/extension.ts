@@ -314,7 +314,6 @@ const BOARD_MESSAGE_COMMANDS = new Set([
   'openJira',
   'openMr',
   'getComments',
-  'addToQueueFromModal',
   'addEvidence',
   'addEvidenceCheck',
   'recordEnvironmentResult',
@@ -2033,16 +2032,6 @@ export function activate(context: vscode.ExtensionContext) {
               const detail = warnUnexpectedPanelIntegrationError(e, 'Could not load comments');
               panel.webview.postMessage({ command: 'comments', ticket, data: [], error: detail });
             }
-            return;
-          } else if (command === 'addToQueueFromModal' && hasTicket(ticket)) {
-            try {
-              const result = addTicketToQueue(ticket);
-              state.reloadAndNotify();
-              if (result.alreadyInQueue) { vscode.window.showInformationMessage(`${ticket} is already in the queue.`); }
-            } catch (e: unknown) {
-              vscode.window.showWarningMessage(unknownErrorMessage(e, 'Failed to add ticket to queue.'));
-            }
-            renderBoard();
             return;
           } else if (hasTicket(ticket) && await tryExecuteTicketOperatorCommand(command, ticket)) {
             renderBoard();

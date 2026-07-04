@@ -1113,6 +1113,9 @@ if (!agingHandlerSource.includes("if (request.command === 'refreshPanel') {")
   || !agingHandlerSource.includes('return;')) {
   fail('Aging Report refresh should reload state before rendering.');
 }
+if (extensionUiSource.includes('addToQueueFromModal')) {
+  fail('Jira board modal should use the standard addToQueue command.');
+}
 for (const forbidden of [
   "actionButton('openEvidenceGate'",
   "actionButton('openRunCenter'",
@@ -1551,7 +1554,7 @@ for (const marker of [
   "makeButton(t.isQueued ? 'Remove from Queue' : 'Add to Queue'",
   'function normalizeCommentsPayload',
   "console.warn('Kronos Jira Board could not parse comments payload', error)",
-  "post(t.isQueued ? 'removeFromQueue' : 'addToQueueFromModal'",
+  "post(t.isQueued ? 'removeFromQueue' : 'addToQueue'",
   "unknownErrorMessage(e, 'Failed to link ticket.')",
   "unknownErrorMessage(e, 'Failed to unlink ticket.')",
   "unknownErrorMessage(e, 'Failed to add ticket to queue.')",
