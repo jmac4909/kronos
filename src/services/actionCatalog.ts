@@ -63,7 +63,7 @@ const ACTION_CATALOG: Record<ActionName, ActionCatalogEntry> = {
   },
   await_review: {
     label: 'Review',
-    skill: DEFAULT_SKILL,
+    skill: 'verify-fix',
     estimatedMinutes: 20,
     planningScore: 80,
     proofSensitive: true,

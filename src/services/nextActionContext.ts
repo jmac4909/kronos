@@ -115,9 +115,6 @@ function risksForPlan(plan: PlannedAction): SafetyRisk[] {
   if (plan.action === 'deploy_monitor') {
     return ['read-only'];
   }
-  if (plan.action === 'await_review') {
-    return ['state-write'];
-  }
   return ['repo-write'];
 }
 
@@ -153,6 +150,9 @@ function blockersForPlan(plan: PlannedAction, input: NextActionContextInput): st
   const blockers: string[] = [];
   if (plan.ticketKey && !input.state?.tickets?.[plan.ticketKey]) {
     blockers.push(`Ticket ${plan.ticketKey} is no longer in state.`);
+  }
+  if (plan.action === 'done') {
+    blockers.push('Ticket is already done; no dispatch is needed.');
   }
   if (plan.action !== 'refresh' && plan.projects.length === 0) {
     blockers.push('No linked project; link the ticket before dispatch.');

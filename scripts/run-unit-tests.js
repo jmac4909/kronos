@@ -1389,6 +1389,9 @@ test('deploy monitor handoff resolves projects and only suppresses handled runs'
     { skill: 'deploy-monitor', ticket: 'K-13', project: 'app', status: 'completed', promptMetadata: { mergeRequestIid: 13 } },
   ], match), true);
   assert.equal(deployMonitorHandoff.hasHandledDeployMonitorRun([
+    { skill: 'deploy-monitor', ticket: 'K-13', projectPath: '/repo/app/', status: 'completed', promptMetadata: { mergeRequestIid: 13 } },
+  ], match), true);
+  assert.equal(deployMonitorHandoff.hasHandledDeployMonitorRun([
     { skill: 'deploy-monitor', ticket: 'K-13', project: 'app', status: 'failed', promptMetadata: { mergeRequestIid: 13 } },
     { skill: 'deploy-monitor', ticket: 'K-13', project: 'app', status: 'needs_human', promptMetadata: { mergeRequestIid: 13 } },
     { skill: 'deploy-monitor', ticket: 'K-13', project: 'app', status: 'cancelled', promptMetadata: { mergeRequestIid: 13 } },
@@ -1428,12 +1431,20 @@ test('deploy monitor handoff resolves projects and only suppresses handled runs'
         result: 'fail',
         confidence: 'high',
         summary: 'deploy monitor did not start',
+      }, {
+        id: 'check-2',
+        at: '2026-07-03T01:05:00.000Z',
+        name: 'Deploy monitor handoff MR !13',
+        result: 'fail',
+        confidence: 'high',
+        summary: 'project path missing',
       }],
     },
   });
   assert.equal(deployMonitorHandoff.deployMonitorHandoffCheckName(issueTicket), 'Deploy monitor handoff MR !13');
   assert.equal(deployMonitorHandoff.deployMonitorHandoffIssueSummary(issueTicket), 'deploy monitor did not start');
   assert.equal(deployMonitorHandoff.hasDeployMonitorHandoffIssue(issueTicket, 'deploy monitor did not start'), true);
+  assert.equal(deployMonitorHandoff.hasDeployMonitorHandoffIssue(issueTicket, 'project path missing'), true);
   assert.equal(deployMonitorHandoff.hasDeployMonitorHandoffIssue(issueTicket, 'different failure'), false);
   assert.equal(deployMonitorHandoff.deployMonitorHandoffIssueSummary(ticket({ mr: merged.mr })), undefined);
 });
@@ -1731,6 +1742,23 @@ test('next action context explains command, risk, preflight, and blockers', () =
   assert.ok(queuedStart.safetyPlan.changes.some(item => item.includes('Dispatch Claude /implement')));
   assert.ok(queuedStart.safetyPlan.warnings.some(item => item.includes('Claude auth preflight')));
 
+  const reviewPlan = {
+    planId: 'K-1:await_review',
+    ticketKey: 'K-1',
+    action: 'await_review',
+    projects: ['app'],
+    score: 90,
+    scoreBreakdown: [],
+    reason: 'ready for review',
+    source: 'ticket',
+  };
+  const reviewContext = nextActionContext.buildNextActionContext(reviewPlan, { state, queue: null });
+  assert.equal(reviewContext.skill, 'verify-fix');
+  assert.deepEqual(reviewContext.risks, ['repo-write']);
+  const reviewStart = nextActionContext.buildNextActionStartDecision(reviewPlan, reviewContext);
+  assert.equal(reviewStart.allowed, true);
+  assert.ok(reviewStart.safetyPlan.changes.some(item => item.includes('Dispatch Claude /verify-fix')));
+
   const unlinkedPlan = {
     planId: 'K-2:verify',
     ticketKey: 'K-2',
@@ -1749,6 +1777,20 @@ test('next action context explains command, risk, preflight, and blockers', () =
   assert.equal(blockedStart.allowed, false);
   assert.match(blockedStart.reason, /No linked project/);
   assert.equal(blockedStart.safetyPlan, undefined);
+
+  const donePlan = {
+    planId: 'K-1:done',
+    ticketKey: 'K-1',
+    action: 'done',
+    projects: ['app'],
+    score: 1,
+    scoreBreakdown: [],
+    reason: 'finished',
+    source: 'ticket',
+  };
+  const doneContext = nextActionContext.buildNextActionContext(donePlan, { state, queue: null });
+  assert.deepEqual(doneContext.blockers, ['Ticket is already done; no dispatch is needed.']);
+  assert.equal(nextActionContext.buildNextActionStartDecision(donePlan, doneContext).allowed, false);
 
   const refreshPlan = {
     planId: 'refresh:refresh',
@@ -3307,6 +3349,7 @@ test('action semantics centralize code and handoff action groups', () => {
   assert.deepEqual(actionCatalog.QUEUE_ACTIONS, [...actionCatalog.TICKET_ACTIONS, 'refresh']);
   assert.equal(actionCatalog.actionDisplayLabel('fix_build'), 'Build Failed');
   assert.equal(actionCatalog.actionDisplayLabel('custom_action'), 'custom action');
+  assert.equal(actionCatalog.actionSkill('await_review'), 'verify-fix');
   assert.equal(actionCatalog.actionSkill('deploy_monitor'), 'deploy-monitor');
   assert.equal(actionCatalog.actionSkill('verify'), 'verify-fix');
   assert.equal(actionCatalog.actionSkill('unknown'), 'implement');
@@ -8031,7 +8074,7 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'return true;',
     'return false;',
     'unknownErrorMessage(e, `Failed to start ${skill} session.`)',
-    "import { deployMonitorAttentionIssue, deployMonitorHandoffCheckName, deployMonitorHandoffIssueSummary, hasDeployMonitorHandoffIssue, hasHandledDeployMonitorRun, resolveDeployMonitorProject } from './services/deployMonitorHandoff'",
+    "import { deployMonitorAttentionIssue, deployMonitorHandoffCheckName, hasDeployMonitorHandoffIssue, hasHandledDeployMonitorRun, resolveDeployMonitorProject } from './services/deployMonitorHandoff'",
     'const started = await startDeployMonitorForMergedTicket(state, update.ticketKey, update.ticket)',
     'if (started) { reviewTerminalMergeRequestActions.add(actionKey); }',
     'console.warn(unknownErrorMessage(e, `Failed to load MR diff hints for ${ticketKey}.`))',
@@ -8041,7 +8084,7 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'projectNameOverride: projectName',
     'promptMetadata.mergeRequestIid = mrIid',
     'const currentTicket = state.state?.tickets?.[ticketKey] || ticket',
-    'if (deployMonitorHandoffIssueSummary(currentTicket))',
+    'if (hasDeployMonitorHandoffIssue(currentTicket, reason))',
     'resolveDeployMonitorProject(state.state, ticketKey, currentTicket)',
     'const deployMonitorRuns = [...listRuns(), ...readArchivedRuns()]',
     'const deployMonitorMatch = { projectName, projectPath, ticketKey, mrIid }',
@@ -8146,6 +8189,8 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'const ticketData: Record<string, JiraBoardTicketPayload>',
     'const linkedProjects = ticketStringArray(t.projects)',
     'const attachments = ticketAttachments(t.attachments)',
+    'hasMrUrl: Boolean(mr && ticketStringField(mr, \'url\'))',
+    "vscode.window.showWarningMessage(`${ticketKey} has no ${kind === 'jira' ? 'Jira' : 'merge request'} URL recorded.`)",
     'const projectList = ticketStringArray(ticket.projects)',
     'const mr = ticket.mr',
     'class="kronos-shell operator-shell"',

@@ -67,7 +67,7 @@ import { buildRunCompletionNotification } from './services/runCompletionNotifica
 import { openReviewTicketEntries, reviewBranchTickets as buildReviewBranchTickets, type ReviewBranchTicket, type TicketWithOpenMergeRequest } from './services/reviewWork';
 import { decideReviewMonitorAction, type ReviewMonitorDecision } from './services/reviewMonitor';
 import { decideQueueRemoval } from './services/queueRemovalPolicy';
-import { deployMonitorAttentionIssue, deployMonitorHandoffCheckName, deployMonitorHandoffIssueSummary, hasDeployMonitorHandoffIssue, hasHandledDeployMonitorRun, resolveDeployMonitorProject } from './services/deployMonitorHandoff';
+import { deployMonitorAttentionIssue, deployMonitorHandoffCheckName, hasDeployMonitorHandoffIssue, hasHandledDeployMonitorRun, resolveDeployMonitorProject } from './services/deployMonitorHandoff';
 import { actionButton, actionRow, kronosActionPanelScript, kronosOperatorPanelCss, normalizeActionPanelMessage, operatorCommandRow, type ActionPanelMessage } from './services/operatorPanel';
 import { buildPromptHistoryHtml, buildPromptManagerHtml, buildPromptSmokeTestsHtml } from './services/promptPanelView';
 import { buildRecoveryHtml, buildStateAuditLogHtml } from './services/recoveryPanelView';
@@ -1940,6 +1940,8 @@ export function activate(context: vscode.ExtensionContext) {
         const url = kind === 'jira' ? ticket?.jira_url : ticket?.mr?.url;
         if (url) {
           openExternalHttpUrl(url);
+        } else {
+          vscode.window.showWarningMessage(`${ticketKey} has no ${kind === 'jira' ? 'Jira' : 'merge request'} URL recorded.`);
         }
       };
       panel.webview.onDidReceiveMessage(async (msg) => {
@@ -5175,6 +5177,7 @@ interface JiraBoardTicketPayload {
   build: { number: string; status: string } | null;
   evidenceCount: number;
   hasJiraUrl: boolean;
+  hasMrUrl: boolean;
   isQueued: boolean;
 }
 
@@ -5728,12 +5731,12 @@ function reviewBranchTickets(state: KronosState): ReviewBranchTicket[] {
 async function startDeployMonitorForMergedTicket(state: KronosState, ticketKey: string, ticket: Ticket): Promise<boolean> {
   state.reloadAndNotify();
   const currentTicket = state.state?.tickets?.[ticketKey] || ticket;
-  if (deployMonitorHandoffIssueSummary(currentTicket)) {
-    return false;
-  }
   const project = resolveDeployMonitorProject(state.state, ticketKey, currentTicket);
   if (project.kind !== 'ok' || !project.projectName || !project.projectPath) {
     const reason = project.reason || `${ticketKey} MR merged, but deploy monitoring could not resolve a project.`;
+    if (hasDeployMonitorHandoffIssue(currentTicket, reason)) {
+      return false;
+    }
     recordDeployMonitorHandoffIssue(state, ticketKey, currentTicket, reason);
     void vscode.window.showWarningMessage(reason);
     return false;
@@ -5749,6 +5752,9 @@ async function startDeployMonitorForMergedTicket(state: KronosState, ticketKey: 
   }
   const attentionIssue = deployMonitorAttentionIssue(deployMonitorRuns, deployMonitorMatch);
   if (attentionIssue) {
+    if (hasDeployMonitorHandoffIssue(currentTicket, attentionIssue)) {
+      return false;
+    }
     recordDeployMonitorHandoffIssue(state, ticketKey, currentTicket, attentionIssue);
     void vscode.window.showWarningMessage(attentionIssue, 'Run Center').then(action => {
       if (action === 'Run Center') {
@@ -5772,6 +5778,9 @@ async function startDeployMonitorForMergedTicket(state: KronosState, ticketKey: 
   });
   if (!started) {
     const reason = `${ticketKey} merged, but deploy monitor did not start. Start deploy monitor manually from the Review view or ticket details.`;
+    if (hasDeployMonitorHandoffIssue(currentTicket, reason)) {
+      return false;
+    }
     recordDeployMonitorHandoffIssue(state, ticketKey, currentTicket, reason);
     void vscode.window.showWarningMessage(reason);
     return false;
@@ -6259,6 +6268,7 @@ function buildJiraBoardHtml(state: KronosState, nonce: string, scriptUri: string
       } : null,
       evidenceCount: evidenceRecordCount(t),
       hasJiraUrl: Boolean(t.jira_url),
+      hasMrUrl: Boolean(mr && ticketStringField(mr, 'url')),
       isQueued,
     };
     let col = queuedKeys.has(key) ? 'Queued' : (columnMap[nextAction] || 'To Do');
@@ -6266,7 +6276,13 @@ function buildJiraBoardHtml(state: KronosState, nonce: string, scriptUri: string
     const projs = linkedProjects.map((p: string) => `<span class="tag proj">${esc(p)}</span>`).join('');
     const typeClass = ticketType.toLowerCase().includes('bug') || ticketType.toLowerCase().includes('defect') ? 'bug' : 'story';
     const mrReviewStatus = mr ? ticketStringField(mr, 'review_status') : '';
-    const mrLink = mr ? `<button type="button" class="badge mr clickable" data-action="openMr" data-ticket="${attr(key)}">MR !${esc(ticketStringField(mr, 'iid', '?'))} &middot; ${esc(mrReviewStatus.replace(/_/g, ' '))}</button>` : '';
+    const hasMrUrl = Boolean(mr && ticketStringField(mr, 'url'));
+    const mrLabel = mr ? `MR !${esc(ticketStringField(mr, 'iid', '?'))} &middot; ${esc(mrReviewStatus.replace(/_/g, ' '))}` : '';
+    const mrLink = mr
+      ? hasMrUrl
+        ? `<button type="button" class="badge mr clickable" data-action="openMr" data-ticket="${attr(key)}">${mrLabel}</button>`
+        : `<span class="badge mr">${mrLabel}</span>`
+      : '';
     const attBadge = attachments.length > 0 ? `<span class="badge att">${attachments.length} attachment${attachments.length === 1 ? '' : 's'}</span>` : '';
     const evidenceCount = evidenceRecordCount(t);
     const evidenceBadge = evidenceCount > 0 ? `<span class="badge evidence">${evidenceCount} evidence</span>` : '';

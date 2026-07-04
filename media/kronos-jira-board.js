@@ -169,9 +169,11 @@
     clearNode(mrEl);
     if (mrEl && t.mr) {
       mrEl.appendChild(makeEl('span', '', 'MR !' + t.mr.iid + ' - ' + formatStatus(t.mr.status) + ' '));
-      var mrLink = makeEl('button', 'text-button clickable', 'Open in GitLab');
-      mrLink.addEventListener('click', function() { post('openMr', { ticket: currentModalKey }); });
-      mrEl.appendChild(mrLink);
+      if (t.hasMrUrl) {
+        var mrLink = makeEl('button', 'text-button clickable', 'Open in GitLab');
+        mrLink.addEventListener('click', function() { post('openMr', { ticket: currentModalKey }); });
+        mrEl.appendChild(mrLink);
+      }
     } else if (mrEl) {
       mrEl.textContent = 'No MR';
     }

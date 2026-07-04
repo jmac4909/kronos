@@ -74,7 +74,7 @@ export function deployMonitorAttentionIssue(runs: DeployMonitorRunLike[], match:
 
 export function isDeployMonitorRunMatch(run: DeployMonitorRunLike, match: DeployMonitorRunMatch): boolean {
   if (run.skill !== 'deploy-monitor' || run.ticket !== match.ticketKey) { return false; }
-  if (run.project !== match.projectName && run.projectPath !== match.projectPath) { return false; }
+  if (run.project !== match.projectName && !deployMonitorProjectPathMatches(run.projectPath, match.projectPath)) { return false; }
   const runMrIid = promptMetadataMergeRequestIid(run.promptMetadata);
   if (match.mrIid === undefined) { return true; }
   if (runMrIid === undefined) { return false; }
@@ -108,15 +108,34 @@ export function deployMonitorHandoffCheckName(ticket: Ticket): string {
 }
 
 export function deployMonitorHandoffIssueSummary(ticket: Ticket): string | undefined {
-  const expectedName = deployMonitorHandoffCheckName(ticket);
-  const check = evidenceChecks(ticket).find(candidate =>
-    evidenceString(candidate, 'name') === expectedName &&
-    evidenceString(candidate, 'result') === 'fail'
-  );
-  if (!check) { return undefined; }
-  return evidenceString(check, 'summary') || expectedName;
+  return deployMonitorHandoffIssueSummaries(ticket)[0];
 }
 
 export function hasDeployMonitorHandoffIssue(ticket: Ticket, summary: string): boolean {
-  return deployMonitorHandoffIssueSummary(ticket) === summary;
+  return deployMonitorHandoffIssueSummaries(ticket).includes(summary);
+}
+
+function deployMonitorHandoffIssueSummaries(ticket: Ticket): string[] {
+  const expectedName = deployMonitorHandoffCheckName(ticket);
+  return evidenceChecks(ticket)
+    .filter(candidate =>
+      evidenceString(candidate, 'name') === expectedName &&
+      evidenceString(candidate, 'result') === 'fail'
+    )
+    .map(check => evidenceString(check, 'summary') || expectedName);
+}
+
+function deployMonitorProjectPathMatches(runPath: unknown, matchPath: string): boolean {
+  const runKey = deployMonitorProjectPathKey(runPath);
+  const matchKey = deployMonitorProjectPathKey(matchPath);
+  return Boolean(runKey && matchKey && runKey === matchKey);
+}
+
+function deployMonitorProjectPathKey(value: unknown): string {
+  if (typeof value !== 'string') { return ''; }
+  let normalized = value.trim().replace(/\\/g, '/').replace(/\/+$/g, '');
+  if (process.platform === 'win32') {
+    normalized = normalized.toLowerCase();
+  }
+  return normalized;
 }
