@@ -30,7 +30,7 @@ export interface AgingReport {
   items: AgingItem[];
 }
 
-export const DEFAULT_AGING_THRESHOLDS: AgingThresholds = {
+const DEFAULT_AGING_THRESHOLDS: AgingThresholds = {
   reviewDays: 3,
   buildFailureDays: 1,
   blockedDays: 2,

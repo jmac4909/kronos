@@ -5,7 +5,7 @@ import { buildHumanReviewInbox } from './humanReviewInbox';
 import { RunRecord } from './runStore';
 import { isActiveRun, runStatus } from './runStatus';
 
-export interface AttentionBadgeInput {
+interface AttentionBadgeInput {
   state?: KronosState | null;
   queue?: QueueState | null;
   runs?: RunRecord[];
@@ -14,7 +14,7 @@ export interface AttentionBadgeInput {
   agingThresholds?: Partial<AgingThresholds>;
 }
 
-export interface AttentionBadgeSummary {
+interface AttentionBadgeSummary {
   count: number;
   tooltip: string;
   humanReviewItems: number;
@@ -55,7 +55,7 @@ export function computeAttentionBadge(input: AttentionBadgeInput): AttentionBadg
   };
 }
 
-export function attentionBadgeCount(summary: Omit<AttentionBadgeSummary, 'count' | 'tooltip'>): number {
+function attentionBadgeCount(summary: Omit<AttentionBadgeSummary, 'count' | 'tooltip'>): number {
   return Object.values(summary).reduce((total, value) => total + nonNegativeInteger(value), 0);
 }
 

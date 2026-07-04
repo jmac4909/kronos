@@ -3149,7 +3149,7 @@ for (const marker of [
 
 for (const marker of [
   'export function computeAttentionBadge',
-  'export function attentionBadgeCount',
+  'function attentionBadgeCount',
   'buildHumanReviewInbox',
   'evaluateEvidenceGates',
   'analyzeAging',

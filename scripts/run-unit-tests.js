@@ -3752,7 +3752,8 @@ test('evidence store formats markdown and compact comment handoff', () => {
     },
   });
 
-  const markdown = evidenceStore.formatEvidenceMarkdown('K-9', t);
+  const exported = evidenceStore.writeEvidenceExport('K-9', t);
+  const markdown = exported.markdown;
   const comment = evidenceStore.formatEvidenceComment('K-9', t);
 
   assert.match(markdown, /# Evidence for K-9/);
@@ -5808,20 +5809,20 @@ test('attention badge aggregates review, aging, and paused-run signals', () => {
   assert.match(summary.tooltip, /2 new review items/);
   assert.match(summary.tooltip, /1 paused run/);
   assert.equal(attentionBadge.computeAttentionBadge({ state: baseState({}) }).count, 0);
-  assert.equal(attentionBadge.attentionBadgeCount({
-    humanReviewItems: 1,
-    evidenceGateFailures: -1,
-    evidenceGateWarnings: Number.NaN,
-    staleCritical: 1.8,
-    staleWarning: 0,
-    newReviewItems: 0,
-    pausedRuns: 1,
-  }), 3);
+  assert.equal(attentionBadge.computeAttentionBadge({
+    state: baseState({}),
+    newReviewItems: 1.8,
+    runs: [{ id: 'paused', status: 'paused' }],
+  }).count, 2);
+  assert.equal(attentionBadge.computeAttentionBadge({
+    state: baseState({}),
+    newReviewItems: Number.NaN,
+  }).count, 0);
 
   const source = readSourceFixture('src', 'services', 'attentionBadge.ts');
   for (const marker of [
     'export function computeAttentionBadge',
-    'export function attentionBadgeCount',
+    'function attentionBadgeCount',
     'buildHumanReviewInbox',
     'evaluateEvidenceGates',
     'analyzeAging',

@@ -13,7 +13,7 @@ export interface EvidenceExport {
   filePath: string;
 }
 
-export function formatEvidenceMarkdown(ticketKey: string, ticket: Ticket): string {
+function formatEvidenceMarkdown(ticketKey: string, ticket: Ticket): string {
   const lines = [
     `# Evidence for ${ticketKey}`,
     '',
