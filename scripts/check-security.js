@@ -12,8 +12,12 @@ const files = [
   'src/services/queueActiveRun.ts',
   'src/services/queuePlannerPanelView.ts',
   'src/services/operationsReportPanelView.ts',
+  'src/services/operatorPanel.ts',
+  'src/services/webviewSecurity.ts',
   'src/views/ProjectTreeProvider.ts',
   'src/views/TicketTreeProvider.ts',
+  'media/kronos-action-panel.js',
+  'media/kronos-jira-board.js',
 ];
 
 const sources = Object.fromEntries(files.map((file) => [file, readSource(file)]));
@@ -2434,6 +2438,7 @@ for (const marker of [
 
 for (const marker of [
   'function claimKronosJiraBoard()',
+  'function closestBoardTarget',
   '__kronosJiraBoardAttached',
   'data-kronos-jira-board-attached',
 ]) {

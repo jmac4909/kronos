@@ -244,10 +244,23 @@
     }
   }
 
+  function closestBoardTarget(target, selector) {
+    if (!target) { return null; }
+    if (typeof target.closest === 'function') {
+      return target.closest(selector);
+    }
+    var current = target.parentElement && typeof target.parentElement === 'object' ? target.parentElement : null;
+    while (current) {
+      if (typeof current.matches === 'function' && current.matches(selector)) { return current; }
+      if (typeof current.closest === 'function') { return current.closest(selector); }
+      current = current.parentElement && typeof current.parentElement === 'object' ? current.parentElement : null;
+    }
+    return null;
+  }
+
   function handleBoardClick(e) {
-    var target = e.target && typeof e.target.closest === 'function' ? e.target : null;
-    if (!target) { return; }
-    var actionEl = target.closest('[data-action]');
+    var target = e && e.target;
+    var actionEl = closestBoardTarget(target, '[data-action]');
     if (actionEl) {
       if (typeof e.stopPropagation === 'function') { e.stopPropagation(); }
       var ticket = actionEl.getAttribute('data-ticket') || currentModalKey;
@@ -260,7 +273,7 @@
       }
       return;
     }
-    var card = target.closest('.card[data-ticket]');
+    var card = closestBoardTarget(target, '.card[data-ticket]');
     if (card) {
       showModal(card.getAttribute('data-ticket') || '');
     }

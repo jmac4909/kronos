@@ -2426,7 +2426,69 @@ test('webview security injects CSP and preserves existing nonce policies', () =>
   assert.match(jiraBoardScript, /kronos-jira-ticket-data/);
   assert.match(jiraBoardScript, /data-kronos-actions-ready/);
   assert.match(jiraBoardScript, /Kronos webview script ready/);
+  assert.match(jiraBoardScript, /function closestBoardTarget/);
   assert.doesNotMatch(jiraBoardScript, /const vscode =/);
+  const jiraPostedMessages = [];
+  const jiraDocumentListeners = {};
+  const jiraDocumentElementAttributes = {};
+  const jiraActionButton = {
+    parentElement: null,
+    matches(selector) { return selector === '[data-action]'; },
+    getAttribute(name) {
+      return {
+        'data-action': 'removeFromQueue',
+        'data-ticket': 'K-77',
+        'data-project': '',
+      }[name] || '';
+    },
+  };
+  const jiraBoardElement = {
+    addEventListener(type, handler) { jiraDocumentListeners[`board:${type}`] = handler; },
+  };
+  const jiraSandbox = {
+    acquireVsCodeApi: () => ({ postMessage: message => jiraPostedMessages.push(message) }),
+    console: { info() {}, warn() {}, error() {} },
+    navigator: { userAgent: 'Kronos Windows Jira Board Webview Test' },
+    setTimeout(handler) { handler(); },
+    window: { addEventListener() {} },
+    document: {
+      readyState: 'complete',
+      currentScript: {
+        getAttribute(name) {
+          return {
+            'data-kronos-webview-name': 'Kronos Jira Board',
+            'data-kronos-ready-command': webviewSecurity.WEBVIEW_READY_COMMAND,
+          }[name] || '';
+        },
+      },
+      documentElement: {
+        setAttribute(name, value) { jiraDocumentElementAttributes[name] = value; },
+      },
+      getElementById(id) {
+        if (id === 'kronos-jira-ticket-data') { return { value: '{}' }; }
+        return null;
+      },
+      querySelector(selector) {
+        if (selector === '.board') { return jiraBoardElement; }
+        return null;
+      },
+      querySelectorAll() { return []; },
+      addEventListener(type, handler) { jiraDocumentListeners[type] = handler; },
+    },
+  };
+  vm.runInNewContext(jiraBoardScript, jiraSandbox);
+  assert.equal(jiraDocumentElementAttributes['data-kronos-script-ready'], 'true');
+  assert.equal(jiraDocumentElementAttributes['data-kronos-actions-ready'], 'true');
+  assert.equal(jiraPostedMessages[0].command, webviewSecurity.WEBVIEW_READY_COMMAND);
+  assert.equal(typeof jiraDocumentListeners['board:click'], 'function');
+  let jiraStopped = false;
+  jiraDocumentListeners['board:click']({
+    target: { parentElement: jiraActionButton },
+    stopPropagation() { jiraStopped = true; },
+  });
+  assert.equal(jiraStopped, true);
+  assert.equal(jiraPostedMessages[1].command, 'removeFromQueue');
+  assert.equal(jiraPostedMessages[1].ticket, 'K-77');
 
   const button = operatorPanel.actionButton('open<Thing>', 'Open & Check', {
     ticket: 'T-1',
