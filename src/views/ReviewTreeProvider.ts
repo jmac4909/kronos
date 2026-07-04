@@ -8,7 +8,7 @@ const NEW_REVIEW_SPIN_MS = 6000;
 
 type TicketWithOpenMergeRequest = ReturnType<typeof openReviewTicketEntries>[number][1];
 
-export interface NewReviewItemSummary {
+interface NewReviewItemSummary {
   ticketKey: string;
   summary: string;
   projectNames: string[];

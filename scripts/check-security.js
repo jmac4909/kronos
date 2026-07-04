@@ -2351,7 +2351,7 @@ for (const marker of [
   'private spinningReviewKeys = new Map<string, number>()',
   'this.seedInitialReviewKeys()',
   'getNewReviewCount(): number',
-  'export interface NewReviewItemSummary',
+  'interface NewReviewItemSummary',
   'getNewReviewItems(): NewReviewItemSummary[]',
   'activityKey: string',
   'activityKey,',

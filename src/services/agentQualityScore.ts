@@ -4,14 +4,14 @@ import { RunRecord } from './runStore';
 import { evaluateEvidenceGates } from './evidenceGate';
 import { isActiveRun } from './runStatus';
 
-export interface QualityComponent {
+interface QualityComponent {
   label: string;
   score: number;
   max: number;
   detail: string;
 }
 
-export interface QualityMetric {
+interface QualityMetric {
   label: string;
   value: string;
 }

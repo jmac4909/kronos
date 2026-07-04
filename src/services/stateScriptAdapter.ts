@@ -3,9 +3,9 @@ import { unknownErrorMessage } from './errorUtils';
 import { stripUtf8Bom } from './jsonFiles';
 import { DiscoveredProject } from '../state/types';
 
-export type StateScriptRunner = (args: string[], options?: ScriptRunOptions) => string;
+type StateScriptRunner = (args: string[], options?: ScriptRunOptions) => string;
 
-export interface StateScriptAdapterOptions {
+interface StateScriptAdapterOptions {
   runner?: StateScriptRunner;
   scriptOptions?: ScriptRunOptions;
 }

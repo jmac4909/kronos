@@ -9242,7 +9242,7 @@ test('tree providers share action labels and icons', () => {
     'private spinningReviewKeys = new Map<string, number>()',
     'this.seedInitialReviewKeys()',
     'getNewReviewCount(): number',
-    'export interface NewReviewItemSummary',
+    'interface NewReviewItemSummary',
     'getNewReviewItems(): NewReviewItemSummary[]',
     'activityKey: string',
     'activityKey,',
