@@ -1,6 +1,7 @@
 import { Ticket } from '../state/types';
 import { evidenceChecks, evidenceEnvironmentResults, evidenceString } from './evidenceData';
 import { isRecord, recordString } from './records';
+import { toValidDate } from './dateValues';
 
 interface TrendMetricsInput {
   runs: unknown[];
@@ -132,9 +133,8 @@ function ticketInWindow(ticket: Ticket, start: Date, end: Date): boolean {
 }
 
 function isInWindow(value: string | null | undefined, start: Date, end: Date): boolean {
-  if (!value) { return false; }
-  const parsed = new Date(value);
-  return Number.isFinite(parsed.getTime()) && parsed >= start && parsed <= end;
+  const parsed = toValidDate(value);
+  return Boolean(parsed && parsed >= start && parsed <= end);
 }
 
 function cycleTimesHours(tickets: Record<string, Ticket>, runs: RunMetricRecord[]): number[] {
@@ -151,15 +151,15 @@ function cycleTimesHours(tickets: Record<string, Ticket>, runs: RunMetricRecord[
   for (const [ticketKey, ticket] of Object.entries(tickets)) {
     const ticketRuns = groupedRuns.get(ticketKey) || [];
     const runDates = ticketRuns
-      .flatMap(run => [parseDate(recordString(run, 'startedAt')), parseDate(recordString(run, 'endedAt'))])
+      .flatMap(run => [toValidDate(recordString(run, 'startedAt')), toValidDate(recordString(run, 'endedAt'))])
       .filter((date): date is Date => Boolean(date));
     const candidateStart = earliestDate([
-      parseDate(ticket.updated),
+      toValidDate(ticket.updated),
       ...runDates,
     ]);
     const candidateEnd = latestDate([
-      parseDate(ticket.evidence?.updated_at),
-      parseDate(ticket.last_action_at),
+      toValidDate(ticket.evidence?.updated_at),
+      toValidDate(ticket.last_action_at),
       ...runDates,
     ]);
     if (candidateStart && candidateEnd && candidateEnd >= candidateStart) {
@@ -175,12 +175,6 @@ function isFailedRunStatus(status: string): boolean {
 
 function hasRetryMetadata(run: RunMetricRecord): boolean {
   return isRecord(run['promptMetadata']) && recordString(run['promptMetadata'], 'retryOfRunId').length > 0;
-}
-
-function parseDate(value: string | null | undefined): Date | null {
-  if (!value) { return null; }
-  const parsed = new Date(value);
-  return Number.isFinite(parsed.getTime()) ? parsed : null;
 }
 
 function earliestDate(values: Array<Date | null>): Date | null {

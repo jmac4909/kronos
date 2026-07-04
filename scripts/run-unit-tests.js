@@ -3478,11 +3478,12 @@ test('date value helper centralizes valid date coercion', () => {
   assert.ok(runCenterSortSource.includes("import { toValidDate } from './dateValues'"));
   assert.equal(runCenterSortSource.includes('function toValidDate'), false);
 
-  for (const file of ['dashboardWorklist.ts', 'runProgress.ts', 'runStatus.ts', 'runStore.ts']) {
+  for (const file of ['dashboardWorklist.ts', 'runProgress.ts', 'runStatus.ts', 'runStore.ts', 'trendMetrics.ts']) {
     const source = readSourceFixture('src', 'services', file);
     assert.ok(source.includes("import { toValidDate } from './dateValues'"), `${file} should use shared date value helper`);
     assert.equal(source.includes('function dateValue'), false, `${file} should not carry a local dateValue helper`);
     assert.equal(source.includes('function validDate'), false, `${file} should not carry a local validDate helper`);
+    assert.equal(source.includes('function parseDate'), false, `${file} should not carry a local parseDate helper`);
   }
 
   const dispatcherSource = readSourceFixture('src', 'runners', 'sessionDispatcher.ts');

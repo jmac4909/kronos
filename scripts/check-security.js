@@ -2257,6 +2257,7 @@ for (const [name, source, marker] of [
   ['src/services/runProgress.ts', runProgress, "import { toValidDate } from './dateValues'"],
   ['src/services/runStatus.ts', runStatus, "import { toValidDate } from './dateValues'"],
   ['src/services/runStore.ts', runStore, "import { toValidDate } from './dateValues'"],
+  ['src/services/trendMetrics.ts', trendMetrics, "import { toValidDate } from './dateValues'"],
   ['src/runners/sessionDispatcher.ts', dispatcher, "import { toValidDate } from '../services/dateValues'"],
 ]) {
   if (!source.includes(marker)) {
@@ -2265,7 +2266,7 @@ for (const [name, source, marker] of [
   if (source.includes('function toValidDate')) {
     fail(`${name} must not carry a local toValidDate helper.`);
   }
-  if (source.includes('function dateValue') || source.includes('function validDate')) {
+  if (source.includes('function dateValue') || source.includes('function validDate') || source.includes('function parseDate')) {
     fail(`${name} must not carry a local date coercion helper.`);
   }
 }
