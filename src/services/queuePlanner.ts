@@ -4,6 +4,7 @@ import { actionDisplayLabel as actionToLabel } from './actionCatalog';
 import { isCodeAction } from './actionSemantics';
 import { toValidDate } from './dateValues';
 import { evidenceRecordCount } from './evidenceData';
+import { isRecord } from './records';
 import { severityRank } from './severityRank';
 
 interface PlannerInput {
@@ -360,15 +361,11 @@ function releaseKeysForPlan(ticket?: Ticket, queueItem?: unknown): string[] {
 }
 
 function releaseField(source: unknown, field: string): unknown {
-  return isObjectRecord(source) ? Reflect.get(source, field) : undefined;
+  return isRecord(source) ? Reflect.get(source, field) : undefined;
 }
 
 function unknownArray(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
-}
-
-function isObjectRecord(value: unknown): value is object {
-  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
 }
 
 function collectReleaseValues(target: string[], value: unknown): void {
@@ -379,7 +376,7 @@ function collectReleaseValues(target: string[], value: unknown): void {
     }
     return;
   }
-  if (isObjectRecord(value)) {
+  if (isRecord(value)) {
     collectReleaseValues(target, Reflect.get(value, 'name') || Reflect.get(value, 'value') || Reflect.get(value, 'title'));
     return;
   }

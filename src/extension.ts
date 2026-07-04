@@ -66,7 +66,7 @@ import { activeRunStatusBarSummary } from './services/activeRunDisplay';
 import { isFreshActiveRun } from './services/runStatus';
 import { isAttentionRunStatus, runAttentionDetail, runAttentionLine } from './services/runAttention';
 import { buildRunCompletionNotification } from './services/runCompletionNotification';
-import { recordFromUnknown } from './services/records';
+import { isRecord, recordFromUnknown } from './services/records';
 import { openReviewTicketEntries, reviewBranchTickets as buildReviewBranchTickets } from './services/reviewWork';
 import { decideReviewMonitorAction, reviewDeployMonitorActionHandled, reviewTerminalMergeRequestActionKey, type ReviewDeployMonitorResult, type ReviewMonitorDecision, type ReviewTerminalMergeRequestAction } from './services/reviewMonitor';
 import { decideQueueRemoval } from './services/queueRemovalPolicy';
@@ -1144,8 +1144,8 @@ function openTicketExternalUrl(state: KronosState, ticketKey: string, kind: 'jir
   const url = kind === 'jira'
     ? ticketStringField(ticket, 'jira_url')
     : kind === 'mr'
-      ? ticketStringField(ticketRecord(ticket.mr) ? ticket.mr : null, 'url')
-      : ticketStringField(ticketRecord(ticket.build) ? ticket.build : null, 'url');
+      ? ticketStringField(isRecord(ticket.mr) ? ticket.mr : null, 'url')
+      : ticketStringField(isRecord(ticket.build) ? ticket.build : null, 'url');
   if (!url) {
     vscode.window.showWarningMessage(`No ${kind} URL recorded for ${ticketKey}.`);
     return;
@@ -4997,12 +4997,8 @@ function mergeRequestComments(record: object | null | undefined): Array<Record<s
   if (!record) { return []; }
   const value = Reflect.get(record, 'comments');
   return Array.isArray(value)
-    ? value.filter((item): item is Record<string, unknown> => ticketRecord(item) && typeof item['body'] === 'string')
+    ? value.filter((item): item is Record<string, unknown> => isRecord(item) && typeof item['body'] === 'string')
     : [];
-}
-
-function ticketRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
 function existingAcceptanceCriterion(record: object): ExistingAcceptanceCriterion | undefined {
@@ -5022,7 +5018,7 @@ function existingAcceptanceCriterion(record: object): ExistingAcceptanceCriterio
 function ticketAttachments(value: unknown): TicketAttachmentSummary[] {
   if (!Array.isArray(value)) { return []; }
   return value
-    .filter(item => ticketRecord(item))
+    .filter(isRecord)
     .map(item => ({
       filename: ticketStringField(item, 'filename', 'attachment'),
       size: Number.isFinite(Number(item['size'])) ? Number(item['size']) : 0,
@@ -6144,8 +6140,8 @@ function buildJiraBoardHtml(state: KronosState, nonce: string, scriptUri: string
     const labels = ticketStringArray(t.labels);
     const linkedProjects = ticketStringArray(t.projects);
     const attachments = ticketAttachments(t.attachments);
-    const mr = ticketRecord(t.mr) ? t.mr : null;
-    const build = ticketRecord(t.build) ? t.build : null;
+    const mr = isRecord(t.mr) ? t.mr : null;
+    const build = isRecord(t.build) ? t.build : null;
     const summary = ticketStringField(t, 'summary');
     const ticketType = ticketStringField(t, 'type');
     const priority = ticketStringField(t, 'priority');

@@ -906,7 +906,7 @@ for (const marker of [
   'unknownErrorMessage(e, `Could not resolve MR branch for ${ticket.key}.`)',
   'unknownErrorMessage(e, `Could not find fallback remote branch for ${ticket.key}.`)',
   "import { buildSonarReport, type SonarIssue }",
-  "import { recordFromUnknown } from './services/records'",
+  "import { isRecord, recordFromUnknown } from './services/records'",
   'function resolveProjectName(state: KronosState, item: unknown): string | undefined',
   "const ticket = recordFromUnknown(record['ticket'])",
   'function resolveTicketKey(item: unknown): string | undefined',
@@ -2282,8 +2282,10 @@ for (const [name, source, marker] of [
 }
 
 for (const [name, source, marker] of [
+  ['src/extension.ts', extension, "import { isRecord, recordFromUnknown } from './services/records'"],
   ['src/services/changedFiles.ts', changedFiles, "import { isRecord } from './records'"],
   ['src/services/integrationAdapters.ts', integrationAdapters, "import { isRecord } from './records'"],
+  ['src/services/queuePlanner.ts', queuePlanner, "import { isRecord } from './records'"],
   ['src/services/runStatus.ts', runStatus, "import { isRecord } from './records'"],
   ['src/services/runStore.ts', runStore, "import { isRecord } from './records'"],
   ['src/services/sessionStore.ts', sessionStore, "import { isRecord } from './records'"],
@@ -2298,6 +2300,9 @@ for (const [name, source, marker] of [
   }
   if (source.includes('function isRecord')) {
     fail(`${name} must not carry a local isRecord helper.`);
+  }
+  if (source.includes('function isObjectRecord')) {
+    fail(`${name} must not carry a local isObjectRecord helper.`);
   }
   if (source.includes('function isPlainObject')) {
     fail(`${name} must not carry a local isPlainObject helper.`);

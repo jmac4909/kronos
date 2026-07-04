@@ -3416,6 +3416,7 @@ test('record guard helper centralizes unknown object narrowing', () => {
   for (const [file, marker] of [
     ['changedFiles.ts', "import { isRecord } from './records'"],
     ['integrationAdapters.ts', "import { isRecord } from './records'"],
+    ['queuePlanner.ts', "import { isRecord } from './records'"],
     ['runStatus.ts', "import { isRecord } from './records'"],
     ['runStore.ts', "import { isRecord } from './records'"],
     ['sessionStore.ts', "import { isRecord } from './records'"],
@@ -3427,8 +3428,13 @@ test('record guard helper centralizes unknown object narrowing', () => {
     const source = readSourceFixture('src', 'services', file);
     assert.ok(source.includes(marker), `${file} should import shared record guard`);
     assert.equal(source.includes('function isRecord'), false, `${file} should not carry a local isRecord helper`);
+    assert.equal(source.includes('function isObjectRecord'), false, `${file} should not carry a local isObjectRecord helper`);
     assert.equal(source.includes('function isPlainObject'), false, `${file} should not carry a local isPlainObject helper`);
   }
+
+  const extensionSource = readSourceFixture('src', 'extension.ts');
+  assert.ok(extensionSource.includes("import { isRecord, recordFromUnknown } from './services/records'"));
+  assert.equal(extensionSource.includes('function ticketRecord'), false, 'extension should use shared record helper for ticket payload records');
 
   const dispatcherSource = readSourceFixture('src', 'runners', 'sessionDispatcher.ts');
   assert.ok(dispatcherSource.includes("import { isRecord } from '../services/records'"));
@@ -9588,7 +9594,7 @@ test('extension Sonar commands normalize webview and issue payloads', () => {
   const sonarCommandSource = source.slice(sonarCommandStart, sonarCommandEnd);
   for (const marker of [
     "import { buildSonarReport, type SonarIssue }",
-    "import { recordFromUnknown } from './services/records'",
+    "import { isRecord, recordFromUnknown } from './services/records'",
     'function stringFromUnknown(value: unknown): string | undefined',
     "vscode.commands.registerCommand('kronos.sonarScan', async (item: unknown)",
     "vscode.commands.registerCommand('kronos.sonarReport', async (item: unknown)",
