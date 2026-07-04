@@ -8372,6 +8372,10 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     source.includes("      .then(() => {\n        state.reloadAndNotify();\n        return render();\n      })\n      .catch((e: unknown) => { warnUnexpectedPanelIntegrationError(e, 'Kronos panel auto-refresh failed.'); })"),
     'panel auto-refresh should keep state reload inside the guarded render promise',
   );
+  assert.ok(
+    source.includes('wasActive = listRuns().some(run => isFreshActiveRun(run));'),
+    'panel auto-refresh should recheck active runs after render so finished runs stop polling cleanly',
+  );
   for (const marker of [
     'const readyItems = dashboardBriefItems',
     'const attentionItems = dashboardBriefItems',

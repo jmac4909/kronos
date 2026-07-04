@@ -256,7 +256,7 @@ function startActiveRunPanelRefresh(
       })
       .catch((e: unknown) => { warnUnexpectedPanelIntegrationError(e, 'Kronos panel auto-refresh failed.'); })
       .finally(() => {
-        wasActive = hasActive;
+        wasActive = listRuns().some(run => isFreshActiveRun(run));
         rendering = false;
       });
   }, pollIntervalMs);
