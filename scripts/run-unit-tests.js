@@ -2285,7 +2285,7 @@ test('webview security injects CSP and preserves existing nonce policies', () =>
   assert.match(readOnly, /default-src 'none'/);
   assert.match(readOnly, /script-src 'none'/);
 
-  const scriptable = webviewSecurity.webviewCspMeta({ allowScripts: true, nonce: 'abc123', imgSrc: ['data:', 'https:'] });
+  const scriptable = webviewSecurity.withWebviewCsp('<body>ok</body>', { allowScripts: true, nonce: 'abc123', imgSrc: ['data:', 'https:'] });
   assert.match(scriptable, /script-src 'nonce-abc123'/);
   assert.match(scriptable, /script-src-elem 'nonce-abc123'/);
   assert.match(scriptable, /script-src-attr 'none'/);
@@ -2294,12 +2294,12 @@ test('webview security injects CSP and preserves existing nonce policies', () =>
   assert.match(scriptable, /base-uri 'none'/);
   assert.match(scriptable, /form-action 'none'/);
   assert.match(scriptable, /img-src data: https:/);
-  const scriptableWithSource = webviewSecurity.webviewCspMeta({ allowScripts: true, nonce: 'abc123', cspSource: 'vscode-resource:' });
+  const scriptableWithSource = webviewSecurity.withWebviewCsp('<body>ok</body>', { allowScripts: true, nonce: 'abc123', cspSource: 'vscode-resource:' });
   assert.match(scriptableWithSource, /style-src vscode-resource: 'unsafe-inline'/);
   assert.match(scriptableWithSource, /script-src vscode-resource: 'nonce-abc123'/);
   assert.match(scriptableWithSource, /script-src-elem vscode-resource: 'nonce-abc123'/);
 
-  const sourceOnlyScripts = webviewSecurity.webviewCspMeta({ allowScripts: true, cspSource: 'vscode-resource:' });
+  const sourceOnlyScripts = webviewSecurity.withWebviewCsp('<body>ok</body>', { allowScripts: true, cspSource: 'vscode-resource:' });
   assert.match(sourceOnlyScripts, /script-src vscode-resource:/);
   assert.deepEqual(webviewSecurity.webviewScriptCspOptions('vscode-resource:', 'abc123'), {
     allowScripts: true,
@@ -2315,7 +2315,7 @@ test('webview security injects CSP and preserves existing nonce policies', () =>
   const nonce = webviewSecurity.createWebviewNonce();
   assert.match(nonce, /^[a-f0-9]{32}$/);
   assert.doesNotMatch(nonce, /[+/=]/);
-  const nonceSource = webviewSecurity.webviewCspMeta({ allowScripts: true, nonce });
+  const nonceSource = webviewSecurity.withWebviewCsp('<body>ok</body>', { allowScripts: true, nonce });
   assert.match(nonceSource, new RegExp(`script-src 'nonce-${nonce}'`));
   const apiScript = webviewSecurity.webviewVsCodeApiScript();
   assert.match(apiScript, /function kronosVsCodeApi\(\) \{/);

@@ -94,7 +94,7 @@ export function webviewActionScriptTag(
   ].join('\n');
 }
 
-export function webviewCspMeta(options: WebviewCspOptions = {}): string {
+function webviewCspMeta(options: WebviewCspOptions = {}): string {
   const cspSource = options.cspSource?.trim();
   const scriptSources = [
     cspSource,

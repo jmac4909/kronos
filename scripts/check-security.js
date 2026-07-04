@@ -2492,7 +2492,7 @@ for (const marker of [
   'cspSource?: string',
   'options.cspSource?.trim()',
   'scriptSources.join',
-  'export function webviewCspMeta',
+  'function webviewCspMeta',
   'export function withWebviewCsp',
   'function wrapWebviewHtmlWithCsp(html: string, meta: string): string',
   "html.replace(/^\\s*<!doctype[^>]*>\\s*/i, '')",
@@ -2512,6 +2512,9 @@ for (const marker of [
   if (!webviewSecurity.includes(marker)) {
     fail(`Missing webview security marker: ${marker}`);
   }
+}
+if (webviewSecurity.includes('export function webviewCspMeta')) {
+  fail('webviewCspMeta should stay private; callers should use withWebviewCsp.');
 }
 
 for (const marker of [
