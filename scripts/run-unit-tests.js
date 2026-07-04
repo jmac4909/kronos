@@ -7582,6 +7582,7 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     "'Kronos evidence gate action failed.'",
     "'Kronos operator action failed.'",
     'await executeOperatorCommandAction(command, ticketKey)',
+    'executeOperatorCommandAction(request.command, request.ticket, request.runId)',
     'await executeHumanReviewAction(state, request.command, request.ticket, request.runId)',
     "await executeOperatorCommandAction(command, '', runId)",
     "if ((command === 'runCenter' || command === 'recoveryCenter') && runId)",

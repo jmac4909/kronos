@@ -4461,7 +4461,7 @@ function attachOperatorCommandHandler(panel: vscode.WebviewPanel, webviewName: s
       return;
     }
     await runWebviewPanelAction(
-      () => executeOperatorCommandAction(request.command, request.ticket),
+      () => executeOperatorCommandAction(request.command, request.ticket, request.runId),
       'Kronos operator action failed.',
     );
   });

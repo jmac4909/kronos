@@ -546,6 +546,7 @@ for (const marker of [
   'const commandId = OPERATOR_COMMAND_TO_VSCODE_COMMAND.get(command)',
   "vscode.window.showWarningMessage('Ignored unknown Kronos operator action.')",
   'await executeOperatorCommandAction(command, ticketKey)',
+  'executeOperatorCommandAction(request.command, request.ticket, request.runId)',
   "command === 'runCenter' || command === 'recoveryCenter' || command === 'doctor' || command === 'queuePlanner'",
   'kronos.evidenceGate',
   'openEvidenceGatePanel',
