@@ -4633,6 +4633,40 @@ test('ticket filters match operator search facets and grouped views', () => {
   ticketFilters.setTicketFilterString(mutableFilter, 'priority', ' ');
   assert.deepEqual(mutableFilter, { project: 'api' });
   assert.deepEqual(ticketFilters.uniqueTicketFilterValues([' web ', 'api', '', 'web', 'api']), ['api', 'web']);
+  assert.deepEqual(ticketFilters.ticketFilterPromptFields(false).map(field => field.id), [
+    'query',
+    'project',
+    'action',
+    'priority',
+    'label',
+    'mrState',
+    'buildStatus',
+    'staleDays',
+    'linked',
+    'groupBy',
+    'clear',
+  ]);
+  assert.deepEqual(ticketFilters.ticketFilterPromptFields(true).map(field => field.id), [
+    'query',
+    'project',
+    'action',
+    'priority',
+    'label',
+    'mrState',
+    'buildStatus',
+    'staleDays',
+    'clear',
+  ]);
+  assert.deepEqual(ticketFilters.ticketFilterChoiceItems(['api', 'web'], 'web'), [
+    { label: 'Any' },
+    { label: 'api' },
+    { label: 'web', description: 'current' },
+  ]);
+  const tickets = entries.map(([, value]) => value);
+  assert.deepEqual(ticketFilters.ticketFilterFacetValues('project', tickets, { ops: {} }), ['app', 'ops', 'web']);
+  assert.deepEqual(ticketFilters.ticketFilterFacetValues('action', tickets), ['await_review', 'fix_build', 'implement']);
+  assert.ok(ticketFilters.ticketFilterFacetValues('mrState', tickets).includes('changes_requested'));
+  assert.ok(ticketFilters.ticketFilterFacetValues('buildStatus', tickets).includes('SUCCESS'));
 
   const grouped = ticketFilters.groupTicketEntries(entries, 'project');
   assert.ok(grouped.some(([label, groupEntries]) => label === 'Unlinked' && groupEntries.length === 1));

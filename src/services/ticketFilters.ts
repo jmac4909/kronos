@@ -1,7 +1,20 @@
-import { Ticket } from '../state/types';
+import type { Ticket } from '../state/types';
 import { toValidDate } from './dateValues';
 
 export type TicketGroupBy = 'none' | 'action' | 'project' | 'priority';
+export type TicketFilterPromptFieldId =
+  | 'query'
+  | 'project'
+  | 'action'
+  | 'priority'
+  | 'label'
+  | 'mrState'
+  | 'buildStatus'
+  | 'staleDays'
+  | 'linked'
+  | 'groupBy'
+  | 'clear';
+export type TicketFilterFacet = 'project' | 'action' | 'priority' | 'label' | 'mrState' | 'buildStatus';
 
 export interface TicketFilter {
   query?: string;
@@ -13,6 +26,16 @@ export interface TicketFilter {
   buildStatus?: string;
   staleDays?: number;
   linked?: 'linked' | 'unlinked';
+}
+
+export interface TicketFilterPromptField {
+  label: string;
+  id: TicketFilterPromptFieldId;
+}
+
+export interface TicketFilterChoiceItem {
+  label: string;
+  description?: string;
 }
 
 interface TicketViewState {
@@ -105,6 +128,70 @@ export function cleanTicketFilter(filter: TicketFilter): TicketFilter {
   if (filter.staleDays && filter.staleDays > 0) { cleaned.staleDays = filter.staleDays; }
   if (filter.linked) { cleaned.linked = filter.linked; }
   return cleaned;
+}
+
+export function ticketFilterPromptFields(reviewOnly: boolean): TicketFilterPromptField[] {
+  return [
+    { label: 'Search text', id: 'query' },
+    { label: 'Project', id: 'project' },
+    { label: 'Action status', id: 'action' },
+    { label: 'Priority', id: 'priority' },
+    { label: 'Label', id: 'label' },
+    { label: 'MR state', id: 'mrState' },
+    { label: 'Build status', id: 'buildStatus' },
+    { label: 'Stale age', id: 'staleDays' },
+    ...(reviewOnly ? [] : [
+      { label: 'Link state', id: 'linked' as const },
+      { label: 'Group by', id: 'groupBy' as const },
+    ]),
+    { label: 'Clear filters', id: 'clear' },
+  ];
+}
+
+export function ticketFilterChoiceItems(values: string[], current?: string): TicketFilterChoiceItem[] {
+  return ['Any', ...values].map(value => {
+    const item: TicketFilterChoiceItem = { label: value };
+    if (value === current) { item.description = 'current'; }
+    return item;
+  });
+}
+
+export function ticketFilterFacetValues(
+  facet: TicketFilterFacet,
+  tickets: Ticket[],
+  projects?: Record<string, unknown>,
+): string[] {
+  if (facet === 'project') {
+    return uniqueTicketFilterValues([
+      ...Object.keys(projects || {}),
+      ...tickets.flatMap(ticket => ticket.projects || []),
+    ]);
+  }
+  if (facet === 'action') {
+    return uniqueTicketFilterValues(tickets.map(ticket => ticket.next_action));
+  }
+  if (facet === 'priority') {
+    return uniqueTicketFilterValues(tickets.map(ticket => ticket.priority));
+  }
+  if (facet === 'label') {
+    return uniqueTicketFilterValues(tickets.flatMap(ticket => ticket.labels || []));
+  }
+  if (facet === 'mrState') {
+    return uniqueTicketFilterValues([
+      'none',
+      'opened',
+      'merged',
+      'closed',
+      'pending_review',
+      'approved',
+      'changes_requested',
+      ...tickets.flatMap(ticket => ticket.mr ? [ticket.mr.state, ticket.mr.review_status] : []),
+    ]);
+  }
+  return uniqueTicketFilterValues([
+    'none',
+    ...tickets.map(ticket => ticket.build?.status || ''),
+  ]);
 }
 
 export function uniqueTicketFilterValues(values: string[]): string[] {

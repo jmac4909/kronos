@@ -64,7 +64,9 @@ import {
   cleanTicketFilter,
   describeTicketFilter,
   setTicketFilterString,
-  uniqueTicketFilterValues,
+  ticketFilterChoiceItems,
+  ticketFilterFacetValues,
+  ticketFilterPromptFields,
 } from './services/ticketFilters';
 import { buildRunResumePrompt, readRunLogTail } from './services/runRecovery';
 import { addTicketEvidenceCheck, addTicketEvidenceNote, addTicketRunCompletionEvidence, linkMergeRequestToTicket, previewLinkMergeRequestToTicket, reconcileTerminalMergeRequestState, recordTicketEnvironmentResult, replaceTicketAcceptanceCriteria, updateTicketAcceptanceCriteria, updateTicketMergeRequestStatus } from './services/ticketMutations';
@@ -899,18 +901,7 @@ async function promptTicketView(
   currentGroupBy: TicketGroupBy,
   reviewOnly: boolean,
 ): Promise<{ filter: TicketFilter; groupBy: TicketGroupBy } | null> {
-  const fields = [
-    { label: 'Search text', id: 'query' },
-    { label: 'Project', id: 'project' },
-    { label: 'Action status', id: 'action' },
-    { label: 'Priority', id: 'priority' },
-    { label: 'Label', id: 'label' },
-    { label: 'MR state', id: 'mrState' },
-    { label: 'Build status', id: 'buildStatus' },
-    { label: 'Stale age', id: 'staleDays' },
-    ...(reviewOnly ? [] : [{ label: 'Link state', id: 'linked' }, { label: 'Group by', id: 'groupBy' }]),
-    { label: 'Clear filters', id: 'clear' },
-  ];
+  const fields = ticketFilterPromptFields(reviewOnly);
   const picked = await vscode.window.showQuickPick(fields, { placeHolder: `Current: ${describeTicketFilter(currentFilter)}` });
   if (!picked) { return null; }
   if (picked.id === 'clear') {
@@ -924,32 +915,17 @@ async function promptTicketView(
   if (picked.id === 'query') {
     setTicketFilterString(filter, 'query', await promptOptionalText('Ticket search text', filter.query));
   } else if (picked.id === 'project') {
-    setTicketFilterString(filter, 'project', await promptOptionalChoice('Project', filter.project, uniqueTicketFilterValues([
-      ...Object.keys(state.state?.projects || {}),
-      ...tickets.flatMap(ticket => ticket.projects || []),
-    ])));
+    setTicketFilterString(filter, 'project', await promptOptionalChoice('Project', filter.project, ticketFilterFacetValues('project', tickets, state.state?.projects)));
   } else if (picked.id === 'action') {
-    setTicketFilterString(filter, 'action', await promptOptionalChoice('Action status', filter.action, uniqueTicketFilterValues(tickets.map(ticket => ticket.next_action))));
+    setTicketFilterString(filter, 'action', await promptOptionalChoice('Action status', filter.action, ticketFilterFacetValues('action', tickets, state.state?.projects)));
   } else if (picked.id === 'priority') {
-    setTicketFilterString(filter, 'priority', await promptOptionalChoice('Priority', filter.priority, uniqueTicketFilterValues(tickets.map(ticket => ticket.priority))));
+    setTicketFilterString(filter, 'priority', await promptOptionalChoice('Priority', filter.priority, ticketFilterFacetValues('priority', tickets, state.state?.projects)));
   } else if (picked.id === 'label') {
-    setTicketFilterString(filter, 'label', await promptOptionalChoice('Label', filter.label, uniqueTicketFilterValues(tickets.flatMap(ticket => ticket.labels || []))));
+    setTicketFilterString(filter, 'label', await promptOptionalChoice('Label', filter.label, ticketFilterFacetValues('label', tickets, state.state?.projects)));
   } else if (picked.id === 'mrState') {
-    setTicketFilterString(filter, 'mrState', await promptOptionalChoice('MR state', filter.mrState, uniqueTicketFilterValues([
-      'none',
-      'opened',
-      'merged',
-      'closed',
-      'pending_review',
-      'approved',
-      'changes_requested',
-      ...tickets.flatMap(ticket => ticket.mr ? [ticket.mr.state, ticket.mr.review_status] : []),
-    ])));
+    setTicketFilterString(filter, 'mrState', await promptOptionalChoice('MR state', filter.mrState, ticketFilterFacetValues('mrState', tickets, state.state?.projects)));
   } else if (picked.id === 'buildStatus') {
-    setTicketFilterString(filter, 'buildStatus', await promptOptionalChoice('Build status', filter.buildStatus, uniqueTicketFilterValues([
-      'none',
-      ...tickets.map(ticket => ticket.build?.status || ''),
-    ])));
+    setTicketFilterString(filter, 'buildStatus', await promptOptionalChoice('Build status', filter.buildStatus, ticketFilterFacetValues('buildStatus', tickets, state.state?.projects)));
   } else if (picked.id === 'staleDays') {
     const value = await vscode.window.showInputBox({
       prompt: 'Minimum age in days; leave blank for any age',
@@ -978,11 +954,7 @@ async function promptOptionalText(placeHolder: string, current?: string): Promis
 }
 
 async function promptOptionalChoice(placeHolder: string, current: string | undefined, values: string[]): Promise<string | undefined> {
-  const options: vscode.QuickPickItem[] = ['Any', ...values].map(value => {
-    const option: vscode.QuickPickItem = { label: value };
-    if (value === current) { option.description = 'current'; }
-    return option;
-  });
+  const options: vscode.QuickPickItem[] = ticketFilterChoiceItems(values, current);
   const picked = await vscode.window.showQuickPick(options, { placeHolder });
   if (!picked) { return current; }
   return picked.label === 'Any' ? undefined : picked.label;
