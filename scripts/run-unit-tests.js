@@ -4687,7 +4687,7 @@ test('dispatcher parses every assistant content block for progress metrics', asy
       'checking the live run state before patching',
       'Queued the next validation step.',
     ]);
-    assert.equal(dispatcher.parseStreamEvent(payload).label, 'Reading src/app.ts');
+    assert.equal(events[0].label, 'Reading src/app.ts');
     const progress = runProgress.runProgressSummary({ events });
     assert.equal(progress.toolCalls, 2);
     assert.equal(progress.toolErrors, 0);
@@ -4830,7 +4830,6 @@ test('dispatcher records branch and permission metadata for persisted runs', () 
     'function recordField(record: Record<string, unknown>, key: string): Record<string, unknown>',
     'function arrayField(record: Record<string, unknown>, key: string): unknown[]',
     'function streamString(value: unknown): string',
-    'export function parseStreamEvent(event: unknown): ProgressEvent | null',
     'export function parseStreamEvents(event: unknown): ProgressEvent[]',
     'function parseAssistantContentBlock(rawBlock: unknown, now: Date): ProgressEvent | null',
     'const payload = isRecord(event) ? event : {}',
@@ -4977,6 +4976,11 @@ test('dispatcher records branch and permission metadata for persisted runs', () 
     source.includes('parseStreamEvent(event: any)'),
     false,
     'dispatcher should parse stream events from unknown payloads',
+  );
+  assert.equal(
+    source.includes('export function parseStreamEvent('),
+    false,
+    'dispatcher should not keep an unused single-event parser wrapper',
   );
   assert.equal(
     source.includes('value is Record<string, any>'),

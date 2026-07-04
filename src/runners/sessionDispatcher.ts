@@ -1247,10 +1247,6 @@ function streamString(value: unknown): string {
   return typeof value === 'string' || typeof value === 'number' ? String(value) : '';
 }
 
-export function parseStreamEvent(event: unknown): ProgressEvent | null {
-  return parseStreamEvents(event)[0] || null;
-}
-
 export function parseStreamEvents(event: unknown): ProgressEvent[] {
   const now = new Date();
   const payload = isRecord(event) ? event : {};
