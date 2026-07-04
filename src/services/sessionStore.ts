@@ -5,6 +5,7 @@ import { KRONOS_DIR } from './stateStore';
 import { unknownErrorMessage } from './errorUtils';
 import { readJsonFile } from './jsonFiles';
 import { isRecord } from './records';
+import { toValidDate } from './dateValues';
 
 const SESSIONS_DIR = path.join(KRONOS_DIR, 'sessions');
 const STATS_FILE = path.join(KRONOS_DIR, 'stats.json');
@@ -270,10 +271,8 @@ function listSessionJsonFiles(order: 'asc' | 'desc'): string[] {
 }
 
 function compareSessionsNewestFirst(a: SavedSession, b: SavedSession): number {
-  const aTime = Date.parse(a.startedAt);
-  const bTime = Date.parse(b.startedAt);
-  const aSafe = Number.isFinite(aTime) ? aTime : 0;
-  const bSafe = Number.isFinite(bTime) ? bTime : 0;
+  const aSafe = toValidDate(a.startedAt)?.getTime() || 0;
+  const bSafe = toValidDate(b.startedAt)?.getTime() || 0;
   return bSafe - aSafe || b.id.localeCompare(a.id);
 }
 

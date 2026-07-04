@@ -1,4 +1,5 @@
 import type { MergeRequest } from '../state/types';
+import { toValidDate } from './dateValues';
 import type { MergeRequestStatusUpdate } from './ticketMutations';
 
 interface MergeRequestStatusNotification {
@@ -116,8 +117,7 @@ function finiteCommentCount(value: unknown): number | undefined {
 }
 
 function laterIsoTimestamp(next: string | undefined, previous: string): boolean {
-  if (!next) { return false; }
-  const nextTime = Date.parse(next);
-  const previousTime = Date.parse(previous);
-  return Number.isFinite(nextTime) && Number.isFinite(previousTime) && nextTime > previousTime;
+  const nextTime = toValidDate(next)?.getTime();
+  const previousTime = toValidDate(previous)?.getTime();
+  return nextTime !== undefined && previousTime !== undefined && nextTime > previousTime;
 }

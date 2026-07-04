@@ -105,6 +105,8 @@ const trendMetrics = readSource('src/services/trendMetrics.ts');
 const dashboardWorklist = readSource('src/services/dashboardWorklist.ts');
 const ticketTimeline = readSource('src/services/ticketTimeline.ts');
 const integrationAdapters = readSource('src/services/integrationAdapters.ts');
+const mergeRequestComments = readSource('src/services/mergeRequestComments.ts');
+const mergeRequestNotifications = readSource('src/services/mergeRequestNotifications.ts');
 const postRunReadiness = readSource('src/services/postRunReadiness.ts');
 const ticketFilters = readSource('src/services/ticketFilters.ts');
 const reviewWork = readSource('src/services/reviewWork.ts');
@@ -2271,6 +2273,9 @@ for (const [name, source, marker] of [
   ['src/services/agingReportView.ts', agingReportView, "import { toValidDate } from './dateValues'"],
   ['src/services/collisionDetector.ts', collisionDetector, "import { toValidDate } from './dateValues'"],
   ['src/services/dashboardWorklist.ts', dashboardWorklist, "import { toValidDate } from './dateValues'"],
+  ['src/services/integrationAdapters.ts', integrationAdapters, "import { toValidDate } from './dateValues'"],
+  ['src/services/mergeRequestComments.ts', mergeRequestComments, "import { toValidDate } from './dateValues'"],
+  ['src/services/mergeRequestNotifications.ts', mergeRequestNotifications, "import { toValidDate } from './dateValues'"],
   ['src/services/queuePlanner.ts', queuePlanner, "import { toValidDate } from './dateValues'"],
   ['src/services/relativeTime.ts', relativeTime, "import { toValidDate } from './dateValues'"],
   ['src/services/recoveryCenter.ts', recoveryCenter, "import { toValidDate } from './dateValues'"],
@@ -2278,6 +2283,7 @@ for (const [name, source, marker] of [
   ['src/services/runProgress.ts', runProgress, "import { toValidDate } from './dateValues'"],
   ['src/services/runStatus.ts', runStatus, "import { toValidDate } from './dateValues'"],
   ['src/services/runStore.ts', runStore, "import { toValidDate } from './dateValues'"],
+  ['src/services/sessionStore.ts', sessionStore, "import { toValidDate } from './dateValues'"],
   ['src/services/ticketFilters.ts', ticketFilters, "import { toValidDate } from './dateValues'"],
   ['src/services/ticketTimeline.ts', ticketTimeline, "import { toValidDate } from './dateValues'"],
   ['src/services/trendMetrics.ts', trendMetrics, "import { toValidDate } from './dateValues'"],

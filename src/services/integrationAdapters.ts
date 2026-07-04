@@ -5,6 +5,7 @@ import { unknownErrorMessage } from './errorUtils';
 import { parseJsonWithLabel } from './jsonFiles';
 import { isRecord } from './records';
 import { sortMergeRequestCommentsByCreated } from './mergeRequestComments';
+import { toValidDate } from './dateValues';
 
 interface KronosScriptRunner {
   runScript(args: string[], options?: ScriptRunOptions): Promise<string>;
@@ -411,9 +412,8 @@ function latestIsoTimestamp(...values: Array<string | undefined>): string | unde
   let latest: string | undefined;
   let latestTime = Number.NEGATIVE_INFINITY;
   for (const value of values) {
-    if (!value) { continue; }
-    const time = Date.parse(value);
-    if (!Number.isFinite(time)) { continue; }
+    const time = toValidDate(value)?.getTime();
+    if (time === undefined) { continue; }
     if (time >= latestTime) {
       latest = value;
       latestTime = time;
