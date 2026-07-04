@@ -1,7 +1,7 @@
 import { formatRunProgress } from './runProgress';
 import { activeRunSummary, isFreshActiveRun, runStatus } from './runStatus';
 
-export interface ActiveRunDisplaySummary {
+interface ActiveRunDisplaySummary {
   count: number;
   text: string;
   tooltip: string;

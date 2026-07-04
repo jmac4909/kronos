@@ -1,6 +1,6 @@
 import { isActiveRunStatus } from './runStatus';
 
-export interface RunProgressSummary {
+interface RunProgressSummary {
   toolCalls: number;
   toolErrors: number;
   filesRead: number;

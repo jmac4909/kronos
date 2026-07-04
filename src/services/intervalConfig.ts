@@ -1,4 +1,4 @@
-export type PositiveNumberInputResult =
+type PositiveNumberInputResult =
   | { kind: 'empty' }
   | { kind: 'invalid'; raw: string }
   | { kind: 'value'; value: number };
