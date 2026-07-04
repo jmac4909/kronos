@@ -4044,6 +4044,25 @@ test('run store returns normalized active views and repairs only on explicit req
     status: 'running',
     logPath: path.join(runStore.RUNS_DIR, 'run-terminal-log.log'),
   };
+  const logCompletedDeadProcess = {
+    id: 'run-terminal-log-dead-process',
+    project: 'app',
+    skill: 'implement',
+    ticket: 'K-LOG-DEAD',
+    status: 'running',
+    processPid: 99999999,
+    startedAt: '2026-07-02T10:15:00.000Z',
+    logPath: path.join(runStore.RUNS_DIR, 'run-terminal-log-dead-process.log'),
+  };
+  const logCompletedStaleProcessless = {
+    id: 'run-terminal-log-stale-processless',
+    project: 'app',
+    skill: 'implement',
+    ticket: 'K-LOG-STALE',
+    status: 'running',
+    startedAt: '2000-01-01T00:00:00.000Z',
+    logPath: path.join(runStore.RUNS_DIR, 'run-terminal-log-stale-processless.log'),
+  };
   const externalLog = path.join(makeTempDir('kronos-external-run-log-'), 'external.log');
   const unsafeLog = {
     id: 'run-terminal-external-log',
@@ -4060,8 +4079,12 @@ test('run store returns normalized active views and repairs only on explicit req
   runStore.writeRunRecord(deadProcess);
   runStore.writeRunRecord(staleProcessless);
   runStore.writeRunRecord(logCompleted);
+  runStore.writeRunRecord(logCompletedDeadProcess);
+  runStore.writeRunRecord(logCompletedStaleProcessless);
   runStore.writeRunRecord(unsafeLog);
   runStore.appendRunLog(logCompleted.logPath, 'tool output: Session exited with code 1\n{"type":"assistant","message":{"content":[]}}\n{"type":"result","subtype":"success","result":"done"}\n');
+  runStore.appendRunLog(logCompletedDeadProcess.logPath, '{"type":"result","subtype":"success","result":"done"}\n');
+  runStore.appendRunLog(logCompletedStaleProcessless.logPath, '{"type":"result","subtype":"success","result":"done"}\n');
   fs.writeFileSync(externalLog, '{"type":"result","subtype":"success","result":"done"}\n');
 
   assert.equal(JSON.parse(fs.readFileSync(runStore.runRecordPath(completed.id), 'utf8')).status, 'running');
@@ -4071,6 +4094,8 @@ test('run store returns normalized active views and repairs only on explicit req
   const deadProcessRead = runStore.readRunRecord(deadProcess.id);
   const staleProcesslessRead = runStore.readRunRecord(staleProcessless.id);
   const logCompletedRead = runStore.readRunRecord(logCompleted.id);
+  const logCompletedDeadProcessRead = runStore.readRunRecord(logCompletedDeadProcess.id);
+  const logCompletedStaleProcesslessRead = runStore.readRunRecord(logCompletedStaleProcessless.id);
   const unsafeLogRead = runStore.readRunRecord(unsafeLog.id);
   assert.equal(completedRead.status, 'completed');
   assert.equal(failedRead.status, 'failed');
@@ -4088,6 +4113,12 @@ test('run store returns normalized active views and repairs only on explicit req
   assert.ok(staleProcesslessRead.events.some(event => event.label === 'Stale active run needs human review'));
   assert.equal(logCompletedRead.status, 'completed');
   assert.ok(logCompletedRead.endedAt);
+  assert.equal(logCompletedDeadProcessRead.status, 'completed');
+  assert.equal(logCompletedDeadProcessRead.failureReason, undefined);
+  assert.equal(Array.isArray(logCompletedDeadProcessRead.events) && logCompletedDeadProcessRead.events.some(event => event.label === 'Run process no longer exists'), false);
+  assert.equal(logCompletedStaleProcesslessRead.status, 'completed');
+  assert.equal(logCompletedStaleProcesslessRead.failureReason, undefined);
+  assert.equal(Array.isArray(logCompletedStaleProcesslessRead.events) && logCompletedStaleProcesslessRead.events.some(event => event.label === 'Stale active run needs human review'), false);
   assert.equal(unsafeLogRead.status, 'running');
   assert.equal(JSON.parse(fs.readFileSync(runStore.runRecordPath(completed.id), 'utf8')).status, 'running');
   assert.equal(JSON.parse(fs.readFileSync(runStore.runRecordPath(failed.id), 'utf8')).status, 'preflight');
@@ -4095,10 +4126,12 @@ test('run store returns normalized active views and repairs only on explicit req
   assert.equal(JSON.parse(fs.readFileSync(runStore.runRecordPath(deadProcess.id), 'utf8')).status, 'running');
   assert.equal(JSON.parse(fs.readFileSync(runStore.runRecordPath(staleProcessless.id), 'utf8')).status, 'running');
   assert.equal(JSON.parse(fs.readFileSync(runStore.runRecordPath(logCompleted.id), 'utf8')).status, 'running');
+  assert.equal(JSON.parse(fs.readFileSync(runStore.runRecordPath(logCompletedDeadProcess.id), 'utf8')).status, 'running');
+  assert.equal(JSON.parse(fs.readFileSync(runStore.runRecordPath(logCompletedStaleProcessless.id), 'utf8')).status, 'running');
   assert.equal(JSON.parse(fs.readFileSync(runStore.runRecordPath(unsafeLog.id), 'utf8')).status, 'running');
 
   const repaired = runStore.repairActiveRunRecords();
-  assert.equal(repaired.repaired, 6);
+  assert.equal(repaired.repaired, 8);
   assert.equal(repaired.runs.some(run => run.id === unsafeLog.id && run.status === 'running'), true);
   assert.equal(JSON.parse(fs.readFileSync(runStore.runRecordPath(completed.id), 'utf8')).status, 'completed');
   assert.equal(JSON.parse(fs.readFileSync(runStore.runRecordPath(failed.id), 'utf8')).status, 'failed');
@@ -4106,6 +4139,12 @@ test('run store returns normalized active views and repairs only on explicit req
   assert.equal(JSON.parse(fs.readFileSync(runStore.runRecordPath(deadProcess.id), 'utf8')).status, 'failed');
   assert.equal(JSON.parse(fs.readFileSync(runStore.runRecordPath(staleProcessless.id), 'utf8')).status, 'needs_human');
   assert.equal(JSON.parse(fs.readFileSync(runStore.runRecordPath(logCompleted.id), 'utf8')).status, 'completed');
+  const persistedLogCompletedDeadProcess = JSON.parse(fs.readFileSync(runStore.runRecordPath(logCompletedDeadProcess.id), 'utf8'));
+  const persistedLogCompletedStaleProcessless = JSON.parse(fs.readFileSync(runStore.runRecordPath(logCompletedStaleProcessless.id), 'utf8'));
+  assert.equal(persistedLogCompletedDeadProcess.status, 'completed');
+  assert.equal(persistedLogCompletedDeadProcess.failureReason, undefined);
+  assert.equal(persistedLogCompletedStaleProcessless.status, 'completed');
+  assert.equal(persistedLogCompletedStaleProcessless.failureReason, undefined);
   assert.equal(JSON.parse(fs.readFileSync(runStore.runRecordPath(unsafeLog.id), 'utf8')).status, 'running');
 
   const archived = runStore.archiveRun(failed.id);

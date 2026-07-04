@@ -240,15 +240,15 @@ function readRunFileResult(filePath: string, scope: RunStoreIssue['scope']): { r
 function normalizeTerminalActiveRun(run: RunRecord): RunRecord {
   const status = typeof run.status === 'string' ? run.status : '';
   const effectiveStatus = effectiveRunStatus(run);
-  const deadProcessStatus = effectiveStatus === status && isActiveRunStatus(status)
+  const activeStatusNeedsRepair = effectiveStatus === status && isActiveRunStatus(status);
+  const logStatus = activeStatusNeedsRepair ? terminalRunOutcomeFromActiveLog(run) : undefined;
+  const deadProcessStatus = activeStatusNeedsRepair && !logStatus
     ? terminalRunOutcomeFromDeadProcess(run, status)
     : undefined;
-  const staleProcesslessStatus = effectiveStatus === status && isActiveRunStatus(status)
+  const staleProcesslessStatus = activeStatusNeedsRepair && !logStatus
     ? terminalRunOutcomeFromStaleProcesslessRun(run, status)
     : undefined;
-  const repairedStatus = effectiveStatus === status && isActiveRunStatus(status)
-    ? terminalRunOutcomeFromActiveLog(run) || deadProcessStatus || staleProcesslessStatus
-    : undefined;
+  const repairedStatus = logStatus || deadProcessStatus || staleProcesslessStatus;
   const nextStatus = repairedStatus || effectiveStatus;
   if (!status || !isActiveRunStatus(status) || !nextStatus || nextStatus === status) {
     return run;
