@@ -165,6 +165,7 @@ const promptManager = require('../out/services/promptManager.js');
 const promptWorkspaceModel = require('../out/services/promptWorkspaceModel.js');
 const stateStore = require('../out/services/stateStore.js');
 const queuePlanner = require('../out/services/queuePlanner.js');
+const queueDispatchPlan = require('../out/services/queueDispatchPlan.js');
 const actionCatalog = require('../out/services/actionCatalog.js');
 const actionSemantics = require('../out/services/actionSemantics.js');
 const buildStatus = require('../out/services/buildStatus.js');
@@ -1843,6 +1844,54 @@ test('queue planner converts a recommendation into a runnable queue item', () =>
   assert.equal(item.id, 'planned-K-3');
   assert.equal(item.project_path, '/repo/app');
   assert.equal(item.priority_score, 105);
+});
+
+test('queue dispatch plan resolves registered, missing, and direct project targets', () => {
+  const resolveProjectPath = project => ({ app: '/repo/app', web: '/repo/web' })[project];
+
+  assert.deepEqual(queueDispatchPlan.buildQueueDispatchPlan({
+    projects: ['app', 'missing', 'web'],
+    resolveProjectPath,
+  }), {
+    projects: ['app', 'missing', 'web'],
+    directProjectPath: undefined,
+    projectLabel: 'app, missing, web',
+    dispatchTargets: [
+      { projectName: 'app', projectPath: '/repo/app' },
+      { projectName: 'web', projectPath: '/repo/web' },
+    ],
+    missingProjects: ['missing'],
+  });
+
+  assert.deepEqual(queueDispatchPlan.buildQueueDispatchPlan({
+    projects: [],
+    projectPath: '/repo/direct',
+    resolveProjectPath,
+  }), {
+    projects: [],
+    directProjectPath: '/repo/direct',
+    projectLabel: '/repo/direct',
+    dispatchTargets: [{ projectPath: '/repo/direct' }],
+    missingProjects: [],
+  });
+
+  assert.deepEqual(queueDispatchPlan.buildQueueDispatchPlan({
+    projects: [],
+    projectPath: '/repo/app',
+    pathProject: 'app',
+    resolveProjectPath,
+  }).dispatchTargets, [{ projectName: 'app', projectPath: '/repo/app' }]);
+
+  const source = readSourceFixture('src', 'services', 'queueDispatchPlan.ts');
+  for (const marker of [
+    'export interface QueueDispatchTarget',
+    'export interface QueueDispatchPlan',
+    'export function buildQueueDispatchPlan',
+    'directProjectPath',
+    'missingProjects',
+  ]) {
+    assert.ok(source.includes(marker), marker);
+  }
 });
 
 test('next action context explains command, risk, preflight, and blockers', () => {
@@ -9983,6 +10032,7 @@ test('extension run recovery helpers use typed run records', () => {
 test('extension dispatch command handlers normalize tree payloads before use', () => {
   const source = readSourceFixture('src', 'extension.ts');
   for (const marker of [
+    "import { buildQueueDispatchPlan } from './services/queueDispatchPlan'",
     "vscode.commands.registerCommand('kronos.refreshProject', async (item: unknown)",
     "vscode.commands.registerCommand('kronos.implement', async (item: unknown)",
     "vscode.commands.registerCommand('kronos.deployMonitor', async (item: unknown)",
@@ -9994,9 +10044,9 @@ test('extension dispatch command handlers normalize tree payloads before use', (
     "vscode.commands.registerCommand('kronos.verifyFix', async (item: unknown)",
     "vscode.commands.registerCommand('kronos.startNext', async () =>",
     'const selection = selectNextQueueItem();',
-    'const dispatchTargets: Array<{ projectName: string; projectPath: string }> = []',
-    "vscode.window.showWarningMessage(`Cannot start ${item.ticket || item.id || 'queue item'}; linked project ${missingProjects.join(', ')} is not registered.`)",
-    'projectNameOverride: target.projectName',
+    'const dispatchPlan = buildQueueDispatchPlan({',
+    "vscode.window.showWarningMessage(`Cannot start ${item.ticket || item.id || 'queue item'}; linked project ${dispatchPlan.missingProjects.join(', ')} is not registered.`)",
+    'dispatchOptions.projectNameOverride = target.projectName',
     "vscode.commands.registerCommand('kronos.completeTask', async (item: unknown)",
     "vscode.commands.registerCommand('kronos.openProject', async (item: unknown)",
     "vscode.commands.registerCommand('kronos.openInClaude', async (item: unknown)",
@@ -10017,7 +10067,7 @@ test('extension dispatch command handlers normalize tree payloads before use', (
   const startNextEnd = source.indexOf("    vscode.commands.registerCommand('kronos.nextBestAction'", startNextStart);
   assert.ok(startNextStart >= 0 && startNextEnd > startNextStart, 'start next command handler should be present');
   const startNextSource = source.slice(startNextStart, startNextEnd);
-  const startNextTargetResolutionIdx = startNextSource.indexOf('const dispatchTargets: Array<{ projectName: string; projectPath: string }> = []');
+  const startNextTargetResolutionIdx = startNextSource.indexOf('const dispatchPlan = buildQueueDispatchPlan({');
   const startNextCollisionIdx = startNextSource.indexOf('const canStart = await confirmDispatchCollisions');
   assert.ok(
     startNextTargetResolutionIdx >= 0 && startNextCollisionIdx > startNextTargetResolutionIdx,
@@ -10106,14 +10156,15 @@ test('extension queue command handlers normalize payloads before use', () => {
     "vscode.commands.registerCommand('kronos.verifyLocal', async (treeItem: unknown)",
     'const ticketKey = resolveTicketKey(treeItem);',
     'const queueData = resolveQueueCommandItem(treeItemOrData);',
-    'const pathProject = getProjectNameForPath(state, queueData.projectPath);',
-    'const directProjectPath = projs.length === 0 ? queueData.projectPath : undefined;',
-    'const dispatchTargets: Array<{ projectName?: string; projectPath: string }> = []',
-    'const missingProjects: string[] = []',
-    "vscode.window.showWarningMessage(`Cannot start ${target}; linked project ${missingProjects.join(', ')} is not registered.`)",
+    'pathProject: getProjectNameForPath(state, queueData.projectPath),',
+    'const projs = dispatchPlan.projects;',
+    'const projLabel = dispatchPlan.projectLabel;',
+    'if (projs.length === 0 && !dispatchPlan.directProjectPath)',
+    'dispatchPlan.dispatchTargets',
+    'dispatchPlan.missingProjects',
+    "vscode.window.showWarningMessage(`Cannot start ${target}; linked project ${dispatchPlan.missingProjects.join(', ')} is not registered.`)",
     "vscode.window.showWarningMessage(`Cannot start ${queueData.ticket || 'queue item'}; no project path was found.`)",
     'if (target.projectName) { dispatchOptions.projectNameOverride = target.projectName; }',
-    'dispatchTargets.push({ projectPath: directProjectPath });',
     'const idx = resolveQueueIndex(treeItem);',
     'await startClaudeDispatch(target.projectPath, skill, queueData.ticket || undefined,',
     'resolveQueueCommandItem,',
@@ -10124,7 +10175,7 @@ test('extension queue command handlers normalize payloads before use', () => {
   ]) {
     assert.ok(source.includes(marker), marker);
   }
-  const projectResolutionIdx = queueCommandSource.indexOf('const dispatchTargets: Array<{ projectName?: string; projectPath: string }> = []');
+  const projectResolutionIdx = queueCommandSource.indexOf('const dispatchPlan = buildQueueDispatchPlan({');
   const collisionIdx = queueCommandSource.indexOf('const canStart = await confirmDispatchCollisions');
   const contextPromptIdx = queueCommandSource.indexOf('const extra = await vscode.window.showInputBox');
   assert.ok(projectResolutionIdx >= 0 && collisionIdx > projectResolutionIdx, 'queue dispatch should resolve project targets before collision checks');

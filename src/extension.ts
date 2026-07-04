@@ -15,6 +15,7 @@ import { dispatchClaudeSession, openInClaude, ensureAuth, cleanupStaleWorktrees,
 import { PromptHistoryDiff, createPromptHistorySnapshot, diffPromptHistorySnapshots, latestPromptHistorySnapshot, listPromptHistorySnapshots, listPromptTemplates, repairRequiredPromptTemplates, runPromptSmokeTests } from './services/promptManager';
 import { KRONOS_DIR, STATE_AUDIT_FILE, listBackups, listStateAuditEvents, restoreBackup } from './services/stateStore';
 import { PlannedAction, buildBacklogTriageReport, overnightCandidatePlans, planByProject, planByRelease, planForMinutes, planNextActions as buildNextActionPlan, planToQueueItem as buildQueueItemFromPlan } from './services/queuePlanner';
+import { buildQueueDispatchPlan } from './services/queueDispatchPlan';
 import { actionDisplayLabel as actionToLabel } from './services/actionCatalog';
 import { isCodeAction, isProofSensitiveAction } from './services/actionSemantics';
 import { toValidDate } from './services/dateValues';
@@ -1463,21 +1464,15 @@ export function activate(context: vscode.ExtensionContext) {
           vscode.window.showInformationMessage(`Starting: [${item.action}] ${projLabel}/${item.ticket || 'refresh'}`);
           for (const p of projs) { await state.refresh(p); }
         } else if (projs.length > 0) {
-          const dispatchTargets: Array<{ projectName: string; projectPath: string }> = [];
-          const missingProjects: string[] = [];
-          for (const projName of projs) {
-            const projectPath = getProjectPath(state, projName);
-            if (projectPath) {
-              dispatchTargets.push({ projectName: projName, projectPath });
-            } else {
-              missingProjects.push(projName);
-            }
-          }
-          if (missingProjects.length > 0) {
-            vscode.window.showWarningMessage(`Cannot start ${item.ticket || item.id || 'queue item'}; linked project ${missingProjects.join(', ')} is not registered.`);
+          const dispatchPlan = buildQueueDispatchPlan({
+            projects: projs,
+            resolveProjectPath: projectName => getProjectPath(state, projectName),
+          });
+          if (dispatchPlan.missingProjects.length > 0) {
+            vscode.window.showWarningMessage(`Cannot start ${item.ticket || item.id || 'queue item'}; linked project ${dispatchPlan.missingProjects.join(', ')} is not registered.`);
             return;
           }
-          if (dispatchTargets.length === 0) {
+          if (dispatchPlan.dispatchTargets.length === 0) {
             vscode.window.showWarningMessage(`Cannot start ${item.ticket || 'queue item'}; no project path was found.`);
             return;
           }
@@ -1489,15 +1484,15 @@ export function activate(context: vscode.ExtensionContext) {
           }, context.extensionUri);
           if (!canStart) { return; }
           vscode.window.showInformationMessage(`Starting: [${item.action}] ${projLabel}/${item.ticket || 'refresh'}`);
-          for (const target of dispatchTargets) {
+          for (const target of dispatchPlan.dispatchTargets) {
             const skill = skillForAction(item.action);
             const codeAction = isCodeAction(item.action);
             const ticketKey = item.ticket || undefined;
             const dispatchOptions: DispatchOptions = {
               onComplete: refreshAfterDispatch(state, target.projectName, ticketKey),
               parallel: codeAction,
-              projectNameOverride: target.projectName,
             };
+            if (target.projectName) { dispatchOptions.projectNameOverride = target.projectName; }
             if (codeAction) { dispatchOptions.appendSystemPrompt = getImplementPrompt(state); }
             await startClaudeDispatch(target.projectPath, skill, ticketKey, dispatchOptions);
           }
@@ -2250,10 +2245,14 @@ export function activate(context: vscode.ExtensionContext) {
       const queueData = resolveQueueCommandItem(treeItemOrData);
       if (!queueData) { return; }
 
-      const pathProject = getProjectNameForPath(state, queueData.projectPath);
-      const projs = queueData.projects.length > 0 ? queueData.projects : pathProject ? [pathProject] : [];
-      const directProjectPath = projs.length === 0 ? queueData.projectPath : undefined;
-      const projLabel = projs.join(', ') || directProjectPath || 'unlinked';
+      const dispatchPlan = buildQueueDispatchPlan({
+        projects: queueData.projects,
+        projectPath: queueData.projectPath,
+        pathProject: getProjectNameForPath(state, queueData.projectPath),
+        resolveProjectPath: projectName => getProjectPath(state, projectName),
+      });
+      const projs = dispatchPlan.projects;
+      const projLabel = dispatchPlan.projectLabel;
 
       if (queueData.action === 'refresh') {
         if (projs.length === 0) {
@@ -2268,30 +2267,17 @@ export function activate(context: vscode.ExtensionContext) {
       const skill = skillForAction(queueData.action);
       const codeAction = isCodeAction(queueData.action);
 
-      if (projs.length === 0 && !directProjectPath) {
+      if (projs.length === 0 && !dispatchPlan.directProjectPath) {
         vscode.window.showWarningMessage(`${queueData.ticket} is not linked to any project.`);
         return;
       }
 
-      const dispatchTargets: Array<{ projectName?: string; projectPath: string }> = [];
-      const missingProjects: string[] = [];
-      for (const projName of projs) {
-        const projectPath = getProjectPath(state, projName);
-        if (projectPath) {
-          dispatchTargets.push({ projectName: projName, projectPath });
-        } else {
-          missingProjects.push(projName);
-        }
-      }
-      if (dispatchTargets.length === 0 && directProjectPath) {
-        dispatchTargets.push({ projectPath: directProjectPath });
-      }
-      if (missingProjects.length > 0) {
+      if (dispatchPlan.missingProjects.length > 0) {
         const target = queueData.ticket || queueData.id || 'queue item';
-        vscode.window.showWarningMessage(`Cannot start ${target}; linked project ${missingProjects.join(', ')} is not registered.`);
+        vscode.window.showWarningMessage(`Cannot start ${target}; linked project ${dispatchPlan.missingProjects.join(', ')} is not registered.`);
         return;
       }
-      if (dispatchTargets.length === 0) {
+      if (dispatchPlan.dispatchTargets.length === 0) {
         vscode.window.showWarningMessage(`Cannot start ${queueData.ticket || 'queue item'}; no project path was found.`);
         return;
       }
@@ -2313,7 +2299,7 @@ export function activate(context: vscode.ExtensionContext) {
       if (extra === undefined) { return; }
       const extraPrompt = extra ? `\n\nADDITIONAL CONTEXT FROM USER: ${extra}` : '';
 
-      for (const target of dispatchTargets) {
+      for (const target of dispatchPlan.dispatchTargets) {
         const otherProjects = target.projectName ? projs.filter(p => p !== target.projectName) : [];
         const projectLabel = target.projectName || target.projectPath;
         const scopeHint = otherProjects.length > 0 ? `\nYou are working in ${projectLabel}. Focus ONLY on this codebase. Other projects: ${otherProjects.join(', ')}.` : '';

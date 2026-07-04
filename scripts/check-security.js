@@ -93,6 +93,7 @@ const runAttention = readSource('src/services/runAttention.ts');
 const runCenterSort = readSource('src/services/runCenterSort.ts');
 const attentionBadge = readSource('src/services/attentionBadge.ts');
 const queuePlanner = readSource('src/services/queuePlanner.ts');
+const queueDispatchPlan = readSource('src/services/queueDispatchPlan.ts');
 const actionCatalog = readSource('src/services/actionCatalog.ts');
 const actionSemantics = readSource('src/services/actionSemantics.ts');
 const severityRank = readSource('src/services/severityRank.ts');
@@ -1381,9 +1382,10 @@ for (const marker of [
   "vscode.commands.registerCommand('kronos.verifyFix', async (item: unknown)",
   "vscode.commands.registerCommand('kronos.startNext', async () =>",
   'const selection = selectNextQueueItem();',
-  'const dispatchTargets: Array<{ projectName: string; projectPath: string }> = []',
-  "vscode.window.showWarningMessage(`Cannot start ${item.ticket || item.id || 'queue item'}; linked project ${missingProjects.join(', ')} is not registered.`)",
-  'projectNameOverride: target.projectName',
+  "import { buildQueueDispatchPlan } from './services/queueDispatchPlan'",
+  'const dispatchPlan = buildQueueDispatchPlan({',
+  "vscode.window.showWarningMessage(`Cannot start ${item.ticket || item.id || 'queue item'}; linked project ${dispatchPlan.missingProjects.join(', ')} is not registered.`)",
+  'dispatchOptions.projectNameOverride = target.projectName',
   "vscode.commands.registerCommand('kronos.completeTask', async (item: unknown)",
   "vscode.commands.registerCommand('kronos.openProject', async (item: unknown)",
   "vscode.commands.registerCommand('kronos.openInClaude', async (item: unknown)",
@@ -1417,9 +1419,13 @@ for (const marker of [
   "vscode.commands.registerCommand('kronos.linkTicket', async (ticketKeyOrItem: unknown)",
   "vscode.commands.registerCommand('kronos.unlinkTicket', async (item: unknown)",
   'const queueData = resolveQueueCommandItem(treeItemOrData);',
-  'const dispatchTargets: Array<{ projectName?: string; projectPath: string }> = []',
-  'const missingProjects: string[] = []',
-  "vscode.window.showWarningMessage(`Cannot start ${target}; linked project ${missingProjects.join(', ')} is not registered.`)",
+  'pathProject: getProjectNameForPath(state, queueData.projectPath),',
+  'const projs = dispatchPlan.projects;',
+  'const projLabel = dispatchPlan.projectLabel;',
+  'if (projs.length === 0 && !dispatchPlan.directProjectPath)',
+  'dispatchPlan.dispatchTargets',
+  'dispatchPlan.missingProjects',
+  "vscode.window.showWarningMessage(`Cannot start ${target}; linked project ${dispatchPlan.missingProjects.join(', ')} is not registered.`)",
   "vscode.window.showWarningMessage(`Cannot start ${queueData.ticket || 'queue item'}; no project path was found.`)",
   'if (target.projectName) { dispatchOptions.projectNameOverride = target.projectName; }',
   'const idx = resolveQueueIndex(treeItem);',
@@ -1463,6 +1469,17 @@ for (const marker of [
 ]) {
   if (!commandPayloads.includes(marker)) {
     fail(`Missing command payload helper marker: ${marker}`);
+  }
+}
+for (const marker of [
+  'export interface QueueDispatchTarget',
+  'export interface QueueDispatchPlan',
+  'export function buildQueueDispatchPlan',
+  'directProjectPath',
+  'missingProjects',
+]) {
+  if (!queueDispatchPlan.includes(marker)) {
+    fail(`Missing queue dispatch plan marker: ${marker}`);
   }
 }
 
