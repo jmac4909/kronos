@@ -5090,7 +5090,7 @@ test('run recovery builds resume prompts from saved prompt and log tail', () => 
 });
 
 test('run attention summarizes actionable failure reasons', () => {
-  const buildFailure = runAttention.summarizeRunAttention({
+  const buildFailure = runAttention.runAttentionDetail({
     id: 'run-9',
     status: 'needs_human',
     skill: 'fix_build',
@@ -5099,10 +5099,8 @@ test('run attention summarizes actionable failure reasons', () => {
       { label: 'Process exited with code 1', detail: 'Jenkins build failed' },
     ],
   });
-  assert.equal(buildFailure.failureKind, 'build');
-  assert.equal(buildFailure.source, 'eventDetail');
-  assert.match(buildFailure.detail, /Jenkins build failed/);
-  assert.notEqual(buildFailure.detail, 'Run status is needs human');
+  assert.match(buildFailure, /Jenkins build failed/);
+  assert.notEqual(buildFailure, 'Run status is needs human');
 
   const genericBuildFailure = runAttention.runAttentionDetail({
     status: 'failed',

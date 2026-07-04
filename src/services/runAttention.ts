@@ -1,6 +1,6 @@
 import { classifyRunFailure, type RunFailureKind } from './postRunReadiness';
 
-export type RunAttentionSource =
+type RunAttentionSource =
   | 'failureReason'
   | 'readiness'
   | 'error'
@@ -9,7 +9,7 @@ export type RunAttentionSource =
   | 'failureKind'
   | 'status';
 
-export interface RunAttentionSummary {
+interface RunAttentionSummary {
   status: string;
   failureKind: RunFailureKind;
   label: string;
@@ -37,7 +37,7 @@ export function isAttentionRunStatus(status: unknown): boolean {
   return typeof status === 'string' && ATTENTION_RUN_STATUSES.has(status);
 }
 
-export function summarizeRunAttention(run: unknown): RunAttentionSummary {
+function summarizeRunAttention(run: unknown): RunAttentionSummary {
   const record = runRecord(run);
   const status = runText(record['status']) || 'unknown';
   const failureKind = coerceRunFailureKind(runText(record['failureKind'])) || classifyRunFailure(run);
