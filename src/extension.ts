@@ -5300,6 +5300,9 @@ async function pickTicketProjectNameForDispatch(
   if (explicitProject) { return explicitProject; }
   const projects = ticketProjectNamesForCommand(state, item, ticketKey);
   if (projects.length === 0) {
+    if (!ticketKey) {
+      return pickProjectName(state, placeHolder);
+    }
     const target = ticketKey ? `${ticketKey} is` : 'Selected ticket is';
     vscode.window.showWarningMessage(`${target} not linked to any project.`);
     return undefined;

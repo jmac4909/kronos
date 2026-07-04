@@ -1234,6 +1234,7 @@ for (const marker of [
   'const projectName = resolveProjectName(state, item) || await pickProjectName(state,',
   'async function pickProjectName(state: KronosState, placeHolder: string): Promise<string | undefined>',
   'async function pickTicketProjectNameForDispatch(',
+  'if (!ticketKey) {\n      return pickProjectName(state, placeHolder);\n    }',
   'function ticketProjectNamesForCommand(state: KronosState, item: unknown, ticketKey: string | undefined): string[]',
   'function uniqueProjectNames(value: unknown): string[]',
   "vscode.commands.registerCommand('kronos.implement', async (item: unknown)",

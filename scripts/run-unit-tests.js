@@ -8951,6 +8951,7 @@ test('extension dispatch command handlers normalize tree payloads before use', (
     'const projectName = resolveProjectName(state, item) || await pickProjectName(state,',
     'async function pickProjectName(state: KronosState, placeHolder: string): Promise<string | undefined>',
     'async function pickTicketProjectNameForDispatch(',
+    'if (!ticketKey) {\n      return pickProjectName(state, placeHolder);\n    }',
     'function ticketProjectNamesForCommand(state: KronosState, item: unknown, ticketKey: string | undefined): string[]',
     'function uniqueProjectNames(value: unknown): string[]',
     'const ticketKey = resolveTicketKey(item);',
