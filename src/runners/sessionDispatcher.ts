@@ -328,7 +328,11 @@ export function openSavedSession(session: SavedSession): void {
     vscode.ViewColumn.One,
     { enableScripts: false }
   );
-  panel.webview.html = withWebviewCsp(buildProgressHtml(session.project, session.skill, session.ticket, events));
+  renderProgressPanel(panel, session.project, session.skill, session.ticket, events);
+}
+
+function renderProgressPanel(panel: vscode.WebviewPanel, project: string, skill: string, ticket: string, events: ProgressEvent[], run?: KronosRun): void {
+  panel.webview.html = withWebviewCsp(buildProgressHtml(project, skill, ticket, events, run));
 }
 
 function createRun(project: string, projectPath: string, skill: string, ticket: string, model: string, prompt: string, cwd: string, promptMetadata?: PromptRunMetadata): KronosRun {
@@ -476,7 +480,7 @@ async function runCompletionCallback(
   try {
     await opts.onComplete(code, run);
     writeRun(run);
-    context.panel.webview.html = withWebviewCsp(buildProgressHtml(context.projectName, context.skill, context.ticket, context.events, run));
+    renderProgressPanel(context.panel, context.projectName, context.skill, context.ticket, context.events, run);
     saveSession(context.projectName, context.skill, context.ticket, context.events);
   } catch (e: unknown) {
     const detail = unknownErrorMessage(e, 'Post-run completion callback failed.');
@@ -492,7 +496,7 @@ async function runCompletionCallback(
       failureReason,
       failureKind: classifyRunFailure({ ...run, status: nextStatus, failureReason, events: run.events }),
     }, 'Failed to persist post-run callback failure status.');
-    context.panel.webview.html = withWebviewCsp(buildProgressHtml(context.projectName, context.skill, context.ticket, context.events, run));
+    renderProgressPanel(context.panel, context.projectName, context.skill, context.ticket, context.events, run);
     saveSession(context.projectName, context.skill, context.ticket, context.events);
     vscode.window.showWarningMessage(`Kronos post-run completion failed for ${run.id}. See Run Center.`);
   }
@@ -720,7 +724,7 @@ export async function dispatchClaudeSession(
   );
 
   const events: ProgressEvent[] = [{ type: 'text', label: 'Setting up session...', detail: '', timestamp: new Date() }];
-  panel.webview.html = withWebviewCsp(buildProgressHtml(projectName, skill, ticket || '', events));
+  renderProgressPanel(panel, projectName, skill, ticket || '', events);
 
   const config = vscode.workspace.getConfiguration('kronos');
   let model: string;
@@ -771,7 +775,7 @@ export async function dispatchClaudeSession(
     const event = { type: 'error' as const, label: 'Could not fully resolve project base branch config', detail: baseRef.warning, timestamp: new Date() };
     events.push(event);
     addRunEvent(run, event);
-    panel.webview.html = withWebviewCsp(buildProgressHtml(projectName, skill, ticket || '', events, run));
+    renderProgressPanel(panel, projectName, skill, ticket || '', events, run);
   }
 
   const authed = await ensureAuth();
@@ -787,7 +791,7 @@ export async function dispatchClaudeSession(
       failureReason: message,
       failureKind: classifyRunFailure({ ...run, status: 'failed', failureReason: message, events: run.events }),
     });
-    panel.webview.html = withWebviewCsp(buildProgressHtml(projectName, skill, ticket || '', events, run));
+    renderProgressPanel(panel, projectName, skill, ticket || '', events, run);
     saveSession(projectName, skill, ticket || '', events);
     await runCompletionCallback(opts, 1, run, { projectName, skill, ticket: ticket || '', events, panel });
     return launchResult(run, false);
@@ -806,7 +810,7 @@ export async function dispatchClaudeSession(
       const event = { type: 'text' as const, label: `Creating worktree on ${targetBranch}...`, detail: '', timestamp: new Date() };
       events.push(event);
       addRunEvent(run, event);
-      panel.webview.html = withWebviewCsp(buildProgressHtml(projectName, skill, ticket || '', events, run));
+      renderProgressPanel(panel, projectName, skill, ticket || '', events, run);
       // For feature branches: use local name so worktree gets a real branch checkout
       // For base branches: use origin/ ref so the main checkout is not mutated
       const isFeatureBranch = Boolean(opts.worktreeBranch);
@@ -904,7 +908,7 @@ export async function dispatchClaudeSession(
         managedWorktreePath = null;
       }
       updateRun(run, failurePatch);
-      panel.webview.html = withWebviewCsp(buildProgressHtml(projectName, skill, ticket || '', events, run));
+      renderProgressPanel(panel, projectName, skill, ticket || '', events, run);
       saveSession(projectName, skill, ticket || '', events);
       await runCompletionCallback(opts, 1, run, { projectName, skill, ticket: ticket || '', events, panel });
       return launchResult(run, false);
@@ -914,7 +918,7 @@ export async function dispatchClaudeSession(
   const launchEvent = { type: 'text' as const, label: 'Launching Claude session...', detail: '', timestamp: new Date() };
   events.push(launchEvent);
   addRunEvent(run, launchEvent);
-  panel.webview.html = withWebviewCsp(buildProgressHtml(projectName, skill, ticket || '', events, run));
+  renderProgressPanel(panel, projectName, skill, ticket || '', events, run);
 
   const addDirs = ['~/.claude'];
   if (opts.extraDirs) { addDirs.push(...opts.extraDirs); }
@@ -926,7 +930,7 @@ export async function dispatchClaudeSession(
     const event = { type: 'error' as const, label: 'Could not read project extra_dirs', detail: configuredExtraDirs.warning, timestamp: new Date() };
     events.push(event);
     addRunEvent(run, event);
-    panel.webview.html = withWebviewCsp(buildProgressHtml(projectName, skill, ticket || '', events, run));
+    renderProgressPanel(panel, projectName, skill, ticket || '', events, run);
   }
   const claudeArgs = buildClaudeArgs(prompt, model, opts.appendSystemPrompt, addDirs);
   const permissions = buildRunPermissionMetadata(addDirs);
@@ -969,7 +973,7 @@ export async function dispatchClaudeSession(
       failureReason,
       failureKind: classifyRunFailure({ ...run, status: 'failed', failureReason, events: run.events }),
     });
-    panel.webview.html = withWebviewCsp(buildProgressHtml(projectName, skill, ticket || '', events, run));
+    renderProgressPanel(panel, projectName, skill, ticket || '', events, run);
     saveSession(projectName, skill, ticket || '', events);
     await runCompletionCallback(opts, 1, run, { projectName, skill, ticket: ticket || '', events, panel });
     return launchResult(run, false);
@@ -1010,7 +1014,7 @@ export async function dispatchClaudeSession(
         failureKind: classifyRunFailure({ ...run, status: 'failed', failureReason, events: run.events }),
       });
     }
-    panel.webview.html = withWebviewCsp(buildProgressHtml(projectName, skill, ticket || '', events, run));
+    renderProgressPanel(panel, projectName, skill, ticket || '', events, run);
     saveSession(projectName, skill, ticket || '', events);
     await runCompletionCallback(opts, 1, run, { projectName, skill, ticket: ticket || '', events, panel });
     return launchResult(run, false);
@@ -1030,7 +1034,7 @@ export async function dispatchClaudeSession(
       failureReason: message,
       failureKind: classifyRunFailure({ ...run, status: 'failed', failureReason: message }),
     });
-    panel.webview.html = withWebviewCsp(buildProgressHtml(projectName, skill, ticket || '', events, run));
+    renderProgressPanel(panel, projectName, skill, ticket || '', events, run);
     saveSession(projectName, skill, ticket || '', events);
     await runCompletionCallback(opts, 1, run, { projectName, skill, ticket: ticket || '', events, panel });
   });
@@ -1048,7 +1052,7 @@ export async function dispatchClaudeSession(
         for (const pe of parseStreamEvents(JSON.parse(trimmed))) {
           events.push(pe);
           addRunEvent(run, pe);
-          panel.webview.html = withWebviewCsp(buildProgressHtml(projectName, skill, ticket || '', events, run));
+          renderProgressPanel(panel, projectName, skill, ticket || '', events, run);
         }
       } catch (e: unknown) {
         const detail = unknownErrorMessage(e, 'Failed to parse Claude stream event.');
@@ -1060,7 +1064,7 @@ export async function dispatchClaudeSession(
         };
         events.push(event);
         addRunEvent(run, event);
-        panel.webview.html = withWebviewCsp(buildProgressHtml(projectName, skill, ticket || '', events, run));
+        renderProgressPanel(panel, projectName, skill, ticket || '', events, run);
       }
     }
   });
@@ -1072,7 +1076,7 @@ export async function dispatchClaudeSession(
       const event = { type: 'error' as const, label: text.substring(0, 200), detail: '', timestamp: new Date() };
       events.push(event);
       addRunEvent(run, event);
-      panel.webview.html = withWebviewCsp(buildProgressHtml(projectName, skill, ticket || '', events, run));
+      renderProgressPanel(panel, projectName, skill, ticket || '', events, run);
     }
   });
 
@@ -1115,7 +1119,7 @@ export async function dispatchClaudeSession(
     };
     if (finalFailureReason !== undefined) { finalPatch.failureReason = finalFailureReason; }
     updateRunBestEffort(run, finalPatch, 'Failed to persist terminal run status.');
-    panel.webview.html = withWebviewCsp(buildProgressHtml(projectName, skill, ticket || '', events, run));
+    renderProgressPanel(panel, projectName, skill, ticket || '', events, run);
     saveSession(projectName, skill, ticket || '', events);
 
     if (managedWorktreePath) {
@@ -1136,7 +1140,7 @@ export async function dispatchClaudeSession(
           failureReason: cleanupFailureReason,
           failureKind: classifyRunFailure({ ...run, status: cleanupStatus, failureReason: cleanupFailureReason }),
         }, 'Failed to persist worktree cleanup blocked status.');
-        panel.webview.html = withWebviewCsp(buildProgressHtml(projectName, skill, ticket || '', events, run));
+        renderProgressPanel(panel, projectName, skill, ticket || '', events, run);
       }
     }
 

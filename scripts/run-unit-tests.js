@@ -4906,7 +4906,7 @@ test('dispatcher close handler preserves operator terminal run statuses', () => 
 
 test('dispatcher completion callback refreshes progress panel after successful mutations', () => {
   const source = readSourceFixture('src', 'runners', 'sessionDispatcher.ts');
-  const successCallbackBlock = /try \{\n    await opts\.onComplete\(code, run\);\n    writeRun\(run\);\n    context\.panel\.webview\.html = withWebviewCsp\(buildProgressHtml\(context\.projectName, context\.skill, context\.ticket, context\.events, run\)\);\n    saveSession\(context\.projectName, context\.skill, context\.ticket, context\.events\);\n  \} catch/.exec(source);
+  const successCallbackBlock = /try \{\n    await opts\.onComplete\(code, run\);\n    writeRun\(run\);\n    renderProgressPanel\(context\.panel, context\.projectName, context\.skill, context\.ticket, context\.events, run\);\n    saveSession\(context\.projectName, context\.skill, context\.ticket, context\.events\);\n  \} catch/.exec(source);
   assert.ok(successCallbackBlock, 'successful post-run callback should persist and re-render mutated run state');
 });
 
@@ -5219,12 +5219,13 @@ test('dispatcher records branch and permission metadata for persisted runs', () 
     "label: 'Post-run completion callback failed'",
     "addRunEventBestEffort(run, event, 'Failed to persist post-run callback failure event.')",
     "'Failed to persist post-run callback failure status.'",
-    'buildProgressHtml(context.projectName, context.skill, context.ticket, context.events, run)',
+    'function renderProgressPanel(panel: vscode.WebviewPanel, project: string, skill: string, ticket: string, events: ProgressEvent[], run?: KronosRun): void',
+    'renderProgressPanel(context.panel, context.projectName, context.skill, context.ticket, context.events, run)',
     "function buildProgressHtml(project: string, skill: string, ticket: string, events: ProgressEvent[], run?: KronosRun)",
     'const attentionDetail = run && isAttentionRunStatus(run.status) ? runAttentionDetail(run) :',
     'attention-banner',
     '<strong>Needs Attention</strong>',
-    "buildProgressHtml(projectName, skill, ticket || '', events, run)",
+    "renderProgressPanel(panel, projectName, skill, ticket || '', events, run)",
     "label: 'Managed worktree pull skipped'",
     'updateRun(run, { warnings: [...(run.warnings || []), warning] })',
     'await runCompletionCallback(opts, code ?? 1, run',
