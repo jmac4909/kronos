@@ -25,6 +25,7 @@ import { isAttentionRunStatus, runAttentionDetail } from '../services/runAttenti
 import { sortedRunCenterRuns } from '../services/runCenterSort';
 import { readJsonFile } from '../services/jsonFiles';
 import { isRecord } from '../services/records';
+import { toValidDate } from '../services/dateValues';
 import type { KronosState as KronosStateFile } from '../state/types';
 export { getAggregateStats, listSavedSessions, listSessionStoreIssues } from '../services/sessionStore';
 
@@ -1200,17 +1201,6 @@ type ClaudeProcess = ReturnType<typeof spawn> & {
   stdout: NodeJS.ReadableStream;
   stderr: NodeJS.ReadableStream;
 };
-
-function toValidDate(value: unknown): Date | null {
-  if (value instanceof Date) {
-    return Number.isFinite(value.getTime()) ? value : null;
-  }
-  if (typeof value === 'string' || typeof value === 'number') {
-    const parsed = new Date(value);
-    return Number.isFinite(parsed.getTime()) ? parsed : null;
-  }
-  return null;
-}
 
 function progressDateOr(value: unknown, fallback: Date): Date {
   return toValidDate(value) || fallback;

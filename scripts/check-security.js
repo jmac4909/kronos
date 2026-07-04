@@ -89,6 +89,7 @@ const actionCatalog = readSource('src/services/actionCatalog.ts');
 const actionSemantics = readSource('src/services/actionSemantics.ts');
 const severityRank = readSource('src/services/severityRank.ts');
 const records = readSource('src/services/records.ts');
+const dateValues = readSource('src/services/dateValues.ts');
 const queuePlannerPanelView = sources['src/services/queuePlannerPanelView.ts'];
 const operationsReportPanelView = sources['src/services/operationsReportPanelView.ts'];
 const agentQualityScore = readSource('src/services/agentQualityScore.ts');
@@ -1856,7 +1857,7 @@ for (const marker of [
   'writeSavedSession(session)',
   'export { getAggregateStats, listSavedSessions, listSessionStoreIssues }',
   'const id = safeSessionId',
-  'function toValidDate',
+  "import { toValidDate } from '../services/dateValues'",
   'function progressDateOr',
   'function progressEventTimeLabel',
   'function progressDateTimeLabel',
@@ -2159,6 +2160,30 @@ for (const marker of [
     fail(`Missing record helper marker: ${marker}`);
   }
 }
+
+for (const marker of [
+  'export function toValidDate(value: unknown): Date | null',
+  'value instanceof Date',
+  "typeof value === 'string' || typeof value === 'number'",
+  'Number.isFinite',
+]) {
+  if (!dateValues.includes(marker)) {
+    fail(`Missing date value helper marker: ${marker}`);
+  }
+}
+
+for (const [name, source, marker] of [
+  ['src/services/runCenterSort.ts', runCenterSort, "import { toValidDate } from './dateValues'"],
+  ['src/runners/sessionDispatcher.ts', dispatcher, "import { toValidDate } from '../services/dateValues'"],
+]) {
+  if (!source.includes(marker)) {
+    fail(`${name} must import the shared date value helper.`);
+  }
+  if (source.includes('function toValidDate')) {
+    fail(`${name} must not carry a local toValidDate helper.`);
+  }
+}
+
 for (const [name, source, marker] of [
   ['src/services/changedFiles.ts', changedFiles, "import { isRecord } from './records'"],
   ['src/services/integrationAdapters.ts', integrationAdapters, "import { isRecord } from './records'"],

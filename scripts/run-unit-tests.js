@@ -159,6 +159,7 @@ const actionCatalog = require('../out/services/actionCatalog.js');
 const actionSemantics = require('../out/services/actionSemantics.js');
 const severityRank = require('../out/services/severityRank.js');
 const records = require('../out/services/records.js');
+const dateValues = require('../out/services/dateValues.js');
 const evidenceStore = require('../out/services/evidenceStore.js');
 const evidenceHandoff = require('../out/services/evidenceHandoff.js');
 const evidencePublisher = require('../out/services/evidencePublisher.js');
@@ -3426,6 +3427,23 @@ test('record guard helper centralizes unknown object narrowing', () => {
   assert.equal(dispatcherSource.includes('function isRecord'), false);
 });
 
+test('date value helper centralizes valid date coercion', () => {
+  const date = new Date('2026-07-02T10:00:00.000Z');
+  assert.equal(dateValues.toValidDate(date), date);
+  assert.equal(dateValues.toValidDate(date.toISOString())?.toISOString(), date.toISOString());
+  assert.equal(dateValues.toValidDate(date.getTime())?.toISOString(), date.toISOString());
+  assert.equal(dateValues.toValidDate('not-a-date'), null);
+  assert.equal(dateValues.toValidDate({}), null);
+
+  const runCenterSortSource = readSourceFixture('src', 'services', 'runCenterSort.ts');
+  assert.ok(runCenterSortSource.includes("import { toValidDate } from './dateValues'"));
+  assert.equal(runCenterSortSource.includes('function toValidDate'), false);
+
+  const dispatcherSource = readSourceFixture('src', 'runners', 'sessionDispatcher.ts');
+  assert.ok(dispatcherSource.includes("import { toValidDate } from '../services/dateValues'"));
+  assert.equal(dispatcherSource.includes('function toValidDate'), false);
+});
+
 test('review work service centralizes open review merge request semantics', () => {
   const tickets = {
     'K-OPEN': ticket({
@@ -5013,7 +5031,7 @@ test('dispatcher records branch and permission metadata for persisted runs', () 
     'pollIntervalMs?: number',
     'const pollTimer = setInterval',
     'panel.onDidDispose(() => clearInterval(pollTimer))',
-    'function toValidDate',
+    "import { toValidDate } from '../services/dateValues'",
     'function progressDateOr',
     'function progressEventTimeLabel',
     'function progressDateTimeLabel',

@@ -1,4 +1,5 @@
 import { isFreshActiveRun } from './runStatus';
+import { toValidDate } from './dateValues';
 
 interface RunCenterSortableRun {
   id?: unknown;
@@ -39,11 +40,4 @@ function runCenterSortTimestamp(run: RunCenterSortableRun): number {
 
 function stringOrDefault(value: unknown, fallback: string): string {
   return typeof value === 'string' || typeof value === 'number' ? String(value) : fallback;
-}
-
-function toValidDate(value: unknown): Date | null {
-  const date = value instanceof Date || typeof value === 'string' || typeof value === 'number'
-    ? new Date(value)
-    : null;
-  return date && Number.isFinite(date.getTime()) ? date : null;
 }
