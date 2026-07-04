@@ -46,6 +46,7 @@ import { removeProject as removeProjectFromState, setProjectConfigValue, setProj
 import { DoctorCheck, runDoctorChecks as collectDoctorChecks, runDoctorReachabilityChecks as collectDoctorReachabilityChecks } from './services/doctorChecks';
 import { checkClaudeModelAccess } from './services/cliProbes';
 import { buildCombinedVerificationPlan, buildCombinedVerificationPromptVars } from './services/combinedVerification';
+import { buildDiscoveryQuickPickEntries, discoveryCandidateNeedsJiraKey, type DiscoveryQuickPickEntry } from './services/discoveryQuickPick';
 import { buildSonarReport, type SonarIssue } from './services/sonarReportView';
 import { buildAgingReportHtml } from './services/agingReportView';
 import { buildTicketHtml } from './services/ticketPanelView';
@@ -741,6 +742,19 @@ async function pickRun(runs: KronosRun[], placeHolder: string, emptyMessage: str
   return picked?.run;
 }
 
+function discoveryQuickPickItem(entry: DiscoveryQuickPickEntry): vscode.QuickPickItem {
+  if (entry.separator) {
+    return { label: entry.label, kind: vscode.QuickPickItemKind.Separator };
+  }
+  const item: vscode.QuickPickItem = {
+    label: entry.label,
+  };
+  if (entry.description !== undefined) { item.description = entry.description; }
+  if (entry.detail !== undefined) { item.detail = entry.detail; }
+  if (entry.picked !== undefined) { item.picked = entry.picked; }
+  return item;
+}
+
 function kronosScriptableWebviewOptions(extensionUri?: vscode.Uri): vscode.WebviewOptions {
   return extensionUri
     ? { enableScripts: true, localResourceRoots: [vscode.Uri.joinPath(extensionUri, 'media')] }
@@ -1312,35 +1326,7 @@ export function activate(context: vscode.ExtensionContext) {
               return;
             }
 
-            // Show ALL repos, group by readiness
-            const withConfig = candidates.filter(c => c.has_project_json);
-            const withJiraGuess = candidates.filter(c => !c.has_project_json && c.suggested_jira_key);
-            const noConfig = candidates.filter(c => !c.has_project_json && !c.suggested_jira_key);
-
-            const items: vscode.QuickPickItem[] = [];
-
-            if (withConfig.length > 0) {
-              items.push({ label: '--- Ready to register (has config) ---', kind: vscode.QuickPickItemKind.Separator } as vscode.QuickPickItem);
-              for (const c of withConfig) {
-                items.push({ label: c.repo_name, description: '$(check) Has .claude/project.json', detail: c.path, picked: true });
-              }
-            }
-
-            if (withJiraGuess.length > 0) {
-              items.push({ label: `--- Jira key guessed (${withJiraGuess.length} repos) ---`, kind: vscode.QuickPickItemKind.Separator } as vscode.QuickPickItem);
-              for (const c of withJiraGuess) {
-                const parent = c.path.split(/[\\/]/).slice(-2, -1)[0] || '';
-                items.push({ label: c.repo_name, description: `Jira: ${c.suggested_jira_key} | ${parent}`, detail: c.path });
-              }
-            }
-
-            if (noConfig.length > 0) {
-              items.push({ label: `--- No config (${noConfig.length} repos) ---`, kind: vscode.QuickPickItemKind.Separator } as vscode.QuickPickItem);
-              for (const c of noConfig) {
-                const parent = c.path.split(/[\\/]/).slice(-2, -1)[0] || '';
-                items.push({ label: c.repo_name, description: `${parent} — needs Jira key`, detail: c.path });
-              }
-            }
+            const items = buildDiscoveryQuickPickEntries(candidates).map(discoveryQuickPickItem);
 
             const selected = await vscode.window.showQuickPick<vscode.QuickPickItem>(items, {
               canPickMany: true,
@@ -1356,8 +1342,7 @@ export function activate(context: vscode.ExtensionContext) {
                   await state.register(s.detail);
                   registered++;
 
-                  // For repos without config AND no guessed Jira key, ask for one
-                  if (candidate && !candidate.has_project_json && !candidate.suggested_jira_key) {
+                  if (discoveryCandidateNeedsJiraKey(candidate)) {
                     const jiraKey = await vscode.window.showInputBox({
                       prompt: `Jira project key for ${s.label}?`,
                       placeHolder: 'e.g., EDIPVR (leave empty to skip)',

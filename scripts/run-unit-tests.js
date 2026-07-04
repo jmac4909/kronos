@@ -233,6 +233,7 @@ const attentionBadge = require('../out/services/attentionBadge.js');
 const intervalConfig = require('../out/services/intervalConfig.js');
 const commandPayloads = require('../out/services/commandPayloads.js');
 const cliProbes = require('../out/services/cliProbes.js');
+const discoveryQuickPick = require('../out/services/discoveryQuickPick.js');
 const webviewMessages = require('../out/services/webviewMessages.js');
 const errorUtils = require('../out/services/errorUtils.js');
 const combinedVerification = require('../out/services/combinedVerification.js');
@@ -6983,6 +6984,42 @@ test('state script adapter owns typed kronos_state operations', () => {
     ['--morning-brief'],
   ]);
   assert.ok(calls.every(call => call.options.timeout === 1234));
+});
+
+test('discovery quick-pick groups candidates by registration readiness', () => {
+  const entries = discoveryQuickPick.buildDiscoveryQuickPickEntries([
+    { repo_name: 'configured', path: '/scan/configured', has_project_json: true },
+    { repo_name: 'guessed', path: '/scan/team/guessed', has_project_json: false, suggested_jira_key: 'TEAM' },
+    { repo_name: 'needs-key', path: 'C:\\scan\\team\\needs-key', has_project_json: false },
+  ]);
+
+  assert.deepEqual(entries.map(entry => entry.label), [
+    '--- Ready to register (has config) ---',
+    'configured',
+    '--- Jira key guessed (1 repos) ---',
+    'guessed',
+    '--- No config (1 repos) ---',
+    'needs-key',
+  ]);
+  assert.equal(entries[0].separator, true);
+  assert.equal(entries[1].description, '$(check) Has .claude/project.json');
+  assert.equal(entries[1].picked, true);
+  assert.equal(entries[3].description, 'Jira: TEAM | team');
+  assert.equal(entries[5].description, 'team — needs Jira key');
+  assert.equal(discoveryQuickPick.discoveryCandidateNeedsJiraKey({ repo_name: 'needs-key', path: '/scan/needs-key', has_project_json: false }), true);
+  assert.equal(discoveryQuickPick.discoveryCandidateNeedsJiraKey({ repo_name: 'ready', path: '/scan/ready', has_project_json: true }), false);
+
+  const source = readSourceFixture('src', 'services', 'discoveryQuickPick.ts');
+  for (const marker of [
+    'export function buildDiscoveryQuickPickEntries',
+    'export function discoveryCandidateNeedsJiraKey',
+    'function parentDirName(projectPath: string): string',
+    '--- Ready to register (has config) ---',
+    '--- Jira key guessed (${withJiraGuess.length} repos) ---',
+    '--- No config (${noConfig.length} repos) ---',
+  ]) {
+    assert.ok(source.includes(marker), marker);
+  }
 });
 
 test('state script adapter keeps raw JSON payloads unknown until normalized', () => {
