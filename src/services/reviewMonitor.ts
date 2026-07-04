@@ -2,8 +2,10 @@ import { describeMergeRequestStatusChange } from './mergeRequestNotifications';
 import type { MergeRequestStatusUpdate } from './ticketMutations';
 
 type ReviewMonitorDecisionKind = 'deploy_monitor' | 'blocked' | 'notify' | 'none';
+export type ReviewTerminalMergeRequestAction = 'deploy_monitor' | 'blocked';
+export type ReviewDeployMonitorResult = 'started' | 'handled' | 'blocked';
 
-interface ReviewMonitorDecision {
+export interface ReviewMonitorDecision {
   kind: ReviewMonitorDecisionKind;
   message?: string;
   severity?: 'info' | 'warning';
@@ -35,4 +37,23 @@ export function decideReviewMonitorAction(ticketKey: string, update: MergeReques
   };
   if (url) { decision.url = url; }
   return decision;
+}
+
+export function reviewTerminalMergeRequestActionKey(
+  ticketKey: string,
+  mrIid: number | string | undefined,
+  action: ReviewTerminalMergeRequestAction,
+): string {
+  const mrKey = normalizedMergeRequestKey(mrIid);
+  return `${ticketKey}:${mrKey}:${action}`;
+}
+
+export function reviewDeployMonitorActionHandled(result: ReviewDeployMonitorResult): boolean {
+  return result === 'started' || result === 'handled' || result === 'blocked';
+}
+
+function normalizedMergeRequestKey(value: number | string | undefined): string {
+  if (typeof value === 'number' && Number.isFinite(value)) { return String(Math.trunc(value)); }
+  if (typeof value === 'string' && value.trim()) { return value.trim(); }
+  return 'mr';
 }

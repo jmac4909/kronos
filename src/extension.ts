@@ -66,7 +66,7 @@ import { isFreshActiveRun } from './services/runStatus';
 import { isAttentionRunStatus, runAttentionDetail, runAttentionLine } from './services/runAttention';
 import { buildRunCompletionNotification } from './services/runCompletionNotification';
 import { openReviewTicketEntries, reviewBranchTickets as buildReviewBranchTickets } from './services/reviewWork';
-import { decideReviewMonitorAction } from './services/reviewMonitor';
+import { decideReviewMonitorAction, reviewDeployMonitorActionHandled, reviewTerminalMergeRequestActionKey, type ReviewDeployMonitorResult, type ReviewMonitorDecision, type ReviewTerminalMergeRequestAction } from './services/reviewMonitor';
 import { decideQueueRemoval } from './services/queueRemovalPolicy';
 import { deployMonitorAttentionIssue, deployMonitorHandoffCheckName, hasDeployMonitorHandoffIssue, hasHandledDeployMonitorRun, resolveDeployMonitorProject } from './services/deployMonitorHandoff';
 import { actionButton, actionRow, kronosActionPanelScript, kronosOperatorPanelCss, normalizeActionPanelMessage, operatorCommandRow, type ActionPanelMessage } from './services/operatorPanel';
@@ -101,8 +101,6 @@ const REVIEW_SEEN_KEYS_STORAGE_KEY = 'kronos.review.seenKeys.v1';
 const reviewPollFailureNotifications = new Map<string, number>();
 const reviewTerminalMergeRequestActions = new Set<string>();
 const OPTIONAL_SCRIPT_PANEL_WARNING = 'Kronos integration scripts are not installed. Run Kronos: Doctor for setup details.';
-
-type DeployMonitorStartResult = 'started' | 'handled' | 'blocked';
 
 function recordFromUnknown(value: unknown): Record<string, unknown> {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value)) ? value as Record<string, unknown> : {};
@@ -5547,7 +5545,7 @@ async function reconcileTerminalReviewMergeRequests(state: KronosState, shouldCo
   if (!shouldContinue()) { return; }
   for (const update of updates) {
     if (!shouldContinue()) { return; }
-    const actionKey = reviewTerminalMergeRequestActionKey(update.ticketKey, update.ticket, update.action);
+    const actionKey = reviewTerminalMergeRequestActionKey(update.ticketKey, update.ticket.mr?.iid, update.action);
     if (reviewTerminalMergeRequestActions.has(actionKey)) { continue; }
     if (update.action === 'deploy_monitor') {
       if (!shouldContinue()) { return; }
@@ -5561,17 +5559,8 @@ async function reconcileTerminalReviewMergeRequests(state: KronosState, shouldCo
   }
 }
 
-function rememberReviewTerminalMergeRequestAction(ticketKey: string, ticket: Ticket, action: 'deploy_monitor' | 'blocked'): void {
-  reviewTerminalMergeRequestActions.add(reviewTerminalMergeRequestActionKey(ticketKey, ticket, action));
-}
-
-function reviewTerminalMergeRequestActionKey(ticketKey: string, ticket: Ticket, action: 'deploy_monitor' | 'blocked'): string {
-  const mrIid = ticket.mr?.iid || 'mr';
-  return `${ticketKey}:${mrIid}:${action}`;
-}
-
-function reviewDeployMonitorActionHandled(result: DeployMonitorStartResult): boolean {
-  return result === 'started' || result === 'handled' || result === 'blocked';
+function rememberReviewTerminalMergeRequestAction(ticketKey: string, ticket: Ticket, action: ReviewTerminalMergeRequestAction): void {
+  reviewTerminalMergeRequestActions.add(reviewTerminalMergeRequestActionKey(ticketKey, ticket.mr?.iid, action));
 }
 
 function notifyReviewMergeRequestPollFailure(ticketKey: string, error: unknown): void {
@@ -5597,7 +5586,7 @@ function notifyReviewMergeRequestPollFailure(ticketKey: string, error: unknown):
   });
 }
 
-function notifyReviewMonitorDecision(decision: ReturnType<typeof decideReviewMonitorAction>): void {
+function notifyReviewMonitorDecision(decision: ReviewMonitorDecision): void {
   if (!decision.message) { return; }
   const actions = decision.url ? ['Open MR', 'Open Review'] : ['Open Review'];
   const selection = decision.severity === 'warning'
@@ -5626,7 +5615,7 @@ function reviewBranchTickets(state: KronosState) {
   return buildReviewBranchTickets(state.state?.tickets);
 }
 
-async function startDeployMonitorForMergedTicket(state: KronosState, ticketKey: string, ticket: Ticket): Promise<DeployMonitorStartResult> {
+async function startDeployMonitorForMergedTicket(state: KronosState, ticketKey: string, ticket: Ticket): Promise<ReviewDeployMonitorResult> {
   state.reloadAndNotify();
   const currentTicket = state.state?.tickets?.[ticketKey] || ticket;
   const project = resolveDeployMonitorProject(state.state, ticketKey, currentTicket);

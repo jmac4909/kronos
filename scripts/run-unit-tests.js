@@ -1384,6 +1384,13 @@ test('review monitor decisions route merged, closed, comment, and no-op MR polls
   assert.deepEqual(reviewMonitor.decideReviewMonitorAction('K-5', baseUpdate), {
     kind: 'none',
   });
+  assert.equal(reviewMonitor.reviewDeployMonitorActionHandled('started'), true);
+  assert.equal(reviewMonitor.reviewDeployMonitorActionHandled('handled'), true);
+  assert.equal(reviewMonitor.reviewDeployMonitorActionHandled('blocked'), true);
+  assert.equal(reviewMonitor.reviewDeployMonitorActionHandled('failed'), false);
+  assert.equal(reviewMonitor.reviewTerminalMergeRequestActionKey('K-1', 13, 'deploy_monitor'), 'K-1:13:deploy_monitor');
+  assert.equal(reviewMonitor.reviewTerminalMergeRequestActionKey('K-2', '  14  ', 'blocked'), 'K-2:14:blocked');
+  assert.equal(reviewMonitor.reviewTerminalMergeRequestActionKey('K-3', undefined, 'blocked'), 'K-3:mr:blocked');
 });
 
 test('deploy monitor handoff resolves projects and only suppresses handled runs', () => {
@@ -8203,7 +8210,7 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     "import { buildPromptHistoryHtml, buildPromptManagerHtml, buildPromptSmokeTestsHtml } from './services/promptPanelView'",
     "import { buildRecoveryHtml, buildStateAuditLogHtml } from './services/recoveryPanelView'",
     "import { buildHumanReviewInboxHtml } from './services/humanReviewPanelView'",
-    "import { decideReviewMonitorAction } from './services/reviewMonitor'",
+    "import { decideReviewMonitorAction, reviewDeployMonitorActionHandled, reviewTerminalMergeRequestActionKey, type ReviewDeployMonitorResult, type ReviewMonitorDecision, type ReviewTerminalMergeRequestAction } from './services/reviewMonitor'",
     "import { buildEvidenceGateHtml, buildEvidenceHandoffHtml, buildEvidencePublishHtml } from './services/evidencePanelView'",
     "import { buildBacklogTriageHtml, buildCollisionReportHtml, buildProjectBatchPlanHtml, buildQueuePlanModeHtml, buildQueuePlannerHtml, buildReleaseBatchPlanHtml } from './services/queuePlannerPanelView'",
     "import { isCodeAction, isProofSensitiveAction } from './services/actionSemantics'",
@@ -8396,10 +8403,9 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'function notifyReviewMergeRequestPollFailure(ticketKey: string, error: unknown): void',
     'MR status polling failed:',
     'function rememberReviewTerminalMergeRequestAction',
-    'function reviewTerminalMergeRequestActionKey',
-    "type DeployMonitorStartResult = 'started' | 'handled' | 'blocked'",
-    'function reviewDeployMonitorActionHandled(result: DeployMonitorStartResult): boolean',
-    'function notifyReviewMonitorDecision(decision: ReturnType<typeof decideReviewMonitorAction>): void',
+    'reviewTerminalMergeRequestActionKey(update.ticketKey, update.ticket.mr?.iid, update.action)',
+    'reviewTerminalMergeRequestActionKey(ticketKey, ticket.mr?.iid, action)',
+    'function notifyReviewMonitorDecision(decision: ReviewMonitorDecision): void',
     "const actions = decision.url ? ['Open MR', 'Open Review'] : ['Open Review']",
     "action === 'Open MR' && decision.url",
     'openExternalHttpUrl(decision.url)',
@@ -8412,7 +8418,7 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     "vscode.window.showInformationMessage('No open review MRs to verify.')",
     'startDeployMonitorForMergedTicket',
     'async function startClaudeDispatch',
-    '): Promise<DeployMonitorStartResult>',
+    '): Promise<ReviewDeployMonitorResult>',
     'type DispatchOptions',
     'const launch = await dispatchClaudeSession(projectPath, skill, ticket, onCompleteOrOpts, customPrompt)',
     'return launch.launched',
