@@ -9235,6 +9235,8 @@ test('extension Sonar commands normalize webview and issue payloads', () => {
     "vscode.commands.registerCommand('kronos.verifyDevelop', async (item: unknown)",
     "const branch = mode.value === 'new' ? (stringFromUnknown(commandArg['branch']) || baseBranch) : '';",
     "const sourceBranch = stringFromUnknown(commandArg['sourceBranch']) || '';",
+    "projectName = await pickProjectName(state, 'Run SonarQube scan for which project?');",
+    "projectName = await pickProjectName(state, 'Open SonarQube report for which project?');",
     "projectName = await pickProjectName(state, 'Fix SonarQube issues in which project?');",
     "projectName = await pickProjectName(state, 'Fix verification finding in which project?');",
     'let projectName = resolveProjectName(state, args);',

@@ -2799,7 +2799,10 @@ export function activate(context: vscode.ExtensionContext) {
     }),
 
     vscode.commands.registerCommand('kronos.sonarScan', async (item: unknown) => {
-      const projectName = resolveProjectName(state, item);
+      let projectName = resolveProjectName(state, item);
+      if (!projectName && state.state) {
+        projectName = await pickProjectName(state, 'Run SonarQube scan for which project?');
+      }
       if (!projectName || !state.state) {
         vscode.window.showWarningMessage('No project found for scan.');
         return;
@@ -2840,7 +2843,10 @@ export function activate(context: vscode.ExtensionContext) {
     }),
 
     vscode.commands.registerCommand('kronos.sonarReport', async (item: unknown) => {
-      const projectName = resolveProjectName(state, item);
+      let projectName = resolveProjectName(state, item);
+      if (!projectName && state.state) {
+        projectName = await pickProjectName(state, 'Open SonarQube report for which project?');
+      }
       if (!projectName || !state.state) {
         vscode.window.showWarningMessage('No project found.');
         return;
