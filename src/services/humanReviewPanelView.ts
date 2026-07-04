@@ -15,7 +15,7 @@ export function buildHumanReviewInboxHtml(inbox: HumanReviewInbox, options: Huma
     <td>${escapeHtml(item.kind)}</td>
     <td>${escapeHtml(item.title)}</td>
     <td class="detail">${escapeHtml(item.detail)}</td>
-    <td>${escapeHtml(item.ticketKey || item.runId || '')}</td>
+    <td>${escapeHtml(item.ticketKey || item.runId || item.worktreePath || '')}</td>
     <td class="action-cell">${humanReviewActionButtons(item, options.tickets || {})}</td>
   </tr>`).join('');
   const empty = inbox.items.length === 0 ? '<div class="empty">No human-review items found.</div>' : '';
@@ -68,7 +68,7 @@ function humanReviewActionButtons(item: HumanReviewItem, tickets: Record<string,
   } else if (item.kind === 'integration') {
     buttons.push(actionButton('doctor', 'Open Doctor', { primary: item.severity === 'critical' }));
   } else if (item.kind === 'worktree') {
-    buttons.push(actionButton('recoveryCenter', 'Review Worktree', { primary: item.severity === 'critical' }));
+    buttons.push(actionButton('recoveryCenter', 'Review Worktree', { itemId: item.id, primary: item.severity === 'critical' }));
     if (item.ticketKey) {
       buttons.push(actionButton('viewTicket', 'View Ticket', { ticket: item.ticketKey }));
     }

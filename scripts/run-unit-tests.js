@@ -5538,6 +5538,7 @@ test('recovery center prioritizes failed runs, unsafe worktrees, doctor failures
   assert.ok(inventory.items.some(item => item.id === 'run:failed-run' && item.detail === 'Jenkins build failed'));
   assert.ok(inventory.items.some(item => item.id === 'mr:MR-7:7' && item.action === 'linkMrToTicket' && item.ticketKey === 'MR-7'));
   assert.ok(inventory.items.some(item => item.id === 'run:stale-run' && item.title.includes('may be abandoned')));
+  assert.ok(inventory.items.some(item => item.id === 'worktree:/repo/app/.claude/worktrees/dirty' && item.detail.includes('/repo/app/.claude/worktrees/dirty')));
   assert.ok(inventory.items.some(item => item.kind === 'backup' && item.action === 'restoreBackup'));
 });
 
@@ -5567,7 +5568,8 @@ test('recovery panel view renders escaped recovery and state audit rows', () => 
   assert.ok(recoveryHtml.includes('Kronos Recovery Center'));
   assert.ok(recoveryHtml.includes('focused on run-1'));
   assert.ok(recoveryHtml.includes('focused-recovery-item'));
-  assert.ok(recoveryHtml.includes('data-focused-run="true"'));
+  assert.ok(recoveryHtml.includes('data-focused-item="true"'));
+  assert.ok(recoveryHtml.includes('data-item-id="item-1"'));
   assert.ok(recoveryHtml.includes('data-run-id="run-1"'));
   assert.ok(recoveryHtml.includes('Broken &lt;run&gt;'));
   assert.ok(recoveryHtml.includes('Needs &amp; review'));
@@ -5578,6 +5580,22 @@ test('recovery panel view renders escaped recovery and state audit rows', () => 
   assert.ok(recoveryHtml.includes('data-recovery-action="openRunPrompt"'));
   assert.ok(recoveryHtml.includes('data-recovery-action="retryRun"'));
   assert.ok(recoveryHtml.includes('data-recovery-action="archiveRun"'));
+  const worktreeRecoveryHtml = recoveryPanelView.buildRecoveryHtml({
+    generatedAt: '2026-07-01T12:00:00.000Z',
+    summary: { critical: 0, warning: 1, info: 0, total: 1 },
+    items: [{
+      id: 'worktree:/repo/app/.claude/worktrees/K-2',
+      kind: 'worktree',
+      severity: 'warning',
+      title: 'K-2 worktree needs manual review',
+      detail: '/repo/app/.claude/worktrees/K-2\nDirty worktree',
+      action: 'cleanupWorktrees',
+      worktreePath: '/repo/app/.claude/worktrees/K-2',
+    }],
+  }, 'nonce-worktree', 'worktree:/repo/app/.claude/worktrees/K-2', ACTION_SCRIPT_URI);
+  assert.ok(worktreeRecoveryHtml.includes('focused on worktree:/repo/app/.claude/worktrees/K-2'));
+  assert.ok(worktreeRecoveryHtml.includes('data-focused-item="true"'));
+  assert.ok(worktreeRecoveryHtml.includes('data-worktree-path="/repo/app/.claude/worktrees/K-2"'));
   assert.ok(recoveryHtml.includes('Resume Run'));
   assert.ok(recoveryHtml.includes('Log'));
   assert.ok(recoveryHtml.includes('Prompt'));
@@ -7476,6 +7494,7 @@ test('human review inbox aggregates runs, tickets, evidence gaps, integrations, 
   assert.ok(inbox.items.some(item => item.id === 'queue:duplicate:K-3'));
   assert.ok(inbox.items.some(item => item.title.includes('No evidence records')));
   assert.ok(inbox.items.some(item => item.title.includes('Acceptance criteria not extracted')));
+  assert.ok(inbox.items.some(item => item.id === 'worktree:/repo/app/.claude/worktrees/K-2' && item.worktreePath === '/repo/app/.claude/worktrees/K-2'));
 
   const source = readSourceFixture('src', 'services', 'humanReviewInbox.ts');
   assert.ok(source.includes('type HumanReviewRunRecord = HumanReviewRun & Record<string, unknown>'));
@@ -7493,6 +7512,8 @@ test('human review inbox aggregates runs, tickets, evidence gaps, integrations, 
   assert.ok(html.includes('data-action="runCenter"'));
   assert.ok(html.includes('data-action="runCenter" data-run-id="run-1"'));
   assert.ok(html.includes('data-action="recoveryCenter" data-run-id="run-1"'));
+  assert.ok(html.includes('/repo/app/.claude/worktrees/K-2'));
+  assert.ok(html.includes('data-action="recoveryCenter" data-item-id="worktree:/repo/app/.claude/worktrees/K-2"'));
   assert.ok(html.includes('Kronos Human Review Inbox'));
 
   const escapedHtml = humanReviewPanelView.buildHumanReviewInboxHtml({
@@ -8299,10 +8320,10 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     "'Kronos operator action failed.'",
     'await executeOperatorCommandAction(command, ticketKey)',
     'executeOperatorCommandAction(request.command, request.ticket, request.runId)',
-    'await executeHumanReviewAction(state, request.command, request.ticket, request.runId)',
-    "await executeOperatorCommandAction(command, '', runId)",
-    "if ((command === 'runCenter' || command === 'recoveryCenter') && runId)",
-    'await vscode.commands.executeCommand(commandId, { runId })',
+    'await executeHumanReviewAction(state, request.command, request.ticket, request.runId, request.itemId)',
+    "await executeOperatorCommandAction(command, '', runId, itemId)",
+    "if ((command === 'runCenter' || command === 'recoveryCenter') && (runId || itemId))",
+    'await vscode.commands.executeCommand(commandId, { runId, itemId })',
     "command === 'runCenter' || command === 'recoveryCenter' || command === 'doctor' || command === 'queuePlanner'",
     'const render = (currentChecks: DoctorCheck[]) =>',
     ".catch((e: unknown) => render([...checks, {",
@@ -8518,8 +8539,9 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     "actionButton('runCenter', 'Run Center', { runId })",
     'openInteractiveRunCenter(state, extensionUri, runId || undefined)',
     'await openRecoveryCenter(state, extensionUri, runId || undefined)',
-    'await openRecoveryCenter(state, context.extensionUri, resolveRunId(item))',
-    'openRecoveryPanel(state, inventory, backups, focusRunId, extensionUri)',
+    'await openRecoveryCenter(state, context.extensionUri, resolveRecoveryFocusId(item))',
+    'openRecoveryPanel(state, inventory, backups, focusItemId, extensionUri)',
+    'function resolveRecoveryFocusId(item: unknown): string | undefined',
     'kronosScriptableWebviewOptions(extensionUri)',
     "actionButton('viewTicket', 'View', { ticket, primary: true })",
     "actionButton('startTicket', 'Start', { ticket })",

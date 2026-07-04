@@ -46,14 +46,14 @@ export function buildStateAuditLogHtml(events: StateAuditEvent[], stateAuditFile
 </div>${nonce ? kronosActionPanelScript(nonce, 'Kronos State Audit Log', actionScriptUri) : ''}</body></html>`;
 }
 
-export function buildRecoveryHtml(inventory: RecoveryInventory, nonce?: string, focusRunId?: string, actionScriptUri?: string): string {
-  const focusedRunId = focusRunId?.trim() || '';
-  const items = focusedRunId
-    ? [...inventory.items].sort((a, b) => focusedRecoveryItemSort(a, b, focusedRunId))
+export function buildRecoveryHtml(inventory: RecoveryInventory, nonce?: string, focusItemId?: string, actionScriptUri?: string): string {
+  const focusedItemId = focusItemId?.trim() || '';
+  const items = focusedItemId
+    ? [...inventory.items].sort((a, b) => focusedRecoveryItemSort(a, b, focusedItemId))
     : inventory.items;
   const rows = items.map(item => {
-    const focused = Boolean(focusedRunId && item.runId === focusedRunId);
-    return `<tr class="${item.severity}${focused ? ' focused-recovery-item' : ''}"${item.runId ? ` data-run-id="${escapeAttr(item.runId)}"` : ''}${focused ? ' data-focused-run="true"' : ''}>
+    const focused = Boolean(focusedItemId && isFocusedRecoveryItem(item, focusedItemId));
+    return `<tr class="${item.severity}${focused ? ' focused-recovery-item' : ''}" data-item-id="${escapeAttr(item.id)}"${item.runId ? ` data-run-id="${escapeAttr(item.runId)}"` : ''}${item.worktreePath ? ` data-worktree-path="${escapeAttr(item.worktreePath)}"` : ''}${focused ? ' data-focused-item="true"' : ''}>
     <td><span class="pill ${item.severity}">${escapeHtml(item.severity.toUpperCase())}</span></td>
     <td>${escapeHtml(item.kind)}</td>
     <td>${escapeHtml(item.title)}</td>
@@ -68,7 +68,7 @@ export function buildRecoveryHtml(inventory: RecoveryInventory, nonce?: string, 
   ${kronosOperatorPanelCss()}
   .focused-recovery-item { outline: 2px solid var(--k-accent); outline-offset: -2px; background: color-mix(in srgb, var(--k-accent) 12%, transparent); }
 </style></head><body><div class="kronos-shell operator-shell">
-  <div class="kronos-header"><div><h1 class="kronos-title">Kronos Recovery Center</h1><div class="kronos-subtitle">Runs, worktrees, backups, integrations, and merge requests that need operator action${focusedRunId ? ` - focused on ${escapeHtml(focusedRunId)}` : ''}</div></div></div>
+  <div class="kronos-header"><div><h1 class="kronos-title">Kronos Recovery Center</h1><div class="kronos-subtitle">Runs, worktrees, backups, integrations, and merge requests that need operator action${focusedItemId ? ` - focused on ${escapeHtml(focusedItemId)}` : ''}</div></div></div>
   <div class="operator-summary">
     <div class="summary-card"><div class="num">${inventory.summary.critical}</div><div class="lbl">Critical</div></div>
     <div class="summary-card"><div class="num">${inventory.summary.warning}</div><div class="lbl">Warnings</div></div>
@@ -79,10 +79,14 @@ export function buildRecoveryHtml(inventory: RecoveryInventory, nonce?: string, 
 </div>${nonce ? kronosActionPanelScript(nonce, 'Kronos Recovery Center', actionScriptUri) : ''}</body></html>`;
 }
 
-function focusedRecoveryItemSort(a: RecoveryItem, b: RecoveryItem, focusRunId: string): number {
-  const aFocused = a.runId === focusRunId;
-  const bFocused = b.runId === focusRunId;
+function focusedRecoveryItemSort(a: RecoveryItem, b: RecoveryItem, focusItemId: string): number {
+  const aFocused = isFocusedRecoveryItem(a, focusItemId);
+  const bFocused = isFocusedRecoveryItem(b, focusItemId);
   return Number(bFocused) - Number(aFocused);
+}
+
+function isFocusedRecoveryItem(item: RecoveryItem, focusItemId: string): boolean {
+  return item.id === focusItemId || item.runId === focusItemId || item.worktreePath === focusItemId;
 }
 
 function recoveryActionButtons(item: RecoveryItem): string {

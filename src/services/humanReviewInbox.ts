@@ -25,6 +25,7 @@ export interface HumanReviewItem {
   detail: string;
   ticketKey?: string;
   runId?: string;
+  worktreePath?: string;
 }
 
 interface HumanReviewInboxInput {
@@ -90,7 +91,7 @@ export function buildHumanReviewInbox(input: HumanReviewInboxInput): HumanReview
       severity: result.status === 'error' ? 'critical' : 'warning',
       title: `${result.entry.ticket || 'Worktree'} needs cleanup review`,
       detail: result.reason,
-    }, { ticketKey: result.entry.ticket }));
+    }, { ticketKey: result.entry.ticket, worktreePath: result.entry.worktreePath }));
   }
 
   for (const check of input.doctorChecks || []) {
@@ -132,12 +133,13 @@ function ticketItem(ticketKey: string, kind: HumanReviewKind, severity: HumanRev
 }
 
 function humanReviewItem(
-  base: Omit<HumanReviewItem, 'ticketKey' | 'runId'>,
-  refs: { ticketKey?: string | undefined; runId?: string | undefined } = {},
+  base: Omit<HumanReviewItem, 'ticketKey' | 'runId' | 'worktreePath'>,
+  refs: { ticketKey?: string | undefined; runId?: string | undefined; worktreePath?: string | undefined } = {},
 ): HumanReviewItem {
   const item: HumanReviewItem = { ...base };
   if (refs.ticketKey) { item.ticketKey = refs.ticketKey; }
   if (refs.runId) { item.runId = refs.runId; }
+  if (refs.worktreePath) { item.worktreePath = refs.worktreePath; }
   return item;
 }
 

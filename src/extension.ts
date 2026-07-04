@@ -3731,7 +3731,7 @@ export function activate(context: vscode.ExtensionContext) {
     }),
 
     vscode.commands.registerCommand('kronos.recoveryCenter', async (item: unknown) => {
-      await openRecoveryCenter(state, context.extensionUri, resolveRunId(item));
+      await openRecoveryCenter(state, context.extensionUri, resolveRecoveryFocusId(item));
     }),
 
     vscode.commands.registerCommand('kronos.stateAuditLog', async () => {
@@ -4038,10 +4038,10 @@ function buildPromptSmokeTests(
   return tests;
 }
 
-async function openRecoveryCenter(state: KronosState, extensionUri?: vscode.Uri, focusRunId?: string): Promise<void> {
+async function openRecoveryCenter(state: KronosState, extensionUri?: vscode.Uri, focusItemId?: string): Promise<void> {
   const backups = listBackups();
   const inventory = buildRecoveryInventoryForState(state, backups);
-  openRecoveryPanel(state, inventory, backups, focusRunId, extensionUri);
+  openRecoveryPanel(state, inventory, backups, focusItemId, extensionUri);
 
   if (!inventory.items.some(item => item.action)) {
     vscode.window.showInformationMessage('Recovery Center found no active recovery items.');
@@ -4060,7 +4060,7 @@ function buildRecoveryInventoryForState(state: KronosState, backups = listBackup
   return buildRecoveryInventory(input);
 }
 
-function openRecoveryPanel(state: KronosState, initialInventory: RecoveryInventory, initialBackups = listBackups(), focusRunId?: string, extensionUri?: vscode.Uri): void {
+function openRecoveryPanel(state: KronosState, initialInventory: RecoveryInventory, initialBackups = listBackups(), focusItemId?: string, extensionUri?: vscode.Uri): void {
   const panel = vscode.window.createWebviewPanel(
     'kronosRecoveryCenter',
     'Kronos Recovery Center',
@@ -4078,7 +4078,7 @@ function openRecoveryPanel(state: KronosState, initialInventory: RecoveryInvento
       currentInventory = buildRecoveryInventoryForState(state, currentBackups);
     }
     logReady.arm();
-    panel.webview.html = withWebviewCsp(buildRecoveryHtml(currentInventory, nonce, focusRunId, actionScriptUri), webviewScriptCspOptions(panel.webview.cspSource, nonce));
+    panel.webview.html = withWebviewCsp(buildRecoveryHtml(currentInventory, nonce, focusItemId, actionScriptUri), webviewScriptCspOptions(panel.webview.cspSource, nonce));
   };
   render();
   panel.webview.onDidReceiveMessage(async msg => {
@@ -4266,7 +4266,7 @@ function openHumanReviewInbox(state: KronosState, extensionUri?: vscode.Uri): vo
         render();
         return;
       }
-      await executeHumanReviewAction(state, request.command, request.ticket, request.runId);
+      await executeHumanReviewAction(state, request.command, request.ticket, request.runId, request.itemId);
       render();
     }, 'Kronos human review action failed.');
   });
@@ -4274,7 +4274,7 @@ function openHumanReviewInbox(state: KronosState, extensionUri?: vscode.Uri): vo
   startActiveRunPanelRefresh(panel, state, render);
 }
 
-async function executeHumanReviewAction(state: KronosState, command: string, ticketKey: string, runId = ''): Promise<void> {
+async function executeHumanReviewAction(state: KronosState, command: string, ticketKey: string, runId = '', itemId = ''): Promise<void> {
   if (ticketKey && !state.state?.tickets?.[ticketKey]) {
     vscode.window.showWarningMessage(`${ticketKey} is no longer in Kronos state.`);
     return;
@@ -4285,7 +4285,7 @@ async function executeHumanReviewAction(state: KronosState, command: string, tic
   } else if (ticketKey && await tryExecuteTicketOperatorCommand(command, ticketKey)) {
     return;
   } else if (command === 'runCenter' || command === 'recoveryCenter' || command === 'doctor' || command === 'queuePlanner') {
-    await executeOperatorCommandAction(command, '', runId);
+    await executeOperatorCommandAction(command, '', runId, itemId);
   } else {
     vscode.window.showWarningMessage('Ignored Kronos human review action without a valid target.');
   }
@@ -4398,7 +4398,7 @@ async function executeEvidenceGateAction(command: string, ticketKey: string): Pr
   }
 }
 
-async function executeOperatorCommandAction(command: string, ticketKey = '', runId = ''): Promise<void> {
+async function executeOperatorCommandAction(command: string, ticketKey = '', runId = '', itemId = ''): Promise<void> {
   const commandId = OPERATOR_COMMAND_TO_VSCODE_COMMAND.get(command);
   if (!commandId) {
     vscode.window.showWarningMessage('Ignored unknown Kronos operator action.');
@@ -4416,8 +4416,8 @@ async function executeOperatorCommandAction(command: string, ticketKey = '', run
     await vscode.commands.executeCommand(commandId, { ticketKey });
     return;
   }
-  if ((command === 'runCenter' || command === 'recoveryCenter') && runId) {
-    await vscode.commands.executeCommand(commandId, { runId });
+  if ((command === 'runCenter' || command === 'recoveryCenter') && (runId || itemId)) {
+    await vscode.commands.executeCommand(commandId, { runId, itemId });
     return;
   }
   await vscode.commands.executeCommand(commandId);
@@ -5367,6 +5367,20 @@ function resolveRunId(item: unknown): string | undefined {
   const id = record['id'];
   if (typeof id === 'string' && id.trim()) { return id.trim(); }
   return undefined;
+}
+
+function resolveItemId(item: unknown): string | undefined {
+  const itemId = recordFromUnknown(item)['itemId'];
+  return typeof itemId === 'string' && itemId.trim() ? itemId.trim() : undefined;
+}
+
+function resolveWorktreePath(item: unknown): string | undefined {
+  const worktreePath = recordFromUnknown(item)['worktreePath'];
+  return typeof worktreePath === 'string' && worktreePath.trim() ? worktreePath.trim() : undefined;
+}
+
+function resolveRecoveryFocusId(item: unknown): string | undefined {
+  return resolveItemId(item) || resolveRunId(item) || resolveWorktreePath(item);
 }
 
 async function pickProjectName(state: KronosState, placeHolder: string): Promise<string | undefined> {
