@@ -3545,6 +3545,7 @@ test('queue planner groups recommendations into release batch plans', () => {
 
   for (const marker of [
     'QueueItem, QueueState, Ticket',
+    'interface PlannerInput',
     'queueItem?: QueueItem',
     'export function planToQueueItem(input: PlannerInput, plan: PlannedAction): QueueItem',
     "import { evidenceRecordCount } from './evidenceData'",
@@ -3556,6 +3557,7 @@ test('queue planner groups recommendations into release batch plans', () => {
   ]) {
     assert.ok(queuePlannerSource.includes(marker), marker);
   }
+  assert.equal(queuePlannerSource.includes('export interface PlannerInput'), false);
   assert.equal(/\bany\b/.test(queuePlannerSource), false, 'queuePlanner should keep planner payloads typed without any');
 });
 
@@ -4738,8 +4740,8 @@ test('dispatcher records branch and permission metadata for persisted runs', () 
   for (const marker of [
     'branch?: RunBranchMetadata',
     'permissions?: RunPermissionMetadata',
-    'export interface RunBranchMetadata',
-    'export interface RunPermissionMetadata',
+    'interface RunBranchMetadata',
+    'interface RunPermissionMetadata',
     'projectBaseBranch?: string',
     'projectBaseSource?: string',
     'projectBaseWarning?: string',
@@ -4910,6 +4912,12 @@ test('dispatcher records branch and permission metadata for persisted runs', () 
     'resolvePostRunTicket',
   ]) {
     assert.ok(source.includes(marker), marker);
+  }
+  for (const marker of [
+    'export interface RunBranchMetadata',
+    'export interface RunPermissionMetadata',
+  ]) {
+    assert.equal(source.includes(marker), false, marker);
   }
 
   assert.equal(

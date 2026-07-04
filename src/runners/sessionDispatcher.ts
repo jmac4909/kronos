@@ -218,7 +218,7 @@ export interface KronosRun {
   [key: string]: unknown;
 }
 
-export interface RunBranchMetadata {
+interface RunBranchMetadata {
   projectBaseRef?: string;
   projectBaseBranch?: string;
   projectBaseSource?: string;
@@ -231,7 +231,7 @@ export interface RunBranchMetadata {
   managedWorktree?: boolean;
 }
 
-export interface RunPermissionMetadata {
+interface RunPermissionMetadata {
   claudePath: string;
   permissionMode: string;
   allowedTools: string[];

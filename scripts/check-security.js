@@ -1700,8 +1700,8 @@ for (const marker of [
   'processPid?: number',
   'branch?: RunBranchMetadata',
   'permissions?: RunPermissionMetadata',
-  'export interface RunBranchMetadata',
-  'export interface RunPermissionMetadata',
+  'interface RunBranchMetadata',
+  'interface RunPermissionMetadata',
   'readRunRecord(run.id)',
   'markRunCancelled(run.id',
   'const CLAUDE_PATH',
@@ -1858,6 +1858,14 @@ for (const marker of [
 ]) {
   if (!dispatcher.includes(marker)) {
     fail(`Missing run recovery marker: ${marker}`);
+  }
+}
+for (const marker of [
+  'export interface RunBranchMetadata',
+  'export interface RunPermissionMetadata',
+]) {
+  if (dispatcher.includes(marker)) {
+    fail(`Run metadata helper type should stay private: ${marker}`);
   }
 }
 if (dispatcher.includes("target.closest('[data-action][data-run-id]')")) {
@@ -3242,6 +3250,7 @@ for (const marker of [
   'planForMinutes',
   'overnightCandidatePlans',
   'isPlanSuppressed',
+  'interface PlannerInput',
   'QueueItem, QueueState, Ticket',
   'queueItem?: QueueItem',
   'export function planToQueueItem(input: PlannerInput, plan: PlannedAction): QueueItem',
@@ -3271,6 +3280,9 @@ for (const marker of [
   if (!queuePlanner.includes(marker)) {
     fail(`Missing queue planner marker: ${marker}`);
   }
+}
+if (queuePlanner.includes('export interface PlannerInput')) {
+  fail('PlannerInput should stay private to queuePlanner.');
 }
 if (/\bany\b/.test(queuePlanner)) {
   fail('Queue planner should not use any for planner payload normalization.');

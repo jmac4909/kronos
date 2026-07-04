@@ -4,7 +4,7 @@ import { actionDisplayLabel as actionToLabel } from './actionCatalog';
 import { isCodeAction } from './actionSemantics';
 import { evidenceRecordCount } from './evidenceData';
 
-export interface PlannerInput {
+interface PlannerInput {
   state: KronosStateType | null;
   queue: QueueState | null;
   resolveProjectPath?: (projectName: string) => string | undefined;
