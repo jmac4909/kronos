@@ -163,7 +163,7 @@ export function normalizeJiraComments(value: unknown): JiraComment[] {
 export function normalizeMergeRequestStatus(value: unknown): MergeRequestStatusResult {
   const data = isRecord(value) ? value : {};
   const mr = isRecord(data['mr']) ? data['mr'] : data;
-  const commentsSource = firstDefined(data['comments'], data['notes'], data['discussions'], mr['comments'], mr['notes'], mr['discussions']);
+  const commentsSource = firstDefined(data['comments'], data['notes'], mr['comments'], mr['notes']);
   const discussionsSource = firstDefined(data['discussions'], mr['discussions']);
   const comments = commentsSource === undefined ? [] : normalizeMergeRequestComments(commentsSource);
   const latestComment = latestCommentAt(comments);

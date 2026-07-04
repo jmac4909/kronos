@@ -6088,6 +6088,23 @@ test('integration adapters wrap selected Jira, GitLab, and Sonar script contract
   assert.equal(status.last_discussion_at, '2026-07-02T03:00:00.000Z');
   assert.equal(status.discussions_resolved, false);
   assert.deepEqual(status.comments.map(comment => comment.id), ['1', '2']);
+  const discussionOnlyStatus = integrationAdapters.normalizeMergeRequestStatus({
+    mr: {
+      title: 'Thread only',
+      iid: 8,
+      state: 'opened',
+      review_status: 'pending_review',
+      web_url: 'https://gitlab.example/mr/8',
+    },
+    discussions: [
+      { id: 'thread-1', notes: [{ id: 'n1', body: 'thread note', created_at: '2026-07-02T03:30:00.000Z', resolvable: true, resolved: false }] },
+    ],
+  });
+  assert.equal(discussionOnlyStatus.comment_count, undefined);
+  assert.equal(discussionOnlyStatus.last_comment_at, undefined);
+  assert.equal(discussionOnlyStatus.discussion_count, 1);
+  assert.equal(discussionOnlyStatus.unresolved_discussion_count, 1);
+  assert.equal(discussionOnlyStatus.last_discussion_at, '2026-07-02T03:30:00.000Z');
   assert.deepEqual(calls, [
     ['--ticket-comments', 'K-7'],
     ['--mr-diff', 'K-7'],
@@ -6170,12 +6187,6 @@ test('integration adapters wrap selected Jira, GitLab, and Sonar script contract
     review_status: 'approved',
     author: 'Ada',
     branch: 'feature/K-8',
-    comment_count: 2,
-    last_comment_at: '2026-07-02T04:00:00.000Z',
-    comments: [
-      { created: '2026-07-02T03:00:00.000Z', body: 'Looks good' },
-      { created: '2026-07-02T04:00:00.000Z', body: 'Needs tests' },
-    ],
     discussion_count: 2,
     unresolved_discussion_count: 1,
     resolved_discussion_count: 1,
