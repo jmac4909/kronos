@@ -7,6 +7,7 @@ interface RunStatusLike {
   endedAt?: unknown;
   exitCode?: unknown;
   events?: unknown;
+  processPid?: unknown;
 }
 
 export function runStatus(value: RunStatusLike | unknown): string {
@@ -28,6 +29,7 @@ export function isStaleActiveRun(run: RunStatusLike | unknown, now = new Date(),
   const status = runStatus(run);
   if (!STALEABLE_ACTIVE_RUN_STATUSES.has(status)) { return false; }
   if (staleMs <= 0 || !isRecord(run)) { return false; }
+  if (hasLiveProcess(run['processPid'])) { return false; }
   const startedAt = dateValue(run['startedAt']);
   if (!startedAt) { return false; }
   return now.getTime() - startedAt.getTime() >= staleMs;
@@ -103,6 +105,22 @@ function numericExitCode(value: unknown): number | undefined {
   if (value === undefined || value === null || value === '') { return undefined; }
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function hasLiveProcess(value: unknown): boolean {
+  const pid = numericPid(value);
+  if (pid === undefined) { return false; }
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function numericPid(value: unknown): number | undefined {
+  const parsed = typeof value === 'string' || typeof value === 'number' ? Number(value) : Number.NaN;
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
