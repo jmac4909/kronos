@@ -23,6 +23,13 @@ export interface PostRunReadiness {
   failureKind: RunFailureKind;
 }
 
+export interface PostRunReadinessRunPatch {
+  readiness: PostRunReadiness;
+  failureKind: RunFailureKind;
+  status?: 'waiting_for_review' | 'needs_human';
+  failureReason?: string;
+}
+
 export interface RunCompletionEvidenceCheck {
   name: string;
   result: 'pass' | 'warn';
@@ -38,6 +45,7 @@ export interface PostRunTicketResolution {
 }
 
 const SUCCESS_RUN_STATUSES = new Set(['completed', 'waiting_for_review']);
+const READINESS_STATUS_TRANSITION_RUN_STATUSES = new Set(['completed', 'waiting_for_review']);
 
 export function resolvePostRunTicket(input: {
   tickets?: Record<string, Ticket>;
@@ -238,6 +246,31 @@ export function evaluatePostRunReadiness(input: {
     evidenceGate: gateSummary,
     failureKind,
   };
+}
+
+export function postRunReadinessRunPatch(run: unknown, readiness: PostRunReadiness): PostRunReadinessRunPatch {
+  const record = runRecord(run);
+  const currentStatus = runString(record['status']);
+  const patch: PostRunReadinessRunPatch = {
+    readiness,
+    failureKind: readiness.failureKind,
+  };
+  const status = postRunReadinessStatusTransition(currentStatus, readiness);
+  if (status) {
+    patch.status = status;
+  }
+  const nextStatus = status || currentStatus;
+  if (nextStatus === 'needs_human' && !runString(record['failureReason'])) {
+    patch.failureReason = readiness.summary;
+  }
+  return patch;
+}
+
+function postRunReadinessStatusTransition(runStatus: string, readiness: PostRunReadiness): PostRunReadinessRunPatch['status'] {
+  if (!READINESS_STATUS_TRANSITION_RUN_STATUSES.has(runStatus)) { return undefined; }
+  if (readiness.status === 'ready') { return 'waiting_for_review'; }
+  if (readiness.status === 'needs_human' || readiness.status === 'blocked') { return 'needs_human'; }
+  return undefined;
 }
 
 export function classifyRunFailure(run: unknown): RunFailureKind {

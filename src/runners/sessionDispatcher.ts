@@ -6,7 +6,7 @@ import * as os from 'os';
 import { createHash } from 'crypto';
 import { RUNS_DIR, appendRunLog as appendRunLogFile, markRunCancelled, readRunRecord, repairActiveRunRecords, writeRunPrompt, writeRunRecord } from '../services/runStore';
 import { readStateFile } from '../services/stateStore';
-import { RunFailureKind, classifyRunFailure, evaluatePostRunReadiness, resolvePostRunTicket, type PostRunReadiness } from '../services/postRunReadiness';
+import { RunFailureKind, classifyRunFailure, evaluatePostRunReadiness, postRunReadinessRunPatch, resolvePostRunTicket, type PostRunReadiness } from '../services/postRunReadiness';
 import { stopProcessTree, supportsProcessTreeSuspend } from '../services/processTree';
 import { createWebviewReadyMonitor } from '../services/webviewDiagnostics';
 import { WEBVIEW_ACTION_PANEL_SCRIPT, WEBVIEW_READY_COMMAND, createWebviewNonce, webviewActionScriptTag, webviewScriptCspOptions, withWebviewCsp } from '../services/webviewSecurity';
@@ -427,14 +427,7 @@ function backfillSingleRunReadiness(run: KronosRun, tickets?: KronosStateFile['t
   };
   if (resolution.ticket) { readinessInput.ticket = resolution.ticket; }
   const readiness = evaluatePostRunReadiness(readinessInput);
-  const nextRun: KronosRun = { ...run, readiness, failureKind: readiness.failureKind };
-  const nextStatus = backfilledRunStatus(run, readiness);
-  if (nextStatus) {
-    nextRun.status = nextStatus;
-  }
-  if (nextRun.status === 'needs_human' && !nextRun.failureReason) {
-    nextRun.failureReason = readiness.summary;
-  }
+  const nextRun: KronosRun = { ...run, ...postRunReadinessRunPatch(run, readiness) };
   if (JSON.stringify(nextRun) !== JSON.stringify(run)) {
     writeRunRecord(nextRun);
   }
@@ -450,13 +443,6 @@ function shouldBackfillRunReadiness(run: KronosRun, hasState: boolean): boolean 
   return hasState
     && status === 'needs_human'
     && /could not resolve current ticket state|no ticket state was available/i.test(summary);
-}
-
-function backfilledRunStatus(run: KronosRun, readiness: PostRunReadiness): KronosRun['status'] | undefined {
-  if (run.status !== 'completed' && run.status !== 'waiting_for_review') { return undefined; }
-  if (readiness.status === 'ready') { return 'waiting_for_review'; }
-  if (readiness.status === 'needs_human' || readiness.status === 'blocked') { return 'needs_human'; }
-  return undefined;
 }
 
 export interface DispatchOptions {

@@ -4773,11 +4773,11 @@ test('dispatcher records branch and permission metadata for persisted runs', () 
     "buildProgressHtml(projectName, skill, ticket || '', events, run)",
     "label: 'Managed worktree pull skipped'",
     'updateRun(run, { warnings: [...(run.warnings || []), warning] })',
-    "const nextStatus = run.status === 'completed' || run.status === 'waiting_for_review' ? 'needs_human' : run.status",
     'await runCompletionCallback(opts, code ?? 1, run',
     "repairActiveRunRecords(100).runs as KronosRun[]",
     'function backfillRunReadiness(runs: KronosRun[]): KronosRun[]',
     'evaluatePostRunReadiness',
+    'postRunReadinessRunPatch(run, readiness)',
     'resolvePostRunTicket',
   ]) {
     assert.ok(source.includes(marker), marker);
@@ -7435,6 +7435,11 @@ test('post-run readiness distinguishes process completion from handoff readiness
   assert.equal(ready.status, 'ready');
   assert.equal(ready.failureKind, 'none');
   assert.equal(ready.evidenceGate.status, 'pass');
+  assert.deepEqual(postRunReadiness.postRunReadinessRunPatch({ status: 'completed' }, ready), {
+    readiness: ready,
+    failureKind: 'none',
+    status: 'waiting_for_review',
+  });
 
   const waitingForReview = postRunReadiness.evaluatePostRunReadiness({
     run: { status: 'waiting_for_review' },
@@ -7444,6 +7449,24 @@ test('post-run readiness distinguishes process completion from handoff readiness
   });
   assert.equal(waitingForReview.status, 'ready');
   assert.equal(waitingForReview.failureKind, 'none');
+  const needsHumanPatch = postRunReadiness.postRunReadinessRunPatch({ status: 'completed' }, {
+    ...waitingForReview,
+    status: 'blocked',
+    summary: 'Evidence gate failed.',
+    failureKind: 'test',
+  });
+  assert.deepEqual(needsHumanPatch, {
+    readiness: {
+      ...waitingForReview,
+      status: 'blocked',
+      summary: 'Evidence gate failed.',
+      failureKind: 'test',
+    },
+    failureKind: 'test',
+    status: 'needs_human',
+    failureReason: 'Evidence gate failed.',
+  });
+  assert.equal(postRunReadiness.postRunReadinessRunPatch({ status: 'failed' }, waitingForReview).status, undefined);
   assert.equal(postRunReadiness.shouldRecordRunCompletionEvidence({
     run: { id: 'run-1', skill: 'implement', status: 'completed' },
     ticket: ticket({ next_action: 'await_review', projects: ['app'] }),
@@ -7674,6 +7697,9 @@ test('post-run readiness distinguishes process completion from handoff readiness
     "import { evidenceChecks, evidenceNotes, evidenceString } from './evidenceData'",
     'export function shouldRecordRunCompletionEvidence',
     'export function resolvePostRunTicket',
+    'export function postRunReadinessRunPatch',
+    'function postRunReadinessStatusTransition',
+    "const READINESS_STATUS_TRANSITION_RUN_STATUSES = new Set(['completed', 'waiting_for_review'])",
     'interface PostRunTicketResolution',
     'const runResolved = resolveTicketFromRunRecord(tickets, input.run)',
     'const matchedProjectTickets',
@@ -8116,12 +8142,11 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'const reloadedTicket = resolvePostRunTicket(reloadedTicketInput)',
     'resolvedTicketKey = reloadedTicket.ticketKey || resolvedTicketKey',
     'ticket = reloadedTicket.ticket',
-    "run.status === 'completed' && (run.readiness.status === 'needs_human' || run.readiness.status === 'blocked')",
-    'run.failureReason = run.failureReason || run.readiness.summary',
+    'Object.assign(run, postRunReadinessRunPatch(run, run.readiness))',
     'let resolvedTicketKey = resolveDispatchTicketKey(ticketKey, run)',
     'await reloadStateAfterDispatch(state, projectName)',
     'function resolveDispatchTicketKey(ticketKey: string | undefined, run: KronosRun): string | undefined',
-    "import { buildRunCompletionEvidenceCheck, buildRunCompletionEvidenceText, evaluatePostRunReadiness, resolvePostRunTicket, shouldRecordRunCompletionEvidence } from './services/postRunReadiness'",
+    "import { buildRunCompletionEvidenceCheck, buildRunCompletionEvidenceText, evaluatePostRunReadiness, postRunReadinessRunPatch, resolvePostRunTicket, shouldRecordRunCompletionEvidence } from './services/postRunReadiness'",
     'addTicketRunCompletionEvidence',
     'await showRunCompletionToast(resolvedTicketKey, ticket, run)',
     'async function showRunCompletionToast(ticketKey: string, ticket: Ticket | undefined, run: KronosRun): Promise<void>',

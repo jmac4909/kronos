@@ -25,7 +25,7 @@ import { RecoveryInventory, RecoveryItem, buildRecoveryInventory, type RecoveryI
 import { TimelineEvent, buildTicketTimeline } from './services/ticketTimeline';
 import { DispatchCollision, detectDispatchCollisions, type DispatchCollisionInput } from './services/collisionDetector';
 import { gitlabAdapter, jiraAdapter, sonarAdapter, type MergeRequestDiffResult } from './services/integrationAdapters';
-import { buildRunCompletionEvidenceCheck, buildRunCompletionEvidenceText, evaluatePostRunReadiness, resolvePostRunTicket, shouldRecordRunCompletionEvidence } from './services/postRunReadiness';
+import { buildRunCompletionEvidenceCheck, buildRunCompletionEvidenceText, evaluatePostRunReadiness, postRunReadinessRunPatch, resolvePostRunTicket, shouldRecordRunCompletionEvidence } from './services/postRunReadiness';
 import { extractAcceptanceCriteria } from './services/acceptanceCriteria';
 import type { ExistingAcceptanceCriterion } from './services/acceptanceCriteria';
 import { buildHumanReviewInbox } from './services/humanReviewInbox';
@@ -5265,13 +5265,7 @@ function refreshAfterDispatch(state: KronosState, projectName?: string, ticketKe
       const readinessInput: { run: unknown; ticketKey?: string; ticket?: Ticket } = { run, ticketKey: resolvedTicketKey };
       if (ticket) { readinessInput.ticket = ticket; }
       run.readiness = evaluatePostRunReadiness(readinessInput);
-      run.failureKind = run.readiness.failureKind;
-      if (run.status === 'completed' && run.readiness.status === 'ready') {
-        run.status = 'waiting_for_review';
-      } else if (run.status === 'completed' && (run.readiness.status === 'needs_human' || run.readiness.status === 'blocked')) {
-        run.status = 'needs_human';
-        run.failureReason = run.failureReason || run.readiness.summary;
-      }
+      Object.assign(run, postRunReadinessRunPatch(run, run.readiness));
       writeRunRecord(run);
       if (ticket && ['await_review', 'done', 'deploy_monitor'].includes(ticket.next_action)) {
         await removeTicketFromQueue(state, resolvedTicketKey, false);
@@ -5279,7 +5273,7 @@ function refreshAfterDispatch(state: KronosState, projectName?: string, ticketKe
       await showRunCompletionToast(resolvedTicketKey, ticket, run);
     } else {
       run.readiness = evaluatePostRunReadiness({ run });
-      run.failureKind = run.readiness.failureKind;
+      Object.assign(run, postRunReadinessRunPatch(run, run.readiness));
       writeRunRecord(run);
     }
   };
