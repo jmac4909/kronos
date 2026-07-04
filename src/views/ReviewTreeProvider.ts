@@ -10,6 +10,7 @@ export interface NewReviewItemSummary {
   ticketKey: string;
   summary: string;
   projectNames: string[];
+  activityKey: string;
   mrIid?: number;
   activity?: string;
 }
@@ -62,11 +63,12 @@ export class ReviewTreeProvider implements vscode.TreeDataProvider<ReviewItem> {
   getNewReviewItems(): NewReviewItemSummary[] {
     return this.reviewEntrySnapshots()
       .filter(snapshot => this.newReviewKeys.has(snapshot.activityKey))
-      .map(({ ticketKey, ticket, activity }) => {
+      .map(({ ticketKey, ticket, activityKey, activity }) => {
         const summary: NewReviewItemSummary = {
           ticketKey,
           summary: ticket.summary,
           projectNames: ticket.projects || [],
+          activityKey,
         };
         if (ticket.mr?.iid !== undefined) { summary.mrIid = ticket.mr.iid; }
         if (activity) { summary.activity = activity; }

@@ -174,15 +174,15 @@ function runNotificationCommandAction(
 
 function notifyNewReviewItems(reviewTree: ReviewTreeProvider, notifiedReviewKeys: Set<string>): void {
   const items = reviewTree.getNewReviewItems();
-  const currentKeys = new Set(items.map(item => item.ticketKey));
-  for (const ticketKey of notifiedReviewKeys) {
-    if (!currentKeys.has(ticketKey)) {
-      notifiedReviewKeys.delete(ticketKey);
+  const currentKeys = new Set(items.map(item => item.activityKey || item.ticketKey));
+  for (const key of notifiedReviewKeys) {
+    if (!currentKeys.has(key)) {
+      notifiedReviewKeys.delete(key);
     }
   }
-  const freshItems = items.filter(item => !notifiedReviewKeys.has(item.ticketKey));
+  const freshItems = items.filter(item => !notifiedReviewKeys.has(item.activityKey || item.ticketKey));
   for (const item of freshItems) {
-    notifiedReviewKeys.add(item.ticketKey);
+    notifiedReviewKeys.add(item.activityKey || item.ticketKey);
   }
   if (freshItems.length === 0) { return; }
 

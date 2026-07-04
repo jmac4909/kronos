@@ -3047,8 +3047,10 @@ test('review tree persists seen review keys across reloads', async () => {
     });
     stateEmitter.fire(undefined);
     assert.equal(reloadedProvider.getNewReviewCount(), 1);
-    assert.deepEqual(reloadedProvider.getNewReviewItems().map(item => item.ticketKey), ['K-3']);
-    assert.match(reloadedProvider.getNewReviewItems()[0].activity, /1 comment/);
+    const commentReviewItems = reloadedProvider.getNewReviewItems();
+    assert.deepEqual(commentReviewItems.map(item => item.ticketKey), ['K-3']);
+    assert.match(commentReviewItems[0].activity, /1 comment/);
+    assert.match(commentReviewItems[0].activityKey, /^K-3\|mr:3\|opened\|pending_review\|1\|2026-07-03T01:00:00.000Z\|/);
     reloadedProvider.markVisibleReviewItemsSeen();
     assert.equal(reloadedProvider.getNewReviewCount(), 0);
     reloadedProvider.dispose();
@@ -7222,6 +7224,8 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'function runNotificationCommandAction',
     'function notifyNewReviewItems(reviewTree: ReviewTreeProvider, notifiedReviewKeys: Set<string>): void',
     'const items = reviewTree.getNewReviewItems()',
+    'const currentKeys = new Set(items.map(item => item.activityKey || item.ticketKey))',
+    'const freshItems = items.filter(item => !notifiedReviewKeys.has(item.activityKey || item.ticketKey))',
     'const activity = primary.activity ? ` - ${primary.activity}` :',
     '`${primary.ticketKey}: ${mr} needs review${activity}${suffix}`',
     "'kronosReview.focus'",
@@ -8404,6 +8408,8 @@ test('tree providers share action labels and icons', () => {
     'getNewReviewCount(): number',
     'export interface NewReviewItemSummary',
     'getNewReviewItems(): NewReviewItemSummary[]',
+    'activityKey: string',
+    'activityKey,',
     'if (ticket.mr?.iid !== undefined) { summary.mrIid = ticket.mr.iid; }',
     'if (activity) { summary.activity = activity; }',
     'markVisibleReviewItemsSeen(): void',
