@@ -191,7 +191,7 @@ function queuePlannerPanelShell(options: QueuePlannerPanelShellOptions): string 
     </div>
   </div>
   ${options.body}
-</div>${options.nonce ? kronosActionPanelScript(options.nonce, options.title, true, options.actionScriptUri) : ''}</body></html>`;
+</div>${options.nonce ? kronosActionPanelScript(options.nonce, options.title, options.actionScriptUri) : ''}</body></html>`;
 }
 
 function planActionRow(plan: PlannedAction): string {

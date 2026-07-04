@@ -38,7 +38,7 @@ export function buildAgentQualityScoreHtml(score: AgentQualityScore, nonce?: str
   </div>
   <div class="operator-summary">${metricRows}</div>
   <div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Component</th><th>Score</th><th>Detail</th></tr>${componentRows}</table></div>
-</div>${nonce ? kronosActionPanelScript(nonce, 'Kronos Agent Quality Score', true, actionScriptUri) : ''}</body></html>`;
+</div>${nonce ? kronosActionPanelScript(nonce, 'Kronos Agent Quality Score', actionScriptUri) : ''}</body></html>`;
 }
 
 export function buildTrendMetricsHtml(report: TrendMetricsReport, nonce?: string, actionScriptUri?: string): string {
@@ -80,7 +80,7 @@ export function buildTrendMetricsHtml(report: TrendMetricsReport, nonce?: string
   ${actions}
   <div class="operator-summary">${metricCards}</div>
   <div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Status</th><th>Metric</th><th>Value</th><th>Detail</th></tr>${rows}</table></div>
-</div>${nonce ? kronosActionPanelScript(nonce, 'Kronos Trend Metrics', true, actionScriptUri) : ''}</body></html>`;
+</div>${nonce ? kronosActionPanelScript(nonce, 'Kronos Trend Metrics', actionScriptUri) : ''}</body></html>`;
 }
 
 export function buildIntegrationManifestHtml(status: IntegrationManifestStatus, audit: IntegrationManifestAudit, nonce?: string, actionScriptUri?: string): string {
@@ -154,7 +154,7 @@ export function buildIntegrationManifestHtml(status: IntegrationManifestStatus, 
   ${prompts ? `<div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Prompt</th><th>Required</th><th>Hash Status</th><th>Manifest SHA-256</th></tr>${prompts}</table></div>` : '<div class="kronos-empty">No prompt manifest entries.</div>'}</div>
   <div class="operator-section"><h2>Providers</h2>
   ${providers ? `<div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Provider</th><th>Status</th><th>Base URL</th></tr>${providers}</table></div>` : '<div class="kronos-empty">No provider manifest entries.</div>'}</div>
-</div>${nonce ? kronosActionPanelScript(nonce, 'Kronos Integration Manifest', true, actionScriptUri) : ''}</body></html>`;
+</div>${nonce ? kronosActionPanelScript(nonce, 'Kronos Integration Manifest', actionScriptUri) : ''}</body></html>`;
 }
 
 export function buildProfilesHtml(active: KronosProfile, nonce?: string, actionScriptUri?: string): string {
@@ -190,7 +190,7 @@ export function buildProfilesHtml(active: KronosProfile, nonce?: string, actionS
   </div>
   ${actions}
   <div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Profile</th><th>Default Branch</th><th>Providers</th><th>Description</th></tr>${rows}</table></div>
-</div>${nonce ? kronosActionPanelScript(nonce, 'Kronos Profiles', true, actionScriptUri) : ''}</body></html>`;
+</div>${nonce ? kronosActionPanelScript(nonce, 'Kronos Profiles', actionScriptUri) : ''}</body></html>`;
 }
 
 export function buildDoctorHtml(checks: DoctorCheck[], nonce?: string, actionScriptUri?: string): string {
@@ -233,5 +233,5 @@ export function buildDoctorHtml(checks: DoctorCheck[], nonce?: string, actionScr
     <tr><th>Status</th><th>Check</th><th>Detail</th></tr>
     ${rows}
   </table></div>
-</div>${nonce ? kronosActionPanelScript(nonce, 'Kronos Doctor', true, actionScriptUri) : ''}</body></html>`;
+</div>${nonce ? kronosActionPanelScript(nonce, 'Kronos Doctor', actionScriptUri) : ''}</body></html>`;
 }

@@ -38,7 +38,7 @@ export function buildEvidenceHandoffHtml(plan: EvidenceHandoffPlan, nonce?: stri
   <div class="operator-section"><h2>Comment Payload</h2>
   <pre>${comment}</pre></div>
   <p>Markdown artifact: ${escapeHtml(plan.exportPath)}</p>
-</div>${nonce ? kronosActionPanelScript(nonce, 'Kronos Evidence Handoff', true, actionScriptUri) : ''}</body></html>`;
+</div>${nonce ? kronosActionPanelScript(nonce, 'Kronos Evidence Handoff', actionScriptUri) : ''}</body></html>`;
 }
 
 export function buildEvidencePublishHtml(results: Array<EvidencePublishResult | EvidencePublishDestination>, ticketKey: string, nonce?: string, actionScriptUri?: string): string {
@@ -68,7 +68,7 @@ export function buildEvidencePublishHtml(results: Array<EvidencePublishResult | 
   ${actions}
   <div class="subtitle">External publishing is safety-gated and credential values are never displayed.</div>
   ${empty || `<div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Status</th><th>Destination</th><th>Detail</th><th>Endpoint</th></tr>${rows}</table></div>`}
-</div>${nonce ? kronosActionPanelScript(nonce, 'Kronos Evidence Publish', true, actionScriptUri) : ''}</body></html>`;
+</div>${nonce ? kronosActionPanelScript(nonce, 'Kronos Evidence Publish', actionScriptUri) : ''}</body></html>`;
 }
 
 export function buildEvidenceGateHtml(gates: EvidenceGateResult[], title: string, nonce: string, actionScriptUri?: string): string {
@@ -102,7 +102,7 @@ export function buildEvidenceGateHtml(gates: EvidenceGateResult[], title: string
     <div class="summary-card"><div class="num">${summary.pass}</div><div class="lbl">Passing</div></div>
   </div>
   ${empty || `<div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Status</th><th>Ticket</th><th>Check</th><th>Item</th><th>Detail</th><th class="action-cell">Actions</th></tr>${rows}</table></div>`}
-</div>${kronosActionPanelScript(nonce, 'Kronos Evidence Gate', true, actionScriptUri)}</body></html>`;
+</div>${kronosActionPanelScript(nonce, 'Kronos Evidence Gate', actionScriptUri)}</body></html>`;
 }
 
 function publishPillClass(status: string): string {

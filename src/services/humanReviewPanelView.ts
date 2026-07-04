@@ -36,7 +36,7 @@ export function buildHumanReviewInboxHtml(inbox: HumanReviewInbox, options: Huma
     <div class="summary-card"><div class="num">${inbox.summary.total}</div><div class="lbl">Total</div></div>
   </div>
   ${empty || `<div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Severity</th><th>Kind</th><th>Item</th><th>Detail</th><th>Ref</th><th class="action-cell">Actions</th></tr>${rows}</table></div>`}
-</div>${kronosActionPanelScript(options.nonce, 'Kronos Human Review Inbox', true, options.actionScriptUri)}</body></html>`;
+</div>${kronosActionPanelScript(options.nonce, 'Kronos Human Review Inbox', options.actionScriptUri)}</body></html>`;
 }
 
 function humanReviewActionButtons(item: HumanReviewItem, tickets: Record<string, Ticket>): string {

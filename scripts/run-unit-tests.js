@@ -2673,10 +2673,10 @@ test('webview security injects CSP and preserves existing nonce policies', () =>
   assert.equal(operatorPanel.normalizeActionPanelMessage({ command: 'unknown' }, allowedActions), null);
   assert.equal(operatorPanel.normalizeActionPanelMessage(null, allowedActions), null);
   assert.throws(
-    () => operatorPanel.kronosActionPanelScript('nonce123', 'Kronos Missing Script', true),
+    () => operatorPanel.kronosActionPanelScript('nonce123', 'Kronos Missing Script'),
     /packaged webview script URI/,
   );
-  const panelScript = operatorPanel.kronosActionPanelScript('nonce123', 'Kronos Test', true, 'vscode-resource://kronos/action.js');
+  const panelScript = operatorPanel.kronosActionPanelScript('nonce123', 'Kronos Test', 'vscode-resource://kronos/action.js');
   assert.match(panelScript, /script nonce="nonce123"/);
   assert.match(panelScript, /Kronos Test/);
   assert.match(panelScript, /data-ticket/);
@@ -2685,7 +2685,7 @@ test('webview security injects CSP and preserves existing nonce policies', () =>
   assert.match(panelScript, /data-item-id/);
   assert.match(panelScript, /data-recovery-action/);
   assert.match(panelScript, /__kronosWebviewReady/);
-  const defaultPanelScript = operatorPanel.kronosActionPanelScript('nonce-default', undefined, true, 'vscode-resource://kronos/action.js');
+  const defaultPanelScript = operatorPanel.kronosActionPanelScript('nonce-default', undefined, 'vscode-resource://kronos/action.js');
   assert.match(defaultPanelScript, /__kronosWebviewReady/);
 
   const existing = '<html><head><meta http-equiv="Content-Security-Policy" content="default-src test"></head><body></body></html>';
@@ -8004,9 +8004,9 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     "loadWarning = warnUnexpectedPanelIntegrationError(e, 'Morning brief unavailable.')",
     'const actionScriptUri = kronosActionPanelScriptUri(panel, context.extensionUri)',
     'buildDashboardHtml(state, data, nonce, loadWarning, actionScriptUri)',
-    "kronosActionPanelScript(nonce, 'Kronos Dashboard', true, actionScriptUri)",
+    "kronosActionPanelScript(nonce, 'Kronos Dashboard', actionScriptUri)",
     "function openAgingReportPanel(state: KronosState, extensionUri?: vscode.Uri)",
-    "kronosActionPanelScript(nonce, 'Kronos Aging Report', true, actionScriptUri)",
+    "kronosActionPanelScript(nonce, 'Kronos Aging Report', actionScriptUri)",
     'Morning brief unavailable',
     'dashboard-warning',
     'class="kronos-shell board-shell"',
@@ -8372,7 +8372,7 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'planId: stringField(message,',
     'itemId: stringField(message,',
     'scriptUri?: string',
-    'readyDiagnostic ? { readyCommand: WEBVIEW_READY_COMMAND } : {}',
+    'readyCommand: WEBVIEW_READY_COMMAND',
     "{ messageKey: 'ticket', dataAttribute: 'data-ticket' }",
     "{ messageKey: 'runId', dataAttribute: 'data-run-id' }",
     "{ messageKey: 'planId', dataAttribute: 'data-plan-id' }",
@@ -8395,9 +8395,9 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'promptTemplateRow',
     'kronosOperatorPanelCss',
     'actionScriptUri?: string',
-    "kronosActionPanelScript(nonce, 'Kronos Prompt Manager', true, actionScriptUri)",
-    "kronosActionPanelScript(nonce, 'Kronos Prompt History', true, actionScriptUri)",
-    "kronosActionPanelScript(nonce, 'Kronos Prompt Smoke Tests', true, actionScriptUri)",
+    "kronosActionPanelScript(nonce, 'Kronos Prompt Manager', actionScriptUri)",
+    "kronosActionPanelScript(nonce, 'Kronos Prompt History', actionScriptUri)",
+    "kronosActionPanelScript(nonce, 'Kronos Prompt Smoke Tests', actionScriptUri)",
   ]) {
     assert.ok(promptPanelViewSource.includes(marker), marker);
   }
@@ -8410,7 +8410,7 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     "actionButton('executeRecoveryItem'",
     'recoveryActionLabel',
     'kronosOperatorPanelCss',
-    "kronosActionPanelScript(nonce, 'Kronos Recovery Center', true, actionScriptUri)",
+    "kronosActionPanelScript(nonce, 'Kronos Recovery Center', actionScriptUri)",
   ]) {
     assert.ok(recoveryPanelViewSource.includes(marker), marker);
   }
@@ -8429,7 +8429,7 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     "actionButton('recoveryCenter', 'Recovery', runOptions)",
     "actionButton('doctor', 'Open Doctor'",
     'kronosOperatorPanelCss',
-    "kronosActionPanelScript(options.nonce, 'Kronos Human Review Inbox', true, options.actionScriptUri)",
+    "kronosActionPanelScript(options.nonce, 'Kronos Human Review Inbox', options.actionScriptUri)",
   ]) {
     assert.ok(humanReviewPanelViewSource.includes(marker), marker);
   }
@@ -8451,7 +8451,7 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     "actionButton('publishEvidence', 'Publish'",
     'safeHttpHref',
     'kronosOperatorPanelCss',
-    "kronosActionPanelScript(nonce, 'Kronos Evidence Gate', true, actionScriptUri)",
+    "kronosActionPanelScript(nonce, 'Kronos Evidence Gate', actionScriptUri)",
   ]) {
     assert.ok(evidencePanelViewSource.includes(marker), marker);
   }
@@ -8474,11 +8474,11 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'listProfiles().map',
     'kronosOperatorPanelCss',
     'actionScriptUri?: string',
-    "kronosActionPanelScript(nonce, 'Kronos Agent Quality Score', true, actionScriptUri)",
-    "kronosActionPanelScript(nonce, 'Kronos Trend Metrics', true, actionScriptUri)",
-    "kronosActionPanelScript(nonce, 'Kronos Integration Manifest', true, actionScriptUri)",
-    "kronosActionPanelScript(nonce, 'Kronos Profiles', true, actionScriptUri)",
-    "kronosActionPanelScript(nonce, 'Kronos Doctor', true, actionScriptUri)",
+    "kronosActionPanelScript(nonce, 'Kronos Agent Quality Score', actionScriptUri)",
+    "kronosActionPanelScript(nonce, 'Kronos Trend Metrics', actionScriptUri)",
+    "kronosActionPanelScript(nonce, 'Kronos Integration Manifest', actionScriptUri)",
+    "kronosActionPanelScript(nonce, 'Kronos Profiles', actionScriptUri)",
+    "kronosActionPanelScript(nonce, 'Kronos Doctor', actionScriptUri)",
   ]) {
     assert.ok(operationsReportPanelViewSource.includes(marker), marker);
   }

@@ -997,7 +997,7 @@ for (const marker of [
   'recoveryAction: stringField(message,',
   'webviewActionScriptTag',
   'scriptUri?: string',
-  'readyDiagnostic ? { readyCommand: WEBVIEW_READY_COMMAND } : {}',
+  'readyCommand: WEBVIEW_READY_COMMAND',
   "{ messageKey: 'ticket', dataAttribute: 'data-ticket' }",
   "{ messageKey: 'runId', dataAttribute: 'data-run-id' }",
   "{ messageKey: 'planId', dataAttribute: 'data-plan-id' }",
@@ -1422,7 +1422,7 @@ for (const marker of [
   'focused-recovery-item',
   'recoveryActionLabel',
   'kronosOperatorPanelCss',
-  "kronosActionPanelScript(nonce, 'Kronos Recovery Center', true, actionScriptUri)",
+  "kronosActionPanelScript(nonce, 'Kronos Recovery Center', actionScriptUri)",
 ]) {
   if (!recoveryPanelView.includes(marker)) {
     fail(`Missing recovery panel view marker: ${marker}`);
@@ -1467,7 +1467,7 @@ for (const marker of [
   "actionButton('publishEvidence', 'Publish'",
   'safeHttpHref',
   'kronosOperatorPanelCss',
-  "kronosActionPanelScript(nonce, 'Kronos Evidence Gate', true, actionScriptUri)",
+  "kronosActionPanelScript(nonce, 'Kronos Evidence Gate', actionScriptUri)",
 ]) {
   if (!evidencePanelView.includes(marker)) {
     fail(`Missing evidence panel view marker: ${marker}`);
@@ -1521,9 +1521,9 @@ for (const marker of [
   "loadWarning = warnUnexpectedPanelIntegrationError(e, 'Morning brief unavailable.')",
   'const actionScriptUri = kronosActionPanelScriptUri(panel, context.extensionUri)',
   'buildDashboardHtml(state, data, nonce, loadWarning, actionScriptUri)',
-  "kronosActionPanelScript(nonce, 'Kronos Dashboard', true, actionScriptUri)",
+  "kronosActionPanelScript(nonce, 'Kronos Dashboard', actionScriptUri)",
   "function openAgingReportPanel(state: KronosState, extensionUri?: vscode.Uri)",
-  "kronosActionPanelScript(nonce, 'Kronos Aging Report', true, actionScriptUri)",
+  "kronosActionPanelScript(nonce, 'Kronos Aging Report', actionScriptUri)",
   'Morning brief unavailable',
   'dashboard-warning',
   'class="kronos-shell ticket-shell"',
@@ -1569,9 +1569,9 @@ for (const marker of [
   'promptTemplateRow',
   'kronosOperatorPanelCss',
   'actionScriptUri?: string',
-  "kronosActionPanelScript(nonce, 'Kronos Prompt Manager', true, actionScriptUri)",
-  "kronosActionPanelScript(nonce, 'Kronos Prompt History', true, actionScriptUri)",
-  "kronosActionPanelScript(nonce, 'Kronos Prompt Smoke Tests', true, actionScriptUri)",
+  "kronosActionPanelScript(nonce, 'Kronos Prompt Manager', actionScriptUri)",
+  "kronosActionPanelScript(nonce, 'Kronos Prompt History', actionScriptUri)",
+  "kronosActionPanelScript(nonce, 'Kronos Prompt Smoke Tests', actionScriptUri)",
 ]) {
   if (!promptPanelView.includes(marker)) {
     fail(`Missing prompt panel view marker: ${marker}`);
@@ -3291,11 +3291,11 @@ for (const marker of [
   'listProfiles().map',
   'kronosOperatorPanelCss',
   'actionScriptUri?: string',
-  "kronosActionPanelScript(nonce, 'Kronos Agent Quality Score', true, actionScriptUri)",
-  "kronosActionPanelScript(nonce, 'Kronos Trend Metrics', true, actionScriptUri)",
-  "kronosActionPanelScript(nonce, 'Kronos Integration Manifest', true, actionScriptUri)",
-  "kronosActionPanelScript(nonce, 'Kronos Profiles', true, actionScriptUri)",
-  "kronosActionPanelScript(nonce, 'Kronos Doctor', true, actionScriptUri)",
+  "kronosActionPanelScript(nonce, 'Kronos Agent Quality Score', actionScriptUri)",
+  "kronosActionPanelScript(nonce, 'Kronos Trend Metrics', actionScriptUri)",
+  "kronosActionPanelScript(nonce, 'Kronos Integration Manifest', actionScriptUri)",
+  "kronosActionPanelScript(nonce, 'Kronos Profiles', actionScriptUri)",
+  "kronosActionPanelScript(nonce, 'Kronos Doctor', actionScriptUri)",
 ]) {
   if (!operationsReportPanelView.includes(marker)) {
     fail(`Missing operations report panel view marker: ${marker}`);

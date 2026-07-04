@@ -3555,7 +3555,7 @@ export function activate(context: vscode.ExtensionContext) {
   <div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Action</th><th>Sessions</th><th>Success</th><th>Avg Time</th><th>Avg Tools</th></tr>${skillRows}</table></div></div>
   <div class="operator-section"><h2>Recent Sessions</h2>
   <div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Date</th><th>Project</th><th>Action</th><th>Ticket</th><th>Result</th><th>Time</th><th>Tools</th><th>Errors</th><th>Files</th></tr>${recentRows}</table></div></div>
-</div>${kronosActionPanelScript(nonce, 'Kronos Session Stats', true, actionScriptUri)}</body></html>`, webviewScriptCspOptions(panel.webview.cspSource, nonce));
+</div>${kronosActionPanelScript(nonce, 'Kronos Session Stats', actionScriptUri)}</body></html>`, webviewScriptCspOptions(panel.webview.cspSource, nonce));
     }),
 
     vscode.commands.registerCommand('kronos.agentQualityScore', async () => {
@@ -4842,7 +4842,7 @@ function openAgingReportPanel(state: KronosState, extensionUri?: vscode.Uri): vo
         actionButton('trendMetrics', 'Trend Metrics'),
         actionButton('evidenceGate', 'Evidence Gate'),
       ]),
-      scriptHtml: kronosActionPanelScript(nonce, 'Kronos Aging Report', true, actionScriptUri),
+      scriptHtml: kronosActionPanelScript(nonce, 'Kronos Aging Report', actionScriptUri),
     }), webviewScriptCspOptions(panel.webview.cspSource, nonce));
   };
   render();
@@ -5996,7 +5996,7 @@ function buildDashboardHtml(state: KronosState, brief: unknown, nonce?: string, 
     <h3 class="kronos-section-title">Projects</h3>
     <div class="grid">${projectCards || '<div class="kronos-empty">No projects registered.</div>'}</div>
   </div>
-</div>${nonce ? kronosActionPanelScript(nonce, 'Kronos Dashboard', true, actionScriptUri) : ''}</body>
+</div>${nonce ? kronosActionPanelScript(nonce, 'Kronos Dashboard', actionScriptUri) : ''}</body>
 </html>`;
 }
 
@@ -6606,7 +6606,7 @@ function buildTicketHtml(key: string, ticket: Ticket, state: KronosState, nonce?
   ${buildHtml}
 
   <div class="actions">${actionButtons}</div>
-</div>${nonce ? kronosActionPanelScript(nonce, 'Kronos Ticket Detail', true, actionScriptUri) : ''}</body></html>`;
+</div>${nonce ? kronosActionPanelScript(nonce, 'Kronos Ticket Detail', actionScriptUri) : ''}</body></html>`;
 }
 
 function buildTicketGateHtml(gate: EvidenceGateResult): string {
