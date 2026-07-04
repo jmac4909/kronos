@@ -2850,7 +2850,7 @@ for (const marker of [
   'function readCurrentWriteLock(): StateWriteLock | null',
   'export function readStateFile',
   'export function readQueueFile',
-  'STATE_WRITE_LOCK_FILE',
+  "const STATE_WRITE_LOCK_FILE = path.join(KRONOS_DIR, 'state.write.lock')",
   'acquireStateWriteLock',
   'clearStaleWriteLock',
   'DEFAULT_OVERNIGHT',
@@ -2875,6 +2875,7 @@ for (const marker of [
 for (const forbidden of [
   'catch (e: any)',
   'e?.message',
+  'export const STATE_WRITE_LOCK_FILE',
   'export function migrateStateFileShape(raw: any)',
   'function migrateTicketEvidence(evidence: any): any',
   'export function migrateQueueFileShape(raw: any)',

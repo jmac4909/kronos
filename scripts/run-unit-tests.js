@@ -672,17 +672,18 @@ test('state store write lock blocks concurrent writes and releases after success
   const next = baseState({
     'K-LOCK': ticket({ summary: 'Locked' }),
   });
+  const stateWriteLockFile = path.join(stateStore.KRONOS_DIR, 'state.write.lock');
 
-  fs.mkdirSync(path.dirname(stateStore.STATE_WRITE_LOCK_FILE), { recursive: true });
-  fs.writeFileSync(stateStore.STATE_WRITE_LOCK_FILE, JSON.stringify({ pid: 123, action: 'held', createdAt: new Date().toISOString() }));
+  fs.mkdirSync(path.dirname(stateWriteLockFile), { recursive: true });
+  fs.writeFileSync(stateWriteLockFile, JSON.stringify({ pid: 123, action: 'held', createdAt: new Date().toISOString() }));
   assert.throws(
     () => stateStore.writeJsonFileAtomic(stateStore.STATE_FILE, next, 'blocked-write'),
     /state write lock is held/
   );
-  fs.unlinkSync(stateStore.STATE_WRITE_LOCK_FILE);
+  fs.unlinkSync(stateWriteLockFile);
 
   stateStore.writeJsonFileAtomic(stateStore.STATE_FILE, next, 'locked-write');
-  assert.equal(fs.existsSync(stateStore.STATE_WRITE_LOCK_FILE), false);
+  assert.equal(fs.existsSync(stateWriteLockFile), false);
   assert.equal(JSON.parse(fs.readFileSync(stateStore.STATE_FILE, 'utf8')).tickets['K-LOCK'].summary, 'Locked');
 });
 

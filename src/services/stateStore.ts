@@ -9,10 +9,10 @@ import { QUEUE_ACTIONS, TICKET_ACTIONS } from './actionCatalog';
 export const KRONOS_DIR = process.env['KRONOS_DIR'] || path.join(os.homedir(), '.claude', 'kronos');
 export const STATE_FILE = path.join(KRONOS_DIR, 'state.json');
 export const QUEUE_FILE = path.join(KRONOS_DIR, 'queue.json');
-export const STATE_WRITE_LOCK_FILE = path.join(KRONOS_DIR, 'state.write.lock');
 export const STATE_AUDIT_FILE = path.join(KRONOS_DIR, 'audit.jsonl');
 
 const BACKUP_DIR = path.join(KRONOS_DIR, 'backups');
+const STATE_WRITE_LOCK_FILE = path.join(KRONOS_DIR, 'state.write.lock');
 const WRITE_LOCK_STALE_MS = 5 * 60 * 1000;
 
 interface StateBackup {
