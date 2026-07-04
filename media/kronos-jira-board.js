@@ -8,9 +8,7 @@
       var byId = document.getElementById('kronos-jira-board-script');
       if (byId && typeof byId.getAttribute === 'function') { return byId; }
     }
-    if (typeof document.querySelector === 'function') {
-      return document.querySelector('script[data-kronos-script-kind="jira-board"],script[data-kronos-webview-name="Kronos Jira Board"]');
-    }
+    if (typeof document.querySelector === 'function') { return document.querySelector('script[data-kronos-script-kind="jira-board"]'); }
     return null;
   }
 
@@ -121,14 +119,16 @@
 
   function postReady() {
     if (readyPosted || !readyCommand) { return; }
-    readyPosted = true;
     try {
-      kronosVsCodeApi().postMessage({
+      var api = kronosVsCodeApi();
+      if (api.__kronosFallbackVsCodeApi) { setTimeout(postReady, 50); return; }
+      api.postMessage({
         command: readyCommand,
         webviewName: webviewName,
         userAgent: navigator.userAgent,
         readyState: document.readyState
       });
+      readyPosted = true;
     } catch (error) {
       console.warn('Kronos webview could not post script readiness', error);
     }

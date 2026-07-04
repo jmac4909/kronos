@@ -8,9 +8,7 @@
       var byId = document.getElementById('kronos-action-panel-script');
       if (byId && typeof byId.getAttribute === 'function') { return byId; }
     }
-    if (typeof document.querySelector === 'function') {
-      return document.querySelector('script[data-kronos-script-kind="action-panel"],script[data-kronos-action-fields]');
-    }
+    if (typeof document.querySelector === 'function') { return document.querySelector('script[data-kronos-script-kind="action-panel"]'); }
     return null;
   }
 
@@ -91,7 +89,9 @@
   function postReady() {
     if (!readyCommand) { return; }
     try {
-      kronosVsCodeApi().postMessage({
+      var api = kronosVsCodeApi();
+      if (api.__kronosFallbackVsCodeApi) { setTimeout(postReady, 50); return; }
+      api.postMessage({
         command: readyCommand,
         webviewName: webviewName,
         userAgent: navigator.userAgent,

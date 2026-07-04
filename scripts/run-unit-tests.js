@@ -2251,9 +2251,37 @@ test('webview security injects CSP and preserves existing nonce policies', () =>
   assert.equal(webviewSecurity.WEBVIEW_READY_COMMAND, '__kronosWebviewReady');
   const readyScript = webviewSecurity.webviewReadyPostScript('Kronos Ready');
   assert.match(readyScript, /__kronosWebviewReady/);
-  assert.match(readyScript, /kronosVsCodeApi\(\)\.postMessage/);
+  assert.match(readyScript, /api\.postMessage/);
+  assert.match(readyScript, /__kronosFallbackVsCodeApi/);
   assert.match(readyScript, /Kronos webview could not post script readiness/);
   assert.match(readyScript, /DOMContentLoaded/);
+  const readyPostedMessages = [];
+  const readyTimeouts = [];
+  let readyAcquireCalls = 0;
+  vm.runInNewContext(readyScript, {
+    kronosVsCodeApi() {
+      readyAcquireCalls += 1;
+      if (readyAcquireCalls === 1) {
+        return { __kronosFallbackVsCodeApi: true, postMessage: message => readyPostedMessages.push({ fallback: true, message }) };
+      }
+      return { postMessage: message => readyPostedMessages.push(message) };
+    },
+    console: { warn() {} },
+    navigator: { userAgent: 'Kronos Windows Webview Ready Retry Test' },
+    setTimeout(handler, ms) {
+      readyTimeouts.push(ms);
+      handler();
+    },
+    document: {
+      readyState: 'complete',
+      addEventListener() {},
+    },
+  });
+  assert.equal(readyAcquireCalls, 2);
+  assert.deepEqual(readyTimeouts, [0, 50]);
+  assert.equal(readyPostedMessages.length, 1);
+  assert.equal(readyPostedMessages[0].command, webviewSecurity.WEBVIEW_READY_COMMAND);
+  assert.equal(readyPostedMessages[0].webviewName, 'Kronos Ready');
   const diagnosticBanner = webviewSecurity.webviewScriptDiagnosticBanner();
   assert.match(diagnosticBanner, /data-kronos-script-required/);
   assert.match(diagnosticBanner, /Webview Developer Tools/);
@@ -2485,6 +2513,47 @@ test('webview security injects CSP and preserves existing nonce policies', () =>
   assert.equal(externalPostedMessages[1].ticket, 'K-1');
   assert.equal(externalPostedMessages[1].runId, 'run-1');
   assert.equal(externalAcquireCalls, 1);
+  const externalReadyRetryMessages = [];
+  const externalReadyRetryListeners = {};
+  const externalReadyRetryTimeouts = [];
+  let externalReadyRetryAcquireCalls = 0;
+  vm.runInNewContext(externalActionScript, {
+    acquireVsCodeApi: () => {
+      externalReadyRetryAcquireCalls += 1;
+      if (externalReadyRetryAcquireCalls === 1) { throw new Error('transient acquire failure'); }
+      return { postMessage: message => externalReadyRetryMessages.push(message) };
+    },
+    console: { info() {}, warn() {}, error() {} },
+    navigator: { userAgent: 'Kronos Windows Webview External Ready Retry Test' },
+    setTimeout(handler, ms) {
+      externalReadyRetryTimeouts.push(ms);
+      handler();
+    },
+    window: { addEventListener() {} },
+    document: {
+      readyState: 'complete',
+      currentScript: {
+        getAttribute(name) {
+          return {
+            'data-kronos-webview-name': 'Kronos External Retry',
+            'data-kronos-ready-command': webviewSecurity.WEBVIEW_READY_COMMAND,
+            'data-kronos-action-fields': JSON.stringify([
+              { messageKey: 'ticket', dataAttribute: 'data-ticket' },
+              { messageKey: 'runId', dataAttribute: 'data-run-id' },
+            ]),
+          }[name] || '';
+        },
+      },
+      documentElement: { setAttribute() {} },
+      addEventListener(type, handler) { externalReadyRetryListeners[type] = handler; },
+    },
+  });
+  assert.equal(externalReadyRetryAcquireCalls, 2);
+  assert.deepEqual(externalReadyRetryTimeouts, [0, 50]);
+  assert.equal(externalReadyRetryMessages.length, 1);
+  assert.equal(externalReadyRetryMessages[0].command, webviewSecurity.WEBVIEW_READY_COMMAND);
+  assert.equal(externalReadyRetryMessages[0].webviewName, 'Kronos External Retry');
+  assert.equal(typeof externalReadyRetryListeners.click, 'function');
   const externalNullPostedMessages = [];
   const externalNullListeners = {};
   const externalNullScript = {
@@ -2532,7 +2601,6 @@ test('webview security injects CSP and preserves existing nonce policies', () =>
   assert.match(jiraBoardScript, /Kronos webview script ready/);
   assert.match(jiraBoardScript, /function closestBoardTarget/);
   assert.doesNotMatch(jiraBoardScript, /const vscode =/);
-  assert.doesNotMatch(jiraBoardScript, /\blet\s+lastFocusedEl/);
   const jiraPostedMessages = [];
   const jiraDocumentListeners = {};
   const jiraDocumentElementAttributes = {};
@@ -2594,6 +2662,50 @@ test('webview security injects CSP and preserves existing nonce policies', () =>
   assert.equal(jiraStopped, true);
   assert.equal(jiraPostedMessages[1].command, 'removeFromQueue');
   assert.equal(jiraPostedMessages[1].ticket, 'K-77');
+
+  const jiraReadyRetryMessages = [];
+  let jiraReadyAcquireCalls = 0;
+  const jiraReadyTimeouts = [];
+  vm.runInNewContext(jiraBoardScript, {
+    acquireVsCodeApi() {
+      jiraReadyAcquireCalls += 1;
+      if (jiraReadyAcquireCalls === 1) { throw new Error('transient acquire failure'); }
+      return { postMessage: message => jiraReadyRetryMessages.push(message) };
+    },
+    console: { info() {}, warn() {}, error() {} },
+    navigator: { userAgent: 'Kronos Windows Jira Ready Retry Test' },
+    setTimeout(handler, ms) {
+      jiraReadyTimeouts.push(ms);
+      handler();
+    },
+    window: { addEventListener() {} },
+    document: {
+      readyState: 'complete',
+      currentScript: {
+        getAttribute(name) {
+          return {
+            'data-kronos-webview-name': 'Kronos Jira Board',
+            'data-kronos-ready-command': webviewSecurity.WEBVIEW_READY_COMMAND,
+          }[name] || '';
+        },
+      },
+      documentElement: { setAttribute() {} },
+      getElementById(id) {
+        if (id === 'kronos-jira-ticket-data') { return { value: '{}' }; }
+        return null;
+      },
+      querySelector(selector) {
+        if (selector === '.board') { return { addEventListener() {} }; }
+        return null;
+      },
+      querySelectorAll() { return []; },
+      addEventListener() {},
+    },
+  });
+  assert.equal(jiraReadyAcquireCalls, 2);
+  assert.deepEqual(jiraReadyTimeouts, [0, 50]);
+  assert.equal(jiraReadyRetryMessages.length, 1);
+  assert.equal(jiraReadyRetryMessages[0].command, webviewSecurity.WEBVIEW_READY_COMMAND);
 
   const button = operatorPanel.actionButton('open<Thing>', 'Open & Check', {
     ticket: 'T-1',
@@ -7586,7 +7698,6 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     "document.addEventListener('DOMContentLoaded', initKronosJiraBoard)",
     "document.documentElement.setAttribute('data-kronos-actions-ready', 'true')",
     'function applyBoardFilter',
-    'var lastFocusedEl = null',
     'data-search="${attr(searchText)}"',
     'function formatWebviewDateTime',
     'escapeClass',

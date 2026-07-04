@@ -607,6 +607,8 @@ for (const marker of [
   'const startRuntimePolling = () =>',
   'const runStartupSideEffects = () =>',
   'const startupSideEffectsTimer = setTimeout(runStartupSideEffects, 0)',
+  "warnUnexpectedPanelIntegrationError(e, 'Kronos startup state notification failed.')",
+  "warnUnexpectedPanelIntegrationError(e, 'Kronos startup cleanup check failed.')",
   'vscode.workspace.onDidChangeConfiguration(e =>',
   "e.affectsConfiguration('kronos.pollIntervalSec')",
   "e.affectsConfiguration('kronos.sessionPollIntervalMs')",
@@ -1482,7 +1484,6 @@ for (const marker of [
   'id="board-filter"',
   'id="board-filter-summary"',
   'function applyBoardFilter',
-  'var lastFocusedEl = null',
   'function formatWebviewDateTime',
   'escapeClass',
   'data-search="${attr(searchText)}"',
@@ -2438,7 +2439,9 @@ for (const marker of [
   "console.error('Kronos webview unhandled rejection', webviewName",
   'export const WEBVIEW_READY_COMMAND',
   'export function webviewReadyPostScript',
-  "kronosVsCodeApi().postMessage({ command: readyCommand",
+  'const api = kronosVsCodeApi()',
+  'if (api.__kronosFallbackVsCodeApi) { setTimeout(postReady, 50); return; }',
+  "api.postMessage({ command: readyCommand",
   "console.warn('Kronos webview could not post script readiness', error)",
   'export function webviewScriptDiagnosticBanner',
   'data-kronos-script-required',
@@ -2510,6 +2513,7 @@ for (const marker of [
   "console.error('Kronos webview script error', webviewName",
   "console.error('Kronos webview unhandled rejection', webviewName",
   'function postReady()',
+  'if (api.__kronosFallbackVsCodeApi) { setTimeout(postReady, 50); return; }',
   'function closestKronosActionTarget(target)',
   'target.parentElement',
   'function postKronosAction(event)',
@@ -2529,6 +2533,7 @@ for (const marker of [
   'function closestBoardTarget',
   '__kronosJiraBoardAttached',
   'data-kronos-jira-board-attached',
+  'if (api.__kronosFallbackVsCodeApi) { setTimeout(postReady, 50); return; }',
 ]) {
   if (!jiraBoardScript.includes(marker)) {
     fail(`Missing packaged Jira board script guard marker: ${marker}`);

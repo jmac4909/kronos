@@ -1448,31 +1448,39 @@ export function activate(context: vscode.ExtensionContext) {
   };
   const runStartupSideEffects = () => {
     startRuntimePolling();
-    notifyStateLoadIssues();
-    if (!state.state || Object.keys(state.state.projects).length === 0) {
-      runNotificationCommandAction(
-        vscode.window.showInformationMessage(
-          'Welcome to Kronos! Run setup to configure auth and scan for projects.',
-          'Run Setup', 'Later'
-        ),
-        'Run Setup',
-        'kronos.setup',
-        'Failed to start Kronos setup.'
-      );
+    try {
+      notifyStateLoadIssues();
+    } catch (e: unknown) {
+      warnUnexpectedPanelIntegrationError(e, 'Kronos startup state notification failed.');
     }
+    try {
+      if (!state.state || Object.keys(state.state.projects).length === 0) {
+        runNotificationCommandAction(
+          vscode.window.showInformationMessage(
+            'Welcome to Kronos! Run setup to configure auth and scan for projects.',
+            'Run Setup', 'Later'
+          ),
+          'Run Setup',
+          'kronos.setup',
+          'Failed to start Kronos setup.'
+        );
+      }
 
-    // Report stale worktrees from previous sessions without deleting anything automatically.
-    const cleanupPreview = cleanupStaleWorktrees({ remove: false });
-    if (cleanupPreview.removable > 0 || cleanupPreview.blocked > 0) {
-      runNotificationCommandAction(
-        vscode.window.showWarningMessage(
-          `Kronos found ${cleanupPreview.results.length} tracked worktree(s): ${cleanupPreview.removable} clean, ${cleanupPreview.blocked} need review.`,
-          'Review Cleanup'
-        ),
-        'Review Cleanup',
-        'kronos.cleanupWorktrees',
-        'Failed to open Kronos worktree cleanup.'
-      );
+      // Report stale worktrees from previous sessions without deleting anything automatically.
+      const cleanupPreview = cleanupStaleWorktrees({ remove: false });
+      if (cleanupPreview.removable > 0 || cleanupPreview.blocked > 0) {
+        runNotificationCommandAction(
+          vscode.window.showWarningMessage(
+            `Kronos found ${cleanupPreview.results.length} tracked worktree(s): ${cleanupPreview.removable} clean, ${cleanupPreview.blocked} need review.`,
+            'Review Cleanup'
+          ),
+          'Review Cleanup',
+          'kronos.cleanupWorktrees',
+          'Failed to open Kronos worktree cleanup.'
+        );
+      }
+    } catch (e: unknown) {
+      warnUnexpectedPanelIntegrationError(e, 'Kronos startup cleanup check failed.');
     }
   };
   context.subscriptions.push(
