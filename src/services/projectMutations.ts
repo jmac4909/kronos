@@ -3,23 +3,23 @@ import * as path from 'path';
 import { DiscoveredProject, KronosState, ProjectConfig } from '../state/types';
 import { STATE_FILE, readStateFile, validateStateFileShape, writeJsonFileAtomic } from './stateStore';
 
-export interface ProjectConfigUpdateResult {
+interface ProjectConfigUpdateResult {
   projectName: string;
   key: keyof ProjectConfig;
   value: ProjectConfig[keyof ProjectConfig];
 }
 
-export interface RemovedProjectResult {
+interface RemovedProjectResult {
   projectName: string;
   path: string;
   ticketsUnlinked: string[];
 }
 
-export interface ScanDirsResult {
+interface ScanDirsResult {
   scanDirs: string[];
 }
 
-export interface ProjectSetupConfigInput {
+interface ProjectSetupConfigInput {
   projectPath: string;
   projectName: string;
   gitlabProjectId: number | null;
@@ -27,7 +27,7 @@ export interface ProjectSetupConfigInput {
   defaultBranch: string;
 }
 
-export interface ProjectSetupConfigResult {
+interface ProjectSetupConfigResult {
   path: string;
   config: {
     project_name: string;
@@ -37,7 +37,7 @@ export interface ProjectSetupConfigResult {
   };
 }
 
-export interface ProjectIntegrationConfigInput {
+interface ProjectIntegrationConfigInput {
   gitlabProjectId?: number | null;
   sonarProjectKey?: string | null;
   defaultBranch?: string | null;

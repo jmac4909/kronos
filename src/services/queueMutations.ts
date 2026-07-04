@@ -2,50 +2,50 @@ import { KronosState, QueueDecision, QueueItem, QueueState } from '../state/type
 import { QUEUE_FILE, STATE_FILE, readQueueFile, readStateFile, validateQueueState, validateStateFileShape, writeJsonFileAtomic } from './stateStore';
 import { PlannedAction, clearQueueDecision, planNextActions, planToQueueItem, recordQueueDecision } from './queuePlanner';
 
-export interface AddTicketToQueueResult {
+interface AddTicketToQueueResult {
   added: boolean;
   alreadyInQueue: boolean;
   item?: QueueItem;
 }
 
-export interface RemoveTicketFromQueueResult {
+interface RemoveTicketFromQueueResult {
   removed: number;
 }
 
-export interface TicketProjectLinkResult {
+interface TicketProjectLinkResult {
   changed: boolean;
   projects: string[];
 }
 
-export interface NextQueueItemResult {
+interface NextQueueItemResult {
   empty: boolean;
   item?: QueueItem;
 }
 
-export interface AddPlanToQueueOptions {
+interface AddPlanToQueueOptions {
   pinTop?: boolean;
 }
 
-export interface AddPlanToQueueResult {
+interface AddPlanToQueueResult {
   added: boolean;
   alreadyQueued: boolean;
   pinned: boolean;
   item: QueueItem;
 }
 
-export interface RecordPlanQueueDecisionOptions {
+interface RecordPlanQueueDecisionOptions {
   snoozeMinutes?: number;
   reason?: string;
   now?: Date;
 }
 
-export interface RecordPlanQueueDecisionResult {
+interface RecordPlanQueueDecisionResult {
   decision: QueueDecision;
 }
 
-export type QueueReorderDirection = 'up' | 'down' | 'top';
+type QueueReorderDirection = 'up' | 'down' | 'top';
 
-export interface QueueReorderResult {
+interface QueueReorderResult {
   changed: boolean;
   item?: QueueItem;
   items: QueueItem[];
