@@ -1444,11 +1444,10 @@ test('deploy monitor handoff resolves projects and only suppresses handled runs'
     },
   });
   assert.equal(deployMonitorHandoff.deployMonitorHandoffCheckName(issueTicket), 'Deploy monitor handoff MR !13');
-  assert.equal(deployMonitorHandoff.deployMonitorHandoffIssueSummary(issueTicket), 'deploy monitor did not start');
   assert.equal(deployMonitorHandoff.hasDeployMonitorHandoffIssue(issueTicket, 'deploy monitor did not start'), true);
   assert.equal(deployMonitorHandoff.hasDeployMonitorHandoffIssue(issueTicket, 'project path missing'), true);
   assert.equal(deployMonitorHandoff.hasDeployMonitorHandoffIssue(issueTicket, 'different failure'), false);
-  assert.equal(deployMonitorHandoff.deployMonitorHandoffIssueSummary(ticket({ mr: merged.mr })), undefined);
+  assert.equal(deployMonitorHandoff.hasDeployMonitorHandoffIssue(ticket({ mr: merged.mr }), 'deploy monitor did not start'), false);
 });
 
 test('queue mutation helpers centralize queue membership and ticket project links', () => {

@@ -3,16 +3,16 @@ import { evidenceChecks, evidenceString } from './evidenceData';
 import { runAttentionLine } from './runAttention';
 import { isFreshActiveRun } from './runStatus';
 
-export const DEPLOY_MONITOR_HANDOFF_CHECK_PREFIX = 'Deploy monitor handoff';
+const DEPLOY_MONITOR_HANDOFF_CHECK_PREFIX = 'Deploy monitor handoff';
 
-export interface DeployMonitorProjectResolution {
+interface DeployMonitorProjectResolution {
   kind: 'ok' | 'blocked';
   projectName?: string;
   projectPath?: string;
   reason?: string;
 }
 
-export interface DeployMonitorRunLike {
+interface DeployMonitorRunLike {
   skill?: unknown;
   ticket?: unknown;
   project?: unknown;
@@ -24,7 +24,7 @@ export interface DeployMonitorRunLike {
   events?: unknown;
 }
 
-export interface DeployMonitorRunMatch {
+interface DeployMonitorRunMatch {
   projectName: string;
   projectPath: string;
   ticketKey: string;
@@ -72,7 +72,7 @@ export function deployMonitorAttentionIssue(runs: DeployMonitorRunLike[], match:
   return `${match.ticketKey} merged, but a prior deploy monitor ${status}${detail ? `: ${detail}` : ''}. Resolve it in Run Center before dispatching another deploy monitor.`;
 }
 
-export function isDeployMonitorRunMatch(run: DeployMonitorRunLike, match: DeployMonitorRunMatch): boolean {
+function isDeployMonitorRunMatch(run: DeployMonitorRunLike, match: DeployMonitorRunMatch): boolean {
   if (run.skill !== 'deploy-monitor' || run.ticket !== match.ticketKey) { return false; }
   if (run.project !== match.projectName && !deployMonitorProjectPathMatches(run.projectPath, match.projectPath)) { return false; }
   const runMrIid = promptMetadataMergeRequestIid(run.promptMetadata);
@@ -81,7 +81,7 @@ export function isDeployMonitorRunMatch(run: DeployMonitorRunLike, match: Deploy
   return runMrIid === match.mrIid;
 }
 
-export function isHandledDeployMonitorRun(run: DeployMonitorRunLike): boolean {
+function isHandledDeployMonitorRun(run: DeployMonitorRunLike): boolean {
   return isFreshActiveRun(run) || (typeof run.status === 'string' && HANDLED_DEPLOY_MONITOR_STATUSES.has(run.status));
 }
 
@@ -96,7 +96,7 @@ function runStatusLabel(status: unknown): string {
   return 'needs attention';
 }
 
-export function promptMetadataMergeRequestIid(value: unknown): number | undefined {
+function promptMetadataMergeRequestIid(value: unknown): number | undefined {
   if (!value || typeof value !== 'object' || Array.isArray(value)) { return undefined; }
   const raw = (value as Record<string, unknown>)['mergeRequestIid'];
   const parsed = typeof raw === 'number' ? raw : typeof raw === 'string' ? Number(raw) : NaN;
@@ -105,10 +105,6 @@ export function promptMetadataMergeRequestIid(value: unknown): number | undefine
 
 export function deployMonitorHandoffCheckName(ticket: Ticket): string {
   return `${DEPLOY_MONITOR_HANDOFF_CHECK_PREFIX}${ticket.mr?.iid ? ` MR !${ticket.mr.iid}` : ''}`;
-}
-
-export function deployMonitorHandoffIssueSummary(ticket: Ticket): string | undefined {
-  return deployMonitorHandoffIssueSummaries(ticket)[0];
 }
 
 export function hasDeployMonitorHandoffIssue(ticket: Ticket, summary: string): boolean {

@@ -943,7 +943,7 @@ for (const marker of [
   'if (match.mrIid === undefined) { return true; }',
   'if (runMrIid === undefined) { return false; }',
   'DEPLOY_MONITOR_HANDOFF_CHECK_PREFIX',
-  'deployMonitorHandoffIssueSummary',
+  'deployMonitorHandoffIssueSummaries',
   'hasDeployMonitorHandoffIssue',
 ]) {
   if (!deployMonitorHandoff.includes(marker)) {
