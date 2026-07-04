@@ -41,6 +41,46 @@ export interface DispatchCollision {
   detail: string;
 }
 
+export interface MrFileHintTarget {
+  ticketKey?: string | null;
+  projects: string[];
+  action: string;
+}
+
+export function mrFileHintCandidateKeys(input: {
+  targets: MrFileHintTarget[];
+  tickets?: Record<string, Ticket>;
+  limit: number;
+}): string[] {
+  const tickets = input.tickets || {};
+  const projectTargets = new Set<string>();
+  const candidateKeys = new Set<string>();
+
+  for (const target of input.targets) {
+    if (!isCodeAction(target.action)) { continue; }
+    for (const project of target.projects || []) {
+      if (project) { projectTargets.add(project); }
+    }
+    if (target.ticketKey && tickets[target.ticketKey]?.mr?.state === 'opened') {
+      candidateKeys.add(target.ticketKey);
+    }
+  }
+
+  if (projectTargets.size === 0 && candidateKeys.size === 0) {
+    return [];
+  }
+
+  for (const [ticketKey, ticket] of Object.entries(tickets)) {
+    if (candidateKeys.size >= input.limit) { break; }
+    if (ticket.mr?.state !== 'opened') { continue; }
+    if (ticket.projects?.some(project => projectTargets.has(project))) {
+      candidateKeys.add(ticketKey);
+    }
+  }
+
+  return Array.from(candidateKeys).slice(0, input.limit);
+}
+
 export function detectDispatchCollisions(input: DispatchCollisionInput): DispatchCollision[] {
   const targetProjects = new Set((input.projects || []).filter(Boolean));
   const ticketKey = input.ticketKey || '';

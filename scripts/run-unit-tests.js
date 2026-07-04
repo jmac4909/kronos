@@ -6886,6 +6886,70 @@ test('collision detector flags active runs, duplicate queue work, and open MRs',
   }
 });
 
+test('collision detector selects MR file hint candidates for code work', () => {
+  const tickets = {
+    'K-TARGET': ticket({
+      projects: ['app'],
+      mr: { iid: 1, state: 'opened', review_status: 'pending_review', url: 'https://gitlab.example/1' },
+    }),
+    'K-SAME-1': ticket({
+      projects: ['app'],
+      mr: { iid: 2, state: 'opened', review_status: 'approved', url: 'https://gitlab.example/2' },
+    }),
+    'K-SAME-2': ticket({
+      projects: ['app', 'web'],
+      mr: { iid: 3, state: 'opened', review_status: 'changes_requested', url: 'https://gitlab.example/3' },
+    }),
+    'K-CLOSED': ticket({
+      projects: ['app'],
+      mr: { iid: 4, state: 'closed', review_status: 'pending_review', url: 'https://gitlab.example/4' },
+    }),
+    'K-OTHER': ticket({
+      projects: ['ops'],
+      mr: { iid: 5, state: 'opened', review_status: 'pending_review', url: 'https://gitlab.example/5' },
+    }),
+  };
+
+  assert.deepEqual(collisionDetector.mrFileHintCandidateKeys({
+    targets: [{ ticketKey: 'K-TARGET', projects: ['app'], action: 'implement' }],
+    tickets,
+    limit: 3,
+  }), ['K-TARGET', 'K-SAME-1', 'K-SAME-2']);
+  assert.deepEqual(collisionDetector.mrFileHintCandidateKeys({
+    targets: [{ ticketKey: 'K-TARGET', projects: ['app'], action: 'add_evidence' }],
+    tickets,
+    limit: 3,
+  }), []);
+  const closedTargetCandidates = collisionDetector.mrFileHintCandidateKeys({
+    targets: [{ ticketKey: 'K-CLOSED', projects: ['app'], action: 'implement' }],
+    tickets,
+    limit: 2,
+  });
+  assert.deepEqual(closedTargetCandidates, ['K-TARGET', 'K-SAME-1']);
+  assert.equal(closedTargetCandidates.includes('K-CLOSED'), false);
+  assert.deepEqual(collisionDetector.mrFileHintCandidateKeys({
+    targets: [{ projects: ['ops'], action: 'fix_build' }],
+    tickets,
+    limit: 3,
+  }), ['K-OTHER']);
+  assert.deepEqual(collisionDetector.mrFileHintCandidateKeys({
+    targets: [{ projects: [], action: 'implement' }],
+    tickets,
+    limit: 3,
+  }), []);
+
+  const source = readSourceFixture('src', 'services', 'collisionDetector.ts');
+  for (const marker of [
+    'export interface MrFileHintTarget',
+    'export function mrFileHintCandidateKeys',
+    'if (!isCodeAction(target.action)) { continue; }',
+    "ticket.mr?.state !== 'opened'",
+    'return Array.from(candidateKeys).slice(0, input.limit)',
+  ]) {
+    assert.ok(source.includes(marker), marker);
+  }
+});
+
 test('script client reports required scripts and wraps Python JSON contracts', async () => {
   const kronosStatePath = path.join(process.env.KRONOS_SCRIPTS_DIR, 'kronos_state.py');
   const pipelinePath = path.join(process.env.KRONOS_SCRIPTS_DIR, 'pipeline_monitor.py');
@@ -9007,8 +9071,9 @@ test('extension webviews use shared UI shell and board filtering affordances', (
   const webviewMessagesSource = readSourceFixture('src', 'services', 'webviewMessages.ts');
   const webviewCommandRegistrySource = readSourceFixture('src', 'services', 'webviewCommandRegistry.ts');
   const runActionHelpersSource = readSourceFixture('src', 'services', 'runActionHelpers.ts');
+  const collisionDetectorSource = readSourceFixture('src', 'services', 'collisionDetector.ts');
   const jiraBoardSource = readSourceFixture('media', 'kronos-jira-board.js');
-  const uiSource = `${source}\n${queuePlannerPanelViewSource}\n${operationsReportPanelViewSource}\n${dashboardPanelViewSource}\n${diffPanelViewSource}\n${jiraBoardPanelViewSource}\n${ticketPanelViewSource}\n${webviewCommandRegistrySource}\n${runActionHelpersSource}\n${jiraBoardSource}`;
+  const uiSource = `${source}\n${queuePlannerPanelViewSource}\n${operationsReportPanelViewSource}\n${dashboardPanelViewSource}\n${diffPanelViewSource}\n${jiraBoardPanelViewSource}\n${ticketPanelViewSource}\n${webviewCommandRegistrySource}\n${runActionHelpersSource}\n${collisionDetectorSource}\n${jiraBoardSource}`;
   const boardHandlerStart = source.indexOf('panel.webview.onDidReceiveMessage(async (msg) => {\n        if (logReady(msg)) { return; }\n        const request = normalizeBoardMessage(msg, BOARD_MESSAGE_COMMANDS);');
   const boardHandlerEnd = source.indexOf("    vscode.commands.registerCommand('kronos.viewTicket'", boardHandlerStart);
   assert.ok(boardHandlerStart >= 0 && boardHandlerEnd > boardHandlerStart, 'Jira board message handler should be present');

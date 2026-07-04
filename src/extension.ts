@@ -24,7 +24,7 @@ import { EvidenceHandoffPlan, buildEvidenceHandoffPlan } from './services/eviden
 import { EvidencePublishDestination, EvidencePublishResult, buildEvidencePublishPlan, publishEvidencePlan, readyPublishDestinations } from './services/evidencePublisher';
 import { RUNS_DIR, archiveRun, listRunStoreIssues, markRunCancelled, markRunContinued, markRunNeedsHuman, markRunPaused, readArchivedRuns, runRecordPath, writeRunRecord } from './services/runStore';
 import { RecoveryInventory, RecoveryItem, buildRecoveryInventory, type RecoveryInventoryInput } from './services/recoveryCenter';
-import { DispatchCollision, detectDispatchCollisions, type DispatchCollisionInput } from './services/collisionDetector';
+import { DispatchCollision, detectDispatchCollisions, mrFileHintCandidateKeys, type DispatchCollisionInput } from './services/collisionDetector';
 import { gitlabAdapter, jiraAdapter, sonarAdapter } from './services/integrationAdapters';
 import { buildRunCompletionEvidenceCheck, buildRunCompletionEvidenceText, evaluatePostRunReadiness, postRunReadinessRunPatch, resolvePostRunTicket, shouldRecordRunCompletionEvidence } from './services/postRunReadiness';
 import { extractAcceptanceCriteria } from './services/acceptanceCriteria';
@@ -4260,33 +4260,11 @@ async function openCollisionReportPanel(state: KronosState, extensionUri?: vscod
 
 async function loadMrFileHints(state: KronosState, targets: Array<{ ticketKey?: string | null; projects: string[]; action: string }>): Promise<Record<string, MergeRequestChangedFile[]>> {
   const tickets = state.state?.tickets || {};
-  const projectTargets = new Set<string>();
-  const candidateKeys = new Set<string>();
-
-  for (const target of targets) {
-    if (!isCodeAction(target.action)) { continue; }
-    for (const project of target.projects || []) {
-      if (project) { projectTargets.add(project); }
-    }
-    if (target.ticketKey && tickets[target.ticketKey]?.mr?.state === 'opened') {
-      candidateKeys.add(target.ticketKey);
-    }
-  }
-
-  if (projectTargets.size === 0 && candidateKeys.size === 0) {
-    return {};
-  }
-
-  for (const [ticketKey, ticket] of Object.entries(tickets)) {
-    if (candidateKeys.size >= LIVE_MR_DIFF_LIMIT) { break; }
-    if (ticket.mr?.state !== 'opened') { continue; }
-    if (ticket.projects?.some(project => projectTargets.has(project))) {
-      candidateKeys.add(ticketKey);
-    }
-  }
+  const candidateKeys = mrFileHintCandidateKeys({ targets, tickets, limit: LIVE_MR_DIFF_LIMIT });
+  if (candidateKeys.length === 0) { return {}; }
 
   const hints: Record<string, MergeRequestChangedFile[]> = {};
-  for (const ticketKey of Array.from(candidateKeys).slice(0, LIVE_MR_DIFF_LIMIT)) {
+  for (const ticketKey of candidateKeys) {
     try {
       const diff = await gitlabAdapter.mergeRequestDiff(state, ticketKey, { timeout: LIVE_MR_DIFF_TIMEOUT_MS });
       const files = diff.files;

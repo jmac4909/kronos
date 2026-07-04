@@ -414,6 +414,7 @@ const serviceOwnedSafetyMarkers = new Set([
   'isExistingRealPathInside(filePath, RUNS_DIR)',
   'function resolveRunArtifactFile(filePath: string | undefined): RunArtifactPathResult',
   'unknownErrorMessage(e, `Could not inspect run workspace ${candidate}.`)',
+  'isCodeAction(target.action)',
 ]);
 
 for (const marker of [
