@@ -217,6 +217,7 @@ const evidencePanelView = require('../out/services/evidencePanelView.js');
 const queuePlannerPanelView = require('../out/services/queuePlannerPanelView.js');
 const operationsReportPanelView = require('../out/services/operationsReportPanelView.js');
 const dashboardPanelView = require('../out/services/dashboardPanelView.js');
+const diffPanelView = require('../out/services/diffPanelView.js');
 const runStatus = require('../out/services/runStatus.js');
 const runProgress = require('../out/services/runProgress.js');
 const runRecords = require('../out/services/runRecords.js');
@@ -8765,10 +8766,11 @@ test('extension webviews use shared UI shell and board filtering affordances', (
   const queuePlannerPanelViewSource = readSourceFixture('src', 'services', 'queuePlannerPanelView.ts');
   const operationsReportPanelViewSource = readSourceFixture('src', 'services', 'operationsReportPanelView.ts');
   const dashboardPanelViewSource = readSourceFixture('src', 'services', 'dashboardPanelView.ts');
+  const diffPanelViewSource = readSourceFixture('src', 'services', 'diffPanelView.ts');
   const ticketPanelViewSource = readSourceFixture('src', 'services', 'ticketPanelView.ts');
   const webviewMessagesSource = readSourceFixture('src', 'services', 'webviewMessages.ts');
   const jiraBoardSource = readSourceFixture('media', 'kronos-jira-board.js');
-  const uiSource = `${source}\n${queuePlannerPanelViewSource}\n${operationsReportPanelViewSource}\n${dashboardPanelViewSource}\n${ticketPanelViewSource}\n${jiraBoardSource}`;
+  const uiSource = `${source}\n${queuePlannerPanelViewSource}\n${operationsReportPanelViewSource}\n${dashboardPanelViewSource}\n${diffPanelViewSource}\n${ticketPanelViewSource}\n${jiraBoardSource}`;
   const boardHandlerStart = source.indexOf('panel.webview.onDidReceiveMessage(async (msg) => {\n        if (logReady(msg)) { return; }\n        const request = normalizeBoardMessage(msg, BOARD_MESSAGE_COMMANDS);');
   const boardHandlerEnd = source.indexOf("    vscode.commands.registerCommand('kronos.viewTicket'", boardHandlerStart);
   assert.ok(boardHandlerStart >= 0 && boardHandlerEnd > boardHandlerStart, 'Jira board message handler should be present');
@@ -10120,21 +10122,51 @@ test('ticket detail rendering uses typed tickets and evidence records', () => {
 
 test('merge request diff rendering uses normalized adapter results', () => {
   const extensionSource = readSourceFixture('src', 'extension.ts');
+  const diffPanelViewSource = readSourceFixture('src', 'services', 'diffPanelView.ts');
   const integrationAdapters = readSourceFixture('src', 'services', 'integrationAdapters.ts');
+  assert.ok(extensionSource.includes("import { buildDiffHtml } from './services/diffPanelView'"));
+  assert.ok(extensionSource.includes('panel.webview.html = withWebviewCsp(buildDiffHtml(data));'));
   for (const marker of [
-    'type MergeRequestDiffResult',
-    'function buildDiffHtml(data: MergeRequestDiffResult)',
+    "import type { MergeRequestDiffResult } from './integrationAdapters'",
+    'export function buildDiffHtml(data: MergeRequestDiffResult)',
     'const files = data.files',
-    'const files = diff.files',
+    'primaryChangedFilePath(f)',
   ]) {
-    assert.ok(extensionSource.includes(marker), marker);
+    assert.ok(diffPanelViewSource.includes(marker), marker);
+  }
+  assert.ok(extensionSource.includes('const files = diff.files'));
+  const html = diffPanelView.buildDiffHtml({
+    mr: {
+      title: 'MR <unsafe>',
+      source_branch: 'feature/<x>',
+      target_branch: 'main',
+      author: 'Reviewer <A>',
+    },
+    files: [{
+      new_path: 'src/<unsafe>.ts',
+      old_path: 'src/old.ts',
+      new_file: true,
+      deleted_file: false,
+      diff: '@@ -1 +1 @@\n-const oldValue = 1;\n+const value = "<tag>" & more;',
+    }],
+  });
+  for (const marker of [
+    'MR &lt;unsafe&gt;',
+    'feature/&lt;x&gt;',
+    'Reviewer &lt;A&gt;',
+    'src/&lt;unsafe&gt;.ts',
+    'const value = &quot;&lt;tag&gt;&quot; &amp; more;',
+    'class="line add"',
+    'class="file-link add"',
+  ]) {
+    assert.ok(html.includes(marker), marker);
   }
   for (const marker of [
     'function normalizeChangedFileHints',
     'function buildDiffHtml(data: any)',
     'normalizeChangedFiles(payload.files)',
   ]) {
-    assert.equal(extensionSource.includes(marker), false, marker);
+    assert.equal(`${extensionSource}\n${diffPanelViewSource}`.includes(marker), false, marker);
   }
   assert.ok(integrationAdapters.includes('export interface MergeRequestDiffResult'));
   assert.ok(integrationAdapters.includes("files: normalizeChangedFiles(data['files'])"));

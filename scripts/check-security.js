@@ -28,6 +28,7 @@ const namedFiles = [
   'src/services/queuePlannerPanelView.ts',
   'src/services/operationsReportPanelView.ts',
   'src/services/dashboardPanelView.ts',
+  'src/services/diffPanelView.ts',
   'src/services/operatorPanel.ts',
   'src/services/webviewSecurity.ts',
   'src/services/promptPanelView.ts',
@@ -102,6 +103,7 @@ const pathUtils = readSource('src/services/pathUtils.ts');
 const queuePlannerPanelView = sources['src/services/queuePlannerPanelView.ts'];
 const operationsReportPanelView = sources['src/services/operationsReportPanelView.ts'];
 const dashboardPanelView = sources['src/services/dashboardPanelView.ts'];
+const diffPanelView = sources['src/services/diffPanelView.ts'];
 const agentQualityScore = readSource('src/services/agentQualityScore.ts');
 const integrationManifest = readSource('src/services/integrationManifest.ts');
 const profileManager = readSource('src/services/profileManager.ts');
@@ -360,7 +362,7 @@ for (const requiredIgnore of ['.git/**', '.claude/**', 'node_modules/**', 'scrip
     fail(`.vscodeignore must exclude ${requiredIgnore}`);
   }
 }
-const extensionUiSource = `${extension}\n${queuePlannerPanelView}\n${operationsReportPanelView}\n${dashboardPanelView}\n${ticketPanelView}\n${jiraBoardScript}`;
+const extensionUiSource = `${extension}\n${queuePlannerPanelView}\n${operationsReportPanelView}\n${dashboardPanelView}\n${diffPanelView}\n${ticketPanelView}\n${jiraBoardScript}`;
 const dashboardRendererSafetyMarkers = new Set([
   'Gate Fails',
   'buildDashboardWorklist',
@@ -373,6 +375,9 @@ const dashboardRendererSafetyMarkers = new Set([
   "actionButton('startTicket', 'Start', { ticket })",
   'Rework Rate',
   'Stale Critical',
+]);
+const serviceOwnedSafetyMarkers = new Set([
+  "from './changedFiles'",
 ]);
 
 for (const marker of [
@@ -549,6 +554,7 @@ for (const marker of [
   'function openRecoveryPanel',
   "import { buildTicketHtml } from './services/ticketPanelView'",
   "import { buildDashboardHtml } from './services/dashboardPanelView'",
+  "import { buildDiffHtml } from './services/diffPanelView'",
   'buildTicketHtml(ticketKey, freshTicket, {',
   'runs: listRuns()',
   'confirmDispatchCollisions',
@@ -839,7 +845,7 @@ for (const marker of [
   "from './services/doctorChecks'",
   "from './services/cliProbes'",
   "from './services/combinedVerification'",
-  "from './services/changedFiles'",
+  "from './changedFiles'",
   "from './services/sonarReportView'",
   'Retry Saved Prompt',
   'kronos.resumeRun',
@@ -948,7 +954,11 @@ for (const marker of [
   "from './services/integrationAdapters'",
   "from './services/projectMutations'",
 ]) {
-  const safetySource = dashboardRendererSafetyMarkers.has(marker) ? extensionUiSource : extension;
+  const safetySource = dashboardRendererSafetyMarkers.has(marker)
+    ? extensionUiSource
+    : serviceOwnedSafetyMarkers.has(marker)
+      ? allSource
+      : extension;
   if (!safetySource.includes(marker)) {
     fail(`Missing safety marker: ${marker}`);
   }
