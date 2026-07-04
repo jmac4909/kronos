@@ -5568,6 +5568,7 @@ test('recovery panel view renders escaped recovery and state audit rows', () => 
   assert.ok(recoveryHtml.includes('Kronos Recovery Center'));
   assert.ok(recoveryHtml.includes('focused on run-1'));
   assert.ok(recoveryHtml.includes('focused-recovery-item'));
+  assert.ok(recoveryHtml.includes('data-action="refreshPanel"'));
   assert.ok(recoveryHtml.includes('data-focused-item="true"'));
   assert.ok(recoveryHtml.includes('data-item-id="item-1"'));
   assert.ok(recoveryHtml.includes('data-run-id="run-1"'));
@@ -8542,6 +8543,9 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'await openRecoveryCenter(state, context.extensionUri, resolveRecoveryFocusId(item))',
     'openRecoveryPanel(state, inventory, backups, focusItemId, extensionUri)',
     'function resolveRecoveryFocusId(item: unknown): string | undefined',
+    "const RECOVERY_MESSAGE_COMMANDS = new Set([\n  'refreshPanel',",
+    'startActiveRunPanelRefresh(panel, state, () => render(true))',
+    "if (request.command === 'refreshPanel') {\n      await runWebviewPanelAction(() => render(true), 'Kronos recovery action failed.');\n      return;\n    }",
     'kronosScriptableWebviewOptions(extensionUri)',
     "actionButton('viewTicket', 'View', { ticket, primary: true })",
     "actionButton('startTicket', 'Start', { ticket })",
@@ -8648,6 +8652,7 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'StateAuditEvent',
     'Kronos Recovery Center',
     'Kronos State Audit Log',
+    "actionButton('refreshPanel', 'Refresh')",
     "actionButton('executeRecoveryItem'",
     'recoveryActionLabel',
     'kronosOperatorPanelCss',

@@ -62,6 +62,9 @@ export function buildRecoveryHtml(inventory: RecoveryInventory, nonce?: string, 
   </tr>`;
   }).join('');
   const empty = inventory.items.length === 0 ? '<div class="empty">No active recovery items.</div>' : '';
+  const actions = operatorCommandRow([
+    actionButton('refreshPanel', 'Refresh'),
+  ]);
 
   return `<!DOCTYPE html>
 <html><head><style>
@@ -69,6 +72,7 @@ export function buildRecoveryHtml(inventory: RecoveryInventory, nonce?: string, 
   .focused-recovery-item { outline: 2px solid var(--k-accent); outline-offset: -2px; background: color-mix(in srgb, var(--k-accent) 12%, transparent); }
 </style></head><body><div class="kronos-shell operator-shell">
   <div class="kronos-header"><div><h1 class="kronos-title">Kronos Recovery Center</h1><div class="kronos-subtitle">Runs, worktrees, backups, integrations, and merge requests that need operator action${focusedItemId ? ` - focused on ${escapeHtml(focusedItemId)}` : ''}</div></div></div>
+  ${actions}
   <div class="operator-summary">
     <div class="summary-card"><div class="num">${inventory.summary.critical}</div><div class="lbl">Critical</div></div>
     <div class="summary-card"><div class="num">${inventory.summary.warning}</div><div class="lbl">Warnings</div></div>

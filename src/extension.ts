@@ -402,6 +402,7 @@ const TICKET_DETAIL_MESSAGE_COMMANDS = new Set([
   'openBuild',
 ]);
 const RECOVERY_MESSAGE_COMMANDS = new Set([
+  'refreshPanel',
   'executeRecoveryItem',
 ]);
 const OPERATOR_COMMAND_TO_VSCODE_COMMAND = new Map<string, string>([
@@ -4074,6 +4075,7 @@ function openRecoveryPanel(state: KronosState, initialInventory: RecoveryInvento
   let currentBackups = initialBackups;
   const render = (refresh = false) => {
     if (refresh) {
+      state.reloadAndNotify();
       currentBackups = listBackups();
       currentInventory = buildRecoveryInventoryForState(state, currentBackups);
     }
@@ -4081,11 +4083,16 @@ function openRecoveryPanel(state: KronosState, initialInventory: RecoveryInvento
     panel.webview.html = withWebviewCsp(buildRecoveryHtml(currentInventory, nonce, focusItemId, actionScriptUri), webviewScriptCspOptions(panel.webview.cspSource, nonce));
   };
   render();
+  startActiveRunPanelRefresh(panel, state, () => render(true));
   panel.webview.onDidReceiveMessage(async msg => {
     if (logReady(msg)) { return; }
     const request = normalizeActionPanelMessage(msg, RECOVERY_MESSAGE_COMMANDS);
     if (!request) {
       vscode.window.showWarningMessage('Ignored invalid Kronos recovery action.');
+      return;
+    }
+    if (request.command === 'refreshPanel') {
+      await runWebviewPanelAction(() => render(true), 'Kronos recovery action failed.');
       return;
     }
     const item = currentInventory.items.find(candidate => candidate.id === request.itemId);
