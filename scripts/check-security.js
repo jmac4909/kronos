@@ -129,6 +129,7 @@ const gitWorkspace = readSource('src/services/gitWorkspace.ts');
 const processTree = readSource('src/services/processTree.ts');
 const webviewDiagnostics = readSource('src/services/webviewDiagnostics.ts');
 const webviewSecurity = sources['src/services/webviewSecurity.ts'];
+const webviewMessages = readSource('src/services/webviewMessages.ts');
 const webviewRuntimeScript = sources['media/kronos-webview-runtime.js'];
 const webviewActionPanelScript = sources['media/kronos-action-panel.js'];
 const jiraBoardScript = sources['media/kronos-jira-board.js'];
@@ -463,9 +464,8 @@ for (const marker of [
   ': { enableScripts: true, localResourceRoots: [] }',
   "createKronosActionWebviewPanel('sonarReport', `Sonar: ${projectName}`, context.extensionUri)",
   'BOARD_MESSAGE_COMMANDS',
-  'function normalizeWebviewCommand',
-  'function normalizeBoardMessage',
-  'const request = normalizeBoardMessage(msg)',
+  "import { normalizeBoardMessage, normalizeWebviewCommand } from './services/webviewMessages'",
+  'const request = normalizeBoardMessage(msg, BOARD_MESSAGE_COMMANDS)',
   'const command = normalizeWebviewCommand(msg, sonarCommands)',
   'function openExternalHttpUrl',
   "console.warn(unknownErrorMessage(e, 'Invalid external URL.'))",
@@ -1038,17 +1038,10 @@ for (const marker of [
   'export function actionButton',
   'export function actionRow',
   'export function operatorCommandRow',
-  'export interface ActionPanelMessage',
-  'export function normalizeActionPanelMessage',
+  "export { normalizeActionPanelMessage, type ActionPanelMessage } from './webviewMessages'",
   'export function kronosActionPanelScript',
   'export function kronosOperatorPanelCss',
   'kronosWebviewBaseCss',
-  "const command = message['command']",
-  "ticket: recordString(message, 'ticket')",
-  "runId: recordString(message, 'runId')",
-  "planId: recordString(message, 'planId')",
-  "itemId: recordString(message, 'itemId')",
-  "recoveryAction: recordString(message, 'recoveryAction')",
   'webviewActionScriptTag',
   'scriptUri?: string',
   'readyCommand: WEBVIEW_READY_COMMAND',
@@ -1067,7 +1060,25 @@ for (const marker of [
   }
 }
 
-const boardHandlerStart = extension.indexOf('panel.webview.onDidReceiveMessage(async (msg) => {\n        if (logReady(msg)) { return; }\n        const request = normalizeBoardMessage(msg);');
+for (const marker of [
+  'export interface ActionPanelMessage',
+  'export function normalizeActionPanelMessage',
+  'export function normalizeWebviewCommand',
+  'export function normalizeBoardMessage',
+  'export function normalizeRunCenterMessage',
+  'const command = normalizeWebviewCommand(raw, allowed)',
+  "ticket: recordString(message, 'ticket')",
+  "runId: recordString(message, 'runId')",
+  "planId: recordString(message, 'planId')",
+  "itemId: recordString(message, 'itemId')",
+  "recoveryAction: recordString(message, 'recoveryAction')",
+]) {
+  if (!webviewMessages.includes(marker)) {
+    fail(`Missing webview message helper marker: ${marker}`);
+  }
+}
+
+const boardHandlerStart = extension.indexOf('panel.webview.onDidReceiveMessage(async (msg) => {\n        if (logReady(msg)) { return; }\n        const request = normalizeBoardMessage(msg, BOARD_MESSAGE_COMMANDS);');
 const boardHandlerEnd = extension.indexOf("    vscode.commands.registerCommand('kronos.viewTicket'", boardHandlerStart);
 if (boardHandlerStart < 0 || boardHandlerEnd <= boardHandlerStart) {
   fail('Missing Jira board message handler block.');
@@ -1885,7 +1896,10 @@ for (const marker of [
   "const logReady = interactive ? createWebviewReadyMonitor(panel, 'Kronos Run Center') : undefined",
   'logReady?.arm()',
   'if (logReady?.(msg)) { return; }',
-  "message.command === 'refreshPanel' || message.command === 'archiveFinishedRuns'",
+  "import { normalizeRunCenterMessage, type RunCenterActionRequest } from '../services/webviewMessages'",
+  "export type { RunCenterActionRequest } from '../services/webviewMessages'",
+  'const RUN_CENTER_RUNLESS_MESSAGE_COMMANDS = new Set',
+  'normalizeRunCenterMessage(msg, RUN_CENTER_MESSAGE_COMMANDS, RUN_CENTER_RUNLESS_MESSAGE_COMMANDS)',
   "runCenterActionButton('refreshPanel', 'Refresh')",
   "runCenterActionButton('archiveFinishedRuns', 'Archive Finished')",
   'webviewActionScriptTag',
@@ -2387,7 +2401,7 @@ for (const [name, source, marker] of [
 
 for (const [name, source, marker] of [
   ['src/services/activeRunDisplay.ts', activeRunDisplay, "import { recordFromUnknown, recordString } from './records'"],
-  ['src/services/operatorPanel.ts', operatorPanel, "import { recordFromUnknown, recordString } from './records'"],
+  ['src/services/webviewMessages.ts', webviewMessages, "import { recordFromUnknown, recordString } from './records'"],
   ['src/services/runAttention.ts', runAttention, "import { recordFromUnknown } from './records'"],
   ['src/services/runCompletionNotification.ts', runCompletionNotification, "import { recordFromUnknown, recordString } from './records'"],
   ['src/services/runProgress.ts', runProgress, "import { isRecord, recordFromUnknown, recordString } from './records'"],

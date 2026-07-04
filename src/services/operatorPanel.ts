@@ -1,6 +1,6 @@
 import { WEBVIEW_READY_COMMAND, webviewActionScriptTag } from './webviewSecurity';
 import { escapeAttr, escapeHtml, kronosWebviewBaseCss } from './webviewHtml';
-import { recordFromUnknown, recordString } from './records';
+export { normalizeActionPanelMessage, type ActionPanelMessage } from './webviewMessages';
 
 interface ActionButtonOptions {
   ticket?: string;
@@ -9,15 +9,6 @@ interface ActionButtonOptions {
   itemId?: string;
   recoveryAction?: string;
   primary?: boolean;
-}
-
-export interface ActionPanelMessage {
-  command: string;
-  ticket: string;
-  runId: string;
-  planId: string;
-  itemId: string;
-  recoveryAction: string;
 }
 
 export function actionButton(action: string, label: string, options: ActionButtonOptions = {}): string {
@@ -40,20 +31,6 @@ export function operatorCommandRow(buttons: string[]): string {
   return buttons.length > 0
     ? `<div class="kronos-action-row operator-command-row">${buttons.join('')}</div>`
     : '';
-}
-
-export function normalizeActionPanelMessage(raw: unknown, allowed: ReadonlySet<string>): ActionPanelMessage | null {
-  const message = recordFromUnknown(raw);
-  const command = message['command'];
-  if (typeof command !== 'string' || !allowed.has(command)) { return null; }
-  return {
-    command,
-    ticket: recordString(message, 'ticket'),
-    runId: recordString(message, 'runId'),
-    planId: recordString(message, 'planId'),
-    itemId: recordString(message, 'itemId'),
-    recoveryAction: recordString(message, 'recoveryAction'),
-  };
 }
 
 export function kronosActionPanelScript(nonce: string, webviewName = 'Kronos action panel', scriptUri?: string): string {

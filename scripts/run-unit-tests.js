@@ -229,6 +229,7 @@ const attentionBadge = require('../out/services/attentionBadge.js');
 const intervalConfig = require('../out/services/intervalConfig.js');
 const commandPayloads = require('../out/services/commandPayloads.js');
 const cliProbes = require('../out/services/cliProbes.js');
+const webviewMessages = require('../out/services/webviewMessages.js');
 const errorUtils = require('../out/services/errorUtils.js');
 const combinedVerification = require('../out/services/combinedVerification.js');
 const changedFiles = require('../out/services/changedFiles.js');
@@ -2832,6 +2833,41 @@ test('webview security injects CSP and preserves existing nonce policies', () =>
   });
   assert.equal(operatorPanel.normalizeActionPanelMessage({ command: 'unknown' }, allowedActions), null);
   assert.equal(operatorPanel.normalizeActionPanelMessage(null, allowedActions), null);
+  assert.equal(webviewMessages.normalizeWebviewCommand({ command: 'openRunRecord' }, allowedActions), 'openRunRecord');
+  assert.equal(webviewMessages.normalizeWebviewCommand({ command: 'unknown' }, allowedActions), null);
+  assert.deepEqual(webviewMessages.normalizeBoardMessage({
+    command: 'linkProject',
+    ticket: ' K-BOARD ',
+    project: ' app ',
+  }, new Set(['linkProject'])), {
+    command: 'linkProject',
+    ticket: ' K-BOARD ',
+    project: ' app ',
+  });
+  assert.deepEqual(webviewMessages.normalizeBoardMessage({
+    command: 'linkProject',
+    ticket: 42,
+    project: null,
+  }, new Set(['linkProject'])), {
+    command: 'linkProject',
+    ticket: '',
+    project: '',
+  });
+  assert.equal(webviewMessages.normalizeBoardMessage({ command: 'unknown' }, new Set(['linkProject'])), null);
+  assert.deepEqual(webviewMessages.normalizeRunCenterMessage({
+    command: 'refreshPanel',
+  }, new Set(['refreshPanel', 'openRunRecord']), new Set(['refreshPanel'])), {
+    command: 'refreshPanel',
+    runId: '',
+  });
+  assert.deepEqual(webviewMessages.normalizeRunCenterMessage({
+    command: 'openRunRecord',
+    runId: ' run-1 ',
+  }, new Set(['refreshPanel', 'openRunRecord']), new Set(['refreshPanel'])), {
+    command: 'openRunRecord',
+    runId: ' run-1 ',
+  });
+  assert.equal(webviewMessages.normalizeRunCenterMessage({ command: 'openRunRecord', runId: ' ' }, new Set(['openRunRecord']), new Set()), null);
   assert.throws(
     () => operatorPanel.kronosActionPanelScript('nonce123', 'Kronos Missing Script'),
     /packaged webview script URI/,
@@ -3531,7 +3567,7 @@ test('record guard helper centralizes unknown object narrowing', () => {
 
   for (const [file, marker] of [
     ['activeRunDisplay.ts', "import { recordFromUnknown, recordString } from './records'"],
-    ['operatorPanel.ts', "import { recordFromUnknown, recordString } from './records'"],
+    ['webviewMessages.ts', "import { recordFromUnknown, recordString } from './records'"],
     ['runAttention.ts', "import { recordFromUnknown } from './records'"],
     ['runCompletionNotification.ts', "import { recordFromUnknown, recordString } from './records'"],
     ['runProgress.ts', "import { isRecord, recordFromUnknown, recordString } from './records'"],
@@ -5407,14 +5443,15 @@ test('dispatcher records branch and permission metadata for persisted runs', () 
     'const started = progressDateTimeLabel(run.startedAt)',
     'const runEvents = Array.isArray(run.events) ? run.events : []',
     'const progress = runProgressSummary(run)',
-    'export interface RunCenterActionRequest',
+    "export type { RunCenterActionRequest } from '../services/webviewMessages'",
+    "import { normalizeRunCenterMessage, type RunCenterActionRequest } from '../services/webviewMessages'",
     'const RUN_CENTER_MESSAGE_COMMANDS = new Set',
-    'function normalizeRunCenterMessage',
+    'const RUN_CENTER_RUNLESS_MESSAGE_COMMANDS = new Set',
+    'normalizeRunCenterMessage(msg, RUN_CENTER_MESSAGE_COMMANDS, RUN_CENTER_RUNLESS_MESSAGE_COMMANDS)',
     "import { createWebviewReadyMonitor } from '../services/webviewDiagnostics'",
     "const logReady = interactive ? createWebviewReadyMonitor(panel, 'Kronos Run Center') : undefined",
     'logReady?.arm()',
     'if (logReady?.(msg)) { return; }',
-    "message.command === 'refreshPanel' || message.command === 'archiveFinishedRuns'",
     'function runCenterActionButtons',
     "runCenterActionButton('refreshPanel', 'Refresh')",
     "runCenterActionButton('archiveFinishedRuns', 'Archive Finished')",
@@ -8662,14 +8699,16 @@ test('extension webviews use shared UI shell and board filtering affordances', (
   const evidencePanelViewSource = readSourceFixture('src', 'services', 'evidencePanelView.ts');
   const queuePlannerPanelViewSource = readSourceFixture('src', 'services', 'queuePlannerPanelView.ts');
   const operationsReportPanelViewSource = readSourceFixture('src', 'services', 'operationsReportPanelView.ts');
+  const webviewMessagesSource = readSourceFixture('src', 'services', 'webviewMessages.ts');
   const jiraBoardSource = readSourceFixture('media', 'kronos-jira-board.js');
   const uiSource = `${source}\n${queuePlannerPanelViewSource}\n${operationsReportPanelViewSource}\n${jiraBoardSource}`;
-  const boardHandlerStart = source.indexOf('panel.webview.onDidReceiveMessage(async (msg) => {\n        if (logReady(msg)) { return; }\n        const request = normalizeBoardMessage(msg);');
+  const boardHandlerStart = source.indexOf('panel.webview.onDidReceiveMessage(async (msg) => {\n        if (logReady(msg)) { return; }\n        const request = normalizeBoardMessage(msg, BOARD_MESSAGE_COMMANDS);');
   const boardHandlerEnd = source.indexOf("    vscode.commands.registerCommand('kronos.viewTicket'", boardHandlerStart);
   assert.ok(boardHandlerStart >= 0 && boardHandlerEnd > boardHandlerStart, 'Jira board message handler should be present');
   const boardHandlerSource = source.slice(boardHandlerStart, boardHandlerEnd);
   for (const marker of [
     "import { WEBVIEW_ACTION_PANEL_SCRIPT, WEBVIEW_JIRA_BOARD_SCRIPT, WEBVIEW_READY_COMMAND, createWebviewNonce, webviewRuntimeScriptTag, webviewRuntimeScriptUri, webviewScriptCspOptions, withWebviewCsp } from './services/webviewSecurity'",
+    "import { normalizeBoardMessage, normalizeWebviewCommand } from './services/webviewMessages'",
     "import { actionButton, actionRow, kronosActionPanelScript, kronosOperatorPanelCss, normalizeActionPanelMessage, operatorCommandRow, type ActionPanelMessage } from './services/operatorPanel'",
     "import { buildPromptHistoryHtml, buildPromptManagerHtml, buildPromptSmokeTestsHtml } from './services/promptPanelView'",
     "import { buildRecoveryHtml, buildStateAuditLogHtml } from './services/recoveryPanelView'",
@@ -9056,18 +9095,11 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'export function actionButton',
     'export function actionRow',
     'export function operatorCommandRow',
-    'export interface ActionPanelMessage',
-    'export function normalizeActionPanelMessage',
+    "export { normalizeActionPanelMessage, type ActionPanelMessage } from './webviewMessages'",
     'export function kronosActionPanelScript',
     'export function kronosOperatorPanelCss',
     'kronosWebviewBaseCss',
     'webviewActionScriptTag',
-    "const command = message['command']",
-    "ticket: recordString(message, 'ticket')",
-    "runId: recordString(message, 'runId')",
-    "planId: recordString(message, 'planId')",
-    "itemId: recordString(message, 'itemId')",
-    "recoveryAction: recordString(message, 'recoveryAction')",
     'scriptUri?: string',
     'readyCommand: WEBVIEW_READY_COMMAND',
     "{ messageKey: 'ticket', dataAttribute: 'data-ticket' }",
@@ -9079,6 +9111,21 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     "data-item-id=\"${escapeAttr(options.itemId)}\"",
   ]) {
     assert.ok(operatorPanelSource.includes(marker), marker);
+  }
+  for (const marker of [
+    'export interface ActionPanelMessage',
+    'export function normalizeActionPanelMessage',
+    'export function normalizeWebviewCommand',
+    'export function normalizeBoardMessage',
+    'export function normalizeRunCenterMessage',
+    'const command = normalizeWebviewCommand(raw, allowed)',
+    "ticket: recordString(message, 'ticket')",
+    "runId: recordString(message, 'runId')",
+    "planId: recordString(message, 'planId')",
+    "itemId: recordString(message, 'itemId')",
+    "recoveryAction: recordString(message, 'recoveryAction')",
+  ]) {
+    assert.ok(webviewMessagesSource.includes(marker), marker);
   }
   for (const marker of [
     'export function buildPromptManagerHtml',

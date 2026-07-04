@@ -59,6 +59,7 @@ import { isExistingRealPathInside, projectPathKey } from './services/pathUtils';
 import { signalProcessTree, stopProcessTree, supportsProcessTreeSuspend } from './services/processTree';
 import { createWebviewReadyMonitor } from './services/webviewDiagnostics';
 import { WEBVIEW_ACTION_PANEL_SCRIPT, WEBVIEW_JIRA_BOARD_SCRIPT, WEBVIEW_READY_COMMAND, createWebviewNonce, webviewRuntimeScriptTag, webviewRuntimeScriptUri, webviewScriptCspOptions, withWebviewCsp } from './services/webviewSecurity';
+import { normalizeBoardMessage, normalizeWebviewCommand } from './services/webviewMessages';
 import { escapeAttr, escapeClass, escapeHtml, kronosWebviewBaseCss, safeHttpHref } from './services/webviewHtml';
 import { kronosTerminalOptions } from './services/terminalProfiles';
 import { unknownErrorCode, unknownErrorMessage } from './services/errorUtils';
@@ -545,23 +546,6 @@ function operatorCommandSet(commands: string[]): ReadonlySet<string> {
     }
   }
   return new Set(commands);
-}
-
-function normalizeWebviewCommand(raw: unknown, allowed: Set<string>): string | null {
-  const command = recordFromUnknown(raw)['command'];
-  if (typeof command !== 'string' || !allowed.has(command)) { return null; }
-  return command;
-}
-
-function normalizeBoardMessage(raw: unknown): { command: string; ticket: string; project: string } | null {
-  const command = normalizeWebviewCommand(raw, BOARD_MESSAGE_COMMANDS);
-  if (!command) { return null; }
-  const message = recordFromUnknown(raw);
-  return {
-    command,
-    ticket: typeof message['ticket'] === 'string' ? message['ticket'] : '',
-    project: typeof message['project'] === 'string' ? message['project'] : '',
-  };
 }
 
 function normalizeSonarIssueCommandList(value: unknown): SonarIssue[] {
@@ -1987,7 +1971,7 @@ export function activate(context: vscode.ExtensionContext) {
       };
       panel.webview.onDidReceiveMessage(async (msg) => {
         if (logReady(msg)) { return; }
-        const request = normalizeBoardMessage(msg);
+        const request = normalizeBoardMessage(msg, BOARD_MESSAGE_COMMANDS);
         if (!request) {
           vscode.window.showWarningMessage('Ignored invalid Kronos board request.');
           return;

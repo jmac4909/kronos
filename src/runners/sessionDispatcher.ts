@@ -10,6 +10,7 @@ import { RunFailureKind, classifyRunFailure, evaluatePostRunReadiness, postRunRe
 import { stopProcessTree, supportsProcessTreeSuspend } from '../services/processTree';
 import { createWebviewReadyMonitor } from '../services/webviewDiagnostics';
 import { WEBVIEW_ACTION_PANEL_SCRIPT, WEBVIEW_READY_COMMAND, createWebviewNonce, webviewActionScriptTag, webviewScriptCspOptions, withWebviewCsp } from '../services/webviewSecurity';
+import { normalizeRunCenterMessage, type RunCenterActionRequest } from '../services/webviewMessages';
 import { currentGitCommit, currentGitRef, inspectTrackedWorktree, prepareManagedWorktree, removeWorktreeSafely } from '../services/gitWorkspace';
 import { checkGcloudApplicationDefaultAuth } from '../services/cliProbes';
 import { escapeAttr, escapeClass, escapeHtml, kronosWebviewBaseCss } from '../services/webviewHtml';
@@ -28,6 +29,7 @@ import { isRecord } from '../services/records';
 import { toValidDate } from '../services/dateValues';
 import type { KronosState as KronosStateFile } from '../state/types';
 export { getAggregateStats, listSavedSessions, listSessionStoreIssues } from '../services/sessionStore';
+export type { RunCenterActionRequest } from '../services/webviewMessages';
 
 const CLAUDE_PATH = process.env['CLAUDE_PATH'] || 'claude';
 const CLAUDE_PERMISSION_MODE = 'acceptEdits';
@@ -72,11 +74,10 @@ const RUN_CENTER_MESSAGE_COMMANDS = new Set([
   'retryRun',
   'archiveRun',
 ]);
-
-export interface RunCenterActionRequest {
-  command: string;
-  runId: string;
-}
+const RUN_CENTER_RUNLESS_MESSAGE_COMMANDS = new Set([
+  'refreshPanel',
+  'archiveFinishedRuns',
+]);
 
 interface RunCenterOptions {
   onAction?: (request: RunCenterActionRequest) => Promise<void> | void;
@@ -679,7 +680,7 @@ export function openRunCenter(options: RunCenterOptions = {}): void {
     panel.onDidDispose(() => clearInterval(pollTimer));
     panel.webview.onDidReceiveMessage(async msg => {
       if (logReady?.(msg)) { return; }
-      const request = normalizeRunCenterMessage(msg);
+      const request = normalizeRunCenterMessage(msg, RUN_CENTER_MESSAGE_COMMANDS, RUN_CENTER_RUNLESS_MESSAGE_COMMANDS);
       if (!request) {
         vscode.window.showWarningMessage('Ignored invalid Kronos Run Center action.');
         return;
@@ -1423,17 +1424,6 @@ function buildProgressHtml(project: string, skill: string, ticket: string, event
     </div>
   </div>
 </div></body></html>`;
-}
-
-function normalizeRunCenterMessage(raw: unknown): RunCenterActionRequest | null {
-  if (!raw || typeof raw !== 'object') { return null; }
-  const message = raw as { command?: unknown; runId?: unknown };
-  if (typeof message.command !== 'string' || !RUN_CENTER_MESSAGE_COMMANDS.has(message.command)) { return null; }
-  if (message.command === 'refreshPanel' || message.command === 'archiveFinishedRuns') {
-    return { command: message.command, runId: '' };
-  }
-  if (typeof message.runId !== 'string' || message.runId.trim().length === 0) { return null; }
-  return { command: message.command, runId: message.runId };
 }
 
 function runCenterActionButton(action: string, label: string, runId?: string, primary = false): string {
