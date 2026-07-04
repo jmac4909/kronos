@@ -3263,13 +3263,18 @@ test('sonar report view renders escaped report data and command buttons', () => 
         { severity: 'CRITICAL"><script>', rule: 'java:S123', component: 'app:src/App.java', line: 12, message: '<bad>' },
       ],
     },
+    actionScriptUri: ACTION_SCRIPT_URI,
   });
 
   assert.equal(report.issueList.length, 1);
   assert.equal(report.dashboardUrl, 'https://sonar.example/base/dashboard?id=proj%3Akey&branch=feature%2F%3Cx%3E');
   assert.match(report.html, /script nonce="nonce&#39;&quot;123"/);
   assert.doesNotMatch(report.html, /script nonce="nonce'"123"/);
-  assert.match(report.html, /kronosVsCodeApi\(\)\.postMessage\(\{ command: 'fixSonar' \}\)/);
+  assert.match(report.html, /id="kronos-webview-runtime-script"/);
+  assert.match(report.html, /id="kronos-action-panel-script"/);
+  assert.match(report.html, /data-kronos-webview-name="Kronos Sonar Report"/);
+  assert.match(report.html, /data-action="fixSonar"/);
+  assert.doesNotMatch(report.html, /kronosVsCodeApi/);
   assert.match(report.html, /Open in SonarQube/);
   assert.match(report.html, /New Duplicated Lines Density/);
   assert.match(report.html, /&lt;project&gt;/);
@@ -3288,6 +3293,7 @@ test('sonar report view renders escaped report data and command buttons', () => 
     gate: {},
     measures: {},
     issues: {},
+    actionScriptUri: ACTION_SCRIPT_URI,
   });
   assert.equal(hiddenDashboard.dashboardUrl, undefined);
   assert.doesNotMatch(hiddenDashboard.html, /open-sonar/);
@@ -3300,6 +3306,7 @@ test('sonar report view renders escaped report data and command buttons', () => 
     gate: { projectStatus: { status: 'WARN', conditions: { not: 'an array' } } },
     measures: { component: { measures: { not: 'an array' } } },
     issues: { issues: [null, 'bad', { severity: 'MAJOR', message: 42, component: 42, rule: 42, line: 7 }] },
+    actionScriptUri: ACTION_SCRIPT_URI,
   });
   assert.equal(malformedPayload.issueList.length, 1);
   assert.match(malformedPayload.html, /Quality Gate: WARN/);
@@ -3313,6 +3320,7 @@ test('sonar report view renders escaped report data and command buttons', () => 
     gate: null,
     measures: null,
     issues: null,
+    actionScriptUri: ACTION_SCRIPT_URI,
   }));
   const unknownReport = sonarReportView.buildSonarReport({
     projectName: 'app',
@@ -3322,6 +3330,7 @@ test('sonar report view renders escaped report data and command buttons', () => 
     gate: null,
     measures: { measures: 'bad' },
     issues: {},
+    actionScriptUri: ACTION_SCRIPT_URI,
   });
   assert.match(unknownReport.html, /Quality Gate: UNKNOWN/);
   assert.doesNotMatch(unknownReport.html, /Gate Conditions/);
@@ -3336,6 +3345,7 @@ test('sonar report view renders escaped report data and command buttons', () => 
     gate: {},
     measures: {},
     issues: {},
+    actionScriptUri: ACTION_SCRIPT_URI,
   });
   assert.equal(nonHttpDashboard.dashboardUrl, undefined);
   assert.doesNotMatch(nonHttpDashboard.html, /Open in SonarQube/);
@@ -9170,7 +9180,7 @@ test('security check validates semantic webview script policy', () => {
     'kronosScriptableWebviewOptions for media-backed scripts',
     'const webviewOptions: vscode.WebviewOptions',
     ': { enableScripts: true, localResourceRoots: [] }',
-    "createWebviewPanel('sonarReport', `Sonar: ${projectName}`, vscode.ViewColumn.One, { enableScripts: true, localResourceRoots: [] })",
+    "createKronosActionWebviewPanel('sonarReport', `Sonar: ${projectName}`, context.extensionUri)",
     "'src/services/promptPanelView.ts'",
     "'src/services/recoveryPanelView.ts'",
     "'src/services/humanReviewPanelView.ts'",

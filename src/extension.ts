@@ -2858,7 +2858,7 @@ export function activate(context: vscode.ExtensionContext) {
           sonarAdapter.measures(sonarKey, branch),
           sonarAdapter.issues(sonarKey, branch),
         ]);
-        const nonce = createWebviewNonce();
+        const { panel, nonce, actionScriptUri } = createKronosActionWebviewPanel('sonarReport', `Sonar: ${projectName}`, context.extensionUri);
         const reportInput = {
           projectName,
           branch,
@@ -2867,10 +2867,10 @@ export function activate(context: vscode.ExtensionContext) {
           measures,
           issues,
           nonce,
+          actionScriptUri,
         };
         if (process.env['SONAR_HOST_URL']) { Object.assign(reportInput, { host: process.env['SONAR_HOST_URL'] }); }
         const report = buildSonarReport(reportInput);
-        const panel = vscode.window.createWebviewPanel('sonarReport', `Sonar: ${projectName}`, vscode.ViewColumn.One, { enableScripts: true, localResourceRoots: [] });
         panel.webview.html = withWebviewCsp(report.html, webviewScriptCspOptions(panel.webview.cspSource, nonce));
 
         const sonarCommands = new Set(['fixSonar', 'openSonar']);

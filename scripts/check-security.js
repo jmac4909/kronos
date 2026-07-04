@@ -415,7 +415,7 @@ for (const [file, source] of Object.entries({
   'src/services/sonarReportView.ts': sonarReportView,
 })) {
   if (source.includes('const vscode = acquireVsCodeApi()')) {
-    fail(`${file} must use webviewVsCodeApiScript for webview API acquisition.`);
+    fail(`${file} must use shared webview runtime helpers for webview API acquisition.`);
   }
 }
 
@@ -458,7 +458,7 @@ for (const marker of [
   'logReady.arm();',
   'if (logReady(msg)) { return; }',
   ': { enableScripts: true, localResourceRoots: [] }',
-  "createWebviewPanel('sonarReport', `Sonar: ${projectName}`, vscode.ViewColumn.One, { enableScripts: true, localResourceRoots: [] })",
+  "createKronosActionWebviewPanel('sonarReport', `Sonar: ${projectName}`, context.extensionUri)",
   'BOARD_MESSAGE_COMMANDS',
   'function normalizeWebviewCommand',
   'function normalizeBoardMessage',
@@ -3080,16 +3080,26 @@ for (const marker of [
   'gate: unknown',
   'measures: unknown',
   'issues: unknown',
+  'actionScriptUri: string',
+  "import { kronosActionPanelScript } from './operatorPanel'",
   'kronosWebviewBaseCss',
   'class="kronos-shell sonar-shell"',
   'class="kronos-button primary"',
-  'script nonce="${escapeAttr(input.nonce)}"',
-  "kronosVsCodeApi().postMessage({ command: 'fixSonar' })",
-  "kronosVsCodeApi().postMessage({ command: 'openSonar' })",
+  'data-action="fixSonar"',
+  'data-action="openSonar"',
+  "kronosActionPanelScript(input.nonce, 'Kronos Sonar Report', input.actionScriptUri)",
   'issueList.slice(0, 50)',
 ]) {
   if (!sonarReportView.includes(marker)) {
     fail(`Missing Sonar report view marker: ${marker}`);
+  }
+}
+for (const forbidden of [
+  "import { webviewVsCodeApiScript } from './webviewSecurity'",
+  'kronosVsCodeApi().postMessage',
+]) {
+  if (sonarReportView.includes(forbidden)) {
+    fail(`Sonar report view must use the packaged action-panel runtime: ${forbidden}`);
   }
 }
 

@@ -1,5 +1,5 @@
-import { escapeAttr, escapeClass, escapeHtml, kronosWebviewBaseCss } from './webviewHtml';
-import { webviewVsCodeApiScript } from './webviewSecurity';
+import { escapeClass, escapeHtml, kronosWebviewBaseCss } from './webviewHtml';
+import { kronosActionPanelScript } from './operatorPanel';
 import { isRecord } from './records';
 
 interface SonarReportRenderInput {
@@ -11,6 +11,7 @@ interface SonarReportRenderInput {
   measures: unknown;
   issues: unknown;
   nonce: string;
+  actionScriptUri: string;
 }
 
 interface SonarReportRenderResult {
@@ -163,12 +164,6 @@ export function buildSonarReport(input: SonarReportRenderInput): SonarReportRend
   }).join('');
 
   const dashboardUrl = buildSonarDashboardUrl(input.host, input.sonarKey, input.branch);
-  const openSonarScript = dashboardUrl
-    ? `const openSonar = document.getElementById('open-sonar');
-            openSonar.addEventListener('click', function() {
-              kronosVsCodeApi().postMessage({ command: 'openSonar' });
-            });`
-    : '';
   const html = `<!DOCTYPE html><html><head>
         <style>
           ${kronosWebviewBaseCss()}
@@ -210,16 +205,10 @@ export function buildSonarReport(input: SonarReportRenderInput): SonarReportRend
           ${issueRows ? `<div class="kronos-table-wrap kronos-panel"><table class="kronos-table"><tr><th>Severity</th><th>Rule</th><th>File</th><th>Message</th></tr>${issueRows}</table></div>` : '<div class="kronos-empty">No open issues.</div>'}</div>
 
           <div class="actions">
-            <button class="kronos-button primary" id="fix-sonar" type="button">Fix Issues</button>
-            ${dashboardUrl ? '<button class="kronos-button" id="open-sonar" type="button">Open in SonarQube</button>' : ''}
+            <button class="kronos-button primary" id="fix-sonar" type="button" data-action="fixSonar">Fix Issues</button>
+            ${dashboardUrl ? '<button class="kronos-button" id="open-sonar" type="button" data-action="openSonar">Open in SonarQube</button>' : ''}
           </div>
-          <script nonce="${escapeAttr(input.nonce)}">
-            ${webviewVsCodeApiScript()}
-            document.getElementById('fix-sonar').addEventListener('click', function() {
-              kronosVsCodeApi().postMessage({ command: 'fixSonar' });
-            });
-            ${openSonarScript}
-          </script>
+          ${kronosActionPanelScript(input.nonce, 'Kronos Sonar Report', input.actionScriptUri)}
         </div></body></html>`;
 
   const result: SonarReportRenderResult = { html, issueList };
