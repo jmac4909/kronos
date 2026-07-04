@@ -1,4 +1,5 @@
 import type { RunStoreIssue } from './runStore';
+import { toValidDate } from './dateValues';
 import { runAttentionDetail } from './runAttention';
 import { severityRank } from './severityRank';
 
@@ -326,8 +327,7 @@ function recoveryItemForWorktree(result: RecoveryWorktreeResult): RecoveryItem |
 }
 
 function isStaleRun(startedAt: string | undefined, now: Date, staleRunMs: number): boolean {
-  if (!startedAt) { return false; }
-  const started = new Date(startedAt).getTime();
-  if (!Number.isFinite(started)) { return false; }
-  return now.getTime() - started >= staleRunMs;
+  const started = toValidDate(startedAt);
+  if (!started) { return false; }
+  return now.getTime() - started.getTime() >= staleRunMs;
 }

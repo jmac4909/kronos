@@ -2252,10 +2252,13 @@ for (const [name, source] of [
 }
 
 for (const [name, source, marker] of [
+  ['src/services/agingAnalyzer.ts', agingAnalyzer, "import { toValidDate } from './dateValues'"],
   ['src/services/agingReportView.ts', agingReportView, "import { toValidDate } from './dateValues'"],
   ['src/services/collisionDetector.ts', collisionDetector, "import { toValidDate } from './dateValues'"],
   ['src/services/dashboardWorklist.ts', dashboardWorklist, "import { toValidDate } from './dateValues'"],
+  ['src/services/queuePlanner.ts', queuePlanner, "import { toValidDate } from './dateValues'"],
   ['src/services/relativeTime.ts', relativeTime, "import { toValidDate } from './dateValues'"],
+  ['src/services/recoveryCenter.ts', recoveryCenter, "import { toValidDate } from './dateValues'"],
   ['src/services/runCenterSort.ts', runCenterSort, "import { toValidDate } from './dateValues'"],
   ['src/services/runProgress.ts', runProgress, "import { toValidDate } from './dateValues'"],
   ['src/services/runStatus.ts', runStatus, "import { toValidDate } from './dateValues'"],

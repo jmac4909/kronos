@@ -1,4 +1,5 @@
 import { Ticket } from '../state/types';
+import { toValidDate } from './dateValues';
 import { isOpenReviewTicket } from './reviewWork';
 import { severityRank } from './severityRank';
 
@@ -168,9 +169,8 @@ function referenceDate(ticket: Ticket): Date | null {
     ticket.updated,
   ];
   for (const candidate of candidates) {
-    if (!candidate) { continue; }
-    const parsed = new Date(candidate);
-    if (Number.isFinite(parsed.getTime())) { return parsed; }
+    const parsed = toValidDate(candidate);
+    if (parsed) { return parsed; }
   }
   return null;
 }

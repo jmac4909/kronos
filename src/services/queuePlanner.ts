@@ -2,6 +2,7 @@ import { KronosState as KronosStateType, QueueDecision, QueueItem, QueueState, T
 import { actionEstimateMinutes, actionPlanningScore } from './actionCatalog';
 import { actionDisplayLabel as actionToLabel } from './actionCatalog';
 import { isCodeAction } from './actionSemantics';
+import { toValidDate } from './dateValues';
 import { evidenceRecordCount } from './evidenceData';
 import { severityRank } from './severityRank';
 
@@ -276,9 +277,8 @@ export function planToQueueItem(input: PlannerInput, plan: PlannedAction): Queue
 function ticketAgeDays(ticket: Ticket, now: Date): number | undefined {
   const candidates = [ticket.updated, ticket.last_action_at, ticket.evidence?.updated_at];
   for (const raw of candidates) {
-    if (typeof raw !== 'string') { continue; }
-    const parsed = new Date(raw);
-    if (Number.isFinite(parsed.getTime())) {
+    const parsed = toValidDate(raw);
+    if (parsed) {
       return Math.max(0, Math.floor((now.getTime() - parsed.getTime()) / (24 * 60 * 60 * 1000)));
     }
   }
@@ -471,8 +471,8 @@ function isPlanSuppressed(decision: QueueDecision | undefined, now: Date): boole
   if (!decision) { return false; }
   if (decision.decision === 'rejected') { return true; }
   if (decision.decision === 'snoozed') {
-    const until = decision.snoozed_until ? new Date(decision.snoozed_until) : null;
-    return !!until && Number.isFinite(until.getTime()) && until > now;
+    const until = toValidDate(decision.snoozed_until);
+    return !!until && until > now;
   }
   return false;
 }
