@@ -6,7 +6,7 @@ import { unknownErrorCode, unknownErrorMessage } from './errorUtils';
 import { effectiveRunStatus, isActiveRunStatus, isStaleActiveRun } from './runStatus';
 import { readJsonFile } from './jsonFiles';
 import { isRecord, recordString } from './records';
-import { isPathInside } from './pathUtils';
+import { isExistingRealPathInside, isPathInside } from './pathUtils';
 import { toValidDate } from './dateValues';
 
 export const RUNS_DIR = path.join(KRONOS_DIR, 'runs');
@@ -187,10 +187,9 @@ export function writeRunPrompt(runId: string, prompt: string): string {
 }
 
 export function appendRunLog(logPath: string, chunk: string): void {
-  if (!isPathInside(logPath, RUNS_DIR) || isPathInside(logPath, ARCHIVED_RUNS_DIR)) {
+  if (!isWritableActiveRunLogPath(logPath)) {
     throw new Error(`Refusing to append run log outside active runs directory: ${logPath}`);
   }
-  ensureDir(path.dirname(logPath));
   fs.appendFileSync(logPath, chunk);
 }
 
@@ -376,7 +375,7 @@ function explicitLogTerminalLineOutcome(line: string): string | undefined {
 }
 
 function isReadableActiveRunLog(logPath: string): boolean {
-  if (!logPath || !isPathInside(logPath, RUNS_DIR) || isPathInside(logPath, ARCHIVED_RUNS_DIR)) {
+  if (!logPath || !isExistingActiveRunPath(logPath)) {
     return false;
   }
   try {
@@ -440,7 +439,7 @@ function listRunRecordFiles(dir: string, limit: number): string[] {
 }
 
 function isReadableActiveRunRecord(filePath: string): boolean {
-  if (!isPathInside(filePath, RUNS_DIR) || isPathInside(filePath, ARCHIVED_RUNS_DIR)) {
+  if (!isExistingActiveRunPath(filePath)) {
     return false;
   }
   try {
@@ -452,7 +451,7 @@ function isReadableActiveRunRecord(filePath: string): boolean {
 
 function moveRunArtifactIfExists(filePath: string | undefined, destDir: string, warnings: string[], label: string): string | undefined {
   if (!filePath || !fs.existsSync(filePath)) { return undefined; }
-  if (!isPathInside(filePath, RUNS_DIR) || isPathInside(filePath, ARCHIVED_RUNS_DIR)) {
+  if (!isExistingActiveRunPath(filePath)) {
     warnings.push(`Skipped ${label} outside active runs directory: ${filePath}`);
     return undefined;
   }
@@ -465,6 +464,37 @@ function moveRunArtifactIfExists(filePath: string | undefined, destDir: string, 
   const target = nextAvailablePath(path.join(destDir, path.basename(filePath)), warnings, label);
   fs.renameSync(filePath, target);
   return target;
+}
+
+function isWritableActiveRunLogPath(logPath: string): boolean {
+  if (!isActiveRunPath(logPath)) { return false; }
+  if (fs.existsSync(logPath)) { return isExistingActiveRunPath(logPath); }
+  const parentDir = path.dirname(logPath);
+  ensureDir(parentDir);
+  return isExistingActiveRunPath(parentDir);
+}
+
+function isExistingActiveRunPath(filePath: string): boolean {
+  if (!isActiveRunPath(filePath)) { return false; }
+  try {
+    return isExistingRealPathInside(filePath, RUNS_DIR)
+      && !isExistingArchivedRunPath(filePath);
+  } catch {
+    return false;
+  }
+}
+
+function isExistingArchivedRunPath(filePath: string): boolean {
+  if (!fs.existsSync(ARCHIVED_RUNS_DIR)) { return false; }
+  try {
+    return isExistingRealPathInside(filePath, ARCHIVED_RUNS_DIR);
+  } catch {
+    return false;
+  }
+}
+
+function isActiveRunPath(filePath: string): boolean {
+  return isPathInside(filePath, RUNS_DIR) && !isPathInside(filePath, ARCHIVED_RUNS_DIR);
 }
 
 function nextAvailablePath(filePath: string, warnings: string[], label: string): string {

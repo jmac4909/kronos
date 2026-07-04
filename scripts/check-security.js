@@ -1667,7 +1667,13 @@ for (const marker of [
   "safeFileStem(runId, { fallback: 'run' })",
   'Refusing to append run log outside active runs directory',
   'function moveRunArtifactIfExists',
-  "import { isPathInside } from './pathUtils'",
+  "import { isExistingRealPathInside, isPathInside } from './pathUtils'",
+  'function isWritableActiveRunLogPath',
+  'function isExistingActiveRunPath',
+  'function isExistingArchivedRunPath',
+  'function isActiveRunPath',
+  'isExistingRealPathInside(filePath, RUNS_DIR)',
+  'isExistingRealPathInside(filePath, ARCHIVED_RUNS_DIR)',
   'outside active runs directory',
   'run.archiveWarnings = warnings',
   "import { effectiveRunStatus, isActiveRunStatus, isStaleActiveRun } from './runStatus'",
@@ -2266,7 +2272,10 @@ for (const [name, source] of [
   ['src/services/runStore.ts', runStore],
   ['src/services/gitWorkspace.ts', gitWorkspace],
 ]) {
-  if (!source.includes("import { isPathInside } from './pathUtils'")) {
+  const marker = name === 'src/services/runStore.ts'
+    ? "import { isExistingRealPathInside, isPathInside } from './pathUtils'"
+    : "import { isPathInside } from './pathUtils'";
+  if (!source.includes(marker)) {
     fail(`${name} must import the shared path containment helper.`);
   }
   if (source.includes('function isPathInside')) {

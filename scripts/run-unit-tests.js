@@ -33,6 +33,15 @@ process.once('exit', cleanupTrackedTempDirs);
 process.env.KRONOS_DIR = makeTempDir('kronos-home-');
 process.env.KRONOS_SCRIPTS_DIR = makeTempDir('kronos-scripts-');
 
+function tryCreateSymlink(target, linkPath, type = 'file') {
+  try {
+    fs.symlinkSync(target, linkPath, type);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function kronosTestPath(...segments) {
   return path.join(process.env.KRONOS_DIR, ...segments);
 }
@@ -3565,7 +3574,10 @@ test('path util helper centralizes directory containment checks', () => {
 
   for (const file of ['runStore.ts', 'gitWorkspace.ts']) {
     const source = readSourceFixture('src', 'services', file);
-    assert.ok(source.includes("import { isPathInside } from './pathUtils'"), `${file} should import shared path containment`);
+    const marker = file === 'runStore.ts'
+      ? "import { isExistingRealPathInside, isPathInside } from './pathUtils'"
+      : "import { isPathInside } from './pathUtils'";
+    assert.ok(source.includes(marker), `${file} should import shared path containment`);
     assert.equal(source.includes('function isPathInside'), false, `${file} should not carry a local isPathInside helper`);
   }
   const extensionSource = readSourceFixture('src', 'extension.ts');
@@ -4758,6 +4770,33 @@ test('run store archive refuses to move artifacts outside runs directory', () =>
   assert.equal(persisted.promptPath, externalPrompt);
 });
 
+test('run store archive refuses symlink artifacts escaping runs directory', () => {
+  const externalDir = makeTempDir('kronos-external-symlink-artifact-');
+  const externalLog = path.join(externalDir, 'external.log');
+  fs.writeFileSync(externalLog, 'external log\n');
+  fs.mkdirSync(runStore.RUNS_DIR, { recursive: true });
+  const activeLogLink = path.join(runStore.RUNS_DIR, 'symlink-escape.log');
+  if (!tryCreateSymlink(externalLog, activeLogLink)) { return; }
+  const run = {
+    id: 'run-symlink-artifact',
+    project: 'app',
+    skill: 'implement',
+    ticket: 'K-SYMLINK',
+    status: 'failed',
+    logPath: activeLogLink,
+  };
+  runStore.writeRunRecord(run);
+
+  const archived = runStore.archiveRun(run.id);
+  const persisted = JSON.parse(fs.readFileSync(archived.runPath, 'utf8'));
+
+  assert.equal(fs.existsSync(externalLog), true);
+  assert.equal(fs.lstatSync(activeLogLink).isSymbolicLink(), true);
+  assert.equal(archived.logPath, undefined);
+  assert.ok(archived.warnings.some(warning => warning.includes('outside active runs directory')));
+  assert.equal(persisted.logPath, activeLogLink);
+});
+
 test('run store refuses to append logs outside active runs directory', () => {
   const externalDir = makeTempDir('kronos-external-log-');
   const externalLog = path.join(externalDir, 'run.log');
@@ -4784,6 +4823,35 @@ test('run store refuses to append logs outside active runs directory', () => {
   );
   assert.equal(fs.existsSync(externalLog), false);
   assert.equal(fs.readFileSync(archived.logPath, 'utf8'), 'archived log\n');
+});
+
+test('run store refuses to append through symlink escapes under active runs directory', () => {
+  const externalDir = makeTempDir('kronos-external-symlink-log-');
+  const externalLog = path.join(externalDir, 'run.log');
+  fs.writeFileSync(externalLog, 'external log\n');
+  fs.mkdirSync(runStore.RUNS_DIR, { recursive: true });
+  const activeLogLink = path.join(runStore.RUNS_DIR, 'symlink-run.log');
+  if (!tryCreateSymlink(externalLog, activeLogLink)) { return; }
+
+  assert.throws(
+    () => runStore.appendRunLog(activeLogLink, 'bad\n'),
+    /outside active runs directory/,
+  );
+  assert.equal(fs.readFileSync(externalLog, 'utf8'), 'external log\n');
+});
+
+test('run store refuses to append through symlink parent directories under active runs directory', () => {
+  const externalDir = makeTempDir('kronos-external-symlink-parent-');
+  fs.mkdirSync(runStore.RUNS_DIR, { recursive: true });
+  const activeDirLink = path.join(runStore.RUNS_DIR, 'symlink-parent');
+  if (!tryCreateSymlink(externalDir, activeDirLink, 'dir')) { return; }
+  const escapedLog = path.join(activeDirLink, 'run.log');
+
+  assert.throws(
+    () => runStore.appendRunLog(escapedLog, 'bad\n'),
+    /outside active runs directory/,
+  );
+  assert.equal(fs.existsSync(path.join(externalDir, 'run.log')), false);
 });
 
 test('run store marks runs needs-human with recovery metadata', () => {
