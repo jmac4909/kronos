@@ -9,7 +9,7 @@ import { TicketTreeProvider } from './views/TicketTreeProvider';
 import * as path from 'path';
 import * as os from 'os';
 import * as fs from 'fs';
-import type { DiscoveredProject, MergeRequestChangedFile, QueueItem, Ticket } from './state/types';
+import type { DiscoveredProject, QueueItem, Ticket } from './state/types';
 import type { KronosState as KronosStateSnapshot } from './state/types';
 import { dispatchClaudeSession, openInClaude, ensureAuth, cleanupStaleWorktrees, listSavedSessions, listSessionStoreIssues, openSavedSession, getAggregateStats, openRunCenter, listRuns, type DispatchOptions, type KronosRun, type PromptRunMetadata, type RunCenterActionRequest } from './runners/sessionDispatcher';
 import { PromptHistoryDiff, createPromptHistorySnapshot, diffPromptHistorySnapshots, latestPromptHistorySnapshot, listPromptHistorySnapshots, listPromptTemplates, repairRequiredPromptTemplates, runPromptSmokeTests } from './services/promptManager';
@@ -25,7 +25,7 @@ import { EvidenceHandoffPlan, buildEvidenceHandoffPlan } from './services/eviden
 import { EvidencePublishDestination, EvidencePublishResult, buildEvidencePublishPlan, publishEvidencePlan, readyPublishDestinations } from './services/evidencePublisher';
 import { RUNS_DIR, archiveRun, listRunStoreIssues, markRunCancelled, markRunContinued, markRunNeedsHuman, markRunPaused, readArchivedRuns, runRecordPath, writeRunRecord } from './services/runStore';
 import { RecoveryInventory, RecoveryItem, buildRecoveryInventory, type RecoveryInventoryInput } from './services/recoveryCenter';
-import { DispatchCollision, detectDispatchCollisions, mrFileHintCandidateKeys, type DispatchCollisionInput } from './services/collisionDetector';
+import { DispatchCollision, detectDispatchCollisions, type DispatchCollisionInput } from './services/collisionDetector';
 import { gitlabAdapter, jiraAdapter, sonarAdapter } from './services/integrationAdapters';
 import { buildRunCompletionEvidenceCheck, buildRunCompletionEvidenceText, evaluatePostRunReadiness, postRunReadinessRunPatch, resolvePostRunTicket, shouldRecordRunCompletionEvidence } from './services/postRunReadiness';
 import { extractAcceptanceCriteria } from './services/acceptanceCriteria';
@@ -103,6 +103,7 @@ import { isKronosScriptMissingError } from './services/scriptClient';
 import { activeRunStatusBarSummary } from './services/activeRunDisplay';
 import { isFreshActiveRun } from './services/runStatus';
 import { buildRunCompletionNotification } from './services/runCompletionNotification';
+import { LIVE_MR_DIFF_TIMEOUT_MS, loadMrFileHints } from './services/mergeRequestFileHints';
 import {
   isResumableRun,
   isRetryableRun,
@@ -156,8 +157,6 @@ const REQUIRED_PROMPTS = [
   'verify-combined',
   'continue-work',
 ];
-const LIVE_MR_DIFF_LIMIT = 4;
-const LIVE_MR_DIFF_TIMEOUT_MS = 8000;
 const REVIEW_POLL_FAILURE_NOTIFICATION_MS = 15 * 60 * 1000;
 const REVIEW_SEEN_KEYS_STORAGE_KEY = 'kronos.review.seenKeys.v1';
 const reviewPollFailureNotifications = new Map<string, number>();
@@ -4012,7 +4011,7 @@ function attachOperatorCommandHandler(panel: vscode.WebviewPanel, webviewName: s
       return;
     }
     await runWebviewPanelAction(
-      () => executeOperatorCommandAction(request.command, request.ticket, request.runId),
+      () => executeOperatorCommandAction(request.command, request.ticket, request.runId, request.itemId),
       'Kronos operator action failed.',
     );
   });
@@ -4242,26 +4241,6 @@ async function openCollisionReportPanel(state: KronosState, extensionUri?: vscod
       await render();
     }, 'Kronos collision report action failed.');
   });
-}
-
-async function loadMrFileHints(state: KronosState, targets: Array<{ ticketKey?: string | null; projects: string[]; action: string }>): Promise<Record<string, MergeRequestChangedFile[]>> {
-  const tickets = state.state?.tickets || {};
-  const candidateKeys = mrFileHintCandidateKeys({ targets, tickets, limit: LIVE_MR_DIFF_LIMIT });
-  if (candidateKeys.length === 0) { return {}; }
-
-  const hints: Record<string, MergeRequestChangedFile[]> = {};
-  for (const ticketKey of candidateKeys) {
-    try {
-      const diff = await gitlabAdapter.mergeRequestDiff(state, ticketKey, { timeout: LIVE_MR_DIFF_TIMEOUT_MS });
-      const files = diff.files;
-      if (files.length > 0) {
-        hints[ticketKey] = files;
-      }
-    } catch (e: unknown) {
-      console.warn(unknownErrorMessage(e, `Failed to load MR diff hints for ${ticketKey}.`));
-    }
-  }
-  return hints;
 }
 
 function openQueuePlanWindowPanel(state: KronosState, extensionUri?: vscode.Uri): void {

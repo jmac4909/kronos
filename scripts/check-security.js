@@ -83,6 +83,7 @@ const evidenceGate = readSource('src/services/evidenceGate.ts');
 const evidenceGatePolicy = readSource('src/services/evidenceGatePolicy.ts');
 const queueRemovalPolicy = readSource('src/services/queueRemovalPolicy.ts');
 const collisionDetector = readSource('src/services/collisionDetector.ts');
+const mergeRequestFileHints = readSource('src/services/mergeRequestFileHints.ts');
 const runStatus = readSource('src/services/runStatus.ts');
 const runRecords = readSource('src/services/runRecords.ts');
 const runProgress = readSource('src/services/runProgress.ts');
@@ -549,7 +550,7 @@ for (const marker of [
   "decision.kind === 'confirm_failing_gate'",
   "decision.kind === 'confirm_missing_evidence'",
   "import { unknownErrorCode, unknownErrorMessage } from './services/errorUtils'",
-  "import type { DiscoveredProject, MergeRequestChangedFile, QueueItem, Ticket } from './state/types'",
+  "import type { DiscoveredProject, QueueItem, Ticket } from './state/types'",
   'function planToQueueItem(state: KronosState, plan: PlannedAction): QueueItem',
   'function refreshAfterDispatch(state: KronosState, projectName?: string, ticketKey?: string): (code: number, run: KronosRun) => Promise<void>',
   'return async (_code: number, run: KronosRun)',
@@ -650,7 +651,7 @@ for (const marker of [
   'const commandId = OPERATOR_COMMAND_TO_VSCODE_COMMAND.get(command)',
   "vscode.window.showWarningMessage('Ignored unknown Kronos operator action.')",
   'await executeOperatorCommandAction(command, ticketKey)',
-  'executeOperatorCommandAction(request.command, request.ticket, request.runId)',
+  'executeOperatorCommandAction(request.command, request.ticket, request.runId, request.itemId)',
   'await executeHumanReviewAction(state, request.command, request.ticket, request.runId, request.itemId)',
   "await executeOperatorCommandAction(command, '', runId, itemId)",
   "if ((command === 'runCenter' || command === 'recoveryCenter') && (runId || itemId))",
@@ -801,9 +802,9 @@ for (const marker of [
   "environment: 'Kronos review monitor'",
   'kronos.collisionReport',
   'openCollisionReportPanel',
+  "import { LIVE_MR_DIFF_TIMEOUT_MS, loadMrFileHints } from './services/mergeRequestFileHints'",
   'loadMrFileHints',
   'LIVE_MR_DIFF_TIMEOUT_MS',
-  'console.warn(unknownErrorMessage(e, `Failed to load MR diff hints for ${ticketKey}.`))',
   'kronos.planNextTwoHours',
   'openQueuePlanWindowPanel',
   'kronos.overnightCandidates',
@@ -3773,6 +3774,20 @@ for (const marker of [
 ]) {
   if (!collisionDetector.includes(marker)) {
     fail(`Missing collision detector marker: ${marker}`);
+  }
+}
+for (const marker of [
+  'export const LIVE_MR_DIFF_LIMIT = 4',
+  'export const LIVE_MR_DIFF_TIMEOUT_MS = 8000',
+  'export interface MergeRequestFileHintOptions',
+  "import { mrFileHintCandidateKeys, type MrFileHintTarget } from './collisionDetector'",
+  "import { gitlabAdapter } from './integrationAdapters'",
+  'mrFileHintCandidateKeys({',
+  'loadDiff(state, ticketKey, { timeoutMs })',
+  'logWarning(unknownErrorMessage(e, `Failed to load MR diff hints for ${ticketKey}.`))',
+]) {
+  if (!mergeRequestFileHints.includes(marker)) {
+    fail(`Missing merge request file hint marker: ${marker}`);
   }
 }
 

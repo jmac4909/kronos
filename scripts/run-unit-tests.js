@@ -182,6 +182,7 @@ const runStore = require('../out/services/runStore.js');
 const recoveryCenter = require('../out/services/recoveryCenter.js');
 const ticketTimeline = require('../out/services/ticketTimeline.js');
 const collisionDetector = require('../out/services/collisionDetector.js');
+const mergeRequestFileHints = require('../out/services/mergeRequestFileHints.js');
 const scriptClient = require('../out/services/scriptClient.js');
 const integrationAdapters = require('../out/services/integrationAdapters.js');
 const acceptanceCriteria = require('../out/services/acceptanceCriteria.js');
@@ -6999,6 +7000,78 @@ test('collision detector selects MR file hint candidates for code work', () => {
   }
 });
 
+test('MR file hint service loads candidate diffs and keeps failed hints non-fatal', async () => {
+  const tickets = {
+    'K-TARGET': ticket({
+      projects: ['app'],
+      mr: { iid: 1, state: 'opened', review_status: 'pending_review', url: 'https://gitlab.example/1' },
+    }),
+    'K-EMPTY': ticket({
+      projects: ['app'],
+      mr: { iid: 2, state: 'opened', review_status: 'approved', url: 'https://gitlab.example/2' },
+    }),
+    'K-FAIL': ticket({
+      projects: ['app'],
+      mr: { iid: 3, state: 'opened', review_status: 'changes_requested', url: 'https://gitlab.example/3' },
+    }),
+    'K-SAME': ticket({
+      projects: ['app'],
+      mr: { iid: 4, state: 'opened', review_status: 'pending_review', url: 'https://gitlab.example/4' },
+    }),
+  };
+  const state = { state: { tickets } };
+  const calls = [];
+  const warnings = [];
+
+  const hints = await mergeRequestFileHints.loadMrFileHints(state, [
+    { ticketKey: 'K-TARGET', projects: ['app'], action: 'implement' },
+  ], {
+    limit: 4,
+    timeoutMs: 1234,
+    logWarning: message => warnings.push(message),
+    loadDiff: async (_state, ticketKey, options) => {
+      calls.push({ ticketKey, timeoutMs: options.timeoutMs });
+      if (ticketKey === 'K-EMPTY') { return { files: [] }; }
+      if (ticketKey === 'K-FAIL') { throw {}; }
+      return { files: [{ new_path: `src/${ticketKey}.ts` }] };
+    },
+  });
+
+  assert.deepEqual(calls, [
+    { ticketKey: 'K-TARGET', timeoutMs: 1234 },
+    { ticketKey: 'K-EMPTY', timeoutMs: 1234 },
+    { ticketKey: 'K-FAIL', timeoutMs: 1234 },
+    { ticketKey: 'K-SAME', timeoutMs: 1234 },
+  ]);
+  assert.deepEqual(hints, {
+    'K-TARGET': [{ new_path: 'src/K-TARGET.ts' }],
+    'K-SAME': [{ new_path: 'src/K-SAME.ts' }],
+  });
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0], /Failed to load MR diff hints for K-FAIL/);
+
+  const noHints = await mergeRequestFileHints.loadMrFileHints(state, [
+    { ticketKey: 'K-TARGET', projects: ['app'], action: 'add_evidence' },
+  ], {
+    loadDiff: async () => {
+      throw new Error('non-code actions should not load diffs');
+    },
+  });
+  assert.deepEqual(noHints, {});
+
+  const source = readSourceFixture('src', 'services', 'mergeRequestFileHints.ts');
+  for (const marker of [
+    'export const LIVE_MR_DIFF_LIMIT = 4',
+    'export const LIVE_MR_DIFF_TIMEOUT_MS = 8000',
+    'export interface MergeRequestFileHintOptions',
+    'mrFileHintCandidateKeys({',
+    'loadDiff(state, ticketKey, { timeoutMs })',
+    'logWarning(unknownErrorMessage(e, `Failed to load MR diff hints for ${ticketKey}.`))',
+  ]) {
+    assert.ok(source.includes(marker), marker);
+  }
+});
+
 test('script client reports required scripts and wraps Python JSON contracts', async () => {
   const kronosStatePath = path.join(process.env.KRONOS_SCRIPTS_DIR, 'kronos_state.py');
   const pipelinePath = path.join(process.env.KRONOS_SCRIPTS_DIR, 'pipeline_monitor.py');
@@ -9121,8 +9194,9 @@ test('extension webviews use shared UI shell and board filtering affordances', (
   const webviewCommandRegistrySource = readSourceFixture('src', 'services', 'webviewCommandRegistry.ts');
   const runActionHelpersSource = readSourceFixture('src', 'services', 'runActionHelpers.ts');
   const collisionDetectorSource = readSourceFixture('src', 'services', 'collisionDetector.ts');
+  const mergeRequestFileHintsSource = readSourceFixture('src', 'services', 'mergeRequestFileHints.ts');
   const jiraBoardSource = readSourceFixture('media', 'kronos-jira-board.js');
-  const uiSource = `${source}\n${queuePlannerPanelViewSource}\n${operationsReportPanelViewSource}\n${dashboardPanelViewSource}\n${diffPanelViewSource}\n${jiraBoardPanelViewSource}\n${ticketPanelViewSource}\n${webviewCommandRegistrySource}\n${runActionHelpersSource}\n${collisionDetectorSource}\n${jiraBoardSource}`;
+  const uiSource = `${source}\n${queuePlannerPanelViewSource}\n${operationsReportPanelViewSource}\n${dashboardPanelViewSource}\n${diffPanelViewSource}\n${jiraBoardPanelViewSource}\n${ticketPanelViewSource}\n${webviewCommandRegistrySource}\n${runActionHelpersSource}\n${collisionDetectorSource}\n${mergeRequestFileHintsSource}\n${jiraBoardSource}`;
   const boardHandlerStart = source.indexOf('panel.webview.onDidReceiveMessage(async (msg) => {\n        if (logReady(msg)) { return; }\n        const request = normalizeBoardMessage(msg, BOARD_MESSAGE_COMMANDS);');
   const boardHandlerEnd = source.indexOf("    vscode.commands.registerCommand('kronos.viewTicket'", boardHandlerStart);
   assert.ok(boardHandlerStart >= 0 && boardHandlerEnd > boardHandlerStart, 'Jira board message handler should be present');
@@ -9223,7 +9297,7 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     "'Kronos evidence gate action failed.'",
     "'Kronos operator action failed.'",
     'await executeOperatorCommandAction(command, ticketKey)',
-    'executeOperatorCommandAction(request.command, request.ticket, request.runId)',
+    'executeOperatorCommandAction(request.command, request.ticket, request.runId, request.itemId)',
     'await executeHumanReviewAction(state, request.command, request.ticket, request.runId, request.itemId)',
     "await executeOperatorCommandAction(command, '', runId, itemId)",
     "if ((command === 'runCenter' || command === 'recoveryCenter') && (runId || itemId))",
@@ -9361,7 +9435,7 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     "import { deployMonitorAttentionIssue, deployMonitorHandoffCheckName, hasDeployMonitorHandoffIssue, hasHandledDeployMonitorRun, resolveDeployMonitorProject } from './services/deployMonitorHandoff'",
     'const result = await startDeployMonitorForMergedTicket(state, update.ticketKey, update.ticket)',
     'if (reviewDeployMonitorActionHandled(result)) { reviewTerminalMergeRequestActions.add(actionKey); }',
-    'console.warn(unknownErrorMessage(e, `Failed to load MR diff hints for ${ticketKey}.`))',
+    'logWarning(unknownErrorMessage(e, `Failed to load MR diff hints for ${ticketKey}.`))',
     "const started = await startClaudeDispatch(projectPath, 'deploy-monitor', ticketKey",
     'if (!started) {',
     'deploy monitor did not start',
@@ -9910,7 +9984,7 @@ test('extension run recovery helpers use typed run records', () => {
   assert.ok(runActionStart >= 0 && runActionEnd > runActionStart, 'run action helper block should be present');
   for (const marker of [
     "import { unknownErrorCode, unknownErrorMessage } from './services/errorUtils'",
-    "import type { DiscoveredProject, MergeRequestChangedFile, QueueItem, Ticket } from './state/types'",
+    "import type { DiscoveredProject, QueueItem, Ticket } from './state/types'",
     'function openExternalHttpUrl(url: string): void',
     "console.warn(unknownErrorMessage(e, 'Invalid external URL.'))",
     'type KronosRun',
@@ -10383,7 +10457,7 @@ test('ticket detail rendering uses typed tickets and evidence records', () => {
   const ticketPanelViewSource = readSourceFixture('src', 'services', 'ticketPanelView.ts');
   const evidenceData = readSourceFixture('src', 'services', 'evidenceData.ts');
   for (const marker of [
-    'import type { DiscoveredProject, MergeRequestChangedFile, QueueItem, Ticket }',
+    'import type { DiscoveredProject, QueueItem, Ticket }',
     'function evidenceRecordCount(ticket: Ticket | null | undefined): number',
     "import { buildTicketHtml } from './services/ticketPanelView'",
     'buildTicketHtml(ticketKey, freshTicket, {',
@@ -10484,6 +10558,7 @@ test('merge request diff rendering uses normalized adapter results', () => {
   const extensionSource = readSourceFixture('src', 'extension.ts');
   const diffPanelViewSource = readSourceFixture('src', 'services', 'diffPanelView.ts');
   const integrationAdapters = readSourceFixture('src', 'services', 'integrationAdapters.ts');
+  const mergeRequestFileHintsSource = readSourceFixture('src', 'services', 'mergeRequestFileHints.ts');
   assert.ok(extensionSource.includes("import { buildDiffHtml } from './services/diffPanelView'"));
   assert.ok(extensionSource.includes('panel.webview.html = withWebviewCsp(buildDiffHtml(data));'));
   for (const marker of [
@@ -10494,7 +10569,7 @@ test('merge request diff rendering uses normalized adapter results', () => {
   ]) {
     assert.ok(diffPanelViewSource.includes(marker), marker);
   }
-  assert.ok(extensionSource.includes('const files = diff.files'));
+  assert.ok(mergeRequestFileHintsSource.includes('const files = diff.files'));
   const html = diffPanelView.buildDiffHtml({
     mr: {
       title: 'MR <unsafe>',
