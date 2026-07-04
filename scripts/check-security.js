@@ -2008,6 +2008,14 @@ for (const marker of [
     fail(`Missing action catalog marker: ${marker}`);
   }
 }
+for (const marker of [
+  'export type TicketAction',
+  'export type QueueAction',
+]) {
+  if (actionCatalog.includes(marker)) {
+    fail(`Action catalog should not export unused action alias: ${marker}`);
+  }
+}
 
 for (const [name, source, marker] of [
   ['src/extension.ts', extension, 'const CODE_COLLISION_ACTIONS'],
@@ -3351,6 +3359,9 @@ for (const marker of [
   if (!evidencePublisher.includes(marker)) {
     fail(`Missing evidence publisher marker: ${marker}`);
   }
+}
+if (evidencePublisher.includes('} catch (e) {')) {
+  fail('Evidence publisher caught values must stay explicitly unknown.');
 }
 
 for (const marker of [

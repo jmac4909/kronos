@@ -3117,6 +3117,9 @@ test('action semantics centralize code and handoff action groups', () => {
   assert.equal(actionCatalog.actionSkill('unknown'), 'implement');
   assert.equal(actionCatalog.actionEstimateMinutes('refresh'), 10);
   assert.equal(actionCatalog.actionPlanningScore('fix_build'), 95);
+  const actionCatalogSource = readSourceFixture('src', 'services', 'actionCatalog.ts');
+  assert.equal(actionCatalogSource.includes('export type TicketAction'), false, 'unused ticket action alias should stay private or absent');
+  assert.equal(actionCatalogSource.includes('export type QueueAction'), false, 'unused queue action alias should stay private or absent');
   assert.equal(actionSemantics.isCodeAction('implement'), true);
   assert.equal(actionSemantics.isCodeAction('in_progress'), true);
   assert.equal(actionSemantics.isCodeAction('fix_build'), true);
@@ -3863,6 +3866,7 @@ test('evidence publisher plans and posts Jira and GitLab comments through inject
   }
   for (const marker of [
     'catch (e: any)',
+    '} catch (e) {',
     "e?.message || 'Evidence publish request failed.'",
   ]) {
     assert.equal(source.includes(marker), false, marker);

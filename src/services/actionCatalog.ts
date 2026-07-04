@@ -11,9 +11,7 @@ export const TICKET_ACTIONS = [
 
 export const QUEUE_ACTIONS = [...TICKET_ACTIONS, 'refresh'] as const;
 
-export type TicketAction = typeof TICKET_ACTIONS[number];
-export type QueueAction = typeof QUEUE_ACTIONS[number];
-export type ActionName = QueueAction;
+type ActionName = typeof QUEUE_ACTIONS[number];
 
 export interface ActionIconSpec {
   id: string;

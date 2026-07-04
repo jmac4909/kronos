@@ -291,7 +291,7 @@ function defaultHttpTransport(request: HttpRequest): Promise<HttpResponse> {
     let parsed: URL;
     try {
       parsed = new URL(request.url);
-    } catch (e) {
+    } catch (e: unknown) {
       reject(e);
       return;
     }
