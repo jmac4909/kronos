@@ -29,6 +29,7 @@ const namedFiles = [
   'src/services/operationsReportPanelView.ts',
   'src/services/dashboardPanelView.ts',
   'src/services/diffPanelView.ts',
+  'src/services/jiraBoardPanelView.ts',
   'src/services/operatorPanel.ts',
   'src/services/webviewSecurity.ts',
   'src/services/promptPanelView.ts',
@@ -104,6 +105,7 @@ const queuePlannerPanelView = sources['src/services/queuePlannerPanelView.ts'];
 const operationsReportPanelView = sources['src/services/operationsReportPanelView.ts'];
 const dashboardPanelView = sources['src/services/dashboardPanelView.ts'];
 const diffPanelView = sources['src/services/diffPanelView.ts'];
+const jiraBoardPanelView = sources['src/services/jiraBoardPanelView.ts'];
 const agentQualityScore = readSource('src/services/agentQualityScore.ts');
 const integrationManifest = readSource('src/services/integrationManifest.ts');
 const profileManager = readSource('src/services/profileManager.ts');
@@ -362,8 +364,21 @@ for (const requiredIgnore of ['.git/**', '.claude/**', 'node_modules/**', 'scrip
     fail(`.vscodeignore must exclude ${requiredIgnore}`);
   }
 }
-const extensionUiSource = `${extension}\n${queuePlannerPanelView}\n${operationsReportPanelView}\n${dashboardPanelView}\n${diffPanelView}\n${ticketPanelView}\n${jiraBoardScript}`;
+const extensionUiSource = `${extension}\n${queuePlannerPanelView}\n${operationsReportPanelView}\n${dashboardPanelView}\n${diffPanelView}\n${jiraBoardPanelView}\n${ticketPanelView}\n${jiraBoardScript}`;
 const dashboardRendererSafetyMarkers = new Set([
+  'id="kronos-jira-board-script"',
+  'data-kronos-script-kind="jira-board"',
+  'defer src="${escapeAttr(input.scriptUri)}"',
+  'id="kronos-jira-ticket-data"',
+  'class="kronos-data-payload"',
+  'evidenceCount: evidenceRecordCount(t)',
+  'function ticketStringArray',
+  'function ticketAttachments',
+  'interface TicketAttachmentSummary',
+  'interface JiraBoardTicketPayload',
+  'const ticketData: Record<string, JiraBoardTicketPayload>',
+  'const linkedProjects = ticketStringArray(t.projects)',
+  'const attachments = ticketAttachments(t.attachments)',
   'Gate Fails',
   'buildDashboardWorklist',
   'buildDashboardWorklistHtml',
@@ -468,14 +483,14 @@ for (const marker of [
 }
 
 for (const marker of [
-  'buildJiraBoardHtml(state, nonce, scriptUri)',
+  'buildJiraBoardHtml({',
   'webviewScriptCspOptions(panel.webview.cspSource, nonce)',
   'WEBVIEW_JIRA_BOARD_SCRIPT',
   'function kronosJiraBoardScriptUri',
   "vscode.Uri.joinPath(extensionUri, 'media', scriptFile)",
   'id="kronos-jira-board-script"',
   'data-kronos-script-kind="jira-board"',
-  'defer src="${escapeAttr(scriptUri)}"',
+  'defer src="${escapeAttr(input.scriptUri)}"',
   'id="kronos-jira-ticket-data"',
   'class="kronos-data-payload"',
   "import { createWebviewReadyMonitor } from './services/webviewDiagnostics'",
@@ -555,6 +570,7 @@ for (const marker of [
   "import { buildTicketHtml } from './services/ticketPanelView'",
   "import { buildDashboardHtml } from './services/dashboardPanelView'",
   "import { buildDiffHtml } from './services/diffPanelView'",
+  "import { buildJiraBoardHtml } from './services/jiraBoardPanelView'",
   'buildTicketHtml(ticketKey, freshTicket, {',
   'runs: listRuns()',
   'confirmDispatchCollisions',
@@ -940,7 +956,7 @@ for (const marker of [
   'unknownErrorMessage(e, `Could not resolve MR branch for ${ticket.key}.`)',
   'unknownErrorMessage(e, `Could not find fallback remote branch for ${ticket.key}.`)',
   "import { buildSonarReport, type SonarIssue }",
-  "import { isRecord, recordFromUnknown } from './services/records'",
+  "import { isRecord, recordFromUnknown, recordString } from './services/records'",
   "from './services/commandPayloads'",
   'resolveProjectName,',
   'resolveQueueCommandItem,',
@@ -2422,7 +2438,7 @@ for (const [name, source, marker] of [
 }
 
 for (const [name, source, marker] of [
-  ['src/extension.ts', extension, "import { isRecord, recordFromUnknown } from './services/records'"],
+  ['src/extension.ts', extension, "import { isRecord, recordFromUnknown, recordString } from './services/records'"],
   ['src/services/changedFiles.ts', changedFiles, "import { isRecord } from './records'"],
   ['src/services/evidenceData.ts', evidenceData, "import { isRecord } from './records'"],
   ['src/services/integrationAdapters.ts', integrationAdapters, "import { isRecord } from './records'"],

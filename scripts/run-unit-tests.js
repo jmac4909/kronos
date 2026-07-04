@@ -218,6 +218,7 @@ const queuePlannerPanelView = require('../out/services/queuePlannerPanelView.js'
 const operationsReportPanelView = require('../out/services/operationsReportPanelView.js');
 const dashboardPanelView = require('../out/services/dashboardPanelView.js');
 const diffPanelView = require('../out/services/diffPanelView.js');
+const jiraBoardPanelView = require('../out/services/jiraBoardPanelView.js');
 const runStatus = require('../out/services/runStatus.js');
 const runProgress = require('../out/services/runProgress.js');
 const runRecords = require('../out/services/runRecords.js');
@@ -3561,7 +3562,7 @@ test('record guard helper centralizes unknown object narrowing', () => {
   }
 
   const extensionSource = readSourceFixture('src', 'extension.ts');
-  assert.ok(extensionSource.includes("import { isRecord, recordFromUnknown } from './services/records'"));
+  assert.ok(extensionSource.includes("import { isRecord, recordFromUnknown, recordString } from './services/records'"));
   assert.equal(extensionSource.includes('function ticketRecord'), false, 'extension should use shared record helper for ticket payload records');
 
   const dispatcherSource = readSourceFixture('src', 'runners', 'sessionDispatcher.ts');
@@ -8756,6 +8757,48 @@ test('dashboard panel view renders escaped command center data', () => {
   assert.doesNotMatch(html, /Brief <failed>/);
 });
 
+test('jira board panel view renders escaped ticket data and packaged script', () => {
+  const html = jiraBoardPanelView.buildJiraBoardHtml({
+    state: {
+      projects: { 'app<script>': { health: 'green', summary: 'App', open_mr_count: 1 } },
+      tickets: {
+        'K-BOARD': ticket({
+          summary: 'Board <summary> & detail',
+          description: 'Unsafe <description>',
+          type: 'Bug',
+          priority: 'High <p>',
+          jira_status: 'In Review',
+          next_action: 'await_review',
+          labels: ['label<script>'],
+          projects: ['app<script>'],
+          jira_url: 'https://jira.example/K-BOARD',
+          attachments: [{ filename: 'trace <one>.log', size: '99', mimeType: 'text/plain' }],
+          mr: { iid: 12, review_status: 'changes_requested', url: 'https://gitlab.example/mr/12' },
+          build: { number: 34, status: 'FAILURE' },
+          evidence: { notes: [{ text: 'proof' }] },
+        }),
+      },
+    },
+    queue: { items: [{ id: 'q-board', ticket: 'K-BOARD', action: 'await_review' }], last_computed: '2026-07-01T12:00:00.000Z' },
+    nonce: 'nonce-board',
+    scriptUri: ACTION_SCRIPT_URI,
+  });
+
+  assert.match(html, /class="kronos-shell board-shell"/);
+  assert.match(html, /Board &lt;summary&gt; &amp; detail/);
+  assert.match(html, /High &lt;p&gt;/);
+  assert.match(html, /app&lt;script&gt;/);
+  assert.match(html, /label&lt;script&gt;/);
+  assert.match(html, /trace &lt;one&gt;\.log/);
+  assert.match(html, /data-action="removeFromQueue"/);
+  assert.match(html, /data-action="start"/);
+  assert.match(html, /id="kronos-jira-board-script"/);
+  assert.match(html, /data-kronos-script-kind="jira-board"/);
+  assert.match(html, /data-kronos-ready-command="__kronosWebviewReady"/);
+  assert.doesNotMatch(html, /Board <summary>/);
+  assert.doesNotMatch(html, /trace <one>/);
+});
+
 test('extension webviews use shared UI shell and board filtering affordances', () => {
   const source = readSourceFixture('src', 'extension.ts');
   const operatorPanelSource = readSourceFixture('src', 'services', 'operatorPanel.ts');
@@ -8767,16 +8810,17 @@ test('extension webviews use shared UI shell and board filtering affordances', (
   const operationsReportPanelViewSource = readSourceFixture('src', 'services', 'operationsReportPanelView.ts');
   const dashboardPanelViewSource = readSourceFixture('src', 'services', 'dashboardPanelView.ts');
   const diffPanelViewSource = readSourceFixture('src', 'services', 'diffPanelView.ts');
+  const jiraBoardPanelViewSource = readSourceFixture('src', 'services', 'jiraBoardPanelView.ts');
   const ticketPanelViewSource = readSourceFixture('src', 'services', 'ticketPanelView.ts');
   const webviewMessagesSource = readSourceFixture('src', 'services', 'webviewMessages.ts');
   const jiraBoardSource = readSourceFixture('media', 'kronos-jira-board.js');
-  const uiSource = `${source}\n${queuePlannerPanelViewSource}\n${operationsReportPanelViewSource}\n${dashboardPanelViewSource}\n${diffPanelViewSource}\n${ticketPanelViewSource}\n${jiraBoardSource}`;
+  const uiSource = `${source}\n${queuePlannerPanelViewSource}\n${operationsReportPanelViewSource}\n${dashboardPanelViewSource}\n${diffPanelViewSource}\n${jiraBoardPanelViewSource}\n${ticketPanelViewSource}\n${jiraBoardSource}`;
   const boardHandlerStart = source.indexOf('panel.webview.onDidReceiveMessage(async (msg) => {\n        if (logReady(msg)) { return; }\n        const request = normalizeBoardMessage(msg, BOARD_MESSAGE_COMMANDS);');
   const boardHandlerEnd = source.indexOf("    vscode.commands.registerCommand('kronos.viewTicket'", boardHandlerStart);
   assert.ok(boardHandlerStart >= 0 && boardHandlerEnd > boardHandlerStart, 'Jira board message handler should be present');
   const boardHandlerSource = source.slice(boardHandlerStart, boardHandlerEnd);
   for (const marker of [
-    "import { WEBVIEW_ACTION_PANEL_SCRIPT, WEBVIEW_JIRA_BOARD_SCRIPT, WEBVIEW_READY_COMMAND, createWebviewNonce, webviewRuntimeScriptTag, webviewRuntimeScriptUri, webviewScriptCspOptions, withWebviewCsp } from './services/webviewSecurity'",
+    "import { WEBVIEW_ACTION_PANEL_SCRIPT, WEBVIEW_JIRA_BOARD_SCRIPT, createWebviewNonce, webviewScriptCspOptions, withWebviewCsp } from './services/webviewSecurity'",
     "import { normalizeBoardMessage, normalizeWebviewCommand } from './services/webviewMessages'",
     "import { actionButton, kronosActionPanelScript, kronosOperatorPanelCss, normalizeActionPanelMessage, operatorCommandRow, type ActionPanelMessage } from './services/operatorPanel'",
     "import { buildPromptHistoryHtml, buildPromptManagerHtml, buildPromptSmokeTestsHtml } from './services/promptPanelView'",
@@ -8811,8 +8855,8 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'WEBVIEW_JIRA_BOARD_SCRIPT',
     'function kronosJiraBoardScriptUri',
     "vscode.Uri.joinPath(extensionUri, 'media', scriptFile)",
-    'buildJiraBoardHtml(state, nonce, scriptUri)',
-    'defer src="${escapeAttr(scriptUri)}"',
+    'buildJiraBoardHtml({',
+    'defer src="${escapeAttr(input.scriptUri)}"',
     'data-kronos-ready-command="${escapeAttr(WEBVIEW_READY_COMMAND)}"',
     'function initKronosJiraBoard',
     'function claimKronosJiraBoard',
@@ -9967,7 +10011,7 @@ test('extension Sonar commands normalize webview and issue payloads', () => {
   const sonarCommandSource = source.slice(sonarCommandStart, sonarCommandEnd);
   for (const marker of [
     "import { buildSonarReport, type SonarIssue }",
-    "import { isRecord, recordFromUnknown } from './services/records'",
+    "import { isRecord, recordFromUnknown, recordString } from './services/records'",
     'stringFromUnknown,',
     "vscode.commands.registerCommand('kronos.sonarScan', async (item: unknown)",
     "vscode.commands.registerCommand('kronos.sonarReport', async (item: unknown)",
