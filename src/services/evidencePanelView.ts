@@ -77,6 +77,7 @@ export function buildEvidenceGateHtml(gates: EvidenceGateResult[], title: string
     warn: gates.filter(g => g.status === 'warn').length,
     pass: gates.filter(g => g.status === 'pass').length,
   };
+  const brief = evidenceGateBrief(gates, summary);
   const rows = gates.flatMap(gate => gate.checks.map(check => `<tr class="${check.status}">
     <td><span class="pill ${check.status}">${escapeHtml(check.status.toUpperCase())}</span></td>
     <td>${escapeHtml(gate.ticketKey)}</td>
@@ -93,9 +94,19 @@ export function buildEvidenceGateHtml(gates: EvidenceGateResult[], title: string
   return `<!DOCTYPE html>
 <html><head><style>
   ${kronosOperatorPanelCss()}
+  .decision-brief { margin: 12px 0 16px; }
+  .decision-brief strong { display: block; font-size: 15px; margin-bottom: 4px; }
+  .decision-brief.fail { border-left-color: var(--k-danger); }
+  .decision-brief.warn { border-left-color: var(--k-warn); }
+  .decision-brief.pass { border-left-color: var(--k-ok); }
 </style></head><body><div class="kronos-shell operator-shell">
   <div class="kronos-header"><div><h1 class="kronos-title">${escapeHtml(title)}</h1><div class="kronos-subtitle">Evidence readiness by ticket and check</div></div></div>
   ${actions}
+  <div class="operator-note decision-brief ${escapeClass(brief.status)}">
+    <strong>${escapeHtml(brief.headline)}</strong>
+    <div>${escapeHtml(brief.detail)}</div>
+    <div class="muted"><strong>Next:</strong> ${escapeHtml(brief.nextStep)}</div>
+  </div>
   <div class="operator-summary">
     <div class="summary-card"><div class="num">${summary.fail}</div><div class="lbl">Failing</div></div>
     <div class="summary-card"><div class="num">${summary.warn}</div><div class="lbl">Warnings</div></div>
@@ -103,6 +114,57 @@ export function buildEvidenceGateHtml(gates: EvidenceGateResult[], title: string
   </div>
   ${empty || `<div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Status</th><th>Ticket</th><th>Check</th><th>Item</th><th>Detail</th><th class="action-cell">Actions</th></tr>${rows}</table></div>`}
 </div>${kronosActionPanelScript(nonce, 'Kronos Evidence Gate', actionScriptUri)}</body></html>`;
+}
+
+function evidenceGateBrief(
+  gates: EvidenceGateResult[],
+  summary: { fail: number; warn: number; pass: number },
+): { status: 'fail' | 'warn' | 'pass'; headline: string; detail: string; nextStep: string } {
+  const failingGate = gates.find(gate => gate.status === 'fail');
+  const warningGate = gates.find(gate => gate.status === 'warn');
+  const targetGate = failingGate || warningGate || gates[0];
+  if (failingGate) {
+    const check = failingGate.checks.find(item => item.status === 'fail') || failingGate.checks[0];
+    return {
+      status: 'fail',
+      headline: `${summary.fail} ticket${summary.fail === 1 ? '' : 's'} blocked by evidence`,
+      detail: check ? `${failingGate.ticketKey}: ${check.title} - ${check.detail}` : `${failingGate.ticketKey}: ${failingGate.summary}`,
+      nextStep: check ? evidenceGateNextStep(check) : 'Open the ticket and add the missing proof before review handoff.',
+    };
+  }
+  if (warningGate) {
+    const check = warningGate.checks.find(item => item.status === 'warn') || warningGate.checks[0];
+    return {
+      status: 'warn',
+      headline: `${summary.warn} ticket${summary.warn === 1 ? ' has' : 's have'} evidence warnings`,
+      detail: check ? `${warningGate.ticketKey}: ${check.title} - ${check.detail}` : `${warningGate.ticketKey}: ${warningGate.summary}`,
+      nextStep: check ? evidenceGateNextStep(check) : 'Review the warning and add evidence if it affects readiness.',
+    };
+  }
+  if (targetGate) {
+    return {
+      status: 'pass',
+      headline: `${summary.pass} ticket${summary.pass === 1 ? '' : 's'} passing evidence gates`,
+      detail: 'No failing evidence checks are blocking the current gate view.',
+      nextStep: 'Open the ticket, handoff packet, or publish plan when review is ready.',
+    };
+  }
+  return {
+    status: 'pass',
+    headline: 'No evidence gate items found',
+    detail: 'There are no tickets in this gate view that require evidence action.',
+    nextStep: 'Refresh after a run completes or open Dashboard for the next action.',
+  };
+}
+
+function evidenceGateNextStep(check: EvidenceGateResult['checks'][number]): string {
+  if (check.kind === 'notes' || check.kind === 'risk') { return 'Add an evidence note that explains what changed and how it was verified.'; }
+  if (check.kind === 'test') { return 'Add a test evidence check with the command, result, and short outcome summary.'; }
+  if (check.kind === 'acceptance') { return /not extracted/i.test(check.title) ? 'Extract acceptance criteria, then mark each verified item explicitly.' : 'Mark the verified acceptance item or add the missing proof.'; }
+  if (check.kind === 'environment') { return 'Record the environment verification result or add a check that explains why it is deferred.'; }
+  if (check.kind === 'build') { return 'Add the build evidence check or rerun the build before review handoff.'; }
+  if (check.kind === 'project' || check.kind === 'mr') { return 'Fix the ticket project or merge request linkage before continuing.'; }
+  return 'Use the primary row action, then refresh the evidence gate.';
 }
 
 function publishPillClass(status: string): string {

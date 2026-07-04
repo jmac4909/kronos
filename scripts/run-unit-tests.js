@@ -8854,6 +8854,10 @@ test('human review inbox aggregates runs, tickets, evidence gaps, integrations, 
     actionScriptUri: ACTION_SCRIPT_URI,
   });
   assert.ok(html.includes('Kronos Human Review Inbox'));
+  assert.ok(html.includes('decision-brief'));
+  assert.match(html, /critical decision/);
+  assert.match(html, /Next:/);
+  assert.match(html, /Open Run Center|Open the evidence gate|Open the ticket|Open Recovery Center|Open Doctor|Open Queue Planner/);
   assert.ok(html.includes('data-action="refreshPanel"'));
   assert.ok(html.includes('data-action="extractAcceptanceCriteria"'));
   assert.ok(html.includes('data-action="startTicket"'));
@@ -8898,6 +8902,9 @@ test('evidence panel renderers emit safe links and action buttons', () => {
   }], 'Gate <unsafe>', 'nonce-evidence', ACTION_SCRIPT_URI);
 
   assert.ok(gateHtml.includes('Gate &lt;unsafe&gt;'));
+  assert.ok(gateHtml.includes('decision-brief'));
+  assert.ok(gateHtml.includes('1 ticket has evidence warnings'));
+  assert.ok(gateHtml.includes('Extract acceptance criteria'));
   assert.ok(gateHtml.includes('Add &lt;note&gt; &amp; proof'));
   assert.ok(gateHtml.includes('data-action="refreshPanel"'));
   assert.ok(gateHtml.includes('data-action="addEvidence"'));
@@ -10206,6 +10213,9 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'interface HumanReviewInboxHtmlOptions',
     'actionScriptUri?: string | undefined',
     'Kronos Human Review Inbox',
+    'decision-brief',
+    'function humanReviewBrief',
+    'function humanReviewNextStep',
     'humanReviewActionButtons',
     "actionButton('refreshPanel', 'Refresh')",
     "actionButton('extractAcceptanceCriteria', 'Extract AC'",
@@ -10227,6 +10237,9 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'Evidence Handoff:',
     'Evidence Publish:',
     'Kronos Evidence Gate',
+    'decision-brief',
+    'function evidenceGateBrief',
+    'function evidenceGateNextStep',
     'Kronos did not call a posting API',
     'publishPillClass',
     'evidenceGateActionButtons',

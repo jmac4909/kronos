@@ -10,6 +10,7 @@ interface HumanReviewInboxHtmlOptions {
 }
 
 export function buildHumanReviewInboxHtml(inbox: HumanReviewInbox, options: HumanReviewInboxHtmlOptions): string {
+  const brief = humanReviewBrief(inbox);
   const rows = inbox.items.map(item => `<tr class="${item.severity}">
     <td><span class="pill ${item.severity}">${escapeHtml(item.severity.toUpperCase())}</span></td>
     <td>${escapeHtml(item.kind)}</td>
@@ -26,9 +27,19 @@ export function buildHumanReviewInboxHtml(inbox: HumanReviewInbox, options: Huma
   return `<!DOCTYPE html>
 <html><head><style>
   ${kronosOperatorPanelCss()}
+  .decision-brief { margin: 12px 0 16px; }
+  .decision-brief strong { display: block; font-size: 15px; margin-bottom: 4px; }
+  .decision-brief.critical { border-left-color: var(--k-danger); }
+  .decision-brief.warning { border-left-color: var(--k-warn); }
+  .decision-brief.info { border-left-color: var(--k-accent); }
 </style></head><body><div class="kronos-shell operator-shell">
   <div class="kronos-header"><div><h1 class="kronos-title">Kronos Human Review Inbox</h1><div class="kronos-subtitle">Items where an operator decision is safer than automation</div></div></div>
   ${actions}
+  <div class="operator-note decision-brief ${brief.severity}">
+    <strong>${escapeHtml(brief.headline)}</strong>
+    <div>${escapeHtml(brief.detail)}</div>
+    <div class="muted"><strong>Next:</strong> ${escapeHtml(brief.nextStep)}</div>
+  </div>
   <div class="operator-summary">
     <div class="summary-card"><div class="num">${inbox.summary.critical}</div><div class="lbl">Critical</div></div>
     <div class="summary-card"><div class="num">${inbox.summary.warning}</div><div class="lbl">Warnings</div></div>
@@ -37,6 +48,41 @@ export function buildHumanReviewInboxHtml(inbox: HumanReviewInbox, options: Huma
   </div>
   ${empty || `<div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Severity</th><th>Kind</th><th>Item</th><th>Detail</th><th>Ref</th><th class="action-cell">Actions</th></tr>${rows}</table></div>`}
 </div>${kronosActionPanelScript(options.nonce, 'Kronos Human Review Inbox', options.actionScriptUri)}</body></html>`;
+}
+
+function humanReviewBrief(inbox: HumanReviewInbox): { severity: 'critical' | 'warning' | 'info'; headline: string; detail: string; nextStep: string } {
+  const first = inbox.items.find(item => item.severity === 'critical')
+    || inbox.items.find(item => item.severity === 'warning')
+    || inbox.items[0];
+  if (!first) {
+    return {
+      severity: 'info',
+      headline: 'No human decisions queued',
+      detail: 'Automation has not surfaced any review, recovery, evidence, queue, or integration decisions.',
+      nextStep: 'Refresh after active runs finish, or continue from the Dashboard.',
+    };
+  }
+  const count = first.severity === 'critical'
+    ? inbox.summary.critical
+    : first.severity === 'warning'
+      ? inbox.summary.warning
+      : inbox.summary.info;
+  return {
+    severity: first.severity,
+    headline: `${count} ${first.severity} decision${count === 1 ? ' needs' : 's need'} review`,
+    detail: `${first.title}: ${first.detail}`,
+    nextStep: humanReviewNextStep(first),
+  };
+}
+
+function humanReviewNextStep(item: HumanReviewItem): string {
+  if (item.kind === 'run') { return 'Open Run Center, inspect the log and diff, then resume, retry, or mark the run handled.'; }
+  if (item.kind === 'evidence') { return 'Open the evidence gate and add the missing note, check, build, environment, or acceptance proof.'; }
+  if (item.kind === 'ticket') { return 'Open the ticket, fix the project/blocker state, then queue or start the next safe action.'; }
+  if (item.kind === 'worktree') { return 'Open Recovery Center and decide whether the worktree can be cleaned, resumed, or preserved.'; }
+  if (item.kind === 'integration') { return 'Open Doctor and repair the missing script, auth, or provider configuration before dispatching.'; }
+  if (item.kind === 'queue') { return 'Open Queue Planner and resolve the stale or unsafe queued item before more dispatches.'; }
+  return 'Use the primary action in the row, then refresh the inbox.';
 }
 
 function humanReviewActionButtons(item: HumanReviewItem, tickets: Record<string, Ticket>): string {
