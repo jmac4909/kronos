@@ -842,8 +842,8 @@ for (const marker of [
   "unknownErrorMessage(e, 'Failed to resume run.')",
   "unknownErrorMessage(e, 'Failed to archive run.')",
   'unknownErrorMessage(e, `Failed to archive ${run.id}.`)',
-  'function isPathInsideDirectory(filePath: string, directoryPath: string): boolean',
-  'fs.realpathSync(directoryPath)',
+  "import { isExistingRealPathInside } from './services/pathUtils'",
+  'isExistingRealPathInside(filePath, RUNS_DIR)',
   'function resolveRunArtifactFile(filePath: string | undefined): RunArtifactPathResult',
   'async function openRunArtifactFileIfExists(filePath: string | undefined, missingMessage: string): Promise<void>',
   'Refusing to open run artifact outside Kronos runs directory.',
@@ -2247,10 +2247,15 @@ for (const [name, source] of [
 }
 
 for (const marker of [
+  "import * as fs from 'fs'",
   'export function isPathInside(filePath: string, directoryPath: string): boolean',
   'path.relative(path.resolve(directoryPath), path.resolve(filePath))',
   "!relative.startsWith('..')",
   '!path.isAbsolute(relative)',
+  'export function isExistingRealPathInside(filePath: string, directoryPath: string): boolean',
+  'const realDirectory = fs.realpathSync(directoryPath)',
+  'const realPath = fs.realpathSync(filePath)',
+  'return isPathInside(realPath, realDirectory)',
 ]) {
   if (!pathUtils.includes(marker)) {
     fail(`Missing path utils marker: ${marker}`);
@@ -2267,6 +2272,15 @@ for (const [name, source] of [
   if (source.includes('function isPathInside')) {
     fail(`${name} must not carry a local isPathInside helper.`);
   }
+}
+if (!extension.includes("import { isExistingRealPathInside } from './services/pathUtils'")) {
+  fail('src/extension.ts must import the shared realpath containment helper.');
+}
+if (extension.includes('function isPathInsideDirectory')) {
+  fail('src/extension.ts must not carry a local path containment helper.');
+}
+if (!extension.includes('isExistingRealPathInside(filePath, RUNS_DIR)')) {
+  fail('src/extension.ts must use the shared realpath containment helper for run artifacts.');
 }
 
 for (const [name, source, marker] of [

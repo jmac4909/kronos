@@ -55,6 +55,7 @@ import { computeAttentionBadge } from './services/attentionBadge';
 import { configIntervalMs, configIntervalSeconds, configIntervalSecondsMs, parsePositiveNumberInput, positiveConfigNumber } from './services/intervalConfig';
 import { buildNextActionContext, buildNextActionStartDecision, skillForAction } from './services/nextActionContext';
 import { createWorkspaceDiffArtifact, firstRemoteBranchMatching, originProjectPath } from './services/gitWorkspace';
+import { isExistingRealPathInside } from './services/pathUtils';
 import { signalProcessTree, stopProcessTree, supportsProcessTreeSuspend } from './services/processTree';
 import { createWebviewReadyMonitor } from './services/webviewDiagnostics';
 import { WEBVIEW_ACTION_PANEL_SCRIPT, WEBVIEW_JIRA_BOARD_SCRIPT, WEBVIEW_READY_COMMAND, createWebviewNonce, webviewRuntimeScriptTag, webviewRuntimeScriptUri, webviewScriptCspOptions, withWebviewCsp } from './services/webviewSecurity';
@@ -658,18 +659,6 @@ type RunArtifactPathResult =
   | { ok: true; filePath: string }
   | { ok: false; reason: 'missing' | 'outside-runs-dir' };
 
-function isPathInsideDirectory(filePath: string, directoryPath: string): boolean {
-  try {
-    const realDirectory = fs.realpathSync(directoryPath);
-    const realPath = fs.realpathSync(filePath);
-    const relative = path.relative(realDirectory, realPath);
-    return relative === '' || (!!relative && !relative.startsWith('..') && !path.isAbsolute(relative));
-  } catch (e: unknown) {
-    console.warn(unknownErrorMessage(e, `Could not resolve artifact path ${filePath}.`));
-    return false;
-  }
-}
-
 function resolveRunArtifactFile(filePath: string | undefined): RunArtifactPathResult {
   if (typeof filePath !== 'string' || !filePath.trim() || !fs.existsSync(filePath)) {
     return { ok: false, reason: 'missing' };
@@ -682,7 +671,12 @@ function resolveRunArtifactFile(filePath: string | undefined): RunArtifactPathRe
     console.warn(unknownErrorMessage(e, `Could not inspect run artifact ${filePath}.`));
     return { ok: false, reason: 'missing' };
   }
-  if (!isPathInsideDirectory(filePath, RUNS_DIR)) {
+  try {
+    if (!isExistingRealPathInside(filePath, RUNS_DIR)) {
+      return { ok: false, reason: 'outside-runs-dir' };
+    }
+  } catch (e: unknown) {
+    console.warn(unknownErrorMessage(e, `Could not resolve artifact path ${filePath}.`));
     return { ok: false, reason: 'outside-runs-dir' };
   }
   return { ok: true, filePath };

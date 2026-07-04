@@ -3548,12 +3548,26 @@ test('path util helper centralizes directory containment checks', () => {
   assert.equal(pathUtils.isPathInside(path.join(root, 'child', 'file.txt'), root), true);
   assert.equal(pathUtils.isPathInside(root, root), true);
   assert.equal(pathUtils.isPathInside(path.join(root, '..', 'sibling.txt'), root), false);
+  const realRoot = makeTempDir('kronos-realpath-root-');
+  const realChildDir = path.join(realRoot, 'child');
+  fs.mkdirSync(realChildDir);
+  const realChildFile = path.join(realChildDir, 'file.txt');
+  fs.writeFileSync(realChildFile, 'ok');
+  const realOutside = makeTempDir('kronos-realpath-outside-');
+  const realOutsideFile = path.join(realOutside, 'file.txt');
+  fs.writeFileSync(realOutsideFile, 'outside');
+  assert.equal(pathUtils.isExistingRealPathInside(realChildFile, realRoot), true);
+  assert.equal(pathUtils.isExistingRealPathInside(realOutsideFile, realRoot), false);
 
   for (const file of ['runStore.ts', 'gitWorkspace.ts']) {
     const source = readSourceFixture('src', 'services', file);
     assert.ok(source.includes("import { isPathInside } from './pathUtils'"), `${file} should import shared path containment`);
     assert.equal(source.includes('function isPathInside'), false, `${file} should not carry a local isPathInside helper`);
   }
+  const extensionSource = readSourceFixture('src', 'extension.ts');
+  assert.ok(extensionSource.includes("import { isExistingRealPathInside } from './services/pathUtils'"));
+  assert.equal(extensionSource.includes('function isPathInsideDirectory'), false);
+  assert.ok(extensionSource.includes('isExistingRealPathInside(filePath, RUNS_DIR)'));
 });
 
 test('json file helper centralizes labeled script output parsing', () => {
@@ -9225,8 +9239,8 @@ test('extension run recovery helpers use typed run records', () => {
     'await retryRunFromPrompt(state, run)',
     'function resolveRunWorkspace(run: KronosRun)',
     'type RunArtifactPathResult',
-    'function isPathInsideDirectory(filePath: string, directoryPath: string): boolean',
-    'fs.realpathSync(directoryPath)',
+    "import { isExistingRealPathInside } from './services/pathUtils'",
+    'isExistingRealPathInside(filePath, RUNS_DIR)',
     'function resolveRunArtifactFile(filePath: string | undefined): RunArtifactPathResult',
     "'outside-runs-dir'",
     "Refusing to open run artifact outside Kronos runs directory.",
