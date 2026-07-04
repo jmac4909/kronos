@@ -12,7 +12,7 @@ import * as fs from 'fs';
 import type { DiscoveredProject, MergeRequestChangedFile, QueueItem, Ticket } from './state/types';
 import type { KronosState as KronosStateSnapshot } from './state/types';
 import { dispatchClaudeSession, openInClaude, ensureAuth, cleanupStaleWorktrees, listSavedSessions, listSessionStoreIssues, openSavedSession, getAggregateStats, openRunCenter, listRuns, type DispatchOptions, type KronosRun, type PromptRunMetadata, type RunCenterActionRequest } from './runners/sessionDispatcher';
-import { PromptHistoryDiff, PromptSmokeTest, PromptTemplateInfo, buildDefaultPromptSmokeTests, createPromptHistorySnapshot, diffPromptHistorySnapshots, latestPromptHistorySnapshot, listPromptHistorySnapshots, listPromptTemplates, repairRequiredPromptTemplates, runPromptSmokeTests } from './services/promptManager';
+import { PromptHistoryDiff, createPromptHistorySnapshot, diffPromptHistorySnapshots, latestPromptHistorySnapshot, listPromptHistorySnapshots, listPromptTemplates, repairRequiredPromptTemplates, runPromptSmokeTests } from './services/promptManager';
 import { KRONOS_DIR, STATE_AUDIT_FILE, listBackups, listStateAuditEvents, restoreBackup } from './services/stateStore';
 import { PlannedAction, buildBacklogTriageReport, overnightCandidatePlans, planByProject, planByRelease, planForMinutes, planNextActions as buildNextActionPlan, planToQueueItem as buildQueueItemFromPlan } from './services/queuePlanner';
 import { actionDisplayLabel as actionToLabel } from './services/actionCatalog';
@@ -55,6 +55,7 @@ import { DoctorCheck, runDoctorChecks as collectDoctorChecks, runDoctorReachabil
 import { checkClaudeModelAccess } from './services/cliProbes';
 import { buildCombinedVerificationPlan, buildCombinedVerificationPromptVars } from './services/combinedVerification';
 import { buildDiscoveryQuickPickEntries, discoveryCandidateNeedsJiraKey, type DiscoveryQuickPickEntry } from './services/discoveryQuickPick';
+import { buildPromptWorkspaceModel, promptHistoryTemplatesForProjects } from './services/promptWorkspaceModel';
 import { buildSonarReport, type SonarIssue } from './services/sonarReportView';
 import { buildAgingReportHtml } from './services/agingReportView';
 import { buildTicketHtml } from './services/ticketPanelView';
@@ -3543,37 +3544,23 @@ async function updatePositiveNumberSetting(
 }
 
 function openPromptManager(state: KronosState, extensionUri?: vscode.Uri): void {
-  const globalTemplates = listPromptTemplates();
-  const projects = state.state?.projects || {};
-  const projectOverrides: Array<{ project: string; template: PromptTemplateInfo }> = [];
-  for (const [projectName, project] of Object.entries(projects)) {
-    for (const template of listPromptTemplates(project.path).filter(t => t.source === 'project')) {
-      projectOverrides.push({ project: projectName, template });
-    }
-  }
-  const smokeResults = runPromptSmokeTests(buildPromptSmokeTests(state, globalTemplates, projectOverrides));
+  const model = buildPromptWorkspaceModel(state.state?.projects || {});
+  const smokeResults = runPromptSmokeTests(model.smokeTests);
 
   const { panel, nonce, actionScriptUri } = createKronosActionWebviewPanel('kronosPromptManager', 'Kronos Prompt Manager', extensionUri);
-  panel.webview.html = withWebviewCsp(buildPromptManagerHtml(globalTemplates, projectOverrides, smokeResults, REQUIRED_PROMPTS, nonce, actionScriptUri), webviewScriptCspOptions(panel.webview.cspSource, nonce));
+  panel.webview.html = withWebviewCsp(buildPromptManagerHtml(model.globalTemplates, model.projectOverrides, smokeResults, REQUIRED_PROMPTS, nonce, actionScriptUri), webviewScriptCspOptions(panel.webview.cspSource, nonce));
   attachOperatorCommandHandler(panel, 'Kronos Prompt Manager', PROMPT_MANAGER_OPERATOR_COMMANDS);
 }
 
 function openPromptSmokeTestsPanel(state: KronosState, extensionUri?: vscode.Uri): void {
-  const globalTemplates = listPromptTemplates();
-  const projectOverrides: Array<{ project: string; template: PromptTemplateInfo }> = [];
-  for (const [projectName, project] of Object.entries(state.state?.projects || {})) {
-    for (const template of listPromptTemplates(project.path).filter(t => t.source === 'project')) {
-      projectOverrides.push({ project: projectName, template });
-    }
-  }
-  const results = runPromptSmokeTests(buildPromptSmokeTests(state, globalTemplates, projectOverrides));
+  const results = runPromptSmokeTests(buildPromptWorkspaceModel(state.state?.projects || {}).smokeTests);
   const { panel, nonce, actionScriptUri } = createKronosActionWebviewPanel('kronosPromptSmokeTests', 'Kronos Prompt Smoke Tests', extensionUri);
   panel.webview.html = withWebviewCsp(buildPromptSmokeTestsHtml(results, nonce, actionScriptUri), webviewScriptCspOptions(panel.webview.cspSource, nonce));
   attachOperatorCommandHandler(panel, 'Kronos Prompt Smoke Tests', PROMPT_SMOKE_OPERATOR_COMMANDS);
 }
 
 function snapshotPromptPack(state: KronosState, extensionUri?: vscode.Uri): void {
-  const templates = promptHistoryTemplatesForState(state);
+  const templates = promptHistoryTemplatesForProjects(state.state?.projects || {});
   const previous = latestPromptHistorySnapshot('workspace');
   const snapshot = createPromptHistorySnapshot(templates, { scope: 'workspace' });
   const diff = diffPromptHistorySnapshots(snapshot, previous);
@@ -3628,50 +3615,6 @@ function openPromptHistoryDiffPanel(diff: PromptHistoryDiff, extensionUri?: vsco
   const { panel, nonce, actionScriptUri } = createKronosActionWebviewPanel('kronosPromptHistory', 'Kronos Prompt History', extensionUri);
   panel.webview.html = withWebviewCsp(buildPromptHistoryHtml(listPromptHistorySnapshots(25), diff, nonce, actionScriptUri), webviewScriptCspOptions(panel.webview.cspSource, nonce));
   attachOperatorCommandHandler(panel, 'Kronos Prompt History', PROMPT_HISTORY_OPERATOR_COMMANDS);
-}
-
-function promptHistoryTemplatesForState(state: KronosState): PromptTemplateInfo[] {
-  const byKey = new Map<string, PromptTemplateInfo>();
-  for (const template of listPromptTemplates()) {
-    byKey.set(`${template.source}:${template.name}:${template.path}`, template);
-  }
-  for (const project of Object.values(state.state?.projects || {})) {
-    for (const template of listPromptTemplates(project.path).filter(t => t.source === 'project')) {
-      byKey.set(`${template.source}:${template.name}:${template.path}`, template);
-    }
-  }
-  return Array.from(byKey.values()).sort((a, b) => `${a.source}:${a.name}:${a.path}`.localeCompare(`${b.source}:${b.name}:${b.path}`));
-}
-
-function buildPromptSmokeTests(
-  state: KronosState,
-  globalTemplates: PromptTemplateInfo[],
-  projectOverrides: Array<{ project: string; template: PromptTemplateInfo }>,
-): PromptSmokeTest[] {
-  const tests = buildDefaultPromptSmokeTests(globalTemplates, { idPrefix: 'global' });
-  for (const { project, template } of projectOverrides) {
-    const projectPath = state.state?.projects?.[project]?.path;
-    if (projectPath) {
-      tests.push(...buildDefaultPromptSmokeTests([template], { idPrefix: `project:${project}`, projectPath }));
-    }
-  }
-
-  const manifest = readIntegrationManifest().manifest;
-  for (const [templateName, entry] of Object.entries(manifest?.prompts || {})) {
-    for (const [idx, smoke] of (entry.smoke_tests || []).entries()) {
-      const test: PromptSmokeTest = {
-        id: `manifest:${templateName}:${smoke.name || idx + 1}`,
-        templateName,
-        source: 'manifest',
-      };
-      if (smoke.variables) { test.variables = smoke.variables; }
-      if (smoke.mustContain) { test.mustContain = smoke.mustContain; }
-      if (smoke.mustNotContain) { test.mustNotContain = smoke.mustNotContain; }
-      if (smoke.allowMissingVariables !== undefined) { test.allowMissingVariables = smoke.allowMissingVariables; }
-      tests.push(test);
-    }
-  }
-  return tests;
 }
 
 async function openRecoveryCenter(state: KronosState, extensionUri?: vscode.Uri, focusItemId?: string): Promise<void> {

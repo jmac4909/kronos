@@ -162,6 +162,7 @@ async function withPatchedModuleLoad(resolveReplacement, callback) {
 }
 
 const promptManager = require('../out/services/promptManager.js');
+const promptWorkspaceModel = require('../out/services/promptWorkspaceModel.js');
 const stateStore = require('../out/services/stateStore.js');
 const queuePlanner = require('../out/services/queuePlanner.js');
 const actionCatalog = require('../out/services/actionCatalog.js');
@@ -422,6 +423,74 @@ test('prompt manager runs default and manifest-style smoke tests', () => {
     "e?.message || 'Prompt smoke test failed'",
   ]) {
     assert.equal(source.includes(marker), false, marker);
+  }
+});
+
+test('prompt workspace model collects project overrides and manifest smoke tests', () => {
+  const projectA = makeTempProject();
+  const projectB = makeTempProject();
+  fs.writeFileSync(path.join(projectA, '.claude', 'prompts', 'beta.md'), 'Project A {{VALUE}}\n');
+  fs.writeFileSync(path.join(projectB, '.claude', 'prompts', 'alpha.md'), 'Project B {{VALUE}}\n');
+  fs.mkdirSync(path.join(process.env.KRONOS_DIR, 'prompts'), { recursive: true });
+  fs.writeFileSync(path.join(process.env.KRONOS_DIR, 'prompts', 'global-one.md'), 'Global {{GLOBAL}}\n');
+
+  const projects = {
+    betaProject: { path: projectB },
+    alphaProject: { path: projectA },
+    missingProject: {},
+  };
+  const model = promptWorkspaceModel.buildPromptWorkspaceModel(projects);
+
+  assert.deepEqual(model.projectOverrides.map(item => `${item.project}:${item.template.name}`), [
+    'alphaProject:beta',
+    'betaProject:alpha',
+  ]);
+  assert.ok(model.globalTemplates.some(template => template.name === 'global-one'));
+  assert.ok(model.smokeTests.some(test => test.id === 'global:global-one'));
+  assert.ok(model.smokeTests.some(test => test.id === 'project:alphaProject:beta' && test.projectPath === projectA));
+  assert.ok(model.smokeTests.some(test => test.id === 'project:betaProject:alpha' && test.projectPath === projectB));
+
+  const manifestTests = promptWorkspaceModel.buildPromptSmokeTestsForWorkspace(
+    projects,
+    model.globalTemplates,
+    model.projectOverrides,
+    {
+      prompts: {
+        beta: {
+          smoke_tests: [{
+            name: 'contains',
+            variables: { VALUE: 'ok' },
+            mustContain: ['ok'],
+            mustNotContain: ['bad'],
+            allowMissingVariables: true,
+          }],
+        },
+      },
+    },
+  );
+  const manifestTest = manifestTests.find(test => test.id === 'manifest:beta:contains');
+  assert.ok(manifestTest);
+  assert.deepEqual(manifestTest.variables, { VALUE: 'ok' });
+  assert.deepEqual(manifestTest.mustContain, ['ok']);
+  assert.deepEqual(manifestTest.mustNotContain, ['bad']);
+  assert.equal(manifestTest.allowMissingVariables, true);
+
+  const historyTemplates = promptWorkspaceModel.promptHistoryTemplatesForProjects(projects);
+  assert.equal(new Set(historyTemplates.map(template => `${template.source}:${template.name}:${template.path}`)).size, historyTemplates.length);
+  assert.ok(historyTemplates.some(template => template.name === 'global-one' && template.source === 'global'));
+  assert.ok(historyTemplates.some(template => template.name === 'alpha' && template.source === 'project'));
+  assert.ok(historyTemplates.some(template => template.name === 'beta' && template.source === 'project'));
+
+  const source = readSourceFixture('src', 'services', 'promptWorkspaceModel.ts');
+  for (const marker of [
+    'export function buildPromptWorkspaceModel',
+    'export function collectPromptProjectOverrides',
+    'export function promptHistoryTemplatesForProjects',
+    'export function buildPromptSmokeTestsForWorkspace',
+    'readIntegrationManifest().manifest',
+    "buildDefaultPromptSmokeTests(globalTemplates, { idPrefix: 'global' })",
+  ]) {
+    assert.ok(source.includes(marker), marker);
   }
 });
 
