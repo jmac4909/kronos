@@ -1,6 +1,6 @@
 import { WEBVIEW_READY_COMMAND, webviewActionScriptTag } from './webviewSecurity';
 import { escapeAttr, escapeHtml, kronosWebviewBaseCss } from './webviewHtml';
-import { recordFromUnknown } from './records';
+import { recordFromUnknown, recordString } from './records';
 
 interface ActionButtonOptions {
   ticket?: string;
@@ -48,11 +48,11 @@ export function normalizeActionPanelMessage(raw: unknown, allowed: ReadonlySet<s
   if (typeof command !== 'string' || !allowed.has(command)) { return null; }
   return {
     command,
-    ticket: stringField(message, 'ticket'),
-    runId: stringField(message, 'runId'),
-    planId: stringField(message, 'planId'),
-    itemId: stringField(message, 'itemId'),
-    recoveryAction: stringField(message, 'recoveryAction'),
+    ticket: recordString(message, 'ticket'),
+    runId: recordString(message, 'runId'),
+    planId: recordString(message, 'planId'),
+    itemId: recordString(message, 'itemId'),
+    recoveryAction: recordString(message, 'recoveryAction'),
   };
 }
 
@@ -122,9 +122,4 @@ export function kronosOperatorPanelCss(): string {
   a { color: var(--k-accent); text-decoration: none; }
   a:hover { text-decoration: underline; }
   li { margin: 4px 0; }`;
-}
-
-function stringField(record: Record<string, unknown>, key: string): string {
-  const value = record[key];
-  return typeof value === 'string' ? value : '';
 }

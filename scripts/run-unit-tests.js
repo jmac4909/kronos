@@ -2787,7 +2787,7 @@ test('webview security injects CSP and preserves existing nonce policies', () =>
   const allowedActions = new Set(['openRunRecord']);
   assert.deepEqual(operatorPanel.normalizeActionPanelMessage({
     command: 'openRunRecord',
-    ticket: 'K-1',
+    ticket: ' K-1 ',
     runId: 'run-1',
     planId: 'plan-1',
     itemId: 'item-1',
@@ -3463,7 +3463,7 @@ test('record guard helper centralizes unknown object narrowing', () => {
 
   for (const [file, marker] of [
     ['activeRunDisplay.ts', "import { recordFromUnknown, recordString } from './records'"],
-    ['operatorPanel.ts', "import { recordFromUnknown } from './records'"],
+    ['operatorPanel.ts', "import { recordFromUnknown, recordString } from './records'"],
     ['runAttention.ts', "import { recordFromUnknown } from './records'"],
     ['runCompletionNotification.ts', "import { recordFromUnknown, recordString } from './records'"],
     ['runProgress.ts', "import { isRecord, recordFromUnknown, recordString } from './records'"],
@@ -8851,10 +8851,11 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'kronosWebviewBaseCss',
     'webviewActionScriptTag',
     "const command = message['command']",
-    'ticket: stringField(message,',
-    'runId: stringField(message,',
-    'planId: stringField(message,',
-    'itemId: stringField(message,',
+    "ticket: recordString(message, 'ticket')",
+    "runId: recordString(message, 'runId')",
+    "planId: recordString(message, 'planId')",
+    "itemId: recordString(message, 'itemId')",
+    "recoveryAction: recordString(message, 'recoveryAction')",
     'scriptUri?: string',
     'readyCommand: WEBVIEW_READY_COMMAND',
     "{ messageKey: 'ticket', dataAttribute: 'data-ticket' }",
