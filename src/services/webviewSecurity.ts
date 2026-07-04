@@ -111,7 +111,7 @@ function webviewCspMeta(options: WebviewCspOptions = {}): string {
   return `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${styleSrc}; style-src-elem ${styleSrc}; style-src-attr 'unsafe-inline'; script-src ${scriptSrc}; script-src-elem ${scriptSrc}; script-src-attr 'none'; base-uri 'none'; form-action 'none';${imgSrc}">`;
 }
 
-export function webviewScriptDiagnosticBanner(): string {
+function webviewScriptDiagnosticBanner(): string {
   return '<div class="kronos-script-required" data-kronos-script-required role="status">Kronos webview JavaScript has not started. Check VS Code Webview Developer Tools and the Extension Host DevTools console for CSP or sandbox errors.</div>';
 }
 

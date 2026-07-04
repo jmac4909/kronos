@@ -2333,15 +2333,14 @@ test('webview security injects CSP and preserves existing nonce policies', () =>
   assert.doesNotMatch(apiScript, /const vscode =/);
   assert.doesNotMatch(apiScript, /var vscode =/);
   assert.equal(webviewSecurity.WEBVIEW_READY_COMMAND, '__kronosWebviewReady');
-  const diagnosticBanner = webviewSecurity.webviewScriptDiagnosticBanner();
-  assert.match(diagnosticBanner, /data-kronos-script-required/);
-  assert.match(diagnosticBanner, /Webview Developer Tools/);
-  assert.match(diagnosticBanner, /Extension Host DevTools/);
+  assert.equal(Object.prototype.hasOwnProperty.call(webviewSecurity, 'webviewScriptDiagnosticBanner'), false);
   const scriptableHtml = webviewSecurity.withWebviewCsp('<!DOCTYPE html><html><head><style>body{}</style></head><body><button>ok</button></body></html>', {
     allowScripts: true,
     nonce: 'abc123',
   });
   assert.match(scriptableHtml, /data-kronos-script-required/);
+  assert.match(scriptableHtml, /Webview Developer Tools/);
+  assert.match(scriptableHtml, /Extension Host DevTools/);
   assert.match(scriptableHtml, /<body>\n<div class="kronos-script-required"/);
   assert.equal((scriptableHtml.match(/data-kronos-script-required/g) || []).length, 1);
   const alreadyDiagnosed = webviewSecurity.withWebviewCsp('<!DOCTYPE html><html><head></head><body><div data-kronos-script-required></div></body></html>', {

@@ -2480,7 +2480,7 @@ for (const marker of [
   "console.error('Kronos webview script error', webviewName",
   "console.error('Kronos webview unhandled rejection', webviewName",
   'export const WEBVIEW_READY_COMMAND',
-  'export function webviewScriptDiagnosticBanner',
+  'function webviewScriptDiagnosticBanner',
   'data-kronos-script-required',
   'Webview Developer Tools',
   'Extension Host DevTools',
@@ -2520,6 +2520,9 @@ for (const marker of [
 }
 if (webviewSecurity.includes('export function webviewCspMeta')) {
   fail('webviewCspMeta should stay private; callers should use withWebviewCsp.');
+}
+if (webviewSecurity.includes('export function webviewScriptDiagnosticBanner')) {
+  fail('webviewScriptDiagnosticBanner should stay private; callers should use withWebviewCsp.');
 }
 
 for (const marker of [
