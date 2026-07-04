@@ -11,3 +11,12 @@ export function isExistingRealPathInside(filePath: string, directoryPath: string
   const realPath = fs.realpathSync(filePath);
   return isPathInside(realPath, realDirectory);
 }
+
+export function projectPathKey(value: unknown, platform: NodeJS.Platform | string = process.platform): string {
+  if (typeof value !== 'string') { return ''; }
+  const trimmed = value.trim();
+  if (!trimmed) { return ''; }
+  const normalized = path.posix.normalize(trimmed.replace(/\\/g, '/')).replace(/\/+$/g, '');
+  const key = normalized === '.' ? '' : normalized;
+  return platform === 'win32' ? key.toLowerCase() : key;
+}

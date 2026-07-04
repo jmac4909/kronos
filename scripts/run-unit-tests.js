@@ -1459,6 +1459,9 @@ test('deploy monitor handoff resolves projects and only suppresses handled runs'
     { skill: 'deploy-monitor', ticket: 'K-13', projectPath: '/repo/app/', status: 'completed', promptMetadata: { mergeRequestIid: 13 } },
   ], match), true);
   assert.equal(deployMonitorHandoff.hasHandledDeployMonitorRun([
+    { skill: 'deploy-monitor', ticket: 'K-13', projectPath: '\\repo\\app\\', status: 'completed', promptMetadata: { mergeRequestIid: 13 } },
+  ], match), true);
+  assert.equal(deployMonitorHandoff.hasHandledDeployMonitorRun([
     { skill: 'deploy-monitor', ticket: 'K-13', project: 'app', status: 'failed', promptMetadata: { mergeRequestIid: 13 } },
     { skill: 'deploy-monitor', ticket: 'K-13', project: 'app', status: 'needs_human', promptMetadata: { mergeRequestIid: 13 } },
     { skill: 'deploy-monitor', ticket: 'K-13', project: 'app', status: 'cancelled', promptMetadata: { mergeRequestIid: 13 } },
@@ -3571,6 +3574,10 @@ test('path util helper centralizes directory containment checks', () => {
   fs.writeFileSync(realOutsideFile, 'outside');
   assert.equal(pathUtils.isExistingRealPathInside(realChildFile, realRoot), true);
   assert.equal(pathUtils.isExistingRealPathInside(realOutsideFile, realRoot), false);
+  assert.equal(pathUtils.projectPathKey('/repo/app/'), '/repo/app');
+  assert.equal(pathUtils.projectPathKey('\\repo\\app\\'), '/repo/app');
+  assert.equal(pathUtils.projectPathKey('C:\\Repo\\App\\', 'win32'), 'c:/repo/app');
+  assert.equal(pathUtils.projectPathKey('C:\\Repo\\App\\', 'linux'), 'C:/Repo/App');
 
   for (const file of ['runStore.ts', 'gitWorkspace.ts']) {
     const source = readSourceFixture('src', 'services', file);
@@ -3581,7 +3588,7 @@ test('path util helper centralizes directory containment checks', () => {
     assert.equal(source.includes('function isPathInside'), false, `${file} should not carry a local isPathInside helper`);
   }
   const extensionSource = readSourceFixture('src', 'extension.ts');
-  assert.ok(extensionSource.includes("import { isExistingRealPathInside } from './services/pathUtils'"));
+  assert.ok(extensionSource.includes("import { isExistingRealPathInside, projectPathKey } from './services/pathUtils'"));
   assert.equal(extensionSource.includes('function isPathInsideDirectory'), false);
   assert.ok(extensionSource.includes('isExistingRealPathInside(filePath, RUNS_DIR)'));
 });
@@ -6266,6 +6273,8 @@ test('queue active-run helper matches active runs without broad fallbacks', () =
   assert.equal(activeMatch(run({ ticket: 'APP-999' })), false);
   assert.equal(activeMatch(run({ skill: 'verify-local' })), false);
   assert.equal(activeMatch(run({ project: 'other', projectPath: '/repo/other' })), false);
+  assert.equal(activeMatch(run({ project: 'other', projectPath: '/repo/app/' })), true);
+  assert.equal(activeMatch(run({ project: 'other', projectPath: '\\repo\\app\\' })), true);
   assert.equal(activeMatch(run({ project: 'other', projectPath: '/repo/other' }), queueItem({ projects: [], project_path: '' })), true);
 
   const stale = run({ id: 'stale', startedAt: '2026-07-03T10:00:00.000Z' });
@@ -6276,6 +6285,7 @@ test('queue active-run helper matches active runs without broad fallbacks', () =
   const source = readSourceFixture('src', 'services', 'queueActiveRun.ts');
   for (const marker of [
     "import { skillForAction } from './nextActionContext'",
+    "import { projectPathKey } from './pathUtils'",
     "import { isFreshActiveRun } from './runStatus'",
     'interface QueueActiveRunLike',
     'export function activeRunForQueueItem<T extends QueueActiveRunLike>',
@@ -6285,6 +6295,8 @@ test('queue active-run helper matches active runs without broad fallbacks', () =
     'function runMatchesQueueProject(run: QueueActiveRunLike, item: QueueItem): boolean',
     'function runMatchesQueueProjectScope(run: QueueActiveRunLike, item: QueueItem): boolean',
     'function runMatchesQueueAction(run: QueueActiveRunLike, item: QueueItem): boolean',
+    "projectPathKey(recordString(run, 'projectPath'))",
+    'projectPathKey(item.project_path)',
     "recordString(run, 'skill') === skillForAction(item.action)",
   ]) {
     assert.ok(source.includes(marker), marker);
@@ -9312,7 +9324,7 @@ test('extension run recovery helpers use typed run records', () => {
     'await retryRunFromPrompt(state, run)',
     'function resolveRunWorkspace(run: KronosRun)',
     'type RunArtifactPathResult',
-    "import { isExistingRealPathInside } from './services/pathUtils'",
+    "import { isExistingRealPathInside, projectPathKey } from './services/pathUtils'",
     'isExistingRealPathInside(filePath, RUNS_DIR)',
     'function resolveRunArtifactFile(filePath: string | undefined): RunArtifactPathResult',
     "'outside-runs-dir'",
@@ -9559,7 +9571,8 @@ test('extension queue command handlers normalize payloads before use', () => {
     "const projectPath = stringFromUnknown(record['project_path']) || stringFromUnknown(record['projectPath']);",
     'if (projectPath) { payload.projectPath = projectPath; }',
     'function getProjectNameForPath(state: KronosState, projectPath?: string): string | undefined',
-    'function projectPathKey(projectPath?: string): string',
+    "import { isExistingRealPathInside, projectPathKey } from './services/pathUtils'",
+    'projectPathKey(project.path)',
     'function resolveQueueIndex(item: unknown): number | undefined',
     "typeof index === 'number' && Number.isInteger(index) && index >= 0",
   ]) {

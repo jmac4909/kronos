@@ -1,5 +1,6 @@
 import type { QueueItem } from '../state/types';
 import { skillForAction } from './nextActionContext';
+import { projectPathKey } from './pathUtils';
 import { recordString } from './records';
 import { isFreshActiveRun } from './runStatus';
 
@@ -40,8 +41,9 @@ function runMatchesQueueTicket(run: QueueActiveRunLike, item: QueueItem): boolea
 function runMatchesQueueProject(run: QueueActiveRunLike, item: QueueItem): boolean {
   const projects = item.projects || [];
   const runProject = recordString(run, 'project');
-  const runProjectPath = recordString(run, 'projectPath');
-  return Boolean((runProject && projects.includes(runProject)) || (runProjectPath && runProjectPath === item.project_path));
+  const runProjectPath = projectPathKey(recordString(run, 'projectPath'));
+  const itemProjectPath = projectPathKey(item.project_path);
+  return Boolean((runProject && projects.includes(runProject)) || (runProjectPath && itemProjectPath && runProjectPath === itemProjectPath));
 }
 
 function runMatchesQueueProjectScope(run: QueueActiveRunLike, item: QueueItem): boolean {

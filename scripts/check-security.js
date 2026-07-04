@@ -842,7 +842,7 @@ for (const marker of [
   "unknownErrorMessage(e, 'Failed to resume run.')",
   "unknownErrorMessage(e, 'Failed to archive run.')",
   'unknownErrorMessage(e, `Failed to archive ${run.id}.`)',
-  "import { isExistingRealPathInside } from './services/pathUtils'",
+  "import { isExistingRealPathInside, projectPathKey } from './services/pathUtils'",
   'isExistingRealPathInside(filePath, RUNS_DIR)',
   'function resolveRunArtifactFile(filePath: string | undefined): RunArtifactPathResult',
   'async function openRunArtifactFileIfExists(filePath: string | undefined, missingMessage: string): Promise<void>',
@@ -985,6 +985,7 @@ for (const marker of [
 }
 for (const marker of [
   'export function resolveDeployMonitorProject',
+  "import { projectPathKey } from './pathUtils'",
   'linkedProjects.length > 1',
   'export function hasHandledDeployMonitorRun',
   'isHandledDeployMonitorRun(run)',
@@ -993,6 +994,8 @@ for (const marker of [
   'promptMetadataMergeRequestIid',
   'if (match.mrIid === undefined) { return true; }',
   'if (runMrIid === undefined) { return false; }',
+  'const runKey = projectPathKey(runPath)',
+  'const matchKey = projectPathKey(matchPath)',
   'DEPLOY_MONITOR_HANDOFF_CHECK_PREFIX',
   'deployMonitorHandoffIssueSummaries',
   'hasDeployMonitorHandoffIssue',
@@ -1000,6 +1003,9 @@ for (const marker of [
   if (!deployMonitorHandoff.includes(marker)) {
     fail(`Missing deploy monitor handoff marker: ${marker}`);
   }
+}
+if (deployMonitorHandoff.includes('function deployMonitorProjectPathKey')) {
+  fail('deployMonitorHandoff must use the shared project path identity helper.');
 }
 for (const marker of [
   'function notifyMergeRequestStatusChange',
@@ -2262,6 +2268,10 @@ for (const marker of [
   'const realDirectory = fs.realpathSync(directoryPath)',
   'const realPath = fs.realpathSync(filePath)',
   'return isPathInside(realPath, realDirectory)',
+  'export function projectPathKey(value: unknown',
+  "trimmed.replace(/\\\\/g, '/')",
+  'path.posix.normalize',
+  "platform === 'win32'",
 ]) {
   if (!pathUtils.includes(marker)) {
     fail(`Missing path utils marker: ${marker}`);
@@ -2282,11 +2292,14 @@ for (const [name, source] of [
     fail(`${name} must not carry a local isPathInside helper.`);
   }
 }
-if (!extension.includes("import { isExistingRealPathInside } from './services/pathUtils'")) {
-  fail('src/extension.ts must import the shared realpath containment helper.');
+if (!extension.includes("import { isExistingRealPathInside, projectPathKey } from './services/pathUtils'")) {
+  fail('src/extension.ts must import the shared path helpers.');
 }
 if (extension.includes('function isPathInsideDirectory')) {
   fail('src/extension.ts must not carry a local path containment helper.');
+}
+if (extension.includes('function projectPathKey(')) {
+  fail('src/extension.ts must not carry a local project path identity helper.');
 }
 if (!extension.includes('isExistingRealPathInside(filePath, RUNS_DIR)')) {
   fail('src/extension.ts must use the shared realpath containment helper for run artifacts.');
@@ -2647,6 +2660,7 @@ for (const marker of [
 }
 for (const marker of [
   "import { skillForAction } from './nextActionContext'",
+  "import { projectPathKey } from './pathUtils'",
   "import { isFreshActiveRun } from './runStatus'",
   'interface QueueActiveRunLike',
   'export function activeRunForQueueItem<T extends QueueActiveRunLike>',
@@ -2656,6 +2670,8 @@ for (const marker of [
   'function runMatchesQueueProject(run: QueueActiveRunLike, item: QueueItem): boolean',
   'function runMatchesQueueProjectScope(run: QueueActiveRunLike, item: QueueItem): boolean',
   'function runMatchesQueueAction(run: QueueActiveRunLike, item: QueueItem): boolean',
+  "projectPathKey(recordString(run, 'projectPath'))",
+  'projectPathKey(item.project_path)',
   "recordString(run, 'skill') === skillForAction(item.action)",
 ]) {
   if (!queueActiveRun.includes(marker)) {

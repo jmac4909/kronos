@@ -1,5 +1,6 @@
 import { KronosState, Ticket } from '../state/types';
 import { evidenceChecks, evidenceString } from './evidenceData';
+import { projectPathKey } from './pathUtils';
 import { runAttentionLine } from './runAttention';
 import { isFreshActiveRun } from './runStatus';
 
@@ -119,16 +120,7 @@ function deployMonitorHandoffIssueSummaries(ticket: Ticket): string[] {
 }
 
 function deployMonitorProjectPathMatches(runPath: unknown, matchPath: string): boolean {
-  const runKey = deployMonitorProjectPathKey(runPath);
-  const matchKey = deployMonitorProjectPathKey(matchPath);
+  const runKey = projectPathKey(runPath);
+  const matchKey = projectPathKey(matchPath);
   return Boolean(runKey && matchKey && runKey === matchKey);
-}
-
-function deployMonitorProjectPathKey(value: unknown): string {
-  if (typeof value !== 'string') { return ''; }
-  let normalized = value.trim().replace(/\\/g, '/').replace(/\/+$/g, '');
-  if (process.platform === 'win32') {
-    normalized = normalized.toLowerCase();
-  }
-  return normalized;
 }

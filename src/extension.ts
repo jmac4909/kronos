@@ -55,7 +55,7 @@ import { computeAttentionBadge } from './services/attentionBadge';
 import { configIntervalMs, configIntervalSeconds, configIntervalSecondsMs, parsePositiveNumberInput, positiveConfigNumber } from './services/intervalConfig';
 import { buildNextActionContext, buildNextActionStartDecision, skillForAction } from './services/nextActionContext';
 import { createWorkspaceDiffArtifact, firstRemoteBranchMatching, originProjectPath } from './services/gitWorkspace';
-import { isExistingRealPathInside } from './services/pathUtils';
+import { isExistingRealPathInside, projectPathKey } from './services/pathUtils';
 import { signalProcessTree, stopProcessTree, supportsProcessTreeSuspend } from './services/processTree';
 import { createWebviewReadyMonitor } from './services/webviewDiagnostics';
 import { WEBVIEW_ACTION_PANEL_SCRIPT, WEBVIEW_JIRA_BOARD_SCRIPT, WEBVIEW_READY_COMMAND, createWebviewNonce, webviewRuntimeScriptTag, webviewRuntimeScriptUri, webviewScriptCspOptions, withWebviewCsp } from './services/webviewSecurity';
@@ -5258,12 +5258,6 @@ function getProjectNameForPath(state: KronosState, projectPath?: string): string
     if (projectPathKey(project.path) === targetPath) { return projectName; }
   }
   return undefined;
-}
-
-function projectPathKey(projectPath?: string): string {
-  if (!projectPath?.trim()) { return ''; }
-  const normalized = path.normalize(projectPath.trim()).replace(/[\\/]+$/, '');
-  return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
 }
 
 function getActiveProfile(): KronosProfile {
