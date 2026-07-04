@@ -2536,6 +2536,56 @@ test('webview diagnostics centralize host ready monitoring', () => {
   }
 });
 
+test('webview diagnostics can re-arm readiness checks after rerender', () => {
+  const originalSetTimeout = global.setTimeout;
+  const originalClearTimeout = global.clearTimeout;
+  const scheduled = [];
+  const cleared = [];
+  let disposeListener;
+  global.setTimeout = (fn, ms) => {
+    const timer = { fn, ms, id: scheduled.length + 1 };
+    scheduled.push(timer);
+    return timer;
+  };
+  global.clearTimeout = timer => {
+    cleared.push(timer);
+  };
+  try {
+    const panel = {
+      onDidDispose(listener) {
+        disposeListener = listener;
+        return { dispose() {} };
+      },
+    };
+    const monitor = webviewDiagnostics.createWebviewReadyMonitor(panel, 'Kronos Rerender Panel', 123);
+    assert.equal(typeof monitor.arm, 'function');
+    assert.equal(scheduled.length, 1);
+    assert.equal(monitor({ command: 'noop' }), false);
+    assert.equal(cleared.length, 0);
+    assert.equal(monitor({
+      command: webviewSecurity.WEBVIEW_READY_COMMAND,
+      webviewName: 'Kronos Rerender Panel',
+      readyState: 'complete',
+    }), true);
+    assert.equal(cleared.length, 1);
+
+    monitor.arm();
+    assert.equal(scheduled.length, 2);
+    assert.equal(cleared.length, 1);
+    monitor.arm();
+    assert.equal(scheduled.length, 3);
+    assert.equal(cleared.length, 2);
+    assert.equal(typeof disposeListener, 'function');
+    disposeListener();
+    assert.equal(cleared.length, 3);
+    monitor.arm();
+    assert.equal(scheduled.length, 3);
+  } finally {
+    global.setTimeout = originalSetTimeout;
+    global.clearTimeout = originalClearTimeout;
+  }
+});
+
 test('CLI probes centralize Claude and GCloud argv checks', () => {
   const calls = [];
   const commandRunner = (command, args, options) => {
@@ -4298,8 +4348,9 @@ test('dispatcher records branch and permission metadata for persisted runs', () 
     'const RUN_CENTER_MESSAGE_COMMANDS = new Set',
     'function normalizeRunCenterMessage',
     "import { createWebviewReadyMonitor } from '../services/webviewDiagnostics'",
-    "const logReady = createWebviewReadyMonitor(panel, 'Kronos Run Center')",
-    'if (logReady(msg)) { return; }',
+    "const logReady = interactive ? createWebviewReadyMonitor(panel, 'Kronos Run Center') : undefined",
+    'logReady?.arm()',
+    'if (logReady?.(msg)) { return; }',
     "message.command === 'refreshPanel' || message.command === 'archiveFinishedRuns'",
     'function runCenterActionButtons',
     "runCenterActionButton('refreshPanel', 'Refresh')",

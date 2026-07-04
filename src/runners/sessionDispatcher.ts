@@ -559,8 +559,10 @@ export function openRunCenter(options: RunCenterOptions = {}): void {
   const actionScriptUri = interactive && options.extensionUri
     ? panel.webview.asWebviewUri(vscode.Uri.joinPath(options.extensionUri, 'media', WEBVIEW_ACTION_PANEL_SCRIPT)).toString()
     : undefined;
+  const logReady = interactive ? createWebviewReadyMonitor(panel, 'Kronos Run Center') : undefined;
   const render = (): boolean => {
     const runs = listRuns();
+    logReady?.arm();
     panel.webview.html = withWebviewCsp(
       buildRunCenterHtml(runs, interactive ? nonce : undefined, actionScriptUri, options.focusRunId),
       interactive ? webviewScriptCspOptions(panel.webview.cspSource, nonce) : {},
@@ -582,7 +584,6 @@ export function openRunCenter(options: RunCenterOptions = {}): void {
   let wasActive = false;
   if (interactive && options.onAction) {
     const pollIntervalMs = Math.max(1000, options.pollIntervalMs || 5000);
-    const logReady = createWebviewReadyMonitor(panel, 'Kronos Run Center');
     const pollTimer = setInterval(() => {
       const hasActive = listRuns().some(run => isFreshActiveRun(run));
       if (hasActive || wasActive) {
@@ -591,7 +592,7 @@ export function openRunCenter(options: RunCenterOptions = {}): void {
     }, pollIntervalMs);
     panel.onDidDispose(() => clearInterval(pollTimer));
     panel.webview.onDidReceiveMessage(async msg => {
-      if (logReady(msg)) { return; }
+      if (logReady?.(msg)) { return; }
       const request = normalizeRunCenterMessage(msg);
       if (!request) {
         vscode.window.showWarningMessage('Ignored invalid Kronos Run Center action.');

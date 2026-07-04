@@ -2548,6 +2548,7 @@ export function activate(context: vscode.ExtensionContext) {
         );
         const nonce = createWebviewNonce();
         const actionScriptUri = kronosActionPanelScriptUri(panel, context.extensionUri);
+        const logReady = createWebviewReadyMonitor(panel, 'Kronos Dashboard');
         const render = async () => {
           let data: unknown = {};
           let loadWarning: string | undefined;
@@ -2556,11 +2557,11 @@ export function activate(context: vscode.ExtensionContext) {
           } catch (e: unknown) {
             loadWarning = warnUnexpectedPanelIntegrationError(e, 'Morning brief unavailable.');
           }
+          logReady.arm();
           panel.webview.html = withWebviewCsp(buildDashboardHtml(state, data, nonce, loadWarning, actionScriptUri), webviewScriptCspOptions(panel.webview.cspSource, nonce));
         };
         await render();
         startActiveRunPanelRefresh(panel, state, render);
-        const logReady = createWebviewReadyMonitor(panel, 'Kronos Dashboard');
         panel.webview.onDidReceiveMessage(async msg => {
           if (logReady(msg)) { return; }
           const request = normalizeActionPanelMessage(msg, DASHBOARD_MESSAGE_COMMANDS);
@@ -4053,6 +4054,7 @@ function openRecoveryPanel(state: KronosState, initialInventory: RecoveryInvento
   );
   const nonce = createWebviewNonce();
   const actionScriptUri = kronosActionPanelScriptUri(panel, extensionUri);
+  const logReady = createWebviewReadyMonitor(panel, 'Kronos Recovery Center');
   let currentInventory = initialInventory;
   let currentBackups = initialBackups;
   const render = (refresh = false) => {
@@ -4060,10 +4062,10 @@ function openRecoveryPanel(state: KronosState, initialInventory: RecoveryInvento
       currentBackups = listBackups();
       currentInventory = buildRecoveryInventoryForState(state, currentBackups);
     }
+    logReady.arm();
     panel.webview.html = withWebviewCsp(buildRecoveryHtml(currentInventory, nonce, focusRunId, actionScriptUri), webviewScriptCspOptions(panel.webview.cspSource, nonce));
   };
   render();
-  const logReady = createWebviewReadyMonitor(panel, 'Kronos Recovery Center');
   panel.webview.onDidReceiveMessage(async msg => {
     if (logReady(msg)) { return; }
     const request = normalizeActionPanelMessage(msg, RECOVERY_MESSAGE_COMMANDS);
@@ -4229,6 +4231,7 @@ function openHumanReviewInbox(state: KronosState, extensionUri?: vscode.Uri): vo
   );
   const nonce = createWebviewNonce();
   const actionScriptUri = kronosActionPanelScriptUri(panel, extensionUri);
+  const logReady = createWebviewReadyMonitor(panel, 'Kronos Human Review Inbox');
   const render = () => {
     const inbox = buildHumanReviewInbox({
       state: state.state,
@@ -4239,9 +4242,9 @@ function openHumanReviewInbox(state: KronosState, extensionUri?: vscode.Uri): vo
     });
     const htmlOptions = { nonce, actionScriptUri };
     if (state.state?.tickets) { Object.assign(htmlOptions, { tickets: state.state.tickets }); }
+    logReady.arm();
     panel.webview.html = withWebviewCsp(buildHumanReviewInboxHtml(inbox, htmlOptions), webviewScriptCspOptions(panel.webview.cspSource, nonce));
   };
-  const logReady = createWebviewReadyMonitor(panel, 'Kronos Human Review Inbox');
   panel.webview.onDidReceiveMessage(async msg => {
     if (logReady(msg)) { return; }
     const request = normalizeActionPanelMessage(msg, HUMAN_REVIEW_MESSAGE_COMMANDS);
@@ -4324,6 +4327,7 @@ function openEvidenceGatePanel(
   const nonce = createWebviewNonce();
   const actionScriptUri = kronosActionPanelScriptUri(panel, options.extensionUri);
   const gateTicketKeys = gates.map(gate => gate.ticketKey);
+  const logReady = createWebviewReadyMonitor(panel, title);
   const render = () => {
     const freshGates = options.refreshAllEvidenceGates
       ? evidenceGatePanelGatesForState(state)
@@ -4333,9 +4337,9 @@ function openEvidenceGatePanel(
           return ticket ? evaluateEvidenceGate(ticketKey, ticket) : undefined;
         })
         .filter((gate): gate is EvidenceGateResult => Boolean(gate));
+    logReady.arm();
     panel.webview.html = withWebviewCsp(buildEvidenceGateHtml(freshGates, title, nonce, actionScriptUri), webviewScriptCspOptions(panel.webview.cspSource, nonce));
   };
-  const logReady = createWebviewReadyMonitor(panel, title);
   panel.webview.onDidReceiveMessage(async msg => {
     if (logReady(msg)) { return; }
     const request = normalizeActionPanelMessage(msg, EVIDENCE_GATE_MESSAGE_COMMANDS);
@@ -4459,12 +4463,13 @@ function openQueuePlannerPanel(state: KronosState, extensionUri?: vscode.Uri): v
   const nonce = createWebviewNonce();
   const actionScriptUri = kronosActionPanelScriptUri(panel, extensionUri);
   let currentPlans: PlannedAction[] = [];
+  const logReady = createWebviewReadyMonitor(panel, 'Kronos Queue Planner');
   const render = () => {
     currentPlans = planNextActions(state).slice(0, 50);
+    logReady.arm();
     panel.webview.html = withWebviewCsp(buildQueuePlannerHtml(currentPlans, nonce, actionScriptUri), webviewScriptCspOptions(panel.webview.cspSource, nonce));
   };
   render();
-  const logReady = createWebviewReadyMonitor(panel, 'Kronos Queue Planner');
   panel.webview.onDidReceiveMessage(async msg => {
     if (logReady(msg)) { return; }
     const request = normalizeActionPanelMessage(msg, PLAN_MESSAGE_COMMANDS);
@@ -4825,11 +4830,13 @@ function openAgingReportPanel(state: KronosState, extensionUri?: vscode.Uri): vo
   );
   const nonce = createWebviewNonce();
   const actionScriptUri = kronosActionPanelScriptUri(panel, extensionUri);
+  const logReady = createWebviewReadyMonitor(panel, 'Kronos Aging Report');
   const render = () => {
     const report = analyzeAging({
       tickets: state.state?.tickets || {},
       thresholds: agingThresholdsFromConfig(),
     });
+    logReady.arm();
     panel.webview.html = withWebviewCsp(buildAgingReportHtml(report, {
       actionsHtml: operatorCommandRow([
         actionButton('refreshPanel', 'Refresh'),
@@ -4843,7 +4850,6 @@ function openAgingReportPanel(state: KronosState, extensionUri?: vscode.Uri): vo
   };
   render();
   startActiveRunPanelRefresh(panel, state, render);
-  const logReady = createWebviewReadyMonitor(panel, 'Kronos Aging Report');
   panel.webview.onDidReceiveMessage(async msg => {
     if (logReady(msg)) { return; }
     const request = normalizeActionPanelMessage(msg, AGING_REPORT_MESSAGE_COMMANDS);

@@ -4,19 +4,43 @@ export interface WebviewDisposeTarget {
   onDidDispose(listener: () => void): unknown;
 }
 
-export function createWebviewReadyMonitor(panel: WebviewDisposeTarget, webviewName: string, timeoutMs = 5000): (raw: unknown) => boolean {
+export interface WebviewReadyMonitor {
+  (raw: unknown): boolean;
+  arm(): void;
+}
+
+export function createWebviewReadyMonitor(panel: WebviewDisposeTarget, webviewName: string, timeoutMs = 5000): WebviewReadyMonitor {
   let reportedReady = false;
-  const timer = setTimeout(() => {
-    if (reportedReady) { return; }
-    console.warn(`Kronos webview script did not report ready: ${webviewName}. Check VS Code Webview Developer Tools and the Extension Host DevTools console for CSP or sandbox errors.`);
-  }, timeoutMs);
-  panel.onDidDispose(() => clearTimeout(timer));
-  return (raw: unknown): boolean => {
+  let disposed = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const clearTimer = (): void => {
+    if (timer) {
+      clearTimeout(timer);
+      timer = undefined;
+    }
+  };
+  const arm = (): void => {
+    if (disposed) { return; }
+    reportedReady = false;
+    clearTimer();
+    timer = setTimeout(() => {
+      if (reportedReady) { return; }
+      console.warn(`Kronos webview script did not report ready: ${webviewName}. Check VS Code Webview Developer Tools and the Extension Host DevTools console for CSP or sandbox errors.`);
+    }, timeoutMs);
+  };
+  const monitor = ((raw: unknown): boolean => {
     if (!logWebviewReadyMessage(raw, webviewName)) { return false; }
     reportedReady = true;
-    clearTimeout(timer);
+    clearTimer();
     return true;
-  };
+  }) as WebviewReadyMonitor;
+  monitor.arm = arm;
+  panel.onDidDispose(() => {
+    disposed = true;
+    clearTimer();
+  });
+  arm();
+  return monitor;
 }
 
 export function logWebviewReadyMessage(raw: unknown, fallbackWebviewName = 'Kronos webview'): boolean {
