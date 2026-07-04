@@ -2591,9 +2591,12 @@ for (const marker of [
   "console.error('Kronos webview unhandled rejection', webviewName",
   'function postReady()',
   'var readyPosted = false',
+  'var readyAttempts = 0',
+  'var maxReadyAttempts = 20',
   'if (readyPosted) { return; }',
   'readyPosted = true',
-  'if (api.__kronosFallbackVsCodeApi) { setTimeout(postReady, 50); return; }',
+  'if (readyAttempts < maxReadyAttempts) { setTimeout(postReady, 50); }',
+  "console.warn('Kronos webview could not acquire VS Code API after ready retries', webviewName)",
   'function closestKronosActionTarget(target)',
   'target.parentElement',
   'function postKronosAction(event)',
@@ -2613,10 +2616,21 @@ for (const marker of [
   'function closestBoardTarget',
   '__kronosJiraBoardAttached',
   'data-kronos-jira-board-attached',
-  'if (api.__kronosFallbackVsCodeApi) { setTimeout(postReady, 50); return; }',
+  'var readyAttempts = 0',
+  'var maxReadyAttempts = 20',
+  'if (readyAttempts < maxReadyAttempts) { setTimeout(postReady, 50); }',
+  "console.warn('Kronos webview could not acquire VS Code API after ready retries', webviewName)",
 ]) {
   if (!jiraBoardScript.includes(marker)) {
     fail(`Missing packaged Jira board script guard marker: ${marker}`);
+  }
+}
+for (const [label, source] of [
+  ['packaged action script', webviewActionPanelScript],
+  ['packaged Jira board script', jiraBoardScript],
+]) {
+  if (source.includes('if (api.__kronosFallbackVsCodeApi) { setTimeout(postReady, 50); return; }')) {
+    fail(`${label} must cap VS Code API ready retries.`);
   }
 }
 for (const [label, source, marker] of [

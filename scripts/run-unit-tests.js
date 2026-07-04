@@ -2505,6 +2505,35 @@ test('webview security injects CSP and preserves existing nonce policies', () =>
   assert.equal(externalReadyRetryMessages[0].command, webviewSecurity.WEBVIEW_READY_COMMAND);
   assert.equal(externalReadyRetryMessages[0].webviewName, 'Kronos External Retry');
   assert.equal(typeof externalReadyRetryListeners.click, 'function');
+  const externalUnavailableTimeouts = [];
+  const externalUnavailableWarnings = [];
+  vm.runInNewContext(externalActionScript, {
+    console: { info() {}, warn(...args) { externalUnavailableWarnings.push(args.join(' ')); }, error() {} },
+    navigator: { userAgent: 'Kronos Windows Webview Missing API Test' },
+    setTimeout(handler, ms) {
+      externalUnavailableTimeouts.push(ms);
+      handler();
+    },
+    window: { addEventListener() {} },
+    document: {
+      readyState: 'complete',
+      currentScript: {
+        getAttribute(name) {
+          return {
+            'data-kronos-webview-name': 'Kronos External Missing API',
+            'data-kronos-ready-command': webviewSecurity.WEBVIEW_READY_COMMAND,
+            'data-kronos-action-fields': '[]',
+          }[name] || '';
+        },
+      },
+      documentElement: { setAttribute() {} },
+      addEventListener() {},
+    },
+  });
+  assert.equal(externalUnavailableTimeouts.length, 20);
+  assert.equal(externalUnavailableTimeouts[0], 0);
+  assert.deepEqual(externalUnavailableTimeouts.slice(1), Array(19).fill(50));
+  assert.ok(externalUnavailableWarnings.some(message => message.includes('could not acquire VS Code API after ready retries')));
   const externalNullPostedMessages = [];
   const externalNullListeners = {};
   const externalNullScript = {
@@ -2657,6 +2686,43 @@ test('webview security injects CSP and preserves existing nonce policies', () =>
   assert.deepEqual(jiraReadyTimeouts, [0, 50]);
   assert.equal(jiraReadyRetryMessages.length, 1);
   assert.equal(jiraReadyRetryMessages[0].command, webviewSecurity.WEBVIEW_READY_COMMAND);
+  const jiraUnavailableTimeouts = [];
+  const jiraUnavailableWarnings = [];
+  vm.runInNewContext(jiraBoardScript, {
+    console: { info() {}, warn(...args) { jiraUnavailableWarnings.push(args.join(' ')); }, error() {} },
+    navigator: { userAgent: 'Kronos Windows Jira Missing API Test' },
+    setTimeout(handler, ms) {
+      jiraUnavailableTimeouts.push(ms);
+      handler();
+    },
+    window: { addEventListener() {} },
+    document: {
+      readyState: 'complete',
+      currentScript: {
+        getAttribute(name) {
+          return {
+            'data-kronos-webview-name': 'Kronos Jira Board',
+            'data-kronos-ready-command': webviewSecurity.WEBVIEW_READY_COMMAND,
+          }[name] || '';
+        },
+      },
+      documentElement: { setAttribute() {} },
+      getElementById(id) {
+        if (id === 'kronos-jira-ticket-data') { return { value: '{}' }; }
+        return null;
+      },
+      querySelector(selector) {
+        if (selector === '.board') { return { addEventListener() {} }; }
+        return null;
+      },
+      querySelectorAll() { return []; },
+      addEventListener() {},
+    },
+  });
+  assert.equal(jiraUnavailableTimeouts.length, 20);
+  assert.equal(jiraUnavailableTimeouts[0], 0);
+  assert.deepEqual(jiraUnavailableTimeouts.slice(1), Array(19).fill(50));
+  assert.ok(jiraUnavailableWarnings.some(message => message.includes('could not acquire VS Code API after ready retries')));
 
   const button = operatorPanel.actionButton('open<Thing>', 'Open & Check', {
     ticket: 'T-1',

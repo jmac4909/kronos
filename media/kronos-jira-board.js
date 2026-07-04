@@ -16,6 +16,8 @@
   var webviewName = script && script.getAttribute('data-kronos-webview-name') || 'Kronos Jira Board';
   var readyCommand = script && script.getAttribute('data-kronos-ready-command') || '';
   var readyPosted = false;
+  var readyAttempts = 0;
+  var maxReadyAttempts = 20;
   var currentModalKey = '';
   var lastFocusedEl = null;
   var ticketData = {};
@@ -121,7 +123,12 @@
     if (readyPosted || !readyCommand) { return; }
     try {
       var api = kronosVsCodeApi();
-      if (api.__kronosFallbackVsCodeApi) { setTimeout(postReady, 50); return; }
+      if (api.__kronosFallbackVsCodeApi) {
+        readyAttempts += 1;
+        if (readyAttempts < maxReadyAttempts) { setTimeout(postReady, 50); }
+        else { console.warn('Kronos webview could not acquire VS Code API after ready retries', webviewName); }
+        return;
+      }
       api.postMessage({
         command: readyCommand,
         webviewName: webviewName,
