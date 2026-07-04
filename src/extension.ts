@@ -2887,11 +2887,15 @@ export function activate(context: vscode.ExtensionContext) {
     }),
 
     vscode.commands.registerCommand('kronos.fixSonarIssues', async (item: unknown) => {
-      const projectName = resolveProjectName(state, item);
-      if (!projectName || !state.state) {
+      if (!state.state) {
         vscode.window.showWarningMessage('No project found.');
         return;
       }
+      let projectName = resolveProjectName(state, item);
+      if (!projectName) {
+        projectName = await pickProjectName(state, 'Fix SonarQube issues in which project?');
+      }
+      if (!projectName) { return; }
       const projectPath = getProjectPath(state, projectName);
       if (!projectPath) { return; }
       const sonarKey = state.state.projects[projectName]?.config?.sonar_project_key || projectName;
@@ -3019,8 +3023,11 @@ export function activate(context: vscode.ExtensionContext) {
     }),
 
     vscode.commands.registerCommand('kronos.fixFinding', async (args: unknown) => {
-      const projectName = resolveProjectName(state, args);
       const commandArg = recordFromUnknown(args);
+      let projectName = resolveProjectName(state, args);
+      if (!projectName && state.state) {
+        projectName = await pickProjectName(state, 'Fix verification finding in which project?');
+      }
       const projectPath = stringFromUnknown(commandArg['projectPath']) || getProjectPath(state, projectName);
       if (!projectPath || !projectName) {
         vscode.window.showWarningMessage('No project specified.');
