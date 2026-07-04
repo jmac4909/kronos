@@ -1721,12 +1721,7 @@ export function activate(context: vscode.ExtensionContext) {
       const ticketKey = resolveTicketKey(treeItem);
       if (!ticketKey || !state.state) { return; }
       if (!state.state.tickets[ticketKey]) { return; }
-      const panel = vscode.window.createWebviewPanel(
-        'kronosTicket', `${ticketKey}: Ticket`,
-        vscode.ViewColumn.One, kronosScriptableWebviewOptions(context.extensionUri)
-      );
-      const nonce = createWebviewNonce();
-      const actionScriptUri = kronosActionPanelScriptUri(panel, context.extensionUri);
+      const { panel, nonce, actionScriptUri } = createKronosActionWebviewPanel('kronosTicket', `${ticketKey}: Ticket`, context.extensionUri);
       const logReady = createWebviewReadyMonitor(panel, `${ticketKey}: Ticket`);
       const render = () => {
         const freshTicket = state.state?.tickets?.[ticketKey];

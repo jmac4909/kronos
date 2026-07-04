@@ -9288,7 +9288,7 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'let data: unknown = {}',
     'let loadWarning: string | undefined',
     "loadWarning = warnUnexpectedPanelIntegrationError(e, 'Morning brief unavailable.')",
-    'const actionScriptUri = kronosActionPanelScriptUri(panel, context.extensionUri)',
+    "createKronosActionWebviewPanel('kronosDashboard', 'Kronos Dashboard', context.extensionUri)",
     'buildDashboardHtml({',
     "kronosActionPanelScript(input.nonce, 'Kronos Dashboard', input.actionScriptUri)",
     "function openAgingReportPanel(state: KronosState, extensionUri?: vscode.Uri)",
