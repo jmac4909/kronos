@@ -62,8 +62,9 @@ function humanReviewActionButtons(item: HumanReviewItem, tickets: Record<string,
     }
     buttons.push(actionButton('viewTicket', item.title.includes('blocked') || !hasLinkedProject ? 'Fix' : 'View', { ticket: item.ticketKey, primary: !hasLinkedProject }));
   } else if (item.kind === 'run') {
-    buttons.push(actionButton('runCenter', 'Open Run Center', { primary: item.severity === 'critical' }));
-    buttons.push(actionButton('recoveryCenter', 'Recovery'));
+    const runOptions = item.runId ? { runId: item.runId } : {};
+    buttons.push(actionButton('runCenter', 'Open Run Center', { ...runOptions, primary: item.severity === 'critical' }));
+    buttons.push(actionButton('recoveryCenter', 'Recovery', runOptions));
   } else if (item.kind === 'integration') {
     buttons.push(actionButton('doctor', 'Open Doctor', { primary: item.severity === 'critical' }));
   } else if (item.kind === 'worktree') {

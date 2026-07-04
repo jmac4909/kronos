@@ -4237,7 +4237,7 @@ function openHumanReviewInbox(state: KronosState, extensionUri?: vscode.Uri): vo
         render();
         return;
       }
-      await executeHumanReviewAction(state, request.command, request.ticket);
+      await executeHumanReviewAction(state, request.command, request.ticket, request.runId);
       render();
     }, 'Kronos human review action failed.');
   });
@@ -4245,7 +4245,7 @@ function openHumanReviewInbox(state: KronosState, extensionUri?: vscode.Uri): vo
   startActiveRunPanelRefresh(panel, state, render);
 }
 
-async function executeHumanReviewAction(state: KronosState, command: string, ticketKey: string): Promise<void> {
+async function executeHumanReviewAction(state: KronosState, command: string, ticketKey: string, runId = ''): Promise<void> {
   if (ticketKey && !state.state?.tickets?.[ticketKey]) {
     vscode.window.showWarningMessage(`${ticketKey} is no longer in Kronos state.`);
     return;
@@ -4256,7 +4256,7 @@ async function executeHumanReviewAction(state: KronosState, command: string, tic
   } else if (ticketKey && await tryExecuteTicketOperatorCommand(command, ticketKey)) {
     return;
   } else if (command === 'runCenter' || command === 'recoveryCenter' || command === 'doctor' || command === 'queuePlanner') {
-    await executeOperatorCommandAction(command);
+    await executeOperatorCommandAction(command, '', runId);
   } else {
     vscode.window.showWarningMessage('Ignored Kronos human review action without a valid target.');
   }
@@ -4382,7 +4382,7 @@ async function executeEvidenceGateAction(command: string, ticketKey: string): Pr
   }
 }
 
-async function executeOperatorCommandAction(command: string, ticketKey = ''): Promise<void> {
+async function executeOperatorCommandAction(command: string, ticketKey = '', runId = ''): Promise<void> {
   const commandId = OPERATOR_COMMAND_TO_VSCODE_COMMAND.get(command);
   if (!commandId) {
     vscode.window.showWarningMessage('Ignored unknown Kronos operator action.');
@@ -4398,6 +4398,10 @@ async function executeOperatorCommandAction(command: string, ticketKey = ''): Pr
   }
   if (command === 'evidenceGate' && ticketKey) {
     await vscode.commands.executeCommand(commandId, { ticketKey });
+    return;
+  }
+  if ((command === 'runCenter' || command === 'recoveryCenter') && runId) {
+    await vscode.commands.executeCommand(commandId, { runId });
     return;
   }
   await vscode.commands.executeCommand(commandId);

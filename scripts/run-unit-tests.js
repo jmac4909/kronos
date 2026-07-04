@@ -6473,6 +6473,8 @@ test('human review inbox aggregates runs, tickets, evidence gaps, integrations, 
   assert.ok(html.includes('data-action="extractAcceptanceCriteria"'));
   assert.ok(html.includes('data-action="startTicket"'));
   assert.ok(html.includes('data-action="runCenter"'));
+  assert.ok(html.includes('data-action="runCenter" data-run-id="run-1"'));
+  assert.ok(html.includes('data-action="recoveryCenter" data-run-id="run-1"'));
   assert.ok(html.includes('Kronos Human Review Inbox'));
 
   const escapedHtml = humanReviewPanelView.buildHumanReviewInboxHtml({
@@ -7238,6 +7240,10 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     "'Kronos evidence gate action failed.'",
     "'Kronos operator action failed.'",
     'await executeOperatorCommandAction(command, ticketKey)',
+    'await executeHumanReviewAction(state, request.command, request.ticket, request.runId)',
+    "await executeOperatorCommandAction(command, '', runId)",
+    "if ((command === 'runCenter' || command === 'recoveryCenter') && runId)",
+    'await vscode.commands.executeCommand(commandId, { runId })',
     "command === 'runCenter' || command === 'recoveryCenter' || command === 'doctor' || command === 'queuePlanner'",
     'const render = (currentChecks: DoctorCheck[]) =>',
     ".catch((e: unknown) => render([...checks, {",
@@ -7574,7 +7580,8 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     "actionButton('startTicket', 'Start'",
     "actionButton('evidenceGate', 'Gate'",
     "actionButton('runCenter', 'Open Run Center'",
-    "actionButton('recoveryCenter', 'Recovery'",
+    'const runOptions = item.runId ? { runId: item.runId } : {}',
+    "actionButton('recoveryCenter', 'Recovery', runOptions)",
     "actionButton('doctor', 'Open Doctor'",
     'kronosOperatorPanelCss',
     "kronosActionPanelScript(options.nonce, 'Kronos Human Review Inbox', true, options.actionScriptUri)",
@@ -8449,6 +8456,7 @@ test('tree providers share action labels and icons', () => {
     'Progress: ${progress}',
     "new vscode.ThemeIcon('sync~spin'",
     "this.command = { command: 'kronos.runCenter'",
+    'arguments: [{ runId: run.id }]',
   ]) {
     assert.ok(sessionTree.includes(marker), marker);
   }

@@ -96,7 +96,7 @@ class SessionTreeItem extends vscode.TreeItem {
       this.iconPath = attention
         ? new vscode.ThemeIcon('warning', new vscode.ThemeColor('charts.yellow'))
         : new vscode.ThemeIcon('sync~spin', new vscode.ThemeColor('charts.blue'));
-      this.command = { command: 'kronos.runCenter', title: 'Open Run Center' };
+      this.command = { command: 'kronos.runCenter', title: 'Open Run Center', arguments: [{ runId: run.id }] };
       return;
     }
 
