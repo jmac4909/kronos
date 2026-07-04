@@ -5,8 +5,8 @@ import { RunRecord } from './runStore';
 import { formatRunProgress } from './runProgress';
 import { isFreshActiveRun } from './runStatus';
 
-export type DashboardWorklistKind = 'needs_human' | 'active_runs' | 'failing_gates' | 'recent_completed' | 'stale_items';
-export type DashboardWorklistSeverity = 'critical' | 'warning' | 'info' | 'ok';
+type DashboardWorklistKind = 'needs_human' | 'active_runs' | 'failing_gates' | 'recent_completed' | 'stale_items';
+type DashboardWorklistSeverity = 'critical' | 'warning' | 'info' | 'ok';
 
 export interface DashboardWorklistItem {
   id: string;
@@ -25,7 +25,7 @@ export interface DashboardWorklistLane {
   items: DashboardWorklistItem[];
 }
 
-export interface DashboardWorklistInput {
+interface DashboardWorklistInput {
   runs: RunRecord[];
   humanReviewInbox: HumanReviewInbox;
   evidenceGates: EvidenceGateResult[];

@@ -3,10 +3,10 @@ import { isCodeAction } from './actionSemantics';
 import { changedFilePaths } from './changedFiles';
 import { isActiveRun, isStaleActiveRun } from './runStatus';
 
-export type CollisionSeverity = 'high' | 'medium' | 'low';
-export type CollisionKind = 'active_run' | 'queued_ticket' | 'queued_project' | 'open_mr' | 'recent_file' | 'ticket_area' | 'mr_file';
+type CollisionSeverity = 'high' | 'medium' | 'low';
+type CollisionKind = 'active_run' | 'queued_ticket' | 'queued_project' | 'open_mr' | 'recent_file' | 'ticket_area' | 'mr_file';
 
-export interface CollisionRun {
+interface CollisionRun {
   id: string;
   project?: string;
   ticket?: string;

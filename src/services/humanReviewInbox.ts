@@ -4,10 +4,10 @@ import { RecoveryCheck, RecoveryWorktreeReport } from './recoveryCenter';
 import { evaluateEvidenceGate } from './evidenceGate';
 import { runAttentionDetail } from './runAttention';
 
-export type HumanReviewSeverity = 'critical' | 'warning' | 'info';
-export type HumanReviewKind = 'run' | 'ticket' | 'evidence' | 'integration' | 'worktree' | 'queue';
+type HumanReviewSeverity = 'critical' | 'warning' | 'info';
+type HumanReviewKind = 'run' | 'ticket' | 'evidence' | 'integration' | 'worktree' | 'queue';
 
-export interface HumanReviewRun {
+interface HumanReviewRun {
   id: string;
   status?: string;
   project?: string;
@@ -27,7 +27,7 @@ export interface HumanReviewItem {
   runId?: string;
 }
 
-export interface HumanReviewInboxInput {
+interface HumanReviewInboxInput {
   state?: KronosState | null;
   queue?: QueueState | null;
   runs?: HumanReviewRun[];
