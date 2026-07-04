@@ -10,16 +10,6 @@ import { isRunLikeRecord, type RunLikeRecord } from './runRecords';
 type HumanReviewSeverity = 'critical' | 'warning' | 'info';
 type HumanReviewKind = 'run' | 'ticket' | 'evidence' | 'integration' | 'worktree' | 'queue';
 
-interface HumanReviewRun {
-  id: string;
-  status?: string;
-  project?: string;
-  ticket?: string;
-  skill?: string;
-  failureReason?: string;
-  startedAt?: string;
-}
-
 export interface HumanReviewItem {
   id: string;
   kind: HumanReviewKind;
@@ -34,7 +24,7 @@ export interface HumanReviewItem {
 interface HumanReviewInboxInput {
   state?: KronosState | null;
   queue?: QueueState | null;
-  runs?: HumanReviewRun[];
+  runs?: unknown[];
   worktreeReport?: RecoveryWorktreeReport;
   doctorChecks?: RecoveryCheck[];
 }

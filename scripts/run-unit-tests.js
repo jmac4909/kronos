@@ -216,6 +216,7 @@ const humanReviewPanelView = require('../out/services/humanReviewPanelView.js');
 const evidencePanelView = require('../out/services/evidencePanelView.js');
 const queuePlannerPanelView = require('../out/services/queuePlannerPanelView.js');
 const operationsReportPanelView = require('../out/services/operationsReportPanelView.js');
+const dashboardPanelView = require('../out/services/dashboardPanelView.js');
 const runStatus = require('../out/services/runStatus.js');
 const runProgress = require('../out/services/runProgress.js');
 const runRecords = require('../out/services/runRecords.js');
@@ -8693,6 +8694,67 @@ test('webview html helpers centralize escaping and safe HTTP links', () => {
   assert.match(baseCss, /@media \(max-width: 760px\)/);
 });
 
+test('dashboard panel view renders escaped command center data', () => {
+  const startedAt = new Date().toISOString();
+  const html = dashboardPanelView.buildDashboardHtml({
+    state: {
+      projects: {
+        'web<script>': {
+          health: 'green',
+          summary: 'Project <summary> & details',
+          open_mr_count: 2,
+        },
+      },
+      tickets: {
+        'K-DASH': ticket({
+          summary: 'Dashboard ticket',
+          projects: ['web<script>'],
+          updated: '2026-07-01T12:00:00.000Z',
+        }),
+      },
+    },
+    queue: { items: [{ id: 'q1', ticket: 'K-DASH', action: 'implement' }], last_computed: startedAt },
+    runs: [{
+      id: 'run<script>',
+      project: 'web<script>',
+      ticket: 'K-DASH',
+      skill: 'implement',
+      status: 'running',
+      startedAt,
+    }],
+    plans: [{
+      planId: 'K-DASH:implement',
+      ticketKey: 'K-DASH',
+      action: 'implement',
+      projects: ['web<script>'],
+      score: 99,
+      scoreBreakdown: [],
+      reason: 'Needs <work> & review',
+      source: 'queue',
+    }],
+    brief: { overnight_actions: '2', vpn_drops: '1', completed: ['Done <one>'] },
+    trendWindowDays: 14,
+    agingThresholds: { ticketDays: 1 },
+    nonce: 'nonce-dashboard',
+    loadWarning: 'Brief <failed> & retry',
+    actionScriptUri: ACTION_SCRIPT_URI,
+  });
+
+  assert.match(html, /class="kronos-shell dashboard-shell"/);
+  assert.match(html, /Command Center/);
+  assert.match(html, /web&lt;script&gt;/);
+  assert.match(html, /Project &lt;summary&gt; &amp; details/);
+  assert.match(html, /Needs &lt;work&gt; &amp; review/);
+  assert.match(html, /Brief &lt;failed&gt; &amp; retry/);
+  assert.match(html, /Done &lt;one&gt;/);
+  assert.match(html, /run&lt;script&gt;/);
+  assert.match(html, /data-action="refreshPanel"/);
+  assert.match(html, /data-action="runCenter"/);
+  assert.match(html, /data-kronos-ready-command="__kronosWebviewReady"/);
+  assert.doesNotMatch(html, /Project <summary>/);
+  assert.doesNotMatch(html, /Brief <failed>/);
+});
+
 test('extension webviews use shared UI shell and board filtering affordances', () => {
   const source = readSourceFixture('src', 'extension.ts');
   const operatorPanelSource = readSourceFixture('src', 'services', 'operatorPanel.ts');
@@ -8702,10 +8764,11 @@ test('extension webviews use shared UI shell and board filtering affordances', (
   const evidencePanelViewSource = readSourceFixture('src', 'services', 'evidencePanelView.ts');
   const queuePlannerPanelViewSource = readSourceFixture('src', 'services', 'queuePlannerPanelView.ts');
   const operationsReportPanelViewSource = readSourceFixture('src', 'services', 'operationsReportPanelView.ts');
+  const dashboardPanelViewSource = readSourceFixture('src', 'services', 'dashboardPanelView.ts');
   const ticketPanelViewSource = readSourceFixture('src', 'services', 'ticketPanelView.ts');
   const webviewMessagesSource = readSourceFixture('src', 'services', 'webviewMessages.ts');
   const jiraBoardSource = readSourceFixture('media', 'kronos-jira-board.js');
-  const uiSource = `${source}\n${queuePlannerPanelViewSource}\n${operationsReportPanelViewSource}\n${ticketPanelViewSource}\n${jiraBoardSource}`;
+  const uiSource = `${source}\n${queuePlannerPanelViewSource}\n${operationsReportPanelViewSource}\n${dashboardPanelViewSource}\n${ticketPanelViewSource}\n${jiraBoardSource}`;
   const boardHandlerStart = source.indexOf('panel.webview.onDidReceiveMessage(async (msg) => {\n        if (logReady(msg)) { return; }\n        const request = normalizeBoardMessage(msg, BOARD_MESSAGE_COMMANDS);');
   const boardHandlerEnd = source.indexOf("    vscode.commands.registerCommand('kronos.viewTicket'", boardHandlerStart);
   assert.ok(boardHandlerStart >= 0 && boardHandlerEnd > boardHandlerStart, 'Jira board message handler should be present');
@@ -8713,7 +8776,7 @@ test('extension webviews use shared UI shell and board filtering affordances', (
   for (const marker of [
     "import { WEBVIEW_ACTION_PANEL_SCRIPT, WEBVIEW_JIRA_BOARD_SCRIPT, WEBVIEW_READY_COMMAND, createWebviewNonce, webviewRuntimeScriptTag, webviewRuntimeScriptUri, webviewScriptCspOptions, withWebviewCsp } from './services/webviewSecurity'",
     "import { normalizeBoardMessage, normalizeWebviewCommand } from './services/webviewMessages'",
-    "import { actionButton, actionRow, kronosActionPanelScript, kronosOperatorPanelCss, normalizeActionPanelMessage, operatorCommandRow, type ActionPanelMessage } from './services/operatorPanel'",
+    "import { actionButton, kronosActionPanelScript, kronosOperatorPanelCss, normalizeActionPanelMessage, operatorCommandRow, type ActionPanelMessage } from './services/operatorPanel'",
     "import { buildPromptHistoryHtml, buildPromptManagerHtml, buildPromptSmokeTestsHtml } from './services/promptPanelView'",
     "import { buildRecoveryHtml, buildStateAuditLogHtml } from './services/recoveryPanelView'",
     "import { buildHumanReviewInboxHtml } from './services/humanReviewPanelView'",
@@ -8730,8 +8793,8 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'let loadWarning: string | undefined',
     "loadWarning = warnUnexpectedPanelIntegrationError(e, 'Morning brief unavailable.')",
     'const actionScriptUri = kronosActionPanelScriptUri(panel, context.extensionUri)',
-    'buildDashboardHtml(state, data, nonce, loadWarning, actionScriptUri)',
-    "kronosActionPanelScript(nonce, 'Kronos Dashboard', actionScriptUri)",
+    'buildDashboardHtml({',
+    "kronosActionPanelScript(input.nonce, 'Kronos Dashboard', input.actionScriptUri)",
     "function openAgingReportPanel(state: KronosState, extensionUri?: vscode.Uri)",
     "kronosActionPanelScript(nonce, 'Kronos Aging Report', actionScriptUri)",
     'Morning brief unavailable',

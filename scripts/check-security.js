@@ -27,6 +27,7 @@ const namedFiles = [
   'src/services/queueActiveRun.ts',
   'src/services/queuePlannerPanelView.ts',
   'src/services/operationsReportPanelView.ts',
+  'src/services/dashboardPanelView.ts',
   'src/services/operatorPanel.ts',
   'src/services/webviewSecurity.ts',
   'src/services/promptPanelView.ts',
@@ -100,6 +101,7 @@ const regexp = readSource('src/services/regexp.ts');
 const pathUtils = readSource('src/services/pathUtils.ts');
 const queuePlannerPanelView = sources['src/services/queuePlannerPanelView.ts'];
 const operationsReportPanelView = sources['src/services/operationsReportPanelView.ts'];
+const dashboardPanelView = sources['src/services/dashboardPanelView.ts'];
 const agentQualityScore = readSource('src/services/agentQualityScore.ts');
 const integrationManifest = readSource('src/services/integrationManifest.ts');
 const profileManager = readSource('src/services/profileManager.ts');
@@ -358,7 +360,21 @@ for (const requiredIgnore of ['.git/**', '.claude/**', 'node_modules/**', 'scrip
     fail(`.vscodeignore must exclude ${requiredIgnore}`);
   }
 }
-const extensionUiSource = `${extension}\n${queuePlannerPanelView}\n${operationsReportPanelView}\n${ticketPanelView}\n${jiraBoardScript}`;
+const extensionUiSource = `${extension}\n${queuePlannerPanelView}\n${operationsReportPanelView}\n${dashboardPanelView}\n${ticketPanelView}\n${jiraBoardScript}`;
+const dashboardRendererSafetyMarkers = new Set([
+  'Gate Fails',
+  'buildDashboardWorklist',
+  'buildDashboardWorklistHtml',
+  'Command Center',
+  'function dashboardWorkItemActions',
+  "actionButton('evidenceGate', 'Gate', { ticket, primary: true })",
+  "actionButton('runCenter', 'Run Center', { runId })",
+  "actionButton('viewTicket', 'View', { ticket, primary: true })",
+  "actionButton('startTicket', 'Start', { ticket })",
+  'Rework Rate',
+  'Stale Critical',
+]);
+
 for (const marker of [
   'function mockCommandName(command)',
   'function mockCommandLine(command, args)',
@@ -532,6 +548,7 @@ for (const marker of [
   'function recoveryActionForRequest',
   'function openRecoveryPanel',
   "import { buildTicketHtml } from './services/ticketPanelView'",
+  "import { buildDashboardHtml } from './services/dashboardPanelView'",
   'buildTicketHtml(ticketKey, freshTicket, {',
   'runs: listRuns()',
   'confirmDispatchCollisions',
@@ -931,7 +948,8 @@ for (const marker of [
   "from './services/integrationAdapters'",
   "from './services/projectMutations'",
 ]) {
-  if (!extension.includes(marker)) {
+  const safetySource = dashboardRendererSafetyMarkers.has(marker) ? extensionUiSource : extension;
+  if (!safetySource.includes(marker)) {
     fail(`Missing safety marker: ${marker}`);
   }
 }
@@ -1635,8 +1653,8 @@ for (const marker of [
   'let loadWarning: string | undefined',
   "loadWarning = warnUnexpectedPanelIntegrationError(e, 'Morning brief unavailable.')",
   'const actionScriptUri = kronosActionPanelScriptUri(panel, context.extensionUri)',
-  'buildDashboardHtml(state, data, nonce, loadWarning, actionScriptUri)',
-  "kronosActionPanelScript(nonce, 'Kronos Dashboard', actionScriptUri)",
+  'buildDashboardHtml({',
+  "kronosActionPanelScript(input.nonce, 'Kronos Dashboard', input.actionScriptUri)",
   "function openAgingReportPanel(state: KronosState, extensionUri?: vscode.Uri)",
   "kronosActionPanelScript(nonce, 'Kronos Aging Report', actionScriptUri)",
   'Morning brief unavailable',

@@ -1,7 +1,6 @@
 import { AgingReport } from './agingAnalyzer';
 import { EvidenceGateResult } from './evidenceGate';
 import { HumanReviewInbox } from './humanReviewInbox';
-import { RunRecord } from './runStore';
 import { formatRunProgress } from './runProgress';
 import { isFreshActiveRun } from './runStatus';
 import { recordString } from './records';
@@ -29,7 +28,7 @@ export interface DashboardWorklistLane {
 }
 
 interface DashboardWorklistInput {
-  runs: RunRecord[];
+  runs: unknown[];
   humanReviewInbox: HumanReviewInbox;
   evidenceGates: EvidenceGateResult[];
   agingReport: AgingReport;
