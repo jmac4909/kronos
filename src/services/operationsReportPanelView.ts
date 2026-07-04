@@ -5,7 +5,89 @@ import { actionButton, kronosActionPanelScript, kronosOperatorPanelCss, operator
 import { listProfiles, type KronosProfile } from './profileManager';
 import { requiredScripts } from './scriptClient';
 import type { TrendMetricsReport } from './trendMetrics';
+import { toValidDate } from './dateValues';
 import { escapeClass, escapeHtml } from './webviewHtml';
+
+interface SessionStatsRow {
+  project: string;
+  skill: string;
+  ticket?: string;
+  startedAt?: string;
+  verdict: string;
+  durationSec: number;
+  toolCalls: number;
+  toolErrors: number;
+  filesEdited: number;
+}
+
+interface SessionStatsReport {
+  sessions: SessionStatsRow[];
+}
+
+function formatWebviewDateTime(value: unknown, fallback = 'N/A'): string {
+  return toValidDate(value)?.toLocaleString() || fallback;
+}
+
+export function buildSessionStatsHtml(stats: SessionStatsReport, nonce?: string, actionScriptUri?: string): string {
+  const sessions = stats.sessions;
+  const totalSessions = sessions.length;
+  const successes = sessions.filter(s => s.verdict === 'success').length;
+  const avgDuration = totalSessions > 0 ? Math.round(sessions.reduce((a, s) => a + s.durationSec, 0) / totalSessions) : 0;
+  const avgTools = totalSessions > 0 ? Math.round(sessions.reduce((a, s) => a + s.toolCalls, 0) / totalSessions) : 0;
+  const totalErrors = sessions.reduce((a, s) => a + s.toolErrors, 0);
+  const totalFiles = sessions.reduce((a, s) => a + s.filesEdited, 0);
+
+  const bySkill: Record<string, SessionStatsRow[]> = {};
+  for (const s of sessions) {
+    const bucket = bySkill[s.skill] || [];
+    bucket.push(s);
+    bySkill[s.skill] = bucket;
+  }
+
+  const skillRows = Object.entries(bySkill).map(([skill, items]) => {
+    const avg = Math.round(items.reduce((a, s) => a + s.durationSec, 0) / items.length);
+    const succ = items.filter(s => s.verdict === 'success').length;
+    const tools = Math.round(items.reduce((a, s) => a + s.toolCalls, 0) / items.length);
+    return `<tr><td>${escapeHtml(skill)}</td><td>${items.length}</td><td>${succ}/${items.length}</td><td>${avg}s</td><td>${tools}</td></tr>`;
+  }).join('');
+
+  const recentRows = sessions.slice(-15).reverse().map(s => {
+    const date = formatWebviewDateTime(s.startedAt);
+    const verdict = s.verdict === 'success' ? '<span class="pill pass">PASS</span>' : '<span class="pill fail">FAIL</span>';
+    return `<tr><td>${date}</td><td>${escapeHtml(s.project)}</td><td>${escapeHtml(s.skill)}</td><td>${escapeHtml(s.ticket || '-')}</td><td>${verdict}</td><td>${s.durationSec}s</td><td>${s.toolCalls}</td><td>${s.toolErrors}</td><td>${s.filesEdited}</td></tr>`;
+  }).join('');
+  const actions = operatorCommandRow([
+    actionButton('runCenter', 'Run Center'),
+    actionButton('sessionHistory', 'Session History'),
+    actionButton('agentQualityScore', 'Agent Quality'),
+    actionButton('trendMetrics', 'Trend Metrics'),
+  ]);
+
+  return `<!DOCTYPE html>
+<html><head><style>
+  ${kronosOperatorPanelCss()}
+</style></head><body><div class="kronos-shell operator-shell">
+  <div class="kronos-header">
+    <div>
+      <h1 class="kronos-title">Kronos Session Stats</h1>
+      <div class="kronos-subtitle">Aggregate run outcomes, tool use, errors, and recent session history</div>
+    </div>
+  </div>
+  ${actions}
+  <div class="operator-summary">
+    <div class="summary-card"><div class="num">${totalSessions}</div><div class="lbl">Sessions</div></div>
+    <div class="summary-card"><div class="num">${successes}/${totalSessions}</div><div class="lbl">Success Rate</div></div>
+    <div class="summary-card"><div class="num">${avgDuration}s</div><div class="lbl">Avg Duration</div></div>
+    <div class="summary-card"><div class="num">${avgTools}</div><div class="lbl">Avg Tool Calls</div></div>
+    <div class="summary-card"><div class="num">${totalErrors}</div><div class="lbl">Total Errors</div></div>
+    <div class="summary-card"><div class="num">${totalFiles}</div><div class="lbl">Files Changed</div></div>
+  </div>
+  <div class="operator-section"><h2>By Action Type</h2>
+  <div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Action</th><th>Sessions</th><th>Success</th><th>Avg Time</th><th>Avg Tools</th></tr>${skillRows}</table></div></div>
+  <div class="operator-section"><h2>Recent Sessions</h2>
+  <div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Date</th><th>Project</th><th>Action</th><th>Ticket</th><th>Result</th><th>Time</th><th>Tools</th><th>Errors</th><th>Files</th></tr>${recentRows}</table></div></div>
+</div>${nonce ? kronosActionPanelScript(nonce, 'Kronos Session Stats', actionScriptUri) : ''}</body></html>`;
+}
 
 export function buildAgentQualityScoreHtml(score: AgentQualityScore, nonce?: string, actionScriptUri?: string): string {
   const componentRows = score.components.map(component => `<tr>

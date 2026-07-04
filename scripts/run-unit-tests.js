@@ -4184,6 +4184,42 @@ test('operations report panel view renders escaped data and command actions', ()
   assert.ok(trendHtml.includes('Build &lt;pass&gt;'));
   assert.ok(trendHtml.includes('data-action="agentQualityScore"'));
 
+  const statsHtml = operationsReportPanelView.buildSessionStatsHtml({
+    sessions: [
+      {
+        project: 'api<script>',
+        skill: 'implement<one>',
+        ticket: 'K-STATS<script>',
+        startedAt: '2026-07-01T12:00:00.000Z',
+        verdict: 'success',
+        durationSec: 30,
+        toolCalls: 5,
+        toolErrors: 1,
+        filesEdited: 2,
+      },
+      {
+        project: 'web',
+        skill: 'verify',
+        ticket: '',
+        startedAt: '2026-07-01T12:05:00.000Z',
+        verdict: 'failed',
+        durationSec: 90,
+        toolCalls: 7,
+        toolErrors: 2,
+        filesEdited: 1,
+      },
+    ],
+  }, 'nonce-stats', ACTION_SCRIPT_URI);
+  assert.ok(statsHtml.includes('Kronos Session Stats'));
+  assert.ok(statsHtml.includes('api&lt;script&gt;'));
+  assert.ok(statsHtml.includes('implement&lt;one&gt;'));
+  assert.ok(statsHtml.includes('K-STATS&lt;script&gt;'));
+  assert.ok(statsHtml.includes('2</div><div class="lbl">Sessions</div>'));
+  assert.ok(statsHtml.includes('1/2'));
+  assert.ok(statsHtml.includes('data-action="sessionHistory"'));
+  assert.ok(statsHtml.includes('nonce="nonce-stats"'));
+  assert.equal(statsHtml.includes('api<script>'), false);
+
   const manifestHtml = operationsReportPanelView.buildIntegrationManifestHtml({
     present: true,
     valid: false,
@@ -8822,7 +8858,7 @@ test('extension webviews use shared UI shell and board filtering affordances', (
   for (const marker of [
     "import { WEBVIEW_ACTION_PANEL_SCRIPT, WEBVIEW_JIRA_BOARD_SCRIPT, createWebviewNonce, webviewScriptCspOptions, withWebviewCsp } from './services/webviewSecurity'",
     "import { normalizeBoardMessage, normalizeWebviewCommand } from './services/webviewMessages'",
-    "import { actionButton, kronosActionPanelScript, kronosOperatorPanelCss, normalizeActionPanelMessage, operatorCommandRow, type ActionPanelMessage } from './services/operatorPanel'",
+    "import { actionButton, kronosActionPanelScript, normalizeActionPanelMessage, operatorCommandRow, type ActionPanelMessage } from './services/operatorPanel'",
     "import { buildPromptHistoryHtml, buildPromptManagerHtml, buildPromptSmokeTestsHtml } from './services/promptPanelView'",
     "import { buildRecoveryHtml, buildStateAuditLogHtml } from './services/recoveryPanelView'",
     "import { buildHumanReviewInboxHtml } from './services/humanReviewPanelView'",
@@ -9315,11 +9351,13 @@ test('extension webviews use shared UI shell and board filtering affordances', (
   }
   for (const marker of [
     'export function buildAgentQualityScoreHtml',
+    'export function buildSessionStatsHtml',
     'export function buildTrendMetricsHtml',
     'export function buildIntegrationManifestHtml',
     'export function buildProfilesHtml',
     'export function buildDoctorHtml',
     'Kronos Agent Quality Score',
+    'Kronos Session Stats',
     'Kronos Trend Metrics',
     'Kronos Integration Manifest',
     'Kronos Profiles',
@@ -9332,6 +9370,7 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'listProfiles().map',
     'kronosOperatorPanelCss',
     'actionScriptUri?: string',
+    "kronosActionPanelScript(nonce, 'Kronos Session Stats', actionScriptUri)",
     "kronosActionPanelScript(nonce, 'Kronos Agent Quality Score', actionScriptUri)",
     "kronosActionPanelScript(nonce, 'Kronos Trend Metrics', actionScriptUri)",
     "kronosActionPanelScript(nonce, 'Kronos Integration Manifest', actionScriptUri)",

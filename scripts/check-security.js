@@ -393,6 +393,7 @@ const dashboardRendererSafetyMarkers = new Set([
 ]);
 const serviceOwnedSafetyMarkers = new Set([
   "from './changedFiles'",
+  "from './webviewHtml'",
 ]);
 
 for (const marker of [
@@ -516,7 +517,7 @@ for (const marker of [
   "unknownErrorMessage(e, 'Could not load SonarQube branches.')",
   "'(default; Sonar branches unavailable)'",
   'unknownErrorMessage(e, `Could not resolve MR branch for ${k}.`)',
-  "from './services/webviewHtml'",
+  "from './webviewHtml'",
   'kronos.openExternalUrl',
   'async function confirmSafetyGate',
   'async function removeTicketFromQueue',
@@ -3819,11 +3820,13 @@ if (/\bany\b/.test(queuePlannerPanelView)) {
 
 for (const marker of [
   'export function buildAgentQualityScoreHtml',
+  'export function buildSessionStatsHtml',
   'export function buildTrendMetricsHtml',
   'export function buildIntegrationManifestHtml',
   'export function buildProfilesHtml',
   'export function buildDoctorHtml',
   'Kronos Agent Quality Score',
+  'Kronos Session Stats',
   'Kronos Trend Metrics',
   'Kronos Integration Manifest',
   'Kronos Profiles',
@@ -3836,6 +3839,7 @@ for (const marker of [
   'listProfiles().map',
   'kronosOperatorPanelCss',
   'actionScriptUri?: string',
+  "kronosActionPanelScript(nonce, 'Kronos Session Stats', actionScriptUri)",
   "kronosActionPanelScript(nonce, 'Kronos Agent Quality Score', actionScriptUri)",
   "kronosActionPanelScript(nonce, 'Kronos Trend Metrics', actionScriptUri)",
   "kronosActionPanelScript(nonce, 'Kronos Integration Manifest', actionScriptUri)",

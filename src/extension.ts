@@ -61,7 +61,6 @@ import { signalProcessTree, stopProcessTree, supportsProcessTreeSuspend } from '
 import { createWebviewReadyMonitor } from './services/webviewDiagnostics';
 import { WEBVIEW_ACTION_PANEL_SCRIPT, WEBVIEW_JIRA_BOARD_SCRIPT, createWebviewNonce, webviewScriptCspOptions, withWebviewCsp } from './services/webviewSecurity';
 import { normalizeBoardMessage, normalizeWebviewCommand } from './services/webviewMessages';
-import { escapeHtml } from './services/webviewHtml';
 import { kronosTerminalOptions } from './services/terminalProfiles';
 import { unknownErrorCode, unknownErrorMessage } from './services/errorUtils';
 import { isKronosScriptMissingError } from './services/scriptClient';
@@ -87,13 +86,13 @@ import { openReviewTicketEntries, reviewBranchTickets as buildReviewBranchTicket
 import { decideReviewMonitorAction, reviewDeployMonitorActionHandled, reviewTerminalMergeRequestActionKey, type ReviewDeployMonitorResult, type ReviewMonitorDecision, type ReviewTerminalMergeRequestAction } from './services/reviewMonitor';
 import { decideQueueRemoval } from './services/queueRemovalPolicy';
 import { deployMonitorAttentionIssue, deployMonitorHandoffCheckName, hasDeployMonitorHandoffIssue, hasHandledDeployMonitorRun, resolveDeployMonitorProject } from './services/deployMonitorHandoff';
-import { actionButton, kronosActionPanelScript, kronosOperatorPanelCss, normalizeActionPanelMessage, operatorCommandRow, type ActionPanelMessage } from './services/operatorPanel';
+import { actionButton, kronosActionPanelScript, normalizeActionPanelMessage, operatorCommandRow, type ActionPanelMessage } from './services/operatorPanel';
 import { buildPromptHistoryHtml, buildPromptManagerHtml, buildPromptSmokeTestsHtml } from './services/promptPanelView';
 import { buildRecoveryHtml, buildStateAuditLogHtml } from './services/recoveryPanelView';
 import { buildHumanReviewInboxHtml } from './services/humanReviewPanelView';
 import { buildEvidenceGateHtml, buildEvidenceHandoffHtml, buildEvidencePublishHtml } from './services/evidencePanelView';
 import { buildBacklogTriageHtml, buildCollisionReportHtml, buildProjectBatchPlanHtml, buildQueuePlanModeHtml, buildQueuePlannerHtml, buildReleaseBatchPlanHtml } from './services/queuePlannerPanelView';
-import { buildAgentQualityScoreHtml, buildDoctorHtml, buildIntegrationManifestHtml, buildProfilesHtml, buildTrendMetricsHtml } from './services/operationsReportPanelView';
+import { buildAgentQualityScoreHtml, buildDoctorHtml, buildIntegrationManifestHtml, buildProfilesHtml, buildSessionStatsHtml, buildTrendMetricsHtml } from './services/operationsReportPanelView';
 
 let statusBarItem: vscode.StatusBarItem;
 interface BadgeTarget {
@@ -3523,65 +3522,7 @@ export function activate(context: vscode.ExtensionContext) {
       const nonce = createWebviewNonce();
       const actionScriptUri = kronosActionPanelScriptUri(panel, context.extensionUri);
       attachOperatorCommandHandler(panel, 'Kronos Session Stats', SESSION_STATS_OPERATOR_COMMANDS);
-      const esc = escapeHtml;
-
-      const totalSessions = sessions.length;
-      const successes = sessions.filter(s => s.verdict === 'success').length;
-      const avgDuration = Math.round(sessions.reduce((a, s) => a + s.durationSec, 0) / totalSessions);
-      const avgTools = Math.round(sessions.reduce((a, s) => a + s.toolCalls, 0) / totalSessions);
-      const totalErrors = sessions.reduce((a, s) => a + s.toolErrors, 0);
-      const totalFiles = sessions.reduce((a, s) => a + s.filesEdited, 0);
-
-      const bySkill: Record<string, typeof sessions> = {};
-      for (const s of sessions) {
-        const bucket = bySkill[s.skill] || [];
-        bucket.push(s);
-        bySkill[s.skill] = bucket;
-      }
-
-      const skillRows = Object.entries(bySkill).map(([skill, items]) => {
-        const avg = Math.round(items.reduce((a, s) => a + s.durationSec, 0) / items.length);
-        const succ = items.filter(s => s.verdict === 'success').length;
-        const tools = Math.round(items.reduce((a, s) => a + s.toolCalls, 0) / items.length);
-        return `<tr><td>${esc(skill)}</td><td>${items.length}</td><td>${succ}/${items.length}</td><td>${avg}s</td><td>${tools}</td></tr>`;
-      }).join('');
-
-      const recentRows = sessions.slice(-15).reverse().map(s => {
-        const date = formatWebviewDateTime(s.startedAt);
-        const verdict = s.verdict === 'success' ? '<span class="pill pass">PASS</span>' : '<span class="pill fail">FAIL</span>';
-        return `<tr><td>${date}</td><td>${esc(s.project)}</td><td>${esc(s.skill)}</td><td>${esc(s.ticket || '-')}</td><td>${verdict}</td><td>${s.durationSec}s</td><td>${s.toolCalls}</td><td>${s.toolErrors}</td><td>${s.filesEdited}</td></tr>`;
-      }).join('');
-      const actions = operatorCommandRow([
-        actionButton('runCenter', 'Run Center'),
-        actionButton('sessionHistory', 'Session History'),
-        actionButton('agentQualityScore', 'Agent Quality'),
-        actionButton('trendMetrics', 'Trend Metrics'),
-      ]);
-
-      panel.webview.html = withWebviewCsp(`<!DOCTYPE html>
-<html><head><style>
-  ${kronosOperatorPanelCss()}
-</style></head><body><div class="kronos-shell operator-shell">
-  <div class="kronos-header">
-    <div>
-      <h1 class="kronos-title">Kronos Session Stats</h1>
-      <div class="kronos-subtitle">Aggregate run outcomes, tool use, errors, and recent session history</div>
-    </div>
-  </div>
-  ${actions}
-  <div class="operator-summary">
-    <div class="summary-card"><div class="num">${totalSessions}</div><div class="lbl">Sessions</div></div>
-    <div class="summary-card"><div class="num">${successes}/${totalSessions}</div><div class="lbl">Success Rate</div></div>
-    <div class="summary-card"><div class="num">${avgDuration}s</div><div class="lbl">Avg Duration</div></div>
-    <div class="summary-card"><div class="num">${avgTools}</div><div class="lbl">Avg Tool Calls</div></div>
-    <div class="summary-card"><div class="num">${totalErrors}</div><div class="lbl">Total Errors</div></div>
-    <div class="summary-card"><div class="num">${totalFiles}</div><div class="lbl">Files Changed</div></div>
-  </div>
-  <div class="operator-section"><h2>By Action Type</h2>
-  <div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Action</th><th>Sessions</th><th>Success</th><th>Avg Time</th><th>Avg Tools</th></tr>${skillRows}</table></div></div>
-  <div class="operator-section"><h2>Recent Sessions</h2>
-  <div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Date</th><th>Project</th><th>Action</th><th>Ticket</th><th>Result</th><th>Time</th><th>Tools</th><th>Errors</th><th>Files</th></tr>${recentRows}</table></div></div>
-</div>${kronosActionPanelScript(nonce, 'Kronos Session Stats', actionScriptUri)}</body></html>`, webviewScriptCspOptions(panel.webview.cspSource, nonce));
+      panel.webview.html = withWebviewCsp(buildSessionStatsHtml(stats, nonce, actionScriptUri), webviewScriptCspOptions(panel.webview.cspSource, nonce));
     }),
 
     vscode.commands.registerCommand('kronos.agentQualityScore', async () => {
