@@ -64,6 +64,7 @@ import { kronosTerminalOptions } from './services/terminalProfiles';
 import { unknownErrorCode, unknownErrorMessage } from './services/errorUtils';
 import { isKronosScriptMissingError } from './services/scriptClient';
 import { activeRunStatusBarSummary } from './services/activeRunDisplay';
+import { buildStatusKind } from './services/buildStatus';
 import { isFreshActiveRun } from './services/runStatus';
 import { isAttentionRunStatus, runAttentionDetail, runAttentionLine } from './services/runAttention';
 import { buildRunCompletionNotification } from './services/runCompletionNotification';
@@ -6351,7 +6352,8 @@ function buildTicketHtml(key: string, ticket: Ticket, state: KronosState, nonce?
   let buildHtml = '';
   if (build) {
     const buildStatus = ticketStringField(build, 'status', 'unknown');
-    const buildColor = buildStatus === 'SUCCESS' ? '#4caf50' : buildStatus === 'FAILURE' ? '#f44336' : '#ff9800';
+    const buildKind = buildStatusKind(buildStatus);
+    const buildColor = buildKind === 'pass' ? '#4caf50' : buildKind === 'fail' ? '#f44336' : '#ff9800';
     const buildUrl = safeHttpHref(ticketStringField(build, 'url'));
     buildHtml = `<div class="section">
       <h3>Build</h3>

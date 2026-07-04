@@ -166,6 +166,7 @@ const stateStore = require('../out/services/stateStore.js');
 const queuePlanner = require('../out/services/queuePlanner.js');
 const actionCatalog = require('../out/services/actionCatalog.js');
 const actionSemantics = require('../out/services/actionSemantics.js');
+const buildStatus = require('../out/services/buildStatus.js');
 const severityRank = require('../out/services/severityRank.js');
 const records = require('../out/services/records.js');
 const dateValues = require('../out/services/dateValues.js');
@@ -3444,6 +3445,44 @@ test('severity rank helper centralizes attention ordering vocabularies', () => {
     const source = readSourceFixture('src', 'services', file);
     assert.ok(source.includes("import { severityRank } from './severityRank'"), `${file} should use shared severity ranking`);
     assert.equal(source.includes('function severityWeight'), false, `${file} should not carry a local severityWeight helper`);
+  }
+});
+
+test('build status helper centralizes Jenkins status classification', () => {
+  assert.equal(buildStatus.normalizedBuildStatus(' success '), 'SUCCESS');
+  assert.equal(buildStatus.normalizedBuildStatus(null), '');
+  assert.equal(buildStatus.buildStatusKind('PASSED'), 'pass');
+  assert.equal(buildStatus.buildStatusKind(' ok '), 'pass');
+  assert.equal(buildStatus.buildStatusKind('FAILED'), 'fail');
+  assert.equal(buildStatus.buildStatusKind(' error '), 'fail');
+  assert.equal(buildStatus.buildStatusKind('ABORTED'), 'other');
+  assert.equal(buildStatus.isPassingBuildStatus('SUCCESS'), true);
+  assert.equal(buildStatus.isFailingBuildStatus('FAILURE'), true);
+  assert.equal(buildStatus.isPassingBuildStatus('FAILURE'), false);
+
+  const helperSource = readSourceFixture('src', 'services', 'buildStatus.ts');
+  for (const marker of [
+    "export type BuildStatusKind = 'pass' | 'fail' | 'other'",
+    'export function normalizedBuildStatus(status: unknown): string',
+    'export function buildStatusKind(status: unknown): BuildStatusKind',
+    'export function isPassingBuildStatus(status: unknown): boolean',
+    'export function isFailingBuildStatus(status: unknown): boolean',
+  ]) {
+    assert.ok(helperSource.includes(marker), marker);
+  }
+
+  for (const [file, marker] of [
+    ['src/services/agentQualityScore.ts', "import { isFailingBuildStatus, isPassingBuildStatus } from './buildStatus'"],
+    ['src/services/agingAnalyzer.ts', "import { isFailingBuildStatus } from './buildStatus'"],
+    ['src/services/evidenceGate.ts', "import { buildStatusKind } from './buildStatus'"],
+    ['src/services/postRunReadiness.ts', "import { isPassingBuildStatus } from './buildStatus'"],
+    ['src/services/queuePlanner.ts', "import { isFailingBuildStatus, isPassingBuildStatus } from './buildStatus'"],
+    ['src/services/ticketTimeline.ts', "import { buildStatusKind } from './buildStatus'"],
+    ['src/services/trendMetrics.ts', "import { isFailingBuildStatus, isPassingBuildStatus } from './buildStatus'"],
+    ['src/views/TicketTreeProvider.ts', "import { buildStatusKind } from '../services/buildStatus'"],
+    ['src/extension.ts', "import { buildStatusKind } from './services/buildStatus'"],
+  ]) {
+    assert.ok(readSourceFixture(...file.split('/')).includes(marker), `${file} should use shared build status helper`);
   }
 });
 
@@ -8479,7 +8518,7 @@ test('post-run readiness distinguishes process completion from handoff readiness
     'function runCompletionEvidenceContext(run: unknown, ticket?: Ticket): RunCompletionEvidenceContext',
     'interface RunCompletionEvidenceCheck',
     'function ticketSonarStatus(ticket?: Ticket): string | undefined',
-    'function isPassingBuild',
+    "import { isPassingBuildStatus } from './buildStatus'",
     'function isPassingSonar',
     'export function classifyRunFailure(run: unknown): RunFailureKind',
     "import { recordFromUnknown } from './records'",
@@ -9950,9 +9989,11 @@ test('tree providers share action labels and icons', () => {
 
   for (const marker of [
     "import { actionDisplayLabel as actionToLabel } from '../services/actionCatalog'",
+    "import { buildStatusKind } from '../services/buildStatus'",
     "import { evidenceRecordCount } from '../services/evidenceData'",
     "import { ticketActionIcon } from './actionIcons'",
     'this.iconPath = ticketActionIcon(action)',
+    'const buildKind = buildStatusKind(t.build.status)',
     'evidenceRecordCount(t)',
   ]) {
     assert.ok(ticketTree.includes(marker), marker);

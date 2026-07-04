@@ -1,5 +1,6 @@
 import { Ticket } from '../state/types';
 import { isHandoffAction } from './actionSemantics';
+import { isPassingBuildStatus } from './buildStatus';
 import { EvidenceGateResult, evaluateEvidenceGate } from './evidenceGate';
 import { evidenceChecks, evidenceNotes, evidenceString } from './evidenceData';
 import { runProgressSummary } from './runProgress';
@@ -134,7 +135,7 @@ export function buildRunCompletionEvidenceText(run: unknown, ticket?: Ticket): s
 
 export function buildRunCompletionEvidenceCheck(run: unknown, ticket?: Ticket): RunCompletionEvidenceCheck {
   const context = runCompletionEvidenceContext(run, ticket);
-  const strongSignal = positiveTestCount(context.testCount) || isPassingBuild(context.build) || isPassingSonar(context.sonarStatus);
+  const strongSignal = positiveTestCount(context.testCount) || isPassingBuildStatus(context.build?.status) || isPassingSonar(context.sonarStatus);
   const cleanRun = runCompletedForEvidence(context.record) && (context.exitCode === undefined || context.exitCode === 0);
   const summaryParts = [
     `run ${context.runId} ${context.status}${context.exitCode === undefined ? '' : ` exit ${context.exitCode}`}`,
@@ -444,11 +445,6 @@ function ticketSonarStatus(ticket?: Ticket): string | undefined {
     'quality_gate_status',
     'qualityGateStatus',
   ]);
-}
-
-function isPassingBuild(build: Ticket['build'] | undefined): boolean {
-  const status = String(build?.status || '').trim().toUpperCase();
-  return ['SUCCESS', 'PASSED', 'OK'].includes(status);
 }
 
 function isPassingSonar(status: string | undefined): boolean {

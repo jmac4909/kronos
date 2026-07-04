@@ -1,4 +1,5 @@
 import { Ticket } from '../state/types';
+import { isFailingBuildStatus } from './buildStatus';
 import { toValidDate } from './dateValues';
 import { isOpenReviewTicket } from './reviewWork';
 import { severityRank } from './severityRank';
@@ -180,6 +181,5 @@ function daysBetween(from: Date, to: Date): number {
 }
 
 function isFailedBuild(ticket: Ticket): boolean {
-  const status = String(ticket.build?.status || '').toUpperCase();
-  return ['FAILURE', 'FAILED', 'ERROR'].includes(status);
+  return isFailingBuildStatus(ticket.build?.status);
 }

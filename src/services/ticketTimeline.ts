@@ -1,4 +1,5 @@
 import { QueueState, Ticket } from '../state/types';
+import { buildStatusKind } from './buildStatus';
 import { evidenceChecks, evidenceEnvironmentResults, evidenceNotes, evidenceString } from './evidenceData';
 import { isAttentionRunStatus, runAttentionDetail } from './runAttention';
 import { recordString } from './records';
@@ -196,9 +197,9 @@ function severityForAction(action: string): TimelineSeverity {
 }
 
 function severityForBuild(status: string): TimelineSeverity {
-  const upper = status.toUpperCase();
-  if (upper === 'SUCCESS' || upper === 'PASSED') { return 'success'; }
-  if (upper === 'FAILURE' || upper === 'FAILED' || upper === 'ERROR') { return 'failure'; }
+  const kind = buildStatusKind(status);
+  if (kind === 'pass') { return 'success'; }
+  if (kind === 'fail') { return 'failure'; }
   return 'warning';
 }
 

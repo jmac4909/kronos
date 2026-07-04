@@ -2,6 +2,7 @@ import { KronosState as KronosStateType, QueueDecision, QueueItem, QueueState, T
 import { actionEstimateMinutes, actionPlanningScore } from './actionCatalog';
 import { actionDisplayLabel as actionToLabel } from './actionCatalog';
 import { isCodeAction } from './actionSemantics';
+import { isFailingBuildStatus, isPassingBuildStatus } from './buildStatus';
 import { toValidDate } from './dateValues';
 import { evidenceRecordCount } from './evidenceData';
 import { isRecord } from './records';
@@ -117,7 +118,7 @@ export function planNextActions(input: PlannerInput): PlannedAction[] {
 
     const actionScore = actionPlanningScore(ticket.next_action);
     const priorityScore = scorePriority(ticket.priority);
-    const buildScore = ticket.build?.status === 'FAILURE' ? 25 : ticket.build?.status === 'SUCCESS' ? 5 : 0;
+    const buildScore = isFailingBuildStatus(ticket.build?.status) ? 25 : isPassingBuildStatus(ticket.build?.status) ? 5 : 0;
     const mrScore = ticket.mr?.review_status === 'changes_requested' ? 20 : ticket.mr?.review_status === 'approved' ? 10 : 0;
     const linkScore = (ticket.projects || []).length > 0 ? 10 : -30;
     const evidenceCount = evidenceRecordCount(ticket);
@@ -230,7 +231,7 @@ export function buildBacklogTriageReport(input: PlannerInput): BacklogTriageRepo
     if (ticket.next_action === 'blocked') {
       items.push(triageItem(ticketKey, ticket, 'blocked', 'critical', 'Resolve Blocker', 'Ticket is marked blocked and needs a human decision before automation.', ageDays));
     }
-    if (ticket.build?.status === 'FAILURE' || ticket.next_action === 'fix_build') {
+    if (isFailingBuildStatus(ticket.build?.status) || ticket.next_action === 'fix_build') {
       items.push(triageItem(ticketKey, ticket, 'build_failed', 'critical', 'Fix Build', ticket.build ? `Build #${ticket.build.number} is ${ticket.build.status}.` : 'Ticket is marked fix_build without a build record.', ageDays));
     }
     if (ticket.next_action === 'await_review' || ticket.mr?.review_status === 'approved' || ticket.mr?.review_status === 'changes_requested') {

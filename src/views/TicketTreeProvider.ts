@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { KronosState } from '../state/KronosState';
 import { Ticket } from '../state/types';
 import { actionDisplayLabel as actionToLabel } from '../services/actionCatalog';
+import { buildStatusKind } from '../services/buildStatus';
 import { evidenceRecordCount } from '../services/evidenceData';
 import { TicketFilter, TicketGroupBy, describeTicketFilter, filterTickets, groupTicketEntries, hasTicketFilter } from '../services/ticketFilters';
 import { ticketActionIcon } from './actionIcons';
@@ -107,8 +108,9 @@ export class TicketTreeProvider implements vscode.TreeDataProvider<TicketElement
       }
 
       if (t.build) {
-        const buildIcon = t.build.status === 'SUCCESS' ? 'pass' : t.build.status === 'FAILURE' ? 'error' : 'watch';
-        const buildColor = t.build.status === 'SUCCESS' ? 'testing.iconPassed' : t.build.status === 'FAILURE' ? 'testing.iconFailed' : 'charts.yellow';
+        const buildKind = buildStatusKind(t.build.status);
+        const buildIcon = buildKind === 'pass' ? 'pass' : buildKind === 'fail' ? 'error' : 'watch';
+        const buildColor = buildKind === 'pass' ? 'testing.iconPassed' : buildKind === 'fail' ? 'testing.iconFailed' : 'charts.yellow';
         const buildItem = new TicketDetailItem(`Build #${t.build.number} — ${t.build.status}`, t.build.url);
         buildItem.iconPath = new vscode.ThemeIcon(buildIcon, new vscode.ThemeColor(buildColor));
         items.push(buildItem);

@@ -1,6 +1,7 @@
 import { Ticket } from '../state/types';
 import { extractCriterionTexts } from './acceptanceCriteria';
 import { isReviewReadyAction } from './actionSemantics';
+import { buildStatusKind } from './buildStatus';
 import { evidenceAcceptanceCriteria, evidenceChecked, evidenceChecks, evidenceEnvironmentResults, evidenceNotes, evidenceRecordCount, evidenceRiskNotes, evidenceString } from './evidenceData';
 
 type EvidenceGateStatus = 'pass' | 'warn' | 'fail';
@@ -93,10 +94,10 @@ export function evaluateEvidenceGate(ticketKey: string, ticket: Ticket): Evidenc
   }
 
   if (ticket.build) {
-    const status = String(ticket.build.status || '').toUpperCase();
-    if (['FAILURE', 'FAILED', 'ERROR'].includes(status)) {
+    const status = buildStatusKind(ticket.build.status);
+    if (status === 'fail') {
       checks.push(fail('build', `Build #${ticket.build.number} failed`, ticket.build.url || 'No build URL recorded.'));
-    } else if (['SUCCESS', 'PASSED', 'OK'].includes(status)) {
+    } else if (status === 'pass') {
       checks.push(pass('build', `Build #${ticket.build.number} passed`, ticket.build.url || 'Build URL not recorded.'));
     } else {
       checks.push(warn('build', `Build #${ticket.build.number} is ${ticket.build.status}`, ticket.build.url || 'Build is not final.'));

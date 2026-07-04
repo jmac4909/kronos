@@ -95,6 +95,7 @@ const severityRank = readSource('src/services/severityRank.ts');
 const records = readSource('src/services/records.ts');
 const commandPayloads = readSource('src/services/commandPayloads.ts');
 const dateValues = readSource('src/services/dateValues.ts');
+const buildStatus = readSource('src/services/buildStatus.ts');
 const regexp = readSource('src/services/regexp.ts');
 const pathUtils = readSource('src/services/pathUtils.ts');
 const queuePlannerPanelView = sources['src/services/queuePlannerPanelView.ts'];
@@ -3768,6 +3769,36 @@ if (/\bany\b/.test(operationsReportPanelView)) {
 }
 
 for (const marker of [
+  "export type BuildStatusKind = 'pass' | 'fail' | 'other'",
+  'const PASSING_BUILD_STATUSES',
+  'const FAILING_BUILD_STATUSES',
+  'export function normalizedBuildStatus(status: unknown): string',
+  'export function buildStatusKind(status: unknown): BuildStatusKind',
+  'export function isPassingBuildStatus(status: unknown): boolean',
+  'export function isFailingBuildStatus(status: unknown): boolean',
+]) {
+  if (!buildStatus.includes(marker)) {
+    fail(`Missing build status helper marker: ${marker}`);
+  }
+}
+
+for (const [name, source, marker] of [
+  ['agent quality score', agentQualityScore, "import { isFailingBuildStatus, isPassingBuildStatus } from './buildStatus'"],
+  ['aging analyzer', agingAnalyzer, "import { isFailingBuildStatus } from './buildStatus'"],
+  ['evidence gate', evidenceGate, "import { buildStatusKind } from './buildStatus'"],
+  ['extension', sources['src/extension.ts'], "import { buildStatusKind } from './services/buildStatus'"],
+  ['post-run readiness', postRunReadiness, "import { isPassingBuildStatus } from './buildStatus'"],
+  ['queue planner', queuePlanner, "import { isFailingBuildStatus, isPassingBuildStatus } from './buildStatus'"],
+  ['ticket timeline', ticketTimeline, "import { buildStatusKind } from './buildStatus'"],
+  ['ticket tree', ticketTreeProvider, "import { buildStatusKind } from '../services/buildStatus'"],
+  ['trend metrics', trendMetrics, "import { isFailingBuildStatus, isPassingBuildStatus } from './buildStatus'"],
+]) {
+  if (!source.includes(marker)) {
+    fail(`${name} should use shared build status helper.`);
+  }
+}
+
+for (const marker of [
   'export type RunLikeRecord = Record<string, unknown>',
   'export function isRunLikeRecord',
   'return isRecord(value)',
@@ -4079,7 +4110,7 @@ for (const marker of [
   'function postRunReadinessStatusTransition',
   'interface RunCompletionEvidenceCheck',
   'function ticketSonarStatus(ticket?: Ticket): string | undefined',
-  'function isPassingBuild',
+  "import { isPassingBuildStatus } from './buildStatus'",
   'function isPassingSonar',
   'export function classifyRunFailure(run: unknown): RunFailureKind',
   "import { isHandoffAction } from './actionSemantics'",

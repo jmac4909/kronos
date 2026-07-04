@@ -1,4 +1,5 @@
 import { Ticket } from '../state/types';
+import { isFailingBuildStatus, isPassingBuildStatus } from './buildStatus';
 import { evidenceChecks, evidenceEnvironmentResults, evidenceString } from './evidenceData';
 import { recordString } from './records';
 import { toValidDate } from './dateValues';
@@ -49,8 +50,8 @@ export function computeTrendMetrics(input: TrendMetricsInput): TrendMetricsRepor
   const passedVerificationRuns = verificationRuns.filter(run => SUCCESS_RUN_STATUSES.has(recordString(run, 'status'))).length;
 
   const builds = tickets.map(([_, ticket]) => ticket.build).filter(Boolean) as NonNullable<Ticket['build']>[];
-  const passedBuilds = builds.filter(build => isPassingBuild(build.status)).length;
-  const failedBuilds = builds.filter(build => isFailingBuild(build.status)).length;
+  const passedBuilds = builds.filter(build => isPassingBuildStatus(build.status)).length;
+  const failedBuilds = builds.filter(build => isFailingBuildStatus(build.status)).length;
 
   const mrs = tickets.map(([_, ticket]) => ticket.mr).filter(Boolean) as NonNullable<Ticket['mr']>[];
   const changesRequestedMrs = mrs.filter(mr => mr.review_status === 'changes_requested').length;
@@ -211,12 +212,4 @@ function statusForLowIsGood(value: number | null, total: number): TrendMetric['s
   if (value <= 0.15) { return 'good'; }
   if (value <= 0.35) { return 'warn'; }
   return 'bad';
-}
-
-function isPassingBuild(status: string): boolean {
-  return ['SUCCESS', 'PASSED', 'OK'].includes(String(status || '').toUpperCase());
-}
-
-function isFailingBuild(status: string): boolean {
-  return ['FAILURE', 'FAILED', 'ERROR'].includes(String(status || '').toUpperCase());
 }
