@@ -101,6 +101,8 @@ const reviewPollFailureNotifications = new Map<string, number>();
 const reviewTerminalMergeRequestActions = new Set<string>();
 const OPTIONAL_SCRIPT_PANEL_WARNING = 'Kronos integration scripts are not installed. Run Kronos: Doctor for setup details.';
 
+type DeployMonitorStartResult = 'started' | 'handled' | 'blocked';
+
 function recordFromUnknown(value: unknown): Record<string, unknown> {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value)) ? value as Record<string, unknown> : {};
 }
@@ -5603,8 +5605,8 @@ async function pollReviewMergeRequests(state: KronosState, shouldContinue: () =>
       const decision = decideReviewMonitorAction(candidate.ticketKey, update);
       if (decision.kind === 'deploy_monitor') {
         if (!shouldContinue()) { return; }
-        const started = await startDeployMonitorForMergedTicket(state, candidate.ticketKey, update.ticket);
-        if (started) {
+        const result = await startDeployMonitorForMergedTicket(state, candidate.ticketKey, update.ticket);
+        if (reviewDeployMonitorActionHandled(result)) {
           rememberReviewTerminalMergeRequestAction(candidate.ticketKey, update.ticket, 'deploy_monitor');
         }
       } else if (decision.kind === 'blocked') {
@@ -5636,8 +5638,8 @@ async function reconcileTerminalReviewMergeRequests(state: KronosState, shouldCo
     if (reviewTerminalMergeRequestActions.has(actionKey)) { continue; }
     if (update.action === 'deploy_monitor') {
       if (!shouldContinue()) { return; }
-      const started = await startDeployMonitorForMergedTicket(state, update.ticketKey, update.ticket);
-      if (started) { reviewTerminalMergeRequestActions.add(actionKey); }
+      const result = await startDeployMonitorForMergedTicket(state, update.ticketKey, update.ticket);
+      if (reviewDeployMonitorActionHandled(result)) { reviewTerminalMergeRequestActions.add(actionKey); }
     } else if (update.action === 'blocked') {
       if (!shouldContinue()) { return; }
       reviewTerminalMergeRequestActions.add(actionKey);
@@ -5653,6 +5655,10 @@ function rememberReviewTerminalMergeRequestAction(ticketKey: string, ticket: Tic
 function reviewTerminalMergeRequestActionKey(ticketKey: string, ticket: Ticket, action: 'deploy_monitor' | 'blocked'): string {
   const mrIid = ticket.mr?.iid || 'mr';
   return `${ticketKey}:${mrIid}:${action}`;
+}
+
+function reviewDeployMonitorActionHandled(result: DeployMonitorStartResult): boolean {
+  return result === 'started' || result === 'handled' || result === 'blocked';
 }
 
 function notifyReviewMergeRequestPollFailure(ticketKey: string, error: unknown): void {
@@ -5707,18 +5713,18 @@ function reviewBranchTickets(state: KronosState) {
   return buildReviewBranchTickets(state.state?.tickets);
 }
 
-async function startDeployMonitorForMergedTicket(state: KronosState, ticketKey: string, ticket: Ticket): Promise<boolean> {
+async function startDeployMonitorForMergedTicket(state: KronosState, ticketKey: string, ticket: Ticket): Promise<DeployMonitorStartResult> {
   state.reloadAndNotify();
   const currentTicket = state.state?.tickets?.[ticketKey] || ticket;
   const project = resolveDeployMonitorProject(state.state, ticketKey, currentTicket);
   if (project.kind !== 'ok' || !project.projectName || !project.projectPath) {
     const reason = project.reason || `${ticketKey} MR merged, but deploy monitoring could not resolve a project.`;
     if (hasDeployMonitorHandoffIssue(currentTicket, reason)) {
-      return false;
+      return 'blocked';
     }
     recordDeployMonitorHandoffIssue(state, ticketKey, currentTicket, reason);
     void vscode.window.showWarningMessage(reason);
-    return false;
+    return 'blocked';
   }
   const projectName = project.projectName;
   const projectPath = project.projectPath;
@@ -5727,12 +5733,12 @@ async function startDeployMonitorForMergedTicket(state: KronosState, ticketKey: 
   const deployMonitorMatch = { projectName, projectPath, ticketKey, mrIid };
   if (hasHandledDeployMonitorRun(deployMonitorRuns, deployMonitorMatch)) {
     void vscode.window.showInformationMessage(`${ticketKey} merged - deploy monitor already handled.`);
-    return true;
+    return 'handled';
   }
   const attentionIssue = deployMonitorAttentionIssue(deployMonitorRuns, deployMonitorMatch);
   if (attentionIssue) {
     if (hasDeployMonitorHandoffIssue(currentTicket, attentionIssue)) {
-      return false;
+      return 'blocked';
     }
     recordDeployMonitorHandoffIssue(state, ticketKey, currentTicket, attentionIssue);
     void vscode.window.showWarningMessage(attentionIssue, 'Run Center').then(action => {
@@ -5743,7 +5749,7 @@ async function startDeployMonitorForMergedTicket(state: KronosState, ticketKey: 
     }, (e: unknown) => {
       console.warn(unknownErrorMessage(e, 'Failed to open Run Center for deploy monitor issue.'));
     });
-    return false;
+    return 'blocked';
   }
   const promptMetadata: PromptRunMetadata = {
     source: 'slash',
@@ -5758,14 +5764,14 @@ async function startDeployMonitorForMergedTicket(state: KronosState, ticketKey: 
   if (!started) {
     const reason = `${ticketKey} merged, but deploy monitor did not start. Start deploy monitor manually from the Review view or ticket details.`;
     if (hasDeployMonitorHandoffIssue(currentTicket, reason)) {
-      return false;
+      return 'blocked';
     }
     recordDeployMonitorHandoffIssue(state, ticketKey, currentTicket, reason);
     void vscode.window.showWarningMessage(reason);
-    return false;
+    return 'blocked';
   }
   void vscode.window.showInformationMessage(`${ticketKey} merged - deploy monitor started.`);
-  return true;
+  return 'started';
 }
 
 function recordDeployMonitorHandoffIssue(state: KronosState, ticketKey: string, ticket: Ticket, summary: string): void {
