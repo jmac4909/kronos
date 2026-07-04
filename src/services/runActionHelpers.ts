@@ -51,6 +51,8 @@ export const RUN_ACTION_QUICK_PICK_ITEMS: RunActionQuickPickItem[] = [
   { label: 'Archive Run', runCommand: 'archiveRun' },
 ];
 
+export const FINISHED_ARCHIVE_STATUSES = new Set(['completed', 'waiting_for_review', 'failed', 'cancelled']);
+
 export type RunArtifactPathResult =
   | { ok: true; filePath: string }
   | { ok: false; reason: 'missing' | 'outside-runs-dir' };
@@ -87,6 +89,14 @@ export function isResumableRun(run: RunActionRecord): boolean {
     resolveRunArtifactFile(run.promptPath).ok
     || resolveRunArtifactFile(run.logPath).ok
   );
+}
+
+export function isFinishedArchiveRun(run: RunActionRecord): boolean {
+  return typeof run.status === 'string' && FINISHED_ARCHIVE_STATUSES.has(run.status);
+}
+
+export function runCountLabel(count: number): string {
+  return `${count} finished run${count === 1 ? '' : 's'}`;
 }
 
 export function resolveRunWorkspace(run: RunActionRecord): string | null {

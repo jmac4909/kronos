@@ -126,10 +126,12 @@ import { LIVE_MR_DIFF_TIMEOUT_MS, loadMrFileHints } from './services/mergeReques
 import {
   RUN_ACTION_QUICK_PICK_ITEMS,
   buildRunQuickPickItems,
+  isFinishedArchiveRun,
   isResumableRun,
   isRetryableRun,
   resolveRunArtifactFile,
   resolveRunWorkspace,
+  runCountLabel,
   runProcessPid,
   type RunActionQuickPickItem,
   type RunArtifactPathResult,
@@ -571,16 +573,6 @@ async function archiveSelectedRun(runId: string): Promise<void> {
   } catch (e: unknown) {
     vscode.window.showErrorMessage(unknownErrorMessage(e, 'Failed to archive run.'));
   }
-}
-
-const FINISHED_ARCHIVE_STATUSES = new Set<KronosRun['status']>(['completed', 'waiting_for_review', 'failed', 'cancelled']);
-
-function isFinishedArchiveRun(run: KronosRun): boolean {
-  return FINISHED_ARCHIVE_STATUSES.has(run.status);
-}
-
-function runCountLabel(count: number): string {
-  return `${count} finished run${count === 1 ? '' : 's'}`;
 }
 
 async function archiveFinishedRuns(): Promise<void> {

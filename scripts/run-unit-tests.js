@@ -4069,6 +4069,11 @@ test('run action helpers resolve safe artifacts and quick-pick labels', () => {
     description: 'completed',
     run: 'K-1',
   }]);
+  assert.equal(runActionHelpers.isFinishedArchiveRun({ status: 'completed' }), true);
+  assert.equal(runActionHelpers.isFinishedArchiveRun({ status: 'waiting_for_review' }), true);
+  assert.equal(runActionHelpers.isFinishedArchiveRun({ status: 'running' }), false);
+  assert.equal(runActionHelpers.runCountLabel(1), '1 finished run');
+  assert.equal(runActionHelpers.runCountLabel(2), '2 finished runs');
   assert.equal(runActionHelpers.runProcessPid({ processPid: '1234' }), 1234);
   assert.equal(runActionHelpers.runProcessPid({ pid: '5678' }), 5678);
   assert.equal(runActionHelpers.runProcessPid({ processPid: '-1' }), undefined);
@@ -9566,7 +9571,7 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     "vscode.Uri.joinPath(extensionUri, 'media', scriptFile)",
     'function executeRunCenterAction',
     'async function archiveFinishedRuns',
-    "const FINISHED_ARCHIVE_STATUSES = new Set<KronosRun['status']>(['completed', 'waiting_for_review', 'failed', 'cancelled'])",
+    'export const FINISHED_ARCHIVE_STATUSES',
     'No completed, review-ready, failed, or cancelled Kronos runs to archive.',
     'Active, paused, and needs-human runs stay visible.',
     "request.command === 'archiveFinishedRuns'",
@@ -10257,6 +10262,9 @@ test('extension run recovery helpers use typed run records', () => {
     'function warnIfRunStillActive(run: KronosRun, action: \'retry\' | \'resume\'): boolean',
     'function isRetryableRun(run: RunActionRecord): boolean',
     'function isResumableRun(run: RunActionRecord): boolean',
+    'export const FINISHED_ARCHIVE_STATUSES',
+    'function isFinishedArchiveRun(run: RunActionRecord): boolean',
+    'function runCountLabel(count: number): string',
     'return !isFreshActiveRun(run) && resolveRunArtifactFile(run.promptPath).ok',
     "Run ${run.id} is still active. Stop it or let it finish before attempting to ${action}.",
     'async function resumeSelectedRun(state: KronosState, run: KronosRun)',
