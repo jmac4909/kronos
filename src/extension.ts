@@ -23,6 +23,16 @@ import { writeEvidenceExport } from './services/evidenceStore';
 import { evidenceAcceptanceCriteria, evidenceChecked, evidenceString } from './services/evidenceData';
 import { EvidenceHandoffPlan, buildEvidenceHandoffPlan } from './services/evidenceHandoff';
 import { EvidencePublishDestination, EvidencePublishResult, buildEvidencePublishPlan, publishEvidencePlan, readyPublishDestinations } from './services/evidencePublisher';
+import {
+  EVIDENCE_CHECK_CONFIDENCE_OPTIONS,
+  EVIDENCE_CHECK_ENVIRONMENT_OPTIONS,
+  EVIDENCE_CHECK_RESULT_OPTIONS,
+  EVIDENCE_ENVIRONMENT_OPTIONS,
+  EVIDENCE_ENVIRONMENT_RESULT_OPTIONS,
+  EVIDENCE_NOTE_KIND_OPTIONS,
+  buildTicketEnvironmentResultInput,
+  buildTicketEvidenceCheckInput,
+} from './services/evidenceCommandInputs';
 import { RUNS_DIR, archiveRun, listRunStoreIssues, markRunCancelled, markRunContinued, markRunNeedsHuman, markRunPaused, readArchivedRuns, runRecordPath, writeRunRecord } from './services/runStore';
 import { RecoveryInventory, RecoveryItem, buildRecoveryInventory, type RecoveryInventoryInput } from './services/recoveryCenter';
 import { DispatchCollision, detectDispatchCollisions, type DispatchCollisionInput } from './services/collisionDetector';
@@ -49,7 +59,7 @@ import {
   uniqueTicketFilterValues,
 } from './services/ticketFilters';
 import { buildRunResumePrompt, readRunLogTail } from './services/runRecovery';
-import { addTicketEvidenceCheck, addTicketEvidenceNote, addTicketRunCompletionEvidence, linkMergeRequestToTicket, previewLinkMergeRequestToTicket, reconcileTerminalMergeRequestState, recordTicketEnvironmentResult, replaceTicketAcceptanceCriteria, updateTicketAcceptanceCriteria, updateTicketMergeRequestStatus, type TicketEvidenceCheckInput } from './services/ticketMutations';
+import { addTicketEvidenceCheck, addTicketEvidenceNote, addTicketRunCompletionEvidence, linkMergeRequestToTicket, previewLinkMergeRequestToTicket, reconcileTerminalMergeRequestState, recordTicketEnvironmentResult, replaceTicketAcceptanceCriteria, updateTicketAcceptanceCriteria, updateTicketMergeRequestStatus } from './services/ticketMutations';
 import { addPlanToQueue as addPlanToQueueState, addTicketToQueue, linkTicketToProject, recordPlanQueueDecision, removeTicketFromQueue as removeTicketFromQueueState, reorderQueueItem, selectNextQueueItem, unlinkTicketFromProject } from './services/queueMutations';
 import { removeProject as removeProjectFromState, setProjectConfigValue, setProjectIntegrationConfig, setScanDirs, writeProjectSetupConfig } from './services/projectMutations';
 import { DoctorCheck, runDoctorChecks as collectDoctorChecks, runDoctorReachabilityChecks as collectDoctorReachabilityChecks } from './services/doctorChecks';
@@ -1760,12 +1770,7 @@ export function activate(context: vscode.ExtensionContext) {
       }
 
       const kind = await vscode.window.showQuickPick(
-        [
-          { label: 'note', description: 'General implementation or review note' },
-          { label: 'test', description: 'Verification command, result, or environment proof' },
-          { label: 'risk', description: 'Known risk, gap, or follow-up to preserve' },
-          { label: 'decision', description: 'Architecture or product decision made during work' },
-        ],
+        EVIDENCE_NOTE_KIND_OPTIONS,
         { placeHolder: `Evidence type for ${ticketKey}` }
       );
       if (!kind) { return; }
@@ -1777,9 +1782,8 @@ export function activate(context: vscode.ExtensionContext) {
       });
       if (!text?.trim()) { return; }
 
-      const evidenceKind = kind.label as 'note' | 'test' | 'risk' | 'decision';
       try {
-        addTicketEvidenceNote(ticketKey, { kind: evidenceKind, text: text.trim() });
+        addTicketEvidenceNote(ticketKey, { kind: kind.label, text: text.trim() });
         state.reloadAndNotify();
         vscode.window.showInformationMessage(`Added ${kind.label} evidence to ${ticketKey}.`);
       } catch (e: unknown) {
@@ -1802,18 +1806,13 @@ export function activate(context: vscode.ExtensionContext) {
       if (!name?.trim()) { return; }
 
       const result = await vscode.window.showQuickPick(
-        [
-          { label: 'pass', description: 'Check passed' },
-          { label: 'warn', description: 'Check has caveats or partial coverage' },
-          { label: 'fail', description: 'Check failed and should block handoff' },
-          { label: 'unknown', description: 'Result is inconclusive' },
-        ],
+        EVIDENCE_CHECK_RESULT_OPTIONS,
         { placeHolder: `Result for ${name.trim()}` }
       );
       if (!result) { return; }
 
       const environment = await vscode.window.showQuickPick(
-        ['local', 'develop', 'test', 'prod', 'n/a'],
+        EVIDENCE_CHECK_ENVIRONMENT_OPTIONS,
         { placeHolder: 'Environment for this check' }
       );
       if (!environment) { return; }
@@ -1840,26 +1839,21 @@ export function activate(context: vscode.ExtensionContext) {
       if (artifact === undefined) { return; }
 
       const confidence = await vscode.window.showQuickPick(
-        [
-          { label: 'high', description: 'Directly proves the behavior' },
-          { label: 'medium', description: 'Useful but partial coverage' },
-          { label: 'low', description: 'Weak or indirect signal' },
-        ],
+        EVIDENCE_CHECK_CONFIDENCE_OPTIONS,
         { placeHolder: 'Confidence level' }
       );
       if (!confidence) { return; }
 
       try {
-        const evidenceCheck: TicketEvidenceCheckInput = {
-          name: name.trim(),
-          result: result.label as 'pass' | 'fail' | 'warn' | 'unknown',
+        addTicketEvidenceCheck(ticketKey, buildTicketEvidenceCheckInput({
+          name,
+          result: result.label,
+          environment: environment.label,
           command,
           summary,
           artifactPath: artifact,
-          confidence: confidence.label as 'low' | 'medium' | 'high',
-        };
-        if (environment !== 'n/a') { evidenceCheck.environment = environment; }
-        addTicketEvidenceCheck(ticketKey, evidenceCheck);
+          confidence: confidence.label,
+        }));
         state.reloadAndNotify();
         vscode.window.showInformationMessage(`Added ${result.label} evidence check to ${ticketKey}.`);
       } catch (e: unknown) {
@@ -1875,22 +1869,17 @@ export function activate(context: vscode.ExtensionContext) {
       }
 
       const environment = await vscode.window.showQuickPick(
-        ['local', 'develop', 'test', 'prod'],
+        EVIDENCE_ENVIRONMENT_OPTIONS,
         { placeHolder: `Environment result for ${ticketKey}` }
       );
       if (!environment) { return; }
       const status = await vscode.window.showQuickPick(
-        [
-          { label: 'pass', description: 'Environment check passed' },
-          { label: 'warn', description: 'Environment check has caveats' },
-          { label: 'fail', description: 'Environment check failed' },
-          { label: 'unknown', description: 'Environment state is unknown' },
-        ],
-        { placeHolder: `Status for ${environment}` }
+        EVIDENCE_ENVIRONMENT_RESULT_OPTIONS,
+        { placeHolder: `Status for ${environment.label}` }
       );
       if (!status) { return; }
       const detail = await vscode.window.showInputBox({
-        prompt: `${environment} result detail`,
+        prompt: `${environment.label} result detail`,
         placeHolder: 'e.g., deployed build 123 passed smoke checkout retry',
         ignoreFocusOut: true,
       });
@@ -1903,14 +1892,14 @@ export function activate(context: vscode.ExtensionContext) {
       if (artifact === undefined) { return; }
 
       try {
-        recordTicketEnvironmentResult(ticketKey, {
-          environment,
-          status: status.label as 'pass' | 'fail' | 'warn' | 'unknown',
-          detail: detail.trim(),
+        recordTicketEnvironmentResult(ticketKey, buildTicketEnvironmentResultInput({
+          environment: environment.label,
+          status: status.label,
+          detail,
           artifactPath: artifact,
-        });
+        }));
         state.reloadAndNotify();
-        vscode.window.showInformationMessage(`Recorded ${environment} ${status.label} result for ${ticketKey}.`);
+        vscode.window.showInformationMessage(`Recorded ${environment.label} ${status.label} result for ${ticketKey}.`);
       } catch (e: unknown) {
         vscode.window.showErrorMessage(unknownErrorMessage(e, 'Failed to record environment result.'));
       }

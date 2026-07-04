@@ -76,6 +76,7 @@ const scriptClient = sources['src/services/scriptClient.ts'];
 const acceptanceCriteria = readSource('src/services/acceptanceCriteria.ts');
 const evidenceStore = readSource('src/services/evidenceStore.ts');
 const evidenceData = readSource('src/services/evidenceData.ts');
+const evidenceCommandInputs = readSource('src/services/evidenceCommandInputs.ts');
 const evidenceHandoff = readSource('src/services/evidenceHandoff.ts');
 const evidencePublisher = readSource('src/services/evidencePublisher.ts');
 const humanReviewInbox = readSource('src/services/humanReviewInbox.ts');
@@ -3573,6 +3574,20 @@ for (const forbidden of [
 ]) {
   if (evidenceData.includes(forbidden)) {
     fail(`Evidence data must use shared record helpers: ${forbidden}`);
+  }
+}
+
+for (const marker of [
+  'export const EVIDENCE_NOTE_KIND_OPTIONS',
+  'export const EVIDENCE_CHECK_RESULT_OPTIONS',
+  'export const EVIDENCE_CHECK_ENVIRONMENT_OPTIONS',
+  'export const EVIDENCE_ENVIRONMENT_RESULT_OPTIONS',
+  'export function buildTicketEvidenceCheckInput',
+  "if (input.environment !== 'n/a')",
+  'export function buildTicketEnvironmentResultInput',
+]) {
+  if (!evidenceCommandInputs.includes(marker)) {
+    fail(`Missing evidence command input marker: ${marker}`);
   }
 }
 

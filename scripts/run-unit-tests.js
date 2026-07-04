@@ -176,6 +176,7 @@ const regexp = require('../out/services/regexp.js');
 const pathUtils = require('../out/services/pathUtils.js');
 const jsonFiles = require('../out/services/jsonFiles.js');
 const evidenceStore = require('../out/services/evidenceStore.js');
+const evidenceCommandInputs = require('../out/services/evidenceCommandInputs.js');
 const evidenceHandoff = require('../out/services/evidenceHandoff.js');
 const evidencePublisher = require('../out/services/evidencePublisher.js');
 const runStore = require('../out/services/runStore.js');
@@ -8372,6 +8373,58 @@ Then the request is accepted`;
   assert.equal(updated[3].checked, true);
 });
 
+test('evidence command input helpers build mutation inputs from prompt values', () => {
+  assert.deepEqual(evidenceCommandInputs.EVIDENCE_NOTE_KIND_OPTIONS.map(item => item.label), ['note', 'test', 'risk', 'decision']);
+  assert.deepEqual(evidenceCommandInputs.EVIDENCE_CHECK_ENVIRONMENT_OPTIONS.map(item => item.label), ['local', 'develop', 'test', 'prod', 'n/a']);
+
+  assert.deepEqual(evidenceCommandInputs.buildTicketEvidenceCheckInput({
+    name: ' npm test ',
+    result: 'pass',
+    environment: 'n/a',
+    command: ' npm test ',
+    summary: ' ok ',
+    artifactPath: ' /tmp/test.log ',
+    confidence: 'high',
+  }), {
+    name: 'npm test',
+    result: 'pass',
+    command: ' npm test ',
+    summary: ' ok ',
+    artifactPath: ' /tmp/test.log ',
+    confidence: 'high',
+  });
+
+  assert.deepEqual(evidenceCommandInputs.buildTicketEvidenceCheckInput({
+    name: 'Jenkins',
+    result: 'warn',
+    environment: 'test',
+    command: '',
+    summary: '',
+    artifactPath: '',
+    confidence: 'medium',
+  }), {
+    name: 'Jenkins',
+    result: 'warn',
+    environment: 'test',
+    command: '',
+    summary: '',
+    artifactPath: '',
+    confidence: 'medium',
+  });
+
+  assert.deepEqual(evidenceCommandInputs.buildTicketEnvironmentResultInput({
+    environment: 'develop',
+    status: 'fail',
+    detail: ' build failed ',
+    artifactPath: ' https://jenkins/job/1 ',
+  }), {
+    environment: 'develop',
+    status: 'fail',
+    detail: 'build failed',
+    artifactPath: ' https://jenkins/job/1 ',
+  });
+});
+
 test('human review inbox aggregates runs, tickets, evidence gaps, integrations, worktrees, and duplicate queue items', () => {
   const state = baseState({
     'K-1': ticket({ projects: [], summary: 'Unlinked ticket' }),
@@ -10273,6 +10326,19 @@ test('extension dispatch command handlers normalize tree payloads before use', (
 
 test('extension evidence command handlers normalize payloads and unknown errors', () => {
   const source = readSourceFixture('src', 'extension.ts');
+  const evidenceCommandInputsSource = readSourceFixture('src', 'services', 'evidenceCommandInputs.ts');
+  assert.ok(source.includes("from './services/evidenceCommandInputs'"), "from './services/evidenceCommandInputs'");
+  for (const marker of [
+    'export const EVIDENCE_NOTE_KIND_OPTIONS',
+    'export const EVIDENCE_CHECK_RESULT_OPTIONS',
+    'export const EVIDENCE_CHECK_ENVIRONMENT_OPTIONS',
+    'export const EVIDENCE_ENVIRONMENT_RESULT_OPTIONS',
+    'export function buildTicketEvidenceCheckInput',
+    "if (input.environment !== 'n/a')",
+    'export function buildTicketEnvironmentResultInput',
+  ]) {
+    assert.ok(evidenceCommandInputsSource.includes(marker), marker);
+  }
   const evidenceCommandStart = source.indexOf("vscode.commands.registerCommand('kronos.viewTicket'");
   const evidenceCommandEnd = source.indexOf("    vscode.commands.registerCommand('kronos.addToQueue'", evidenceCommandStart);
   assert.ok(evidenceCommandStart >= 0 && evidenceCommandEnd > evidenceCommandStart, 'evidence command handler block should be present');
@@ -10294,6 +10360,11 @@ test('extension evidence command handlers normalize payloads and unknown errors'
     "unknownErrorMessage(e, 'Failed to record environment result.')",
     "unknownErrorMessage(e, 'Failed to extract acceptance criteria.')",
     "unknownErrorMessage(e, 'Failed to update acceptance criteria.')",
+    'EVIDENCE_NOTE_KIND_OPTIONS',
+    'EVIDENCE_CHECK_RESULT_OPTIONS',
+    'EVIDENCE_CHECK_CONFIDENCE_OPTIONS',
+    'buildTicketEvidenceCheckInput({',
+    'buildTicketEnvironmentResultInput({',
   ]) {
     assert.ok(evidenceCommandSource.includes(marker), marker);
   }
@@ -10311,6 +10382,7 @@ test('extension evidence command handlers normalize payloads and unknown errors'
     "vscode.commands.registerCommand('kronos.evidenceHandoff', async (treeItem: any)",
     "vscode.commands.registerCommand('kronos.publishEvidence', async (treeItem: any)",
     'const ticketKey = treeItem?.ticketKey;',
+    'const evidenceCheck: TicketEvidenceCheckInput',
   ]) {
     assert.equal(evidenceCommandSource.includes(marker), false, marker);
   }
