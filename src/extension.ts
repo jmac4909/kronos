@@ -1490,6 +1490,7 @@ export function activate(context: vscode.ExtensionContext) {
         e.affectsConfiguration('kronos.pollIntervalSec')
         || e.affectsConfiguration('kronos.sessionPollIntervalMs')
         || e.affectsConfiguration('kronos.reviewPollIntervalSec')
+        || e.affectsConfiguration('kronos.profile')
       ) {
         startRuntimePolling();
         updateStatusBar(state);
@@ -5577,6 +5578,9 @@ function resolveTaskId(item: unknown): string | undefined {
 }
 
 function startReviewAutomation(state: KronosState): vscode.Disposable {
+  if (!getActiveProfile().providers.gitlab) {
+    return { dispose: () => undefined };
+  }
   const config = vscode.workspace.getConfiguration('kronos');
   const fallbackSec = positiveConfigNumber(config.get<number>('pollIntervalSec', 300), 300);
   const pollIntervalMs = configIntervalSecondsMs(config.get<number>('reviewPollIntervalSec', fallbackSec), fallbackSec, 60);
