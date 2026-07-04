@@ -4,22 +4,22 @@ import * as path from 'path';
 import { safeFileStem } from './fileNames';
 import { unknownErrorMessage } from './errorUtils';
 
-export interface GitCommandOptions {
+interface GitCommandOptions {
   cwd: string;
   timeoutMs?: number;
   maxBuffer?: number;
 }
 
-export type GitCommandRunner = (args: string[], options: GitCommandOptions) => string;
+type GitCommandRunner = (args: string[], options: GitCommandOptions) => string;
 
-export interface RunWorkspaceRef {
+interface RunWorkspaceRef {
   id?: string;
   worktreePath?: string;
   cwd?: string;
   projectPath?: string;
 }
 
-export interface WorkspaceDiffArtifact {
+interface WorkspaceDiffArtifact {
   cwd: string;
   filePath: string;
   status: string;
@@ -27,26 +27,26 @@ export interface WorkspaceDiffArtifact {
   stagedDiff: string;
 }
 
-export interface TrackedWorktreeEntry {
+interface TrackedWorktreeEntry {
   projectPath: string;
   worktreePath: string;
   ticket: string;
   createdAt: string;
 }
 
-export interface WorktreeInspectionResult {
+interface WorktreeInspectionResult {
   entry: TrackedWorktreeEntry;
   status: 'removable' | 'blocked' | 'missing' | 'removed' | 'error';
   reason: string;
 }
 
-export interface WorktreeRemovalOptions {
+interface WorktreeRemovalOptions {
   onRemoved?: () => void;
   runner?: GitCommandRunner;
   exists?: (filePath: string) => boolean;
 }
 
-export interface ManagedWorktreeInput {
+interface ManagedWorktreeInput {
   projectPath: string;
   worktreePath: string;
   targetRef: string;
@@ -54,7 +54,7 @@ export interface ManagedWorktreeInput {
   runner?: GitCommandRunner;
 }
 
-export interface ManagedWorktreeResult {
+interface ManagedWorktreeResult {
   checkoutRef: string;
   pullWarning?: string;
 }
