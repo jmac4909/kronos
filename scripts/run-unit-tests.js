@@ -216,6 +216,7 @@ const webviewDiagnostics = require('../out/services/webviewDiagnostics.js');
 const webviewSecurity = require('../out/services/webviewSecurity.js');
 const operatorCommandRouting = require('../out/services/operatorCommandRouting.js');
 const operatorPanel = require('../out/services/operatorPanel.js');
+const reviewNotifications = require('../out/services/reviewNotifications.js');
 const promptPanelView = require('../out/services/promptPanelView.js');
 const recoveryPanelView = require('../out/services/recoveryPanelView.js');
 const humanReviewPanelView = require('../out/services/humanReviewPanelView.js');
@@ -4234,6 +4235,25 @@ test('review tree persists seen review keys across reloads', async () => {
     assert.match(storedSeenKeys[0], /^K-1\|mr:1\|opened\|pending_review\|/);
     migratedProvider.dispose();
   });
+});
+
+test('review notification helpers normalize seen keys and plan new-item toasts', () => {
+  assert.equal(reviewNotifications.REVIEW_SEEN_KEYS_STORAGE_KEY, 'kronos.review.seenKeys.v1');
+  assert.equal(reviewNotifications.normalizeReviewSeenKeys(undefined), undefined);
+  assert.deepEqual(reviewNotifications.normalizeReviewSeenKeys('bad'), []);
+  assert.deepEqual(reviewNotifications.normalizeReviewSeenKeys([' K-2 ', 'K-1', '', 42, 'K-2']), ['K-1', 'K-2']);
+
+  const items = [
+    { ticketKey: 'K-1', activityKey: 'K-1|mr:11|opened|approved', mrIid: 11, activity: 'approved' },
+    { ticketKey: 'K-2' },
+  ];
+  const firstPlan = reviewNotifications.planNewReviewNotification(items, new Set(['stale']));
+  assert.deepEqual(firstPlan.nextNotifiedKeys, ['K-1|mr:11|opened|approved', 'K-2']);
+  assert.equal(firstPlan.message, 'K-1: MR !11 needs review - approved (+1 more)');
+
+  const secondPlan = reviewNotifications.planNewReviewNotification(items, new Set([...firstPlan.nextNotifiedKeys, 'stale']));
+  assert.deepEqual(secondPlan.nextNotifiedKeys, firstPlan.nextNotifiedKeys);
+  assert.equal(secondPlan.message, undefined);
 });
 
 test('queue planner builds backlog triage report for grooming lanes', () => {
@@ -9613,9 +9633,8 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'function executeTicketDetailAction',
     'function openTicketExternalUrl',
     'const updateReviewBadge = () =>',
-    "const REVIEW_SEEN_KEYS_STORAGE_KEY = 'kronos.review.seenKeys.v1'",
+    "import { REVIEW_SEEN_KEYS_STORAGE_KEY, normalizeReviewSeenKeys, planNewReviewNotification } from './services/reviewNotifications'",
     'function reviewSeenKeysStore(globalState: vscode.Memento): ReviewSeenKeysStore',
-    'function normalizeReviewSeenKeys(value: unknown): string[] | undefined',
     'new ReviewTreeProvider(state, reviewSeenKeysStore(context.globalState))',
     'reviewTree.getNewReviewCount()',
     'view.badge = count > 0',
@@ -9624,11 +9643,9 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'reviewTree.markVisibleReviewItemsSeen()',
     'function runNotificationCommandAction',
     'function notifyNewReviewItems(reviewTree: ReviewTreeProvider, notifiedReviewKeys: Set<string>): void',
-    'const items = reviewTree.getNewReviewItems()',
-    'const currentKeys = new Set(items.map(item => item.activityKey || item.ticketKey))',
-    'const freshItems = items.filter(item => !notifiedReviewKeys.has(item.activityKey || item.ticketKey))',
-    'const activity = primary.activity ? ` - ${primary.activity}` :',
-    '`${primary.ticketKey}: ${mr} needs review${activity}${suffix}`',
+    'planNewReviewNotification(reviewTree.getNewReviewItems(), notifiedReviewKeys)',
+    'notifiedReviewKeys.clear()',
+    'if (!plan.message) { return; }',
     "'kronosReview.focus'",
     'void selection.then(action => {',
     'void vscode.commands.executeCommand(command).then(undefined, (e: unknown) => {',

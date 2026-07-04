@@ -128,6 +128,7 @@ const postRunReadiness = readSource('src/services/postRunReadiness.ts');
 const ticketFilters = readSource('src/services/ticketFilters.ts');
 const reviewWork = readSource('src/services/reviewWork.ts');
 const reviewMonitor = readSource('src/services/reviewMonitor.ts');
+const reviewNotifications = readSource('src/services/reviewNotifications.ts');
 const deployMonitorHandoff = readSource('src/services/deployMonitorHandoff.ts');
 const promptManager = readSource('src/services/promptManager.ts');
 const runRecovery = readSource('src/services/runRecovery.ts');
@@ -728,9 +729,8 @@ for (const marker of [
   'kronos.filterReviews',
   'kronos.clearReviewFilters',
   'const updateReviewBadge = () =>',
-  "const REVIEW_SEEN_KEYS_STORAGE_KEY = 'kronos.review.seenKeys.v1'",
+  "import { REVIEW_SEEN_KEYS_STORAGE_KEY, normalizeReviewSeenKeys, planNewReviewNotification } from './services/reviewNotifications'",
   'function reviewSeenKeysStore(globalState: vscode.Memento): ReviewSeenKeysStore',
-  'function normalizeReviewSeenKeys(value: unknown): string[] | undefined',
   'new ReviewTreeProvider(state, reviewSeenKeysStore(context.globalState))',
   'reviewTree.getNewReviewCount()',
   'view.badge = count > 0',
@@ -896,11 +896,9 @@ for (const marker of [
   "unknownErrorMessage(e, 'Provider reachability checks failed.')",
   'function runNotificationCommandAction',
   'function notifyNewReviewItems(reviewTree: ReviewTreeProvider, notifiedReviewKeys: Set<string>): void',
-  'const items = reviewTree.getNewReviewItems()',
-  'const currentKeys = new Set(items.map(item => item.activityKey || item.ticketKey))',
-  'const freshItems = items.filter(item => !notifiedReviewKeys.has(item.activityKey || item.ticketKey))',
-  'const activity = primary.activity ? ` - ${primary.activity}` :',
-  '`${primary.ticketKey}: ${mr} needs review${activity}${suffix}`',
+  'planNewReviewNotification(reviewTree.getNewReviewItems(), notifiedReviewKeys)',
+  'notifiedReviewKeys.clear()',
+  'if (!plan.message) { return; }',
   "'kronosReview.focus'",
   'void selection.then(action => {',
   'void vscode.commands.executeCommand(command).then(undefined, (e: unknown) => {',
@@ -1081,6 +1079,18 @@ for (const marker of [
 ]) {
   if (!reviewMonitor.includes(marker)) {
     fail(`Missing review monitor marker: ${marker}`);
+  }
+}
+for (const marker of [
+  "export const REVIEW_SEEN_KEYS_STORAGE_KEY = 'kronos.review.seenKeys.v1'",
+  'export function normalizeReviewSeenKeys',
+  'export function planNewReviewNotification',
+  'nextNotifiedKeys',
+  'newReviewNotificationMessage',
+  'reviewNotificationItemKey',
+]) {
+  if (!reviewNotifications.includes(marker)) {
+    fail(`Missing review notification marker: ${marker}`);
   }
 }
 for (const marker of [

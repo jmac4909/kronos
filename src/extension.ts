@@ -154,6 +154,7 @@ import {
 } from './services/commandPayloads';
 import { openReviewTicketEntries, reviewBranchTickets as buildReviewBranchTickets } from './services/reviewWork';
 import { decideReviewMonitorAction, reviewDeployMonitorActionHandled, reviewTerminalMergeRequestActionKey, type ReviewDeployMonitorResult, type ReviewMonitorDecision, type ReviewTerminalMergeRequestAction } from './services/reviewMonitor';
+import { REVIEW_SEEN_KEYS_STORAGE_KEY, normalizeReviewSeenKeys, planNewReviewNotification } from './services/reviewNotifications';
 import { decideQueueRemoval } from './services/queueRemovalPolicy';
 import { deployMonitorAttentionIssue, deployMonitorHandoffCheckName, hasDeployMonitorHandoffIssue, hasHandledDeployMonitorRun, resolveDeployMonitorProject } from './services/deployMonitorHandoff';
 import { actionButton, kronosActionPanelScript, normalizeActionPanelMessage, operatorCommandRow, type ActionPanelMessage } from './services/operatorPanel';
@@ -182,7 +183,6 @@ const REQUIRED_PROMPTS = [
   'continue-work',
 ];
 const REVIEW_POLL_FAILURE_NOTIFICATION_MS = 15 * 60 * 1000;
-const REVIEW_SEEN_KEYS_STORAGE_KEY = 'kronos.review.seenKeys.v1';
 const reviewPollFailureNotifications = new Map<string, number>();
 const reviewTerminalMergeRequestActions = new Set<string>();
 const OPTIONAL_SCRIPT_PANEL_WARNING = 'Kronos integration scripts are not installed. Run Kronos: Doctor for setup details.';
@@ -243,27 +243,15 @@ function runNotificationCommandAction(
 }
 
 function notifyNewReviewItems(reviewTree: ReviewTreeProvider, notifiedReviewKeys: Set<string>): void {
-  const items = reviewTree.getNewReviewItems();
-  const currentKeys = new Set(items.map(item => item.activityKey || item.ticketKey));
-  for (const key of notifiedReviewKeys) {
-    if (!currentKeys.has(key)) {
-      notifiedReviewKeys.delete(key);
-    }
+  const plan = planNewReviewNotification(reviewTree.getNewReviewItems(), notifiedReviewKeys);
+  notifiedReviewKeys.clear();
+  for (const key of plan.nextNotifiedKeys) {
+    notifiedReviewKeys.add(key);
   }
-  const freshItems = items.filter(item => !notifiedReviewKeys.has(item.activityKey || item.ticketKey));
-  for (const item of freshItems) {
-    notifiedReviewKeys.add(item.activityKey || item.ticketKey);
-  }
-  if (freshItems.length === 0) { return; }
-
-  const primary = freshItems[0];
-  if (!primary) { return; }
-  const mr = primary.mrIid !== undefined ? `MR !${primary.mrIid}` : 'MR';
-  const activity = primary.activity ? ` - ${primary.activity}` : '';
-  const suffix = freshItems.length > 1 ? ` (+${freshItems.length - 1} more)` : '';
+  if (!plan.message) { return; }
   runNotificationCommandAction(
     vscode.window.showInformationMessage(
-      `${primary.ticketKey}: ${mr} needs review${activity}${suffix}`,
+      plan.message,
       'Open Review'
     ),
     'Open Review',
@@ -277,18 +265,6 @@ function reviewSeenKeysStore(globalState: vscode.Memento): ReviewSeenKeysStore {
     get: () => normalizeReviewSeenKeys(globalState.get<unknown>(REVIEW_SEEN_KEYS_STORAGE_KEY)),
     update: keys => globalState.update(REVIEW_SEEN_KEYS_STORAGE_KEY, normalizeReviewSeenKeys([...keys]) || []),
   };
-}
-
-function normalizeReviewSeenKeys(value: unknown): string[] | undefined {
-  if (value === undefined) { return undefined; }
-  if (!Array.isArray(value)) { return []; }
-  const keys = new Set<string>();
-  for (const item of value) {
-    if (typeof item === 'string' && item.trim()) {
-      keys.add(item.trim());
-    }
-  }
-  return [...keys].sort();
 }
 
 async function runCommandProgress(
