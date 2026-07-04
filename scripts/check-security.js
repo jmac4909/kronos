@@ -57,6 +57,7 @@ const nonScriptClientSource = [
 const stateStore = readSource('src/services/stateStore.ts');
 const runStore = readSource('src/services/runStore.ts');
 const fileNames = readSource('src/services/fileNames.ts');
+const jsonFiles = readSource('src/services/jsonFiles.ts');
 const sessionStore = readSource('src/services/sessionStore.ts');
 const worktreeRegistry = readSource('src/services/worktreeRegistry.ts');
 const sessionTreeProvider = readSource('src/views/SessionTreeProvider.ts');
@@ -2098,7 +2099,8 @@ for (const marker of [
   'export function runPipelineJson',
   'export function requiredScripts',
   'function pythonCandidateAvailable(candidate: string): boolean',
-  'Invalid JSON from',
+  "import { parseJsonWithLabel } from './jsonFiles'",
+  "return parseJsonWithLabel<T>(raw, `${scriptName} ${args.join(' ')}`, { includePreview: true })",
   'Kronos integration script unavailable:',
 ]) {
   if (!scriptClient.includes(marker)) {
@@ -2192,6 +2194,31 @@ for (const [name, source] of [
   }
   if (source.includes('function escapeRegExp')) {
     fail(`${name} must not carry a local escapeRegExp helper.`);
+  }
+}
+
+for (const marker of [
+  'export function parseJsonWithLabel<T = unknown>',
+  'const content = stripUtf8Bom(raw)',
+  "unknownErrorMessage(e, 'parse failed')",
+  "options.includePreview ? content.trim().substring(0, previewLength) : ''",
+]) {
+  if (!jsonFiles.includes(marker)) {
+    fail(`Missing JSON file helper marker: ${marker}`);
+  }
+}
+
+for (const [name, source] of [
+  ['src/services/scriptClient.ts', scriptClient],
+  ['src/services/stateScriptAdapter.ts', stateScriptAdapter],
+  ['src/services/integrationAdapters.ts', integrationAdapters],
+  ['src/services/doctorChecks.ts', doctorChecks],
+]) {
+  if (!source.includes("import { parseJsonWithLabel } from './jsonFiles'")) {
+    fail(`${name} must import the shared labeled JSON parser.`);
+  }
+  if (source.includes('const content = stripUtf8Bom(raw)')) {
+    fail(`${name} must not parse labeled JSON locally.`);
   }
 }
 
@@ -2345,7 +2372,7 @@ for (const marker of [
   'function stringOrNull',
   "completed: arrayOrEmpty(parsed['completed'])",
   "ready_to_go: arrayOrEmpty(parsed['ready_to_go'])",
-  'function parseStateScriptJson',
+  "parseJsonWithLabel(discoverProjects(options), 'kronos_state.py --discover', { includePreview: true })",
   'kronos_state.py --discover',
   'kronos_state.py --morning-brief',
   'runKronosStateScript',
@@ -2936,14 +2963,14 @@ for (const marker of [
   "unknownErrorMessage(e, `${command} unavailable`)",
   "unknownErrorMessage(e, 'claude unavailable')",
   "import { normalizeMergeRequestStatus } from './integrationAdapters'",
-  "import { stripUtf8Bom } from './jsonFiles'",
+  "import { parseJsonWithLabel } from './jsonFiles'",
   'Values are not displayed',
   'DoctorCommandRunner',
   'function reviewMergeRequestStatusContractIssue',
   "commandRunner('python', [scriptPath, '--mr-status', ticketKey]",
   'function hasMergeRequestCommentSignal',
   'function hasMergeRequestDiscussionSignal',
-  'function parseDoctorJson',
+  'parseJsonWithLabel(raw, `MR status for ${ticketKey}`)',
   'REVIEW_STATUS_SMOKE_TIMEOUT_MS',
 ]) {
   if (!doctorChecks.includes(marker)) {

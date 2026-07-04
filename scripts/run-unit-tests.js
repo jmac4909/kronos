@@ -162,6 +162,7 @@ const records = require('../out/services/records.js');
 const dateValues = require('../out/services/dateValues.js');
 const regexp = require('../out/services/regexp.js');
 const pathUtils = require('../out/services/pathUtils.js');
+const jsonFiles = require('../out/services/jsonFiles.js');
 const evidenceStore = require('../out/services/evidenceStore.js');
 const evidenceHandoff = require('../out/services/evidenceHandoff.js');
 const evidencePublisher = require('../out/services/evidencePublisher.js');
@@ -3471,6 +3472,29 @@ test('path util helper centralizes directory containment checks', () => {
   }
 });
 
+test('json file helper centralizes labeled script output parsing', () => {
+  assert.deepEqual(jsonFiles.parseJsonWithLabel(`${String.fromCharCode(0xFEFF)}{"ok":true}`, 'demo'), { ok: true });
+  assert.throws(
+    () => jsonFiles.parseJsonWithLabel('not json', 'demo-script'),
+    /Invalid JSON from demo-script:/
+  );
+  assert.throws(
+    () => jsonFiles.parseJsonWithLabel('not json', 'demo-script', { includePreview: true }),
+    /Invalid JSON from demo-script: .*; output: not json/
+  );
+
+  for (const [file, marker] of [
+    ['scriptClient.ts', "import { parseJsonWithLabel } from './jsonFiles'"],
+    ['stateScriptAdapter.ts', "import { parseJsonWithLabel } from './jsonFiles'"],
+    ['integrationAdapters.ts', "import { parseJsonWithLabel } from './jsonFiles'"],
+    ['doctorChecks.ts', "import { parseJsonWithLabel } from './jsonFiles'"],
+  ]) {
+    const source = readSourceFixture('src', 'services', file);
+    assert.ok(source.includes(marker), `${file} should import shared labeled JSON parsing`);
+    assert.equal(source.includes('const content = stripUtf8Bom(raw)'), false, `${file} should not parse labeled JSON locally`);
+  }
+});
+
 test('review work service centralizes open review merge request semantics', () => {
   const tickets = {
     'K-OPEN': ticket({
@@ -6417,8 +6441,8 @@ test('script client keeps raw JSON and process errors unknown by default', () =>
     'function parseScriptJson<T = unknown>',
     'function scriptError(scriptName: RequiredScriptName, args: string[], error: unknown)',
     'function pythonCandidateAvailable(candidate: string): boolean',
-    "import { stripUtf8Bom } from './jsonFiles'",
-    'const content = stripUtf8Bom(raw)',
+    "import { parseJsonWithLabel } from './jsonFiles'",
+    'return parseJsonWithLabel<T>(raw, `${scriptName} ${args.join(\' \')}`, { includePreview: true })',
     "import { unknownErrorField, unknownErrorMessage } from './errorUtils'",
     "unknownErrorField(error, 'stderr')",
   ]) {
@@ -6535,17 +6559,15 @@ test('state script adapter keeps raw JSON payloads unknown until normalized', ()
   const source = readSourceFixture('src', 'services', 'stateScriptAdapter.ts');
   for (const marker of [
     '[key: string]: unknown',
-    'function parseStateScriptJson(raw: string, label: string): unknown',
+    "parseJsonWithLabel(discoverProjects(options), 'kronos_state.py --discover', { includePreview: true })",
     "import { isRecord as isPlainObject } from './records'",
-    "import { stripUtf8Bom } from './jsonFiles'",
-    'const content = stripUtf8Bom(raw)',
-    "import { unknownErrorMessage } from './errorUtils'",
+    "import { parseJsonWithLabel } from './jsonFiles'",
   ]) {
     assert.ok(source.includes(marker), marker);
   }
   for (const marker of [
     '[key: string]: any',
-    'function parseStateScriptJson(raw: string, label: string): any',
+    'function parseStateScriptJson',
     'catch (e: any)',
     'e?.message',
     'value is Record<string, any>',
@@ -6867,9 +6889,8 @@ test('integration adapters keep raw provider payloads unknown until normalized',
     'measures(sonarKey: string, branch: string): Promise<unknown>',
     'issues(sonarKey: string, branch: string): Promise<unknown>',
     'return runPipelineJson<unknown>',
-    'function parseJson(raw: string, label: string): unknown',
-    "import { stripUtf8Bom } from './jsonFiles'",
-    'const content = stripUtf8Bom(raw)',
+    "import { parseJsonWithLabel } from './jsonFiles'",
+    'parseJsonWithLabel(await runner.runScript',
     'catch (e: unknown)',
     "import { isRecord } from './records'",
     "import { unknownErrorMessage } from './errorUtils'",
@@ -6884,7 +6905,7 @@ test('integration adapters keep raw provider payloads unknown until normalized',
   for (const marker of [
     'Promise<any>',
     'runPipelineJson<any>',
-    'function parseJson(raw: string, label: string): any',
+    'function parseJson(raw: string, label: string)',
     'catch (e: any)',
     'e?.message',
     'value is Record<string, any>',
@@ -7415,16 +7436,15 @@ test('doctor checks centralize command, credential, project config, and reachabi
     "unknownErrorMessage(e, `${command} unavailable`)",
     "unknownErrorMessage(e, 'claude unavailable')",
     "import { normalizeMergeRequestStatus } from './integrationAdapters'",
-    "import { stripUtf8Bom } from './jsonFiles'",
+    "import { parseJsonWithLabel } from './jsonFiles'",
     'function addReviewPollingPrerequisiteCheck',
     'function reviewMergeRequestStatusContractIssue',
     'function hasMergeRequestCommentSignal',
     'function hasMergeRequestDiscussionSignal',
-    'function parseDoctorJson',
+    'parseJsonWithLabel(raw, `MR status for ${ticketKey}`)',
     "'Review MR polling prerequisites'",
     "ticket.next_action === 'await_review' && ticket.mr?.state === 'opened'",
     "commandRunner('python', [scriptPath, '--mr-status', ticketKey]",
-    "Invalid JSON from ${label}",
   ]) {
     assert.ok(source.includes(marker), marker);
   }

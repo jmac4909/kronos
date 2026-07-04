@@ -10,7 +10,7 @@ import { KRONOS_DIR } from './stateStore';
 import { defaultCliProbeCommandRunner, readableGoogleApplicationCredentials, resolveGcloudCommandStatus } from './cliProbes';
 import { unknownErrorMessage } from './errorUtils';
 import { normalizeMergeRequestStatus } from './integrationAdapters';
-import { stripUtf8Bom } from './jsonFiles';
+import { parseJsonWithLabel } from './jsonFiles';
 
 export interface DoctorCheck {
   name: string;
@@ -393,7 +393,7 @@ function reviewMergeRequestStatusContractIssue(
 ): string | undefined {
   try {
     const raw = commandRunner('python', [scriptPath, '--mr-status', ticketKey], { timeoutMs: REVIEW_STATUS_SMOKE_TIMEOUT_MS });
-    const status = normalizeMergeRequestStatus(parseDoctorJson(raw, `MR status for ${ticketKey}`));
+    const status = normalizeMergeRequestStatus(parseJsonWithLabel(raw, `MR status for ${ticketKey}`));
     const missing: string[] = [];
     if (!status.state) { missing.push('state'); }
     if (!status.review_status) { missing.push('review_status or approved flag'); }
@@ -415,15 +415,6 @@ function hasMergeRequestDiscussionSignal(status: ReturnType<typeof normalizeMerg
     || status.resolved_discussion_count !== undefined
     || status.last_discussion_at !== undefined
     || status.discussions_resolved !== undefined;
-}
-
-function parseDoctorJson(raw: string, label: string): unknown {
-  const content = stripUtf8Bom(raw);
-  try {
-    return JSON.parse(content);
-  } catch (e: unknown) {
-    throw new Error(`Invalid JSON from ${label}: ${unknownErrorMessage(e, 'parse failed')}`);
-  }
 }
 
 function firstConfiguredUrl(...values: Array<string | undefined>): string | undefined {

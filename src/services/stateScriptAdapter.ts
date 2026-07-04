@@ -1,6 +1,5 @@
 import { ScriptRunOptions, runKronosStateScript } from './scriptClient';
-import { unknownErrorMessage } from './errorUtils';
-import { stripUtf8Bom } from './jsonFiles';
+import { parseJsonWithLabel } from './jsonFiles';
 import { isRecord as isPlainObject } from './records';
 import { DiscoveredProject } from '../state/types';
 
@@ -38,7 +37,7 @@ function discoverProjects(options: StateScriptAdapterOptions = {}): string {
 }
 
 export function discoverProjectsJson(options: StateScriptAdapterOptions = {}): DiscoverProjectsResult {
-  const parsed = parseStateScriptJson(discoverProjects(options), 'kronos_state.py --discover');
+  const parsed = parseJsonWithLabel(discoverProjects(options), 'kronos_state.py --discover', { includePreview: true });
   const data = isPlainObject(parsed) ? parsed : {};
   return {
     ...data,
@@ -95,7 +94,7 @@ function readMorningBrief(options: StateScriptAdapterOptions = {}): string {
 }
 
 export function readMorningBriefJson(options: StateScriptAdapterOptions = {}): MorningBriefResult {
-  const parsed = parseStateScriptJson(readMorningBrief(options), 'kronos_state.py --morning-brief');
+  const parsed = parseJsonWithLabel(readMorningBrief(options), 'kronos_state.py --morning-brief', { includePreview: true });
   if (!isPlainObject(parsed)) { return {}; }
   return {
     ...parsed,
@@ -105,16 +104,6 @@ export function readMorningBriefJson(options: StateScriptAdapterOptions = {}): M
     overnight_actions: finiteNumberOrZero(parsed['overnight_actions']),
     vpn_drops: finiteNumberOrZero(parsed['vpn_drops']),
   };
-}
-
-function parseStateScriptJson(raw: string, label: string): unknown {
-  const content = stripUtf8Bom(raw);
-  try {
-    return JSON.parse(content);
-  } catch (e: unknown) {
-    const preview = content.trim().substring(0, 300);
-    throw new Error(`Invalid JSON from ${label}: ${unknownErrorMessage(e, 'parse failed')}${preview ? `; output: ${preview}` : ''}`);
-  }
 }
 
 function arrayOrEmpty(value: unknown): unknown[] {

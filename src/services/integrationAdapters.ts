@@ -2,7 +2,7 @@ import { ScriptRunOptions, runGitlabJson, runPipelineJson } from './scriptClient
 import { MergeRequest, MergeRequestChangedFile, MergeRequestComment } from '../state/types';
 import { normalizeChangedFiles } from './changedFiles';
 import { unknownErrorMessage } from './errorUtils';
-import { stripUtf8Bom } from './jsonFiles';
+import { parseJsonWithLabel } from './jsonFiles';
 import { isRecord } from './records';
 import { sortMergeRequestCommentsByCreated } from './mergeRequestComments';
 
@@ -74,14 +74,14 @@ interface JiraComment {
 
 export const jiraAdapter = {
   async ticketComments(runner: KronosScriptRunner, ticketKey: string): Promise<JiraComment[]> {
-    const parsed = parseJson(await runner.runScript(['--ticket-comments', ticketKey]), `Jira comments for ${ticketKey}`);
+    const parsed = parseJsonWithLabel(await runner.runScript(['--ticket-comments', ticketKey]), `Jira comments for ${ticketKey}`);
     return normalizeJiraComments(parsed);
   },
 };
 
 export const gitlabAdapter = {
   async mergeRequestDiff(runner: KronosScriptRunner, ticketKey: string, options: ScriptRunOptions = {}): Promise<MergeRequestDiffResult> {
-    const parsed = parseJson(await runner.runScript(['--mr-diff', ticketKey], options), `MR diff for ${ticketKey}`);
+    const parsed = parseJsonWithLabel(await runner.runScript(['--mr-diff', ticketKey], options), `MR diff for ${ticketKey}`);
     const data = isRecord(parsed) ? parsed : {};
     if (data['error']) {
       throw new Error(String(data['error']));
@@ -94,7 +94,7 @@ export const gitlabAdapter = {
   },
 
   async mergeRequestBranch(runner: KronosScriptRunner, ticketKey: string): Promise<string> {
-    const parsed = parseJson(await runner.runScript(['--mr-branch', ticketKey]), `MR branch for ${ticketKey}`);
+    const parsed = parseJsonWithLabel(await runner.runScript(['--mr-branch', ticketKey]), `MR branch for ${ticketKey}`);
     const data = isRecord(parsed) ? parsed : {};
     return typeof data['branch'] === 'string' && data['branch'].trim() ? data['branch'].trim() : ticketKey;
   },
@@ -278,13 +278,13 @@ async function runMergeRequestStatusJson(runner: KronosScriptRunner, ticketKey: 
     if (trimmed && !/^[{\[]/.test(trimmed) && isUnsupportedMergeRequestStatusText(trimmed)) {
       throw new Error(trimmed);
     }
-    return parseJson(raw, `MR status for ${ticketKey}`);
+    return parseJsonWithLabel(raw, `MR status for ${ticketKey}`);
   } catch (e: unknown) {
     if (!isUnsupportedMergeRequestStatusCommand(e)) {
       throw e;
     }
   }
-  return parseJson(await runner.runScript(['--mr-diff', ticketKey], options), `MR status fallback for ${ticketKey}`);
+  return parseJsonWithLabel(await runner.runScript(['--mr-diff', ticketKey], options), `MR status fallback for ${ticketKey}`);
 }
 
 function isUnsupportedMergeRequestStatusCommand(error: unknown): boolean {
@@ -359,15 +359,6 @@ function normalizeSonarBranchStatus(value: Record<string, unknown>): SonarBranch
   const rawGate = value['qualityGateStatus'];
   if (typeof rawGate !== 'string' || !rawGate.trim()) { return undefined; }
   return { qualityGateStatus: rawGate.trim() };
-}
-
-function parseJson(raw: string, label: string): unknown {
-  const content = stripUtf8Bom(raw);
-  try {
-    return JSON.parse(content);
-  } catch (e: unknown) {
-    throw new Error(`Invalid JSON from ${label}: ${unknownErrorMessage(e, 'parse failed')}`);
-  }
 }
 
 function firstDefined(...values: unknown[]): unknown {
