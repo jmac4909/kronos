@@ -56,7 +56,7 @@ import { computeAttentionBadge } from './services/attentionBadge';
 import { configIntervalMs, configIntervalSeconds, configIntervalSecondsMs, parsePositiveNumberInput, positiveConfigNumber } from './services/intervalConfig';
 import { buildNextActionContext, buildNextActionStartDecision, skillForAction } from './services/nextActionContext';
 import { createWorkspaceDiffArtifact, firstRemoteBranchMatching, originProjectPath } from './services/gitWorkspace';
-import { isExistingRealPathInside, projectPathKey } from './services/pathUtils';
+import { projectPathKey } from './services/pathUtils';
 import { signalProcessTree, stopProcessTree, supportsProcessTreeSuspend } from './services/processTree';
 import { createWebviewReadyMonitor } from './services/webviewDiagnostics';
 import { WEBVIEW_ACTION_PANEL_SCRIPT, WEBVIEW_JIRA_BOARD_SCRIPT, createWebviewNonce, webviewScriptCspOptions, withWebviewCsp } from './services/webviewSecurity';
@@ -91,8 +91,17 @@ import { unknownErrorCode, unknownErrorMessage } from './services/errorUtils';
 import { isKronosScriptMissingError } from './services/scriptClient';
 import { activeRunStatusBarSummary } from './services/activeRunDisplay';
 import { isFreshActiveRun } from './services/runStatus';
-import { isAttentionRunStatus, runAttentionDetail, runAttentionLine } from './services/runAttention';
 import { buildRunCompletionNotification } from './services/runCompletionNotification';
+import {
+  isResumableRun,
+  isRetryableRun,
+  resolveRunArtifactFile,
+  resolveRunWorkspace,
+  runProcessPid,
+  runQuickPickDescription,
+  runQuickPickDetail,
+  type RunArtifactPathResult,
+} from './services/runActionHelpers';
 import { isRecord, recordFromUnknown, recordString } from './services/records';
 import {
   explicitProjectName,
@@ -438,33 +447,6 @@ async function openTextFileIfExists(filePath: string, missingMessage: string): P
   await vscode.window.showTextDocument(doc, { preview: false });
 }
 
-type RunArtifactPathResult =
-  | { ok: true; filePath: string }
-  | { ok: false; reason: 'missing' | 'outside-runs-dir' };
-
-function resolveRunArtifactFile(filePath: string | undefined): RunArtifactPathResult {
-  if (typeof filePath !== 'string' || !filePath.trim() || !fs.existsSync(filePath)) {
-    return { ok: false, reason: 'missing' };
-  }
-  try {
-    if (!fs.statSync(filePath).isFile()) {
-      return { ok: false, reason: 'missing' };
-    }
-  } catch (e: unknown) {
-    console.warn(unknownErrorMessage(e, `Could not inspect run artifact ${filePath}.`));
-    return { ok: false, reason: 'missing' };
-  }
-  try {
-    if (!isExistingRealPathInside(filePath, RUNS_DIR)) {
-      return { ok: false, reason: 'outside-runs-dir' };
-    }
-  } catch (e: unknown) {
-    console.warn(unknownErrorMessage(e, `Could not resolve artifact path ${filePath}.`));
-    return { ok: false, reason: 'outside-runs-dir' };
-  }
-  return { ok: true, filePath };
-}
-
 function warnForRunArtifactPath(result: Extract<RunArtifactPathResult, { ok: false }>, missingMessage: string): void {
   vscode.window.showWarningMessage(
     result.reason === 'outside-runs-dir'
@@ -486,17 +468,6 @@ function warnIfRunStillActive(run: KronosRun, action: 'retry' | 'resume'): boole
   if (!isFreshActiveRun(run)) { return false; }
   vscode.window.showWarningMessage(`Run ${run.id} is still active. Stop it or let it finish before attempting to ${action}.`);
   return true;
-}
-
-function isRetryableRun(run: KronosRun): boolean {
-  return !isFreshActiveRun(run) && resolveRunArtifactFile(run.promptPath).ok;
-}
-
-function isResumableRun(run: KronosRun): boolean {
-  return !isFreshActiveRun(run) && (
-    resolveRunArtifactFile(run.promptPath).ok
-    || resolveRunArtifactFile(run.logPath).ok
-  );
 }
 
 async function retryRunFromPrompt(state: KronosState, run: KronosRun): Promise<void> {
@@ -531,21 +502,6 @@ async function retryRunFromPrompt(state: KronosState, run: KronosRun): Promise<v
     projectNameOverride: projectName,
     onComplete: refreshAfterDispatch(state, projectName, ticketKey),
   });
-}
-
-function resolveRunWorkspace(run: KronosRun): string | null {
-  for (const candidate of [run.worktreePath, run.cwd, run.projectPath]) {
-    if (typeof candidate === 'string' && candidate.trim()) {
-      try {
-        if (fs.existsSync(candidate) && fs.statSync(candidate).isDirectory()) {
-          return candidate;
-        }
-      } catch (e: unknown) {
-        console.warn(unknownErrorMessage(e, `Could not inspect run workspace ${candidate}.`));
-      }
-    }
-  }
-  return null;
 }
 
 async function resumeSelectedRun(state: KronosState, run: KronosRun): Promise<void> {
@@ -760,34 +716,6 @@ async function markSelectedRunNeedsHuman(run: KronosRun): Promise<void> {
   } catch (e: unknown) {
     vscode.window.showErrorMessage(unknownErrorMessage(e, 'Failed to mark run needs-human.'));
   }
-}
-
-function runLastEventLabel(run: KronosRun): string {
-  const events = Array.isArray(run.events) ? run.events : [];
-  const last = events[events.length - 1];
-  return typeof last?.label === 'string' ? last.label : '';
-}
-
-function runQuickPickDetail(run: KronosRun): string {
-  const status = String(run.status || '');
-  const detail = isAttentionRunStatus(status)
-    ? runAttentionDetail(run)
-    : runLastEventLabel(run);
-  return `${formatWebviewDateTime(run.startedAt)} - ${detail || run.cwd || ''}`;
-}
-
-function runQuickPickDescription(run: KronosRun): string {
-  const status = String(run.status || 'unknown');
-  if (!isAttentionRunStatus(status)) {
-    return status;
-  }
-  const detail = runAttentionLine(run);
-  return detail ? `${status} - ${detail}` : status;
-}
-
-function runProcessPid(run: KronosRun): number | undefined {
-  const pid = Number(run.processPid ?? Reflect.get(run, 'pid'));
-  return Number.isFinite(pid) && pid > 0 ? pid : undefined;
 }
 
 function findRunById(runId: string): KronosRun | undefined {

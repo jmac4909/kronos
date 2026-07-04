@@ -86,6 +86,7 @@ const collisionDetector = readSource('src/services/collisionDetector.ts');
 const runStatus = readSource('src/services/runStatus.ts');
 const runRecords = readSource('src/services/runRecords.ts');
 const runProgress = readSource('src/services/runProgress.ts');
+const runActionHelpers = readSource('src/services/runActionHelpers.ts');
 const activeRunDisplay = readSource('src/services/activeRunDisplay.ts');
 const runCompletionNotification = readSource('src/services/runCompletionNotification.ts');
 const runAttention = readSource('src/services/runAttention.ts');
@@ -403,6 +404,16 @@ const serviceOwnedSafetyMarkers = new Set([
   'const EVIDENCE_GATE_MESSAGE_COMMANDS = new Set',
   "const RECOVERY_MESSAGE_COMMANDS = new Set([\n  'refreshPanel',",
   'const AGING_REPORT_MESSAGE_COMMANDS = new Set',
+  "import { isAttentionRunStatus, runAttentionDetail, runAttentionLine } from './runAttention'",
+  'function runQuickPickDescription(run: RunActionRecord)',
+  'function isRetryableRun(run: RunActionRecord): boolean',
+  'function isResumableRun(run: RunActionRecord): boolean',
+  'return !isFreshActiveRun(run) && resolveRunArtifactFile(run.promptPath).ok',
+  'function resolveRunWorkspace',
+  "import { isExistingRealPathInside } from './pathUtils'",
+  'isExistingRealPathInside(filePath, RUNS_DIR)',
+  'function resolveRunArtifactFile(filePath: string | undefined): RunArtifactPathResult',
+  'unknownErrorMessage(e, `Could not inspect run workspace ${candidate}.`)',
 ]);
 
 for (const marker of [
@@ -541,8 +552,8 @@ for (const marker of [
   'function refreshAfterDispatch(state: KronosState, projectName?: string, ticketKey?: string): (code: number, run: KronosRun) => Promise<void>',
   'return async (_code: number, run: KronosRun)',
   'await refreshAfterDispatch(state, projectName)(code, run)',
-  "import { isAttentionRunStatus, runAttentionDetail, runAttentionLine } from './services/runAttention'",
-  'function runQuickPickDescription(run: KronosRun)',
+  "import { isAttentionRunStatus, runAttentionDetail, runAttentionLine } from './runAttention'",
+  'function runQuickPickDescription(run: RunActionRecord)',
   'description: runQuickPickDescription(run)',
   'const refreshWarning = await reloadStateAfterDispatch(state, projectName);',
   'run.warnings = [...(run.warnings || []), refreshWarning];',
@@ -550,8 +561,8 @@ for (const marker of [
   "unknownErrorMessage(e, `Failed to refresh Kronos state after dispatch for ${projectName}.`)",
   'vscode.window.showWarningMessage(refreshWarning);',
   'function warnIfRunStillActive(run: KronosRun, action: \'retry\' | \'resume\'): boolean',
-  'function isRetryableRun(run: KronosRun): boolean',
-  'function isResumableRun(run: KronosRun): boolean',
+  'function isRetryableRun(run: RunActionRecord): boolean',
+  'function isResumableRun(run: RunActionRecord): boolean',
   'return !isFreshActiveRun(run) && resolveRunArtifactFile(run.promptPath).ok',
   "Run ${run.id} is still active. Stop it or let it finish before attempting to ${action}.",
   'async function retryRunFromPrompt(state: KronosState, run: KronosRun)',
@@ -891,7 +902,8 @@ for (const marker of [
   "unknownErrorMessage(e, 'Failed to resume run.')",
   "unknownErrorMessage(e, 'Failed to archive run.')",
   'unknownErrorMessage(e, `Failed to archive ${run.id}.`)',
-  "import { isExistingRealPathInside, projectPathKey } from './services/pathUtils'",
+  "import { projectPathKey } from './services/pathUtils'",
+  "import { isExistingRealPathInside } from './pathUtils'",
   'isExistingRealPathInside(filePath, RUNS_DIR)',
   'function resolveRunArtifactFile(filePath: string | undefined): RunArtifactPathResult',
   'async function openRunArtifactFileIfExists(filePath: string | undefined, missingMessage: string): Promise<void>',
@@ -1266,11 +1278,11 @@ for (const forbidden of [
 }
 
 const runActionStart = extension.indexOf('async function resumeSelectedRun');
-const runActionEnd = extension.indexOf('function runLastEventLabel');
+const runActionEnd = extension.indexOf('function findRunById');
 if (runActionStart < 0 || runActionEnd <= runActionStart) {
   fail('Missing extension run action helper block.');
 }
-const runActionSource = extension.slice(runActionStart, runActionEnd);
+const runActionSource = `${extension.slice(runActionStart, runActionEnd)}\n${runActionHelpers}`;
 for (const forbidden of [
   'catch (e: any)',
   'e?.message',
@@ -2400,8 +2412,11 @@ for (const [name, source] of [
     fail(`${name} must not carry a local isPathInside helper.`);
   }
 }
-if (!extension.includes("import { isExistingRealPathInside, projectPathKey } from './services/pathUtils'")) {
-  fail('src/extension.ts must import the shared path helpers.');
+if (!extension.includes("import { projectPathKey } from './services/pathUtils'")) {
+  fail('src/extension.ts must import the shared project path helper.');
+}
+if (!runActionHelpers.includes("import { isExistingRealPathInside } from './pathUtils'")) {
+  fail('src/services/runActionHelpers.ts must import the shared path containment helper.');
 }
 if (extension.includes('function isPathInsideDirectory')) {
   fail('src/extension.ts must not carry a local path containment helper.');
@@ -2409,8 +2424,8 @@ if (extension.includes('function isPathInsideDirectory')) {
 if (extension.includes('function projectPathKey(')) {
   fail('src/extension.ts must not carry a local project path identity helper.');
 }
-if (!extension.includes('isExistingRealPathInside(filePath, RUNS_DIR)')) {
-  fail('src/extension.ts must use the shared realpath containment helper for run artifacts.');
+if (!runActionHelpers.includes('isExistingRealPathInside(filePath, RUNS_DIR)')) {
+  fail('src/services/runActionHelpers.ts must use the shared realpath containment helper for run artifacts.');
 }
 
 for (const [name, source, marker] of [

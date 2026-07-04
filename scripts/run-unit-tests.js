@@ -228,6 +228,7 @@ const relativeTime = require('../out/services/relativeTime.js');
 const runAttention = require('../out/services/runAttention.js');
 const runCompletionNotification = require('../out/services/runCompletionNotification.js');
 const runCenterSort = require('../out/services/runCenterSort.js');
+const runActionHelpers = require('../out/services/runActionHelpers.js');
 const attentionBadge = require('../out/services/attentionBadge.js');
 const intervalConfig = require('../out/services/intervalConfig.js');
 const commandPayloads = require('../out/services/commandPayloads.js');
@@ -3751,9 +3752,46 @@ test('path util helper centralizes directory containment checks', () => {
     assert.equal(source.includes('function isPathInside'), false, `${file} should not carry a local isPathInside helper`);
   }
   const extensionSource = readSourceFixture('src', 'extension.ts');
-  assert.ok(extensionSource.includes("import { isExistingRealPathInside, projectPathKey } from './services/pathUtils'"));
+  const runActionHelpersSource = readSourceFixture('src', 'services', 'runActionHelpers.ts');
+  assert.ok(extensionSource.includes("import { projectPathKey } from './services/pathUtils'"));
+  assert.ok(runActionHelpersSource.includes("import { isExistingRealPathInside } from './pathUtils'"));
   assert.equal(extensionSource.includes('function isPathInsideDirectory'), false);
-  assert.ok(extensionSource.includes('isExistingRealPathInside(filePath, RUNS_DIR)'));
+  assert.ok(runActionHelpersSource.includes('isExistingRealPathInside(filePath, RUNS_DIR)'));
+});
+
+test('run action helpers resolve safe artifacts and quick-pick labels', () => {
+  fs.mkdirSync(runStore.RUNS_DIR, { recursive: true });
+  const promptPath = path.join(runStore.RUNS_DIR, 'run-action.prompt.txt');
+  const logPath = path.join(runStore.RUNS_DIR, 'run-action.log');
+  const externalPath = path.join(makeTempDir('kronos-run-action-external-'), 'outside.log');
+  fs.writeFileSync(promptPath, 'saved prompt');
+  fs.writeFileSync(logPath, 'saved log');
+  fs.writeFileSync(externalPath, 'outside');
+
+  assert.deepEqual(runActionHelpers.resolveRunArtifactFile(promptPath), { ok: true, filePath: promptPath });
+  assert.deepEqual(runActionHelpers.resolveRunArtifactFile(path.join(runStore.RUNS_DIR, 'missing.log')), { ok: false, reason: 'missing' });
+  assert.deepEqual(runActionHelpers.resolveRunArtifactFile(externalPath), { ok: false, reason: 'outside-runs-dir' });
+
+  assert.equal(runActionHelpers.isRetryableRun({ status: 'completed', promptPath }), true);
+  assert.equal(runActionHelpers.isRetryableRun({ status: 'running', promptPath }), false);
+  assert.equal(runActionHelpers.isResumableRun({ status: 'completed', logPath }), true);
+  assert.equal(runActionHelpers.isResumableRun({ status: 'completed' }), false);
+
+  const workspace = makeTempDir('kronos-run-workspace-');
+  assert.equal(runActionHelpers.resolveRunWorkspace({ worktreePath: '/missing/worktree', cwd: workspace, projectPath: '/missing/project' }), workspace);
+  assert.equal(runActionHelpers.resolveRunWorkspace({ worktreePath: '/missing/worktree' }), null);
+
+  assert.equal(runActionHelpers.runQuickPickDescription({ status: 'completed' }), 'completed');
+  assert.equal(runActionHelpers.runQuickPickDescription({ status: 'needs_human', failureReason: 'manual QA needed' }), 'needs_human - Needs human review: manual QA needed');
+  assert.match(runActionHelpers.runQuickPickDetail({
+    status: 'completed',
+    startedAt: '2026-07-01T12:00:00.000Z',
+    cwd: '/repo/app',
+    events: [{ label: 'Session complete' }],
+  }), /Session complete$/);
+  assert.equal(runActionHelpers.runProcessPid({ processPid: '1234' }), 1234);
+  assert.equal(runActionHelpers.runProcessPid({ pid: '5678' }), 5678);
+  assert.equal(runActionHelpers.runProcessPid({ processPid: '-1' }), undefined);
 });
 
 test('json file helper centralizes labeled script output parsing', () => {
@@ -8850,8 +8888,9 @@ test('extension webviews use shared UI shell and board filtering affordances', (
   const ticketPanelViewSource = readSourceFixture('src', 'services', 'ticketPanelView.ts');
   const webviewMessagesSource = readSourceFixture('src', 'services', 'webviewMessages.ts');
   const webviewCommandRegistrySource = readSourceFixture('src', 'services', 'webviewCommandRegistry.ts');
+  const runActionHelpersSource = readSourceFixture('src', 'services', 'runActionHelpers.ts');
   const jiraBoardSource = readSourceFixture('media', 'kronos-jira-board.js');
-  const uiSource = `${source}\n${queuePlannerPanelViewSource}\n${operationsReportPanelViewSource}\n${dashboardPanelViewSource}\n${diffPanelViewSource}\n${jiraBoardPanelViewSource}\n${ticketPanelViewSource}\n${webviewCommandRegistrySource}\n${jiraBoardSource}`;
+  const uiSource = `${source}\n${queuePlannerPanelViewSource}\n${operationsReportPanelViewSource}\n${dashboardPanelViewSource}\n${diffPanelViewSource}\n${jiraBoardPanelViewSource}\n${ticketPanelViewSource}\n${webviewCommandRegistrySource}\n${runActionHelpersSource}\n${jiraBoardSource}`;
   const boardHandlerStart = source.indexOf('panel.webview.onDidReceiveMessage(async (msg) => {\n        if (logReady(msg)) { return; }\n        const request = normalizeBoardMessage(msg, BOARD_MESSAGE_COMMANDS);');
   const boardHandlerEnd = source.indexOf("    vscode.commands.registerCommand('kronos.viewTicket'", boardHandlerStart);
   assert.ok(boardHandlerStart >= 0 && boardHandlerEnd > boardHandlerStart, 'Jira board message handler should be present');
@@ -9632,10 +9671,11 @@ test('extension declares limited Restricted Mode support and blocks trust-sensit
 
 test('extension run recovery helpers use typed run records', () => {
   const source = readSourceFixture('src', 'extension.ts');
+  const runActionHelpersSource = readSourceFixture('src', 'services', 'runActionHelpers.ts');
+  const runActionSources = `${source}\n${runActionHelpersSource}`;
   const runActionStart = source.indexOf('async function resumeSelectedRun');
-  const runActionEnd = source.indexOf('function runLastEventLabel');
+  const runActionEnd = source.indexOf('function findRunById');
   assert.ok(runActionStart >= 0 && runActionEnd > runActionStart, 'run action helper block should be present');
-  const runActionSource = source.slice(runActionStart, runActionEnd);
   for (const marker of [
     "import { unknownErrorCode, unknownErrorMessage } from './services/errorUtils'",
     "import type { DiscoveredProject, MergeRequestChangedFile, QueueItem, Ticket } from './state/types'",
@@ -9652,17 +9692,18 @@ test('extension run recovery helpers use typed run records', () => {
     "unknownErrorMessage(e, `Failed to refresh Kronos state after dispatch for ${projectName}.`)",
     'vscode.window.showWarningMessage(refreshWarning);',
     'await retryRunFromPrompt(state, run)',
-    'function resolveRunWorkspace(run: KronosRun)',
+    'function resolveRunWorkspace(run: RunActionRecord)',
     'type RunArtifactPathResult',
-    "import { isExistingRealPathInside, projectPathKey } from './services/pathUtils'",
+    "import { projectPathKey } from './services/pathUtils'",
+    "import { isExistingRealPathInside } from './pathUtils'",
     'isExistingRealPathInside(filePath, RUNS_DIR)',
     'function resolveRunArtifactFile(filePath: string | undefined): RunArtifactPathResult',
     "'outside-runs-dir'",
     "Refusing to open run artifact outside Kronos runs directory.",
     'async function openRunArtifactFileIfExists(filePath: string | undefined, missingMessage: string): Promise<void>',
     'function warnIfRunStillActive(run: KronosRun, action: \'retry\' | \'resume\'): boolean',
-    'function isRetryableRun(run: KronosRun): boolean',
-    'function isResumableRun(run: KronosRun): boolean',
+    'function isRetryableRun(run: RunActionRecord): boolean',
+    'function isResumableRun(run: RunActionRecord): boolean',
     'return !isFreshActiveRun(run) && resolveRunArtifactFile(run.promptPath).ok',
     "Run ${run.id} is still active. Stop it or let it finish before attempting to ${action}.",
     'async function resumeSelectedRun(state: KronosState, run: KronosRun)',
@@ -9680,12 +9721,12 @@ test('extension run recovery helpers use typed run records', () => {
     'pickRun(listRuns().filter(isRetryableRun)',
     'pickRun(listRuns().filter(isResumableRun)',
     'async function markSelectedRunNeedsHuman(run: KronosRun)',
-    'function runLastEventLabel(run: KronosRun)',
-    "import { isAttentionRunStatus, runAttentionDetail, runAttentionLine } from './services/runAttention'",
-    'function runQuickPickDetail(run: KronosRun)',
-    'function runQuickPickDescription(run: KronosRun)',
+    'function runLastEventLabel(run: RunActionRecord)',
+    "import { isAttentionRunStatus, runAttentionDetail, runAttentionLine } from './runAttention'",
+    'function runQuickPickDetail(run: RunActionRecord)',
+    'function runQuickPickDescription(run: RunActionRecord)',
     'description: runQuickPickDescription(run)',
-    'function runProcessPid(run: KronosRun)',
+    'function runProcessPid(run: RunActionRecord)',
     "Reflect.get(run, 'pid')",
     'function findRunById(runId: string): KronosRun | undefined',
     'function resolveRunItem(item: unknown): KronosRun | undefined',
@@ -9704,7 +9745,7 @@ test('extension run recovery helpers use typed run records', () => {
     "unknownErrorMessage(e, 'Failed to open run diff.')",
     "unknownErrorMessage(e, 'Failed to mark run needs-human.')",
   ]) {
-    assert.ok(source.includes(marker), marker);
+    assert.ok(runActionSources.includes(marker), marker);
   }
   for (const marker of [
     'retryRunFromPrompt(run: any)',
@@ -9731,7 +9772,7 @@ test('extension run recovery helpers use typed run records', () => {
     'listRuns().filter(run => run.promptPath && fs.existsSync(run.promptPath))',
     'listRuns().filter(run => run.promptPath || run.logPath)',
   ]) {
-    assert.equal(source.includes(marker), false, marker);
+    assert.equal(runActionSources.includes(marker), false, marker);
   }
   assert.equal(
     source.includes('try { await state.refresh(); } catch {}'),
@@ -9752,7 +9793,7 @@ test('extension run recovery helpers use typed run records', () => {
     'catch (e: any)',
     'e?.message',
   ]) {
-    assert.equal(runActionSource.includes(marker), false, marker);
+    assert.equal(runActionSources.includes(marker), false, marker);
   }
 });
 
@@ -9894,7 +9935,7 @@ test('extension queue command handlers normalize payloads before use', () => {
     'await startClaudeDispatch(target.projectPath, skill, queueData.ticket || undefined,',
     'resolveQueueCommandItem,',
     'function getProjectNameForPath(state: KronosState, projectPath?: string): string | undefined',
-    "import { isExistingRealPathInside, projectPathKey } from './services/pathUtils'",
+    "import { projectPathKey } from './services/pathUtils'",
     'projectPathKey(project.path)',
     'resolveQueueIndex,',
   ]) {
