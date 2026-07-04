@@ -130,7 +130,6 @@ if (stat.size < 200 * 1024) {
 
 const tree = run('npx', ['--yes', '@vscode/vsce', 'ls', '--tree', '--no-dependencies'], { capture: true });
 for (const marker of [
-  'HUMAN_FEEDBACK_CHECKLIST.md',
   'LICENSE',
   'package.json',
   'README.md',
@@ -147,6 +146,7 @@ for (const marker of [
   'node_modules/',
   '.git/',
   '.claude/',
+  'HUMAN_FEEDBACK_CHECKLIST.md',
   'GOOD_TO_GREAT_REVIEW.md',
   'WINDOWS_FEEDBACK_2026-07-02.md',
   'push-master.sh',

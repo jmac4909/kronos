@@ -164,9 +164,11 @@ export function inspectTrackedWorktree(
     const branch = runner(['branch', '--show-current'], { cwd: entry.worktreePath, timeoutMs: 5000 }).trim();
     if (branch) {
       try {
-        const remote = runner(['rev-parse', `origin/${branch}`], { cwd: entry.worktreePath, timeoutMs: 5000 }).trim();
-        const local = runner(['rev-parse', 'HEAD'], { cwd: entry.worktreePath, timeoutMs: 5000 }).trim();
-        if (remote !== local) {
+        const unpushedCount = Number(runner(['rev-list', '--count', `origin/${branch}..HEAD`], { cwd: entry.worktreePath, timeoutMs: 5000 }).trim());
+        if (!Number.isFinite(unpushedCount)) {
+          return { entry, status: 'blocked', reason: `Branch ${branch} unpushed commit check returned an invalid result.` };
+        }
+        if (unpushedCount > 0) {
           return { entry, status: 'blocked', reason: `Branch ${branch} has unpushed commits.` };
         }
       } catch {

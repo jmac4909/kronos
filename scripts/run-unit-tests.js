@@ -1928,7 +1928,7 @@ test('git workspace service owns branch metadata and safe worktree lifecycle com
     if (joined === 'pull --ff-only') { return ''; }
     if (joined === 'status --porcelain') { return ''; }
     if (joined === 'branch --show-current') { return 'feature/K-1\n'; }
-    if (joined === 'rev-parse origin/feature/K-1') { return 'abc123\n'; }
+    if (joined === 'rev-list --count origin/feature/K-1..HEAD') { return '0\n'; }
     if (joined === 'worktree remove /tmp/wt') { return ''; }
     throw new Error(`unexpected git call: ${joined}`);
   };
@@ -1966,6 +1966,41 @@ test('git workspace service owns branch metadata and safe worktree lifecycle com
   const entry = { projectPath, worktreePath: workspace, ticket: 'K-1', createdAt: 'now' };
   const inspected = gitWorkspace.inspectTrackedWorktree(entry, { runner });
   assert.equal(inspected.status, 'removable');
+  const behindRemote = gitWorkspace.inspectTrackedWorktree(entry, {
+    exists: () => true,
+    runner: args => {
+      const joined = args.join(' ');
+      if (joined === 'status --porcelain') { return ''; }
+      if (joined === 'branch --show-current') { return 'feature/behind\n'; }
+      if (joined === 'rev-list --count origin/feature/behind..HEAD') { return '0\n'; }
+      throw new Error(`unexpected git call: ${joined}`);
+    },
+  });
+  assert.equal(behindRemote.status, 'removable');
+  const aheadRemote = gitWorkspace.inspectTrackedWorktree(entry, {
+    exists: () => true,
+    runner: args => {
+      const joined = args.join(' ');
+      if (joined === 'status --porcelain') { return ''; }
+      if (joined === 'branch --show-current') { return 'feature/ahead\n'; }
+      if (joined === 'rev-list --count origin/feature/ahead..HEAD') { return '2\n'; }
+      throw new Error(`unexpected git call: ${joined}`);
+    },
+  });
+  assert.equal(aheadRemote.status, 'blocked');
+  assert.match(aheadRemote.reason, /unpushed commits/);
+  const invalidAheadCheck = gitWorkspace.inspectTrackedWorktree(entry, {
+    exists: () => true,
+    runner: args => {
+      const joined = args.join(' ');
+      if (joined === 'status --porcelain') { return ''; }
+      if (joined === 'branch --show-current') { return 'feature/invalid\n'; }
+      if (joined === 'rev-list --count origin/feature/invalid..HEAD') { return 'not-a-number\n'; }
+      throw new Error(`unexpected git call: ${joined}`);
+    },
+  });
+  assert.equal(invalidAheadCheck.status, 'blocked');
+  assert.match(invalidAheadCheck.reason, /invalid result/);
   let removed = false;
   const warning = gitWorkspace.removeWorktreeSafely(projectPath, '/tmp/wt', {
     runner,
@@ -2086,6 +2121,8 @@ test('git workspace service owns branch metadata and safe worktree lifecycle com
     'function isPathInside',
     "path.join(worktreePath, '.claude')",
     "runner(['status', '--porcelain']",
+    "runner(['rev-list', '--count', `origin/${branch}..HEAD`]",
+    'unpushed commit check returned an invalid result',
     'const artifactPath = path.resolve(worktreePath, statusPath)',
     'fs.rmSync(artifactPath, { recursive: true, force: true })',
     "statusPath === '.claude' || statusPath === '.claude/' || statusPath.startsWith('.claude/')",
@@ -2098,6 +2135,8 @@ test('git workspace service owns branch metadata and safe worktree lifecycle com
     'catch (e: any)',
     'e?.message',
     '} catch {}',
+    'remote !== local',
+    "runner(['rev-parse', `origin/${branch}`]",
   ]) {
     assert.equal(source.includes(marker), false, marker);
   }
@@ -2989,6 +3028,8 @@ test('feedback readiness script runs npm and npx through the Windows shell', () 
     'shell: shouldUseWindowsShell(command)',
     "return IS_WINDOWS && (command === 'npm' || command === 'npx');",
     "run('npx', ['--yes', '@vscode/vsce', 'ls', '--tree', '--no-dependencies'], { capture: true })",
+    "requireFile('HUMAN_FEEDBACK_CHECKLIST.md', [",
+    "'HUMAN_FEEDBACK_CHECKLIST.md',\n  'GOOD_TO_GREAT_REVIEW.md',",
     "spawnSync('where.exe', [command]",
     "spawnSync('sh', ['-lc', `command -v ${command}`]",
     'function firstOutputLine(value)',
