@@ -662,6 +662,13 @@ for (const marker of [
   'if (disposed || running) { return; }',
   'await pollReviewMergeRequests(state, () => !disposed)',
   'disposed = true',
+  'async function runSettingsMenu(state: KronosState): Promise<void>',
+  "type SettingsMenuItemId = 'profile' | 'dispatchModel' | 'pollInterval' | 'sessionPoll' | 'scanDirectories' | 'authCheck'",
+  'const pick = await vscode.window.showQuickPick<SettingsMenuItem>',
+  'switch (pick.id)',
+  "case 'profile':",
+  "case 'authCheck':",
+  'const exhaustive: never = pick.id',
   'function updatePositiveNumberSetting',
   'parsePositiveNumberInput(input)',
   "console.warn(unknownErrorMessage(e, 'Review MR polling failed.'))",
@@ -1115,6 +1122,9 @@ if (!agingHandlerSource.includes("if (request.command === 'refreshPanel') {")
 }
 if (extensionUiSource.includes('addToQueueFromModal')) {
   fail('Jira board modal should use the standard addToQueue command.');
+}
+if (extensionUiSource.includes('pick.label.includes')) {
+  fail('Settings menu routing should use stable item ids, not display labels.');
 }
 for (const forbidden of [
   "actionButton('openEvidenceGate'",

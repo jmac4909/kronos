@@ -3813,65 +3813,84 @@ async function runSetupWizard(): Promise<void> {
 async function runSettingsMenu(state: KronosState): Promise<void> {
   const config = vscode.workspace.getConfiguration('kronos');
 
-  const pick = await vscode.window.showQuickPick([
-    { label: '$(settings) Profile', description: getActiveProfile().label, detail: 'Provider/default-branch behavior profile' },
-    { label: '$(cloud) Dispatch Model', description: config.get('dispatchModel', 'claude-opus-4-6'), detail: 'Claude model for dispatched sessions' },
-    { label: '$(clock) Poll Interval', description: `${configIntervalSeconds(config.get<number>('pollIntervalSec', 300), 300, 1)}s`, detail: 'How often to auto-refresh project status' },
-    { label: '$(pulse) Session Poll', description: `${configIntervalMs(config.get<number>('sessionPollIntervalMs', 5000), 5000, 1000)}ms`, detail: 'How often to check for active Claude sessions' },
-    { label: '$(folder) Scan Directories', description: 'Edit scan dirs for project discovery', detail: 'Which directories to scan for repos' },
-    { label: '$(key) Run Auth Check', description: 'Verify GCP + Claude access', detail: 'Check gcloud auth and model permissions' },
+  type SettingsMenuItemId = 'profile' | 'dispatchModel' | 'pollInterval' | 'sessionPoll' | 'scanDirectories' | 'authCheck';
+  type SettingsMenuItem = vscode.QuickPickItem & { id: SettingsMenuItemId };
+
+  const pick = await vscode.window.showQuickPick<SettingsMenuItem>([
+    { id: 'profile', label: '$(settings) Profile', description: getActiveProfile().label, detail: 'Provider/default-branch behavior profile' },
+    { id: 'dispatchModel', label: '$(cloud) Dispatch Model', description: config.get('dispatchModel', 'claude-opus-4-6'), detail: 'Claude model for dispatched sessions' },
+    { id: 'pollInterval', label: '$(clock) Poll Interval', description: `${configIntervalSeconds(config.get<number>('pollIntervalSec', 300), 300, 1)}s`, detail: 'How often to auto-refresh project status' },
+    { id: 'sessionPoll', label: '$(pulse) Session Poll', description: `${configIntervalMs(config.get<number>('sessionPollIntervalMs', 5000), 5000, 1000)}ms`, detail: 'How often to check for active Claude sessions' },
+    { id: 'scanDirectories', label: '$(folder) Scan Directories', description: 'Edit scan dirs for project discovery', detail: 'Which directories to scan for repos' },
+    { id: 'authCheck', label: '$(key) Run Auth Check', description: 'Verify GCP + Claude access', detail: 'Check gcloud auth and model permissions' },
   ], { placeHolder: 'Kronos Settings' });
 
   if (!pick) { return; }
 
-  if (pick.label.includes('Profile')) {
-    const current = getActiveProfile().id;
-    const selected = await vscode.window.showQuickPick(
-      listProfiles().map(profile => ({ label: profile.label, description: profile.id === current ? '(current)' : profile.id, detail: profile.description, profile })),
-      { placeHolder: 'Select Kronos profile' }
-    );
-    if (selected) {
-      await config.update('profile', selected.profile.id, vscode.ConfigurationTarget.Global);
-      if (!config.get<string>('defaultBaseBranch')) {
-        await config.update('defaultBaseBranch', selected.profile.defaultBaseBranch, vscode.ConfigurationTarget.Global);
+  switch (pick.id) {
+    case 'profile': {
+      const current = getActiveProfile().id;
+      const selected = await vscode.window.showQuickPick(
+        listProfiles().map(profile => ({ label: profile.label, description: profile.id === current ? '(current)' : profile.id, detail: profile.description, profile })),
+        { placeHolder: 'Select Kronos profile' }
+      );
+      if (selected) {
+        await config.update('profile', selected.profile.id, vscode.ConfigurationTarget.Global);
+        if (!config.get<string>('defaultBaseBranch')) {
+          await config.update('defaultBaseBranch', selected.profile.defaultBaseBranch, vscode.ConfigurationTarget.Global);
+        }
+        vscode.window.showInformationMessage(`Kronos profile set to ${selected.profile.label}.`);
       }
-      vscode.window.showInformationMessage(`Kronos profile set to ${selected.profile.label}.`);
+      break;
     }
-  } else if (pick.label.includes('Dispatch Model')) {
-    const models = ['claude-opus-4-6', 'claude-opus-4-6[1m]', 'claude-sonnet-4-6', 'claude-sonnet-4@20250514', 'claude-haiku-4-5'];
-    const current = config.get<string>('dispatchModel', 'claude-opus-4-6');
-    const selected = await vscode.window.showQuickPick(
-      models.map(m => ({ label: m, description: m === current ? '(current)' : '' })),
-      { placeHolder: 'Select model' }
-    );
-    if (selected) {
-      await config.update('dispatchModel', selected.label, vscode.ConfigurationTarget.Global);
-      vscode.window.showInformationMessage(`Model set to ${selected.label}`);
-    }
-  } else if (pick.label.includes('Poll Interval')) {
-    const val = await vscode.window.showInputBox({ prompt: 'Refresh interval in seconds', value: String(config.get('pollIntervalSec', 300)) });
-    await updatePositiveNumberSetting(config, 'pollIntervalSec', val, 'Refresh interval must be a positive number of seconds.');
-  } else if (pick.label.includes('Session Poll')) {
-    const val = await vscode.window.showInputBox({ prompt: 'Session poll interval in ms', value: String(config.get('sessionPollIntervalMs', 5000)) });
-    await updatePositiveNumberSetting(config, 'sessionPollIntervalMs', val, 'Session poll interval must be a positive number of milliseconds.');
-  } else if (pick.label.includes('Scan Directories')) {
-    const currentState = state.state;
-    const val = await vscode.window.showInputBox({
-      prompt: 'Scan directories (comma-separated)',
-      value: currentState?.settings?.scan_dirs?.join(', ') || '',
-    });
-    if (val) {
-      const newDirs = val.split(',').map(d => d.trim()).filter(Boolean);
-      try {
-        const result = setScanDirs(newDirs);
-        state.reloadAndNotify();
-        vscode.window.showInformationMessage(`Scan dirs updated: ${result.scanDirs.join(', ')}`);
-      } catch (e: unknown) {
-        vscode.window.showErrorMessage(unknownErrorMessage(e, 'Failed to update scan dirs.'));
+    case 'dispatchModel': {
+      const models = ['claude-opus-4-6', 'claude-opus-4-6[1m]', 'claude-sonnet-4-6', 'claude-sonnet-4@20250514', 'claude-haiku-4-5'];
+      const current = config.get<string>('dispatchModel', 'claude-opus-4-6');
+      const selected = await vscode.window.showQuickPick(
+        models.map(m => ({ label: m, description: m === current ? '(current)' : '' })),
+        { placeHolder: 'Select model' }
+      );
+      if (selected) {
+        await config.update('dispatchModel', selected.label, vscode.ConfigurationTarget.Global);
+        vscode.window.showInformationMessage(`Model set to ${selected.label}`);
       }
+      break;
     }
-  } else if (pick.label.includes('Auth Check')) {
-    await vscode.commands.executeCommand('kronos.setup');
+    case 'pollInterval': {
+      const val = await vscode.window.showInputBox({ prompt: 'Refresh interval in seconds', value: String(config.get('pollIntervalSec', 300)) });
+      await updatePositiveNumberSetting(config, 'pollIntervalSec', val, 'Refresh interval must be a positive number of seconds.');
+      break;
+    }
+    case 'sessionPoll': {
+      const val = await vscode.window.showInputBox({ prompt: 'Session poll interval in ms', value: String(config.get('sessionPollIntervalMs', 5000)) });
+      await updatePositiveNumberSetting(config, 'sessionPollIntervalMs', val, 'Session poll interval must be a positive number of milliseconds.');
+      break;
+    }
+    case 'scanDirectories': {
+      const currentState = state.state;
+      const val = await vscode.window.showInputBox({
+        prompt: 'Scan directories (comma-separated)',
+        value: currentState?.settings?.scan_dirs?.join(', ') || '',
+      });
+      if (val) {
+        const newDirs = val.split(',').map(d => d.trim()).filter(Boolean);
+        try {
+          const result = setScanDirs(newDirs);
+          state.reloadAndNotify();
+          vscode.window.showInformationMessage(`Scan dirs updated: ${result.scanDirs.join(', ')}`);
+        } catch (e: unknown) {
+          vscode.window.showErrorMessage(unknownErrorMessage(e, 'Failed to update scan dirs.'));
+        }
+      }
+      break;
+    }
+    case 'authCheck':
+      await vscode.commands.executeCommand('kronos.setup');
+      break;
+    default: {
+      const exhaustive: never = pick.id;
+      throw new Error(`Unhandled settings menu item: ${exhaustive}`);
+    }
   }
 }
 

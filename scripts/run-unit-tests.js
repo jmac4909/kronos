@@ -8595,6 +8595,13 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'if (disposed || running) { return; }',
     'await pollReviewMergeRequests(state, () => !disposed)',
     'disposed = true',
+    'async function runSettingsMenu(state: KronosState): Promise<void>',
+    "type SettingsMenuItemId = 'profile' | 'dispatchModel' | 'pollInterval' | 'sessionPoll' | 'scanDirectories' | 'authCheck'",
+    'const pick = await vscode.window.showQuickPick<SettingsMenuItem>',
+    'switch (pick.id)',
+    "case 'profile':",
+    "case 'authCheck':",
+    'const exhaustive: never = pick.id',
     'function updatePositiveNumberSetting',
     'parsePositiveNumberInput(input)',
     "console.warn(unknownErrorMessage(e, 'Review MR polling failed.'))",
@@ -8777,6 +8784,7 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     assert.ok(uiSource.includes(marker), marker);
   }
   assert.equal(uiSource.includes('addToQueueFromModal'), false, 'Jira board modal should use the standard addToQueue command');
+  assert.equal(uiSource.includes('pick.label.includes'), false, 'Settings menu should route by stable item ids');
   for (const marker of [
     'function kronosMediaScriptInlineFallback',
     'inlineFallbackScript',
