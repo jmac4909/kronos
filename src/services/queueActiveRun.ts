@@ -2,7 +2,7 @@ import type { QueueItem } from '../state/types';
 import { skillForAction } from './nextActionContext';
 import { isFreshActiveRun } from './runStatus';
 
-export interface QueueActiveRunLike {
+interface QueueActiveRunLike {
   project?: unknown;
   projectPath?: unknown;
   ticket?: unknown;
@@ -22,7 +22,7 @@ export function activeRunForQueueItem<T extends QueueActiveRunLike>(
   return runs.find(run => isFreshActiveRun(run, now) && runMatchesQueueItem(run, item));
 }
 
-export function runMatchesQueueItem(run: QueueActiveRunLike, item: QueueItem): boolean {
+function runMatchesQueueItem(run: QueueActiveRunLike, item: QueueItem): boolean {
   if (item.ticket) {
     return runMatchesQueueTicket(run, item)
       && runMatchesQueueAction(run, item)

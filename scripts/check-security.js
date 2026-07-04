@@ -1854,9 +1854,9 @@ if (extension.includes('description: run.status')) {
 for (const marker of [
   "import { isFreshActiveRun } from './runStatus'",
   'export function sortedRunCenterRuns',
-  'export function compareRunCenterRuns',
-  'export function runCenterStatusPriority',
-  'export function runCenterSortTimestamp',
+  'function compareRunCenterRuns',
+  'function runCenterStatusPriority',
+  'function runCenterSortTimestamp',
   'if (status === \'failed\' || status === \'cancelled\') { return 5; }',
   'return 4;',
 ]) {
@@ -2299,10 +2299,10 @@ for (const marker of [
 for (const marker of [
   "import { skillForAction } from './nextActionContext'",
   "import { isFreshActiveRun } from './runStatus'",
-  'export interface QueueActiveRunLike',
+  'interface QueueActiveRunLike',
   'export function activeRunForQueueItem<T extends QueueActiveRunLike>',
   'return runs.find(run => isFreshActiveRun(run, now) && runMatchesQueueItem(run, item));',
-  'export function runMatchesQueueItem(run: QueueActiveRunLike, item: QueueItem): boolean',
+  'function runMatchesQueueItem(run: QueueActiveRunLike, item: QueueItem): boolean',
   'function runMatchesQueueTicket(run: QueueActiveRunLike, item: QueueItem): boolean',
   'function runMatchesQueueProject(run: QueueActiveRunLike, item: QueueItem): boolean',
   'function runMatchesQueueProjectScope(run: QueueActiveRunLike, item: QueueItem): boolean',

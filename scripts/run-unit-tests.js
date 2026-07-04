@@ -5661,18 +5661,19 @@ test('queue active-run helper matches active runs without broad fallbacks', () =
     ticket: 'APP-123',
     skill: 'implement',
     status: 'running',
-    startedAt: '2026-07-03T10:00:00.000Z',
+    startedAt: '2026-07-03T22:59:00.000Z',
     events: [],
     ...overrides,
   });
-
-  assert.equal(queueActiveRun.runMatchesQueueItem(run(), queueItem()), true);
-  assert.equal(queueActiveRun.runMatchesQueueItem(run({ ticket: 'APP-999' }), queueItem()), false);
-  assert.equal(queueActiveRun.runMatchesQueueItem(run({ skill: 'verify-local' }), queueItem()), false);
-  assert.equal(queueActiveRun.runMatchesQueueItem(run({ project: 'other', projectPath: '/repo/other' }), queueItem()), false);
-  assert.equal(queueActiveRun.runMatchesQueueItem(run({ project: 'other', projectPath: '/repo/other' }), queueItem({ projects: [], project_path: '' })), true);
-
   const now = new Date('2026-07-03T23:00:00.000Z');
+  const activeMatch = (candidate, item = queueItem()) => queueActiveRun.activeRunForQueueItem(item, [candidate], now) === candidate;
+
+  assert.equal(activeMatch(run()), true);
+  assert.equal(activeMatch(run({ ticket: 'APP-999' })), false);
+  assert.equal(activeMatch(run({ skill: 'verify-local' })), false);
+  assert.equal(activeMatch(run({ project: 'other', projectPath: '/repo/other' })), false);
+  assert.equal(activeMatch(run({ project: 'other', projectPath: '/repo/other' }), queueItem({ projects: [], project_path: '' })), true);
+
   const stale = run({ id: 'stale', startedAt: '2026-07-03T10:00:00.000Z' });
   const completed = run({ id: 'completed', exitCode: 0 });
   const fresh = run({ id: 'fresh', startedAt: '2026-07-03T22:59:00.000Z' });
@@ -5682,10 +5683,10 @@ test('queue active-run helper matches active runs without broad fallbacks', () =
   for (const marker of [
     "import { skillForAction } from './nextActionContext'",
     "import { isFreshActiveRun } from './runStatus'",
-    'export interface QueueActiveRunLike',
+    'interface QueueActiveRunLike',
     'export function activeRunForQueueItem<T extends QueueActiveRunLike>',
     'return runs.find(run => isFreshActiveRun(run, now) && runMatchesQueueItem(run, item));',
-    'export function runMatchesQueueItem(run: QueueActiveRunLike, item: QueueItem): boolean',
+    'function runMatchesQueueItem(run: QueueActiveRunLike, item: QueueItem): boolean',
     'function runMatchesQueueTicket(run: QueueActiveRunLike, item: QueueItem): boolean',
     'function runMatchesQueueProject(run: QueueActiveRunLike, item: QueueItem): boolean',
     'function runMatchesQueueProjectScope(run: QueueActiveRunLike, item: QueueItem): boolean',
@@ -5752,6 +5753,7 @@ test('run center sort orders active work first and failed or cancelled runs last
     { id: 'running-terminal', status: 'running', startedAt: '2026-07-02T07:00:00.000Z', endedAt: '2026-07-02T07:30:00.000Z' },
     { id: 'active-old', status: 'running', startedAt: recentIso(60) },
     { id: 'active-new', status: 'preflight', startedAt: recentIso(5) },
+    { id: 'active-no-timestamp', status: 'running' },
     { id: 'review-ready', status: 'waiting_for_review', startedAt: '2026-07-02T05:00:00.000Z', endedAt: '2026-07-02T05:30:00.000Z' },
     { id: 'needs-human', status: 'needs_human', startedAt: '2026-07-02T04:00:00.000Z', endedAt: '2026-07-02T04:30:00.000Z' },
     { id: 'cancelled-old', status: 'cancelled', startedAt: '2026-07-02T03:00:00.000Z', endedAt: '2026-07-02T03:30:00.000Z' },
@@ -5760,6 +5762,7 @@ test('run center sort orders active work first and failed or cancelled runs last
   assert.deepEqual(ordered, [
     'active-new',
     'active-old',
+    'active-no-timestamp',
     'review-ready',
     'needs-human',
     'completed-latest',
@@ -5769,11 +5772,6 @@ test('run center sort orders active work first and failed or cancelled runs last
     'failed-newer',
     'cancelled-old',
   ]);
-  assert.equal(runCenterSort.runCenterStatusPriority({ status: 'queued' }), 4);
-  assert.equal(runCenterSort.runCenterStatusPriority({ status: 'running', startedAt: '2000-01-01T00:00:00.000Z' }), 4);
-  assert.equal(runCenterSort.runCenterStatusPriority({ status: 'running', endedAt: '2026-07-02T00:00:00.000Z' }), 4);
-  assert.equal(runCenterSort.runCenterStatusPriority({ status: 'running' }), 0);
-  assert.equal(runCenterSort.runCenterStatusPriority({ status: 'failed' }), 5);
 });
 
 test('attention badge aggregates review, aging, and paused-run signals', () => {
@@ -9189,10 +9187,10 @@ test('tree providers share action labels and icons', () => {
   for (const marker of [
     "import { skillForAction } from './nextActionContext'",
     "import { isFreshActiveRun } from './runStatus'",
-    'export interface QueueActiveRunLike',
+    'interface QueueActiveRunLike',
     'export function activeRunForQueueItem<T extends QueueActiveRunLike>',
     'return runs.find(run => isFreshActiveRun(run, now) && runMatchesQueueItem(run, item));',
-    'export function runMatchesQueueItem(run: QueueActiveRunLike, item: QueueItem): boolean',
+    'function runMatchesQueueItem(run: QueueActiveRunLike, item: QueueItem): boolean',
     'function runMatchesQueueTicket(run: QueueActiveRunLike, item: QueueItem): boolean',
     'function runMatchesQueueProject(run: QueueActiveRunLike, item: QueueItem): boolean',
     'function runMatchesQueueProjectScope(run: QueueActiveRunLike, item: QueueItem): boolean',

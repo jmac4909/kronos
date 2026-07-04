@@ -1,6 +1,6 @@
 import { isFreshActiveRun } from './runStatus';
 
-export interface RunCenterSortableRun {
+interface RunCenterSortableRun {
   id?: unknown;
   status?: unknown;
   startedAt?: unknown;
@@ -14,13 +14,13 @@ export function sortedRunCenterRuns<T extends RunCenterSortableRun>(runs: T[]): 
   return [...runs].sort(compareRunCenterRuns);
 }
 
-export function compareRunCenterRuns(a: RunCenterSortableRun, b: RunCenterSortableRun): number {
+function compareRunCenterRuns(a: RunCenterSortableRun, b: RunCenterSortableRun): number {
   return runCenterStatusPriority(a) - runCenterStatusPriority(b)
     || runCenterSortTimestamp(b) - runCenterSortTimestamp(a)
     || stringOrDefault(a.id, '').localeCompare(stringOrDefault(b.id, ''));
 }
 
-export function runCenterStatusPriority(run: RunCenterSortableRun): number {
+function runCenterStatusPriority(run: RunCenterSortableRun): number {
   if (isFreshActiveRun(run)) { return 0; }
   const status = stringOrDefault(run.status, 'unknown');
   if (status === 'waiting_for_review') { return 1; }
@@ -30,7 +30,7 @@ export function runCenterStatusPriority(run: RunCenterSortableRun): number {
   return 4;
 }
 
-export function runCenterSortTimestamp(run: RunCenterSortableRun): number {
+function runCenterSortTimestamp(run: RunCenterSortableRun): number {
   const status = stringOrDefault(run.status, 'unknown');
   const preferred = isFreshActiveRun(run) ? run.startedAt : run.endedAt || run.startedAt;
   const fallback = status === 'completed' || status === 'failed' || status === 'cancelled' ? run.startedAt : run.endedAt;
