@@ -54,7 +54,7 @@ import { configIntervalMs, configIntervalSeconds, configIntervalSecondsMs, parse
 import { buildNextActionContext, buildNextActionStartDecision, skillForAction } from './services/nextActionContext';
 import { createWorkspaceDiffArtifact, firstRemoteBranchMatching, originProjectPath } from './services/gitWorkspace';
 import { signalProcessTree, stopProcessTree, supportsProcessTreeSuspend } from './services/processTree';
-import { createWebviewReadyMonitor } from './services/webviewDiagnostics';
+import { createWebviewReadyMonitor, type WebviewReadyMonitor } from './services/webviewDiagnostics';
 import { WEBVIEW_ACTION_PANEL_SCRIPT, WEBVIEW_JIRA_BOARD_SCRIPT, WEBVIEW_READY_COMMAND, createWebviewNonce, webviewScriptCspOptions, withWebviewCsp } from './services/webviewSecurity';
 import { escapeAttr, escapeClass, escapeHtml, kronosWebviewBaseCss, safeHttpHref } from './services/webviewHtml';
 import { kronosTerminalOptions } from './services/terminalProfiles';
@@ -1860,11 +1860,12 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.ViewColumn.One, kronosScriptableWebviewOptions(context.extensionUri)
       );
       const nonce = createWebviewNonce();
+      const logReady = createWebviewReadyMonitor(panel, 'Kronos Jira Board');
       const renderBoard = () => {
         const scriptUri = kronosJiraBoardScriptUri(panel, context.extensionUri);
+        logReady.arm();
         panel.webview.html = withWebviewCsp(buildJiraBoardHtml(state, nonce, scriptUri), webviewScriptCspOptions(panel.webview.cspSource, nonce));
       };
-      const logReady = createWebviewReadyMonitor(panel, 'Kronos Jira Board');
       const hasTicket = (ticketKey: string) => Boolean(state.state?.tickets?.[ticketKey]);
       const hasProject = (projectName: string) => Boolean(state.state?.projects?.[projectName]);
       const openKnownTicketUrl = (ticketKey: string, kind: 'jira' | 'mr') => {
@@ -1962,6 +1963,7 @@ export function activate(context: vscode.ExtensionContext) {
       );
       const nonce = createWebviewNonce();
       const actionScriptUri = kronosActionPanelScriptUri(panel, context.extensionUri);
+      const logReady = createWebviewReadyMonitor(panel, `${ticketKey}: Ticket`);
       const render = () => {
         const freshTicket = state.state?.tickets?.[ticketKey];
         if (!freshTicket) {
@@ -1969,10 +1971,10 @@ export function activate(context: vscode.ExtensionContext) {
           return;
         }
         panel.title = `${ticketKey}: ${freshTicket.summary}`;
+        logReady.arm();
         panel.webview.html = withWebviewCsp(buildTicketHtml(ticketKey, freshTicket, state, nonce, actionScriptUri), webviewScriptCspOptions(panel.webview.cspSource, nonce));
       };
       render();
-      const logReady = createWebviewReadyMonitor(panel, `${ticketKey}: Ticket`);
       panel.webview.onDidReceiveMessage(async msg => {
         if (logReady(msg)) { return; }
         const request = normalizeActionPanelMessage(msg, TICKET_DETAIL_MESSAGE_COMMANDS);
@@ -4437,7 +4439,7 @@ async function tryExecuteTicketOperatorCommand(command: string, ticketKey: strin
   return true;
 }
 
-function attachOperatorCommandHandler(panel: vscode.WebviewPanel, webviewName: string, allowedCommands: ReadonlySet<string>): void {
+function attachOperatorCommandHandler(panel: vscode.WebviewPanel, webviewName: string, allowedCommands: ReadonlySet<string>): WebviewReadyMonitor {
   const logReady = createWebviewReadyMonitor(panel, webviewName);
   panel.webview.onDidReceiveMessage(async msg => {
     if (logReady(msg)) { return; }
@@ -4451,6 +4453,7 @@ function attachOperatorCommandHandler(panel: vscode.WebviewPanel, webviewName: s
       'Kronos operator action failed.',
     );
   });
+  return logReady;
 }
 
 function openQueuePlannerPanel(state: KronosState, extensionUri?: vscode.Uri): void {
@@ -4535,12 +4538,13 @@ function openBacklogTriagePanel(state: KronosState, extensionUri?: vscode.Uri): 
   );
   const nonce = createWebviewNonce();
   const actionScriptUri = kronosActionPanelScriptUri(panel, extensionUri);
+  const logReady = createWebviewReadyMonitor(panel, 'Kronos Backlog Triage');
   const render = () => {
     const report = buildBacklogTriageReport({ state: state.state, queue: state.queue });
+    logReady.arm();
     panel.webview.html = withWebviewCsp(buildBacklogTriageHtml(report, nonce, actionScriptUri), webviewScriptCspOptions(panel.webview.cspSource, nonce));
   };
   render();
-  const logReady = createWebviewReadyMonitor(panel, 'Kronos Backlog Triage');
   panel.webview.onDidReceiveMessage(async msg => {
     if (logReady(msg)) { return; }
     const request = normalizeActionPanelMessage(msg, BACKLOG_TRIAGE_MESSAGE_COMMANDS);
@@ -4577,13 +4581,14 @@ function openProjectBatchPlanPanel(state: KronosState, extensionUri?: vscode.Uri
   const nonce = createWebviewNonce();
   const actionScriptUri = kronosActionPanelScriptUri(panel, extensionUri);
   let currentPlans: PlannedAction[] = [];
+  const logReady = createWebviewReadyMonitor(panel, 'Kronos Project Batch Plan');
   const render = () => {
     currentPlans = planNextActions(state);
     const batches = planByProject(currentPlans, 5).slice(0, 20);
+    logReady.arm();
     panel.webview.html = withWebviewCsp(buildProjectBatchPlanHtml(batches, nonce, actionScriptUri), webviewScriptCspOptions(panel.webview.cspSource, nonce));
   };
   render();
-  const logReady = createWebviewReadyMonitor(panel, 'Kronos Project Batch Plan');
   panel.webview.onDidReceiveMessage(async msg => {
     if (logReady(msg)) { return; }
     const request = normalizeActionPanelMessage(msg, PLAN_MESSAGE_COMMANDS);
@@ -4608,13 +4613,14 @@ function openReleaseBatchPlanPanel(state: KronosState, extensionUri?: vscode.Uri
   const nonce = createWebviewNonce();
   const actionScriptUri = kronosActionPanelScriptUri(panel, extensionUri);
   let currentPlans: PlannedAction[] = [];
+  const logReady = createWebviewReadyMonitor(panel, 'Kronos Release Batch Plan');
   const render = () => {
     currentPlans = planNextActions(state);
     const batches = planByRelease(currentPlans, 8).slice(0, 20);
+    logReady.arm();
     panel.webview.html = withWebviewCsp(buildReleaseBatchPlanHtml(batches, nonce, actionScriptUri), webviewScriptCspOptions(panel.webview.cspSource, nonce));
   };
   render();
-  const logReady = createWebviewReadyMonitor(panel, 'Kronos Release Batch Plan');
   panel.webview.onDidReceiveMessage(async msg => {
     if (logReady(msg)) { return; }
     const request = normalizeActionPanelMessage(msg, PLAN_MESSAGE_COMMANDS);
@@ -4639,6 +4645,7 @@ async function openCollisionReportPanel(state: KronosState, extensionUri?: vscod
   const nonce = createWebviewNonce();
   const actionScriptUri = kronosActionPanelScriptUri(panel, extensionUri);
   let plans: PlannedAction[] = [];
+  const logReady = createWebviewReadyMonitor(panel, 'Kronos Collision Report');
   const render = async () => {
     plans = planNextActions(state).slice(0, 25);
     const mrFiles = await loadMrFileHints(state, plans);
@@ -4656,10 +4663,10 @@ async function openCollisionReportPanel(state: KronosState, extensionUri?: vscod
       const collisions = detectDispatchCollisions(collisionInput);
       return { plan, collisions };
     }).filter(report => report.collisions.length > 0);
+    logReady.arm();
     panel.webview.html = withWebviewCsp(buildCollisionReportHtml(reports, nonce, actionScriptUri), webviewScriptCspOptions(panel.webview.cspSource, nonce));
   };
   await render();
-  const logReady = createWebviewReadyMonitor(panel, 'Kronos Collision Report');
   panel.webview.onDidReceiveMessage(async msg => {
     if (logReady(msg)) { return; }
     const request = normalizeActionPanelMessage(msg, PLAN_MESSAGE_COMMANDS);
@@ -4726,9 +4733,11 @@ function openQueuePlanWindowPanel(state: KronosState, extensionUri?: vscode.Uri)
   const nonce = createWebviewNonce();
   const actionScriptUri = kronosActionPanelScriptUri(panel, extensionUri);
   let currentPlans: PlannedAction[] = [];
+  const logReady = createWebviewReadyMonitor(panel, 'Kronos Planning Window');
   const render = () => {
     const window = planForMinutes(planNextActions(state), 120);
     currentPlans = window.plans;
+    logReady.arm();
     panel.webview.html = withWebviewCsp(buildQueuePlanModeHtml(
       'Kronos Plan Next 2 Hours',
       `${window.plans.length} action(s), estimated ${window.estimatedMinutes} minutes`,
@@ -4738,7 +4747,6 @@ function openQueuePlanWindowPanel(state: KronosState, extensionUri?: vscode.Uri)
     ), webviewScriptCspOptions(panel.webview.cspSource, nonce));
   };
   render();
-  const logReady = createWebviewReadyMonitor(panel, 'Kronos Planning Window');
   panel.webview.onDidReceiveMessage(async msg => {
     if (logReady(msg)) { return; }
     const request = normalizeActionPanelMessage(msg, PLAN_MESSAGE_COMMANDS);
@@ -4763,8 +4771,10 @@ function openOvernightCandidatesPanel(state: KronosState, extensionUri?: vscode.
   const nonce = createWebviewNonce();
   const actionScriptUri = kronosActionPanelScriptUri(panel, extensionUri);
   let currentPlans: PlannedAction[] = [];
+  const logReady = createWebviewReadyMonitor(panel, 'Kronos Overnight Candidates');
   const render = () => {
     currentPlans = overnightCandidatePlans(planNextActions(state), 20);
+    logReady.arm();
     panel.webview.html = withWebviewCsp(buildQueuePlanModeHtml(
       'Kronos Overnight Candidates',
       `${currentPlans.length} linked implementation/build candidate(s)`,
@@ -4774,7 +4784,6 @@ function openOvernightCandidatesPanel(state: KronosState, extensionUri?: vscode.
     ), webviewScriptCspOptions(panel.webview.cspSource, nonce));
   };
   render();
-  const logReady = createWebviewReadyMonitor(panel, 'Kronos Overnight Candidates');
   panel.webview.onDidReceiveMessage(async msg => {
     if (logReady(msg)) { return; }
     const request = normalizeActionPanelMessage(msg, PLAN_MESSAGE_COMMANDS);
@@ -4943,13 +4952,14 @@ function openDoctorPanel(state: KronosState, extensionUri?: vscode.Uri): void {
   );
   const nonce = createWebviewNonce();
   const actionScriptUri = kronosActionPanelScriptUri(panel, extensionUri);
-  attachOperatorCommandHandler(panel, 'Kronos Doctor', DOCTOR_OPERATOR_COMMANDS);
+  const logReady = attachOperatorCommandHandler(panel, 'Kronos Doctor', DOCTOR_OPERATOR_COMMANDS);
   const pendingCheck: DoctorCheck = {
     name: 'Provider network reachability',
     status: 'warn',
     detail: 'Checking configured provider endpoints...',
   };
   const render = (currentChecks: DoctorCheck[]) => {
+    logReady.arm();
     panel.webview.html = withWebviewCsp(buildDoctorHtml(currentChecks, nonce, actionScriptUri), webviewScriptCspOptions(panel.webview.cspSource, nonce));
   };
   render([...checks, pendingCheck]);
