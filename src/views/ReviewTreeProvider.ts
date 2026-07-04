@@ -79,15 +79,26 @@ export class ReviewTreeProvider implements vscode.TreeDataProvider<ReviewItem> {
   markVisibleReviewItemsSeen(): void {
     if (this.currentReviewKeys.size === 0 && this.newReviewKeys.size === 0) { return; }
     const previousCount = this.newReviewKeys.size;
-    for (const key of this.currentReviewKeys) {
+    const visibleKeys = this.visibleReviewKeys();
+    let seenKeysChanged = false;
+    for (const key of visibleKeys) {
+      if (!this.seenReviewKeys.has(key)) {
+        seenKeysChanged = true;
+      }
       this.seenReviewKeys.add(key);
+      this.newReviewKeys.delete(key);
+      this.spinningReviewKeys.delete(key);
     }
-    this.newReviewKeys.clear();
-    this.spinningReviewKeys.clear();
-    this.clearSpinTimer();
-    this.persistSeenReviewKeys();
-    if (previousCount > 0) {
-      this._onDidChangeNewReviewCount.fire(0);
+    if (this.spinningReviewKeys.size === 0) {
+      this.clearSpinTimer();
+    } else {
+      this.scheduleSpinRefresh();
+    }
+    if (seenKeysChanged) {
+      this.persistSeenReviewKeys();
+    }
+    if (previousCount !== this.newReviewKeys.size) {
+      this._onDidChangeNewReviewCount.fire(this.getNewReviewCount());
       this._onDidChangeTreeData.fire(undefined);
     }
   }
@@ -214,6 +225,12 @@ export class ReviewTreeProvider implements vscode.TreeDataProvider<ReviewItem> {
       activityKey: reviewActivityKey(ticketKey, ticket),
       activity: reviewActivitySummary(ticket),
     }));
+  }
+
+  private visibleReviewKeys(): Set<string> {
+    return new Set(this.reviewEntrySnapshots()
+      .filter(snapshot => ticketMatchesFilter(snapshot.ticketKey, snapshot.ticket, this.filter))
+      .map(snapshot => snapshot.activityKey));
   }
 
   private isReviewItemSpinning(activityKey: string): boolean {

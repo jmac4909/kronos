@@ -2998,8 +2998,9 @@ test('review tree persists seen review keys across reloads', async () => {
       update: keys => { storedSeenKeys = [...keys]; },
     };
     const stateEmitter = new vscodeStub.EventEmitter();
-    const reviewTicket = (iid, mrFields = {}) => ticket({
+    const reviewTicket = (iid, mrFields = {}, ticketFields = {}) => ticket({
       next_action: 'await_review',
+      ...ticketFields,
       mr: { iid, state: 'opened', review_status: 'pending_review', url: `https://gitlab.example/mr/${iid}`, ...mrFields },
     });
     let currentState = baseState({ 'K-1': reviewTicket(1) });
@@ -3051,6 +3052,21 @@ test('review tree persists seen review keys across reloads', async () => {
     assert.deepEqual(commentReviewItems.map(item => item.ticketKey), ['K-3']);
     assert.match(commentReviewItems[0].activity, /1 comment/);
     assert.match(commentReviewItems[0].activityKey, /^K-3\|mr:3\|opened\|pending_review\|1\|2026-07-03T01:00:00.000Z\|/);
+    reloadedProvider.markVisibleReviewItemsSeen();
+    assert.equal(reloadedProvider.getNewReviewCount(), 0);
+
+    currentState = baseState({
+      'K-5': reviewTicket(5, {}, { projects: ['app'] }),
+      'K-6': reviewTicket(6, {}, { projects: ['api'] }),
+    });
+    stateEmitter.fire(undefined);
+    assert.equal(reloadedProvider.getNewReviewCount(), 2);
+    reloadedProvider.setFilter({ project: 'app' });
+    reloadedProvider.markVisibleReviewItemsSeen();
+    assert.deepEqual(reloadedProvider.getNewReviewItems().map(item => item.ticketKey), ['K-6']);
+    assert.ok(storedSeenKeys.some(key => key.startsWith('K-5|mr:5|opened|pending_review|')));
+    assert.equal(storedSeenKeys.some(key => key.startsWith('K-6|mr:6|opened|pending_review|')), false);
+    reloadedProvider.clearFilter();
     reloadedProvider.markVisibleReviewItemsSeen();
     assert.equal(reloadedProvider.getNewReviewCount(), 0);
     reloadedProvider.dispose();
@@ -8413,9 +8429,13 @@ test('tree providers share action labels and icons', () => {
     'if (ticket.mr?.iid !== undefined) { summary.mrIid = ticket.mr.iid; }',
     'if (activity) { summary.activity = activity; }',
     'markVisibleReviewItemsSeen(): void',
+    'const visibleKeys = this.visibleReviewKeys()',
+    'this.newReviewKeys.delete(key)',
+    'this._onDidChangeNewReviewCount.fire(this.getNewReviewCount())',
     'this.spinningReviewKeys.set(snapshot.activityKey, Date.now() + NEW_REVIEW_SPIN_MS)',
     'new ReviewItem(',
     'reviewActivityKey(ticketKey, ticket)',
+    'private visibleReviewKeys(): Set<string>',
     'private scheduleSpinRefresh(): void',
     'private clearSpinTimer(): void',
     'dispose(): void',
