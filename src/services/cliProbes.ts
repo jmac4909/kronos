@@ -167,7 +167,7 @@ export function readableGoogleApplicationCredentials(options: Pick<CliProbeOptio
   }
 }
 
-export function runCliProbe(command: string, args: string[], options: CliProbeOptions = {}): CliProbeResult {
+function runCliProbe(command: string, args: string[], options: CliProbeOptions = {}): CliProbeResult {
   const commandRunner = options.commandRunner || defaultCliProbeCommandRunner;
   try {
     const commandOptions: CliProbeCommandOptions = {

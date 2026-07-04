@@ -2599,7 +2599,7 @@ for (const marker of [
 
 for (const marker of [
   'export function defaultCliProbeCommandRunner',
-  'export function runCliProbe',
+  'function runCliProbe',
   'export function readClaudeAgents',
   'export function resolveGcloudCommandStatus',
   'export function checkGcloudApplicationDefaultAuth',

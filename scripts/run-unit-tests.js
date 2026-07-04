@@ -2845,13 +2845,13 @@ test('CLI probes normalize failures and invalid Claude agent output', () => {
   assert.equal(failed.ok, false);
   assert.match(failed.error, /expired application default credentials/);
 
-  const stringFailure = cliProbes.runCliProbe('claude', ['agents', '--json'], {
+  const stringFailure = cliProbes.checkClaudeModelAccess('claude-sonnet-4-6', {
     commandRunner: () => { throw 'claude unavailable'; },
   });
   assert.equal(stringFailure.ok, false);
   assert.equal(stringFailure.error, 'claude unavailable');
 
-  const fallbackFailure = cliProbes.runCliProbe('claude', ['agents', '--json'], {
+  const fallbackFailure = cliProbes.checkClaudeModelAccess('claude-sonnet-4-6', {
     commandRunner: () => { throw { message: '   ' }; },
   });
   assert.equal(fallbackFailure.ok, false);
