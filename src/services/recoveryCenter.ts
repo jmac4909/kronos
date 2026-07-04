@@ -113,6 +113,16 @@ export interface RecoveryInventory {
 
 const DEFAULT_STALE_RUN_MS = 2 * 60 * 60 * 1000;
 
+export function resolveRecoveryActionForRequest(item: RecoveryItem, requestedAction?: string): RecoveryItem['action'] {
+  const available = [item.action, ...(item.secondaryActions || []).map(action => action.action)];
+  if (requestedAction) {
+    return available.includes(requestedAction as RecoveryItem['action'])
+      ? requestedAction as RecoveryItem['action']
+      : undefined;
+  }
+  return item.action;
+}
+
 export function buildRecoveryInventory(input: RecoveryInventoryInput): RecoveryInventory {
   const now = input.now || new Date();
   const staleRunMs = input.staleRunMs ?? DEFAULT_STALE_RUN_MS;

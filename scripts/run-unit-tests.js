@@ -6432,6 +6432,9 @@ test('recovery center prioritizes failed runs, unsafe worktrees, doctor failures
   assert.ok(failedRunItem);
   assert.equal(failedRunItem.action, 'resumeRun');
   assert.deepEqual(failedRunItem.secondaryActions.map(action => action.action), ['openRunLog', 'openRunPrompt', 'retryRun', 'archiveRun']);
+  assert.equal(recoveryCenter.resolveRecoveryActionForRequest(failedRunItem), 'resumeRun');
+  assert.equal(recoveryCenter.resolveRecoveryActionForRequest(failedRunItem, 'openRunLog'), 'openRunLog');
+  assert.equal(recoveryCenter.resolveRecoveryActionForRequest(failedRunItem, 'missing'), undefined);
   assert.ok(inventory.items.some(item => item.id === 'run:failed-run' && item.detail === 'Jenkins build failed'));
   assert.ok(inventory.items.some(item => item.id === 'mr:MR-7:7' && item.action === 'linkMrToTicket' && item.ticketKey === 'MR-7'));
   assert.ok(inventory.items.some(item => item.id === 'run:stale-run' && item.title.includes('may be abandoned')));

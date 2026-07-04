@@ -42,7 +42,7 @@ import {
   buildTicketEvidenceCheckInput,
 } from './services/evidenceCommandInputs';
 import { RUNS_DIR, archiveRun, listRunStoreIssues, markRunCancelled, markRunContinued, markRunNeedsHuman, markRunPaused, readArchivedRuns, runRecordPath, writeRunRecord } from './services/runStore';
-import { RecoveryInventory, RecoveryItem, buildRecoveryInventory, type RecoveryInventoryInput } from './services/recoveryCenter';
+import { RecoveryInventory, RecoveryItem, buildRecoveryInventory, resolveRecoveryActionForRequest, type RecoveryInventoryInput } from './services/recoveryCenter';
 import { DispatchCollision, detectDispatchCollisions, type DispatchCollisionInput } from './services/collisionDetector';
 import { gitlabAdapter, jiraAdapter, sonarAdapter } from './services/integrationAdapters';
 import { buildRunCompletionEvidenceCheck, buildRunCompletionEvidenceText, evaluatePostRunReadiness, postRunReadinessRunPatch, resolvePostRunTicket, shouldRecordRunCompletionEvidence } from './services/postRunReadiness';
@@ -3522,7 +3522,7 @@ function openStateAuditLogPanel(extensionUri?: vscode.Uri): void {
 }
 
 async function executeRecoveryAction(item: RecoveryItem, state: KronosState, backups = listBackups(), requestedAction?: string, extensionUri?: vscode.Uri): Promise<void> {
-  const action = recoveryActionForRequest(item, requestedAction);
+  const action = resolveRecoveryActionForRequest(item, requestedAction);
   if (!action) {
     vscode.window.showWarningMessage('Recovery item action is no longer available.');
     return;
@@ -3583,16 +3583,6 @@ async function executeRecoveryAction(item: RecoveryItem, state: KronosState, bac
   if (action === 'restoreBackup') {
     await pickAndRestoreBackup(state, backups, item.backupPath);
   }
-}
-
-function recoveryActionForRequest(item: RecoveryItem, requestedAction?: string): RecoveryItem['action'] {
-  const available = [item.action, ...(item.secondaryActions || []).map(action => action.action)];
-  if (requestedAction) {
-    return available.includes(requestedAction as RecoveryItem['action'])
-      ? requestedAction as RecoveryItem['action']
-      : undefined;
-  }
-  return item.action;
 }
 
 async function pickAndRestoreBackup(state: KronosState, backups = listBackups(), preferredBackupPath?: string): Promise<void> {
