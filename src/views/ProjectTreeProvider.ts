@@ -64,12 +64,12 @@ export class ProjectTreeProvider implements vscode.TreeDataProvider<TreeElement>
       const items: TreeElement[] = [];
       const proj = element.project;
       if (proj.open_mr_count > 0) {
-        items.push(new DetailItem(`${proj.open_mr_count} open MR(s)`, ''));
+        items.push(new DetailItem(`${proj.open_mr_count} open MR(s)`));
       }
       if (proj.last_polled) {
-        items.push(new DetailItem(`Refreshed ${formatRelativeTime(proj.last_polled)}`, ''));
+        items.push(new DetailItem(`Refreshed ${formatRelativeTime(proj.last_polled)}`));
       }
-      items.push(new DetailItem(`Path: ${proj.path}`, ''));
+      items.push(new DetailItem(`Path: ${proj.path}`));
       return items;
     }
 
@@ -136,13 +136,9 @@ class DiscoveredItem extends vscode.TreeItem {
 }
 
 class DetailItem extends vscode.TreeItem {
-  constructor(label: string, url: string) {
+  constructor(label: string) {
     super(label, vscode.TreeItemCollapsibleState.None);
     this.contextValue = 'detail';
-    if (url) {
-      this.tooltip = url;
-      this.command = { command: 'kronos.openExternalUrl', title: 'Open', arguments: [url] };
-    }
   }
 }
 
