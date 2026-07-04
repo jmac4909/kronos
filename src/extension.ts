@@ -67,7 +67,7 @@ import { buildRunCompletionNotification } from './services/runCompletionNotifica
 import { openReviewTicketEntries, reviewBranchTickets as buildReviewBranchTickets, type ReviewBranchTicket, type TicketWithOpenMergeRequest } from './services/reviewWork';
 import { decideReviewMonitorAction, type ReviewMonitorDecision } from './services/reviewMonitor';
 import { decideQueueRemoval } from './services/queueRemovalPolicy';
-import { deployMonitorHandoffCheckName, hasDeployMonitorHandoffIssue, hasHandledDeployMonitorRun, resolveDeployMonitorProject } from './services/deployMonitorHandoff';
+import { deployMonitorAttentionIssue, deployMonitorHandoffCheckName, hasDeployMonitorHandoffIssue, hasHandledDeployMonitorRun, resolveDeployMonitorProject } from './services/deployMonitorHandoff';
 import { actionButton, actionRow, kronosActionPanelScript, kronosOperatorPanelCss, normalizeActionPanelMessage, operatorCommandRow, type ActionPanelMessage } from './services/operatorPanel';
 import { buildPromptHistoryHtml, buildPromptManagerHtml, buildPromptSmokeTestsHtml } from './services/promptPanelView';
 import { buildRecoveryHtml, buildStateAuditLogHtml } from './services/recoveryPanelView';
@@ -1027,16 +1027,6 @@ function kronosJiraBoardScriptUri(panel: vscode.WebviewPanel, extensionUri?: vsc
   return scriptUri;
 }
 
-function kronosMediaScriptInlineFallback(extensionUri: vscode.Uri | undefined, scriptFile: string): string {
-  if (!extensionUri || extensionUri.scheme !== 'file') { return ''; }
-  try {
-    return fs.readFileSync(vscode.Uri.joinPath(extensionUri, 'media', scriptFile).fsPath, 'utf8');
-  } catch (e: unknown) {
-    console.warn(unknownErrorMessage(e, `Could not read Kronos webview fallback script ${scriptFile}.`));
-    return '';
-  }
-}
-
 function kronosMediaScriptUri(panel: vscode.WebviewPanel, extensionUri: vscode.Uri | undefined, scriptFile: string): string | undefined {
   return extensionUri
     ? panel.webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', scriptFile)).toString()
@@ -1869,10 +1859,9 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.ViewColumn.One, kronosScriptableWebviewOptions(context.extensionUri)
       );
       const nonce = createWebviewNonce();
-      const inlineFallbackScript = kronosMediaScriptInlineFallback(context.extensionUri, WEBVIEW_JIRA_BOARD_SCRIPT);
       const renderBoard = () => {
         const scriptUri = kronosJiraBoardScriptUri(panel, context.extensionUri);
-        panel.webview.html = withWebviewCsp(buildJiraBoardHtml(state, nonce, scriptUri, inlineFallbackScript), webviewScriptCspOptions(panel.webview.cspSource, nonce));
+        panel.webview.html = withWebviewCsp(buildJiraBoardHtml(state, nonce, scriptUri), webviewScriptCspOptions(panel.webview.cspSource, nonce));
       };
       const logReady = createWebviewReadyMonitor(panel, 'Kronos Jira Board');
       const hasTicket = (ticketKey: string) => Boolean(state.state?.tickets?.[ticketKey]);
@@ -5560,9 +5549,24 @@ async function startDeployMonitorForMergedTicket(state: KronosState, ticketKey: 
   const projectName = project.projectName;
   const projectPath = project.projectPath;
   const mrIid = ticket.mr?.iid;
-  if (hasHandledDeployMonitorRun([...listRuns(), ...readArchivedRuns()], { projectName, projectPath, ticketKey, mrIid })) {
+  const deployMonitorRuns = [...listRuns(), ...readArchivedRuns()];
+  const deployMonitorMatch = { projectName, projectPath, ticketKey, mrIid };
+  if (hasHandledDeployMonitorRun(deployMonitorRuns, deployMonitorMatch)) {
     void vscode.window.showInformationMessage(`${ticketKey} merged - deploy monitor already handled.`);
     return true;
+  }
+  const attentionIssue = deployMonitorAttentionIssue(deployMonitorRuns, deployMonitorMatch);
+  if (attentionIssue) {
+    recordDeployMonitorHandoffIssue(state, ticketKey, ticket, attentionIssue);
+    void vscode.window.showWarningMessage(attentionIssue, 'Run Center').then(action => {
+      if (action === 'Run Center') {
+        return vscode.commands.executeCommand('kronos.runCenter');
+      }
+      return undefined;
+    }, (e: unknown) => {
+      console.warn(unknownErrorMessage(e, 'Failed to open Run Center for deploy monitor issue.'));
+    });
+    return false;
   }
   const promptMetadata: PromptRunMetadata = {
     source: 'slash',
@@ -6013,7 +6017,7 @@ function buildDiffHtml(data: MergeRequestDiffResult): string {
 </div></body></html>`;
 }
 
-function buildJiraBoardHtml(state: KronosState, nonce: string, scriptUri: string, inlineFallbackScript = ''): string {
+function buildJiraBoardHtml(state: KronosState, nonce: string, scriptUri: string): string {
   const esc = escapeHtml;
   const attr = escapeAttr;
   const tickets = state.state?.tickets || {};
@@ -6122,10 +6126,6 @@ function buildJiraBoardHtml(state: KronosState, nonce: string, scriptUri: string
   }).join('');
 
   const ticketJsonRaw = escapeHtml(JSON.stringify(ticketData));
-  const inlineFallback = inlineFallbackScript
-    ? `<script nonce="${escapeAttr(nonce)}" data-kronos-inline-fallback="jira-board" data-kronos-webview-name="Kronos Jira Board" data-kronos-ready-command="${escapeAttr(WEBVIEW_READY_COMMAND)}">\n${sanitizeInlineScript(inlineFallbackScript)}\n</script>`
-    : '';
-
   return `<!DOCTYPE html>
 <html><head>
 <style>
@@ -6209,7 +6209,6 @@ function buildJiraBoardHtml(state: KronosState, nonce: string, scriptUri: string
   }
 </style>
 <script nonce="${escapeAttr(nonce)}" defer src="${escapeAttr(scriptUri)}" data-kronos-webview-name="Kronos Jira Board" data-kronos-ready-command="${escapeAttr(WEBVIEW_READY_COMMAND)}"></script>
-${inlineFallback}
 </head><body><div class="kronos-shell board-shell">
   <textarea id="kronos-jira-ticket-data" class="kronos-data-payload" hidden aria-hidden="true">${ticketJsonRaw}</textarea>
   <div class="kronos-header">
@@ -6244,10 +6243,6 @@ ${inlineFallback}
     </div>
   </div>
 </div></body></html>`;
-}
-
-function sanitizeInlineScript(script: string): string {
-  return script.replace(/<\/script/gi, '<\\/script');
 }
 
 function buildTicketHtml(key: string, ticket: Ticket, state: KronosState, nonce?: string): string {

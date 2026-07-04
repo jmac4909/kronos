@@ -1,5 +1,6 @@
 import { KronosState, Ticket } from '../state/types';
 import { evidenceChecks, evidenceString } from './evidenceData';
+import { runAttentionLine } from './runAttention';
 import { isFreshActiveRun } from './runStatus';
 
 export const DEPLOY_MONITOR_HANDOFF_CHECK_PREFIX = 'Deploy monitor handoff';
@@ -31,6 +32,7 @@ export interface DeployMonitorRunMatch {
 }
 
 const HANDLED_DEPLOY_MONITOR_STATUSES = new Set(['completed', 'waiting_for_review']);
+const ATTENTION_DEPLOY_MONITOR_STATUSES = new Set(['failed', 'needs_human', 'cancelled']);
 
 export function resolveDeployMonitorProject(
   state: Pick<KronosState, 'projects'> | null | undefined,
@@ -62,6 +64,14 @@ export function hasHandledDeployMonitorRun(runs: DeployMonitorRunLike[], match: 
   return runs.some(run => isDeployMonitorRunMatch(run, match) && isHandledDeployMonitorRun(run));
 }
 
+export function deployMonitorAttentionIssue(runs: DeployMonitorRunLike[], match: DeployMonitorRunMatch): string | undefined {
+  const run = runs.find(candidate => isDeployMonitorRunMatch(candidate, match) && isAttentionDeployMonitorRun(candidate));
+  if (!run) { return undefined; }
+  const status = runStatusLabel(run.status);
+  const detail = runAttentionLine(run, 180);
+  return `${match.ticketKey} merged, but a prior deploy monitor ${status}${detail ? `: ${detail}` : ''}. Resolve it in Run Center before dispatching another deploy monitor.`;
+}
+
 export function isDeployMonitorRunMatch(run: DeployMonitorRunLike, match: DeployMonitorRunMatch): boolean {
   if (run.skill !== 'deploy-monitor' || run.ticket !== match.ticketKey) { return false; }
   if (run.project !== match.projectName && run.projectPath !== match.projectPath) { return false; }
@@ -73,6 +83,17 @@ export function isDeployMonitorRunMatch(run: DeployMonitorRunLike, match: Deploy
 
 export function isHandledDeployMonitorRun(run: DeployMonitorRunLike): boolean {
   return isFreshActiveRun(run) || (typeof run.status === 'string' && HANDLED_DEPLOY_MONITOR_STATUSES.has(run.status));
+}
+
+function isAttentionDeployMonitorRun(run: DeployMonitorRunLike): boolean {
+  return typeof run.status === 'string' && ATTENTION_DEPLOY_MONITOR_STATUSES.has(run.status);
+}
+
+function runStatusLabel(status: unknown): string {
+  if (status === 'failed') { return 'failed'; }
+  if (status === 'needs_human') { return 'needs human review'; }
+  if (status === 'cancelled') { return 'was cancelled'; }
+  return 'needs attention';
 }
 
 export function promptMetadataMergeRequestIid(value: unknown): number | undefined {

@@ -381,16 +381,12 @@ for (const marker of [
 }
 
 for (const marker of [
-  'buildJiraBoardHtml(state, nonce, scriptUri, inlineFallbackScript)',
+  'buildJiraBoardHtml(state, nonce, scriptUri)',
   'webviewScriptCspOptions(panel.webview.cspSource, nonce)',
   'WEBVIEW_JIRA_BOARD_SCRIPT',
   'function kronosJiraBoardScriptUri',
-  'function kronosMediaScriptInlineFallback',
-  "fs.readFileSync(vscode.Uri.joinPath(extensionUri, 'media', scriptFile).fsPath, 'utf8')",
   "vscode.Uri.joinPath(extensionUri, 'media', scriptFile)",
   'defer src="${escapeAttr(scriptUri)}"',
-  'data-kronos-inline-fallback="jira-board"',
-  'function sanitizeInlineScript(script: string): string',
   'id="kronos-jira-ticket-data"',
   'class="kronos-data-payload"',
   "import { createWebviewReadyMonitor } from './services/webviewDiagnostics'",
@@ -628,15 +624,19 @@ for (const marker of [
   'const launch = await dispatchClaudeSession(projectPath, skill, ticket, onCompleteOrOpts, customPrompt)',
   'return launch.launched',
   'unknownErrorMessage(e, `Failed to start ${skill} session.`)',
-  "import { deployMonitorHandoffCheckName, hasDeployMonitorHandoffIssue, hasHandledDeployMonitorRun, resolveDeployMonitorProject } from './services/deployMonitorHandoff'",
+  "import { deployMonitorAttentionIssue, deployMonitorHandoffCheckName, hasDeployMonitorHandoffIssue, hasHandledDeployMonitorRun, resolveDeployMonitorProject } from './services/deployMonitorHandoff'",
   'const started = await startDeployMonitorForMergedTicket(state, update.ticketKey, update.ticket)',
   'if (started) { reviewTerminalMergeRequestActions.add(actionKey); }',
   "await startClaudeDispatch(projectPath, 'deploy-monitor', ticketKey",
   'projectNameOverride: projectName',
   'promptMetadata.mergeRequestIid = mrIid',
   'resolveDeployMonitorProject(state.state, ticketKey, ticket)',
-  'hasHandledDeployMonitorRun([...listRuns(), ...readArchivedRuns()], { projectName, projectPath, ticketKey, mrIid })',
+  'const deployMonitorRuns = [...listRuns(), ...readArchivedRuns()]',
+  'const deployMonitorMatch = { projectName, projectPath, ticketKey, mrIid }',
+  'hasHandledDeployMonitorRun(deployMonitorRuns, deployMonitorMatch)',
   'deploy monitor already handled',
+  'const attentionIssue = deployMonitorAttentionIssue(deployMonitorRuns, deployMonitorMatch)',
+  "vscode.window.showWarningMessage(attentionIssue, 'Run Center')",
   'recordDeployMonitorHandoffIssue(state, ticketKey, ticket, reason)',
   'const currentTicket = state.state?.tickets?.[ticketKey] || ticket',
   'hasDeployMonitorHandoffIssue(currentTicket, summary)',
@@ -830,6 +830,16 @@ for (const marker of [
 ]) {
   if (!extension.includes(marker)) {
     fail(`Missing safety marker: ${marker}`);
+  }
+}
+for (const marker of [
+  'function kronosMediaScriptInlineFallback',
+  'inlineFallbackScript',
+  'data-kronos-inline-fallback="jira-board"',
+  'function sanitizeInlineScript(script: string): string',
+]) {
+  if (extension.includes(marker)) {
+    fail(`Jira Board should rely on packaged media scripts without inline fallback: ${marker}`);
   }
 }
 for (const marker of [

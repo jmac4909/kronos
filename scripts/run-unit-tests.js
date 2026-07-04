@@ -1335,6 +1335,21 @@ test('deploy monitor handoff resolves projects and only suppresses handled runs'
     { skill: 'deploy-monitor', ticket: 'K-13', project: 'app', status: 'needs_human', promptMetadata: { mergeRequestIid: 13 } },
     { skill: 'deploy-monitor', ticket: 'K-13', project: 'app', status: 'cancelled', promptMetadata: { mergeRequestIid: 13 } },
   ], match), false);
+  assert.match(deployMonitorHandoff.deployMonitorAttentionIssue([
+    { skill: 'deploy-monitor', ticket: 'K-13', project: 'app', status: 'failed', failureReason: 'Jenkins build failed', promptMetadata: { mergeRequestIid: 13 } },
+  ], match), /K-13 merged, but a prior deploy monitor failed: Jenkins build failed/);
+  assert.match(deployMonitorHandoff.deployMonitorAttentionIssue([
+    { skill: 'deploy-monitor', ticket: 'K-13', projectPath: '/repo/app', status: 'needs_human', failureReason: 'manual deploy check required', promptMetadata: { mergeRequestIid: 13 } },
+  ], match), /prior deploy monitor needs human review: Needs human review: manual deploy check required/);
+  assert.match(deployMonitorHandoff.deployMonitorAttentionIssue([
+    { skill: 'deploy-monitor', ticket: 'K-13', project: 'app', status: 'cancelled', failureReason: 'operator cancelled retry', promptMetadata: { mergeRequestIid: 13 } },
+  ], match), /prior deploy monitor was cancelled: operator cancelled retry/);
+  assert.equal(deployMonitorHandoff.deployMonitorAttentionIssue([
+    { skill: 'deploy-monitor', ticket: 'K-13', project: 'app', status: 'completed', promptMetadata: { mergeRequestIid: 13 } },
+  ], match), undefined);
+  assert.equal(deployMonitorHandoff.deployMonitorAttentionIssue([
+    { skill: 'deploy-monitor', ticket: 'K-13', project: 'app', status: 'failed', promptMetadata: { mergeRequestIid: 99 } },
+  ], match), undefined);
   assert.equal(deployMonitorHandoff.hasHandledDeployMonitorRun([
     { skill: 'deploy-monitor', ticket: 'K-13', project: 'app', status: 'completed', promptMetadata: { mergeRequestIid: 99 } },
   ], match), false);
@@ -6976,13 +6991,9 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'class="kronos-data-payload"',
     'WEBVIEW_JIRA_BOARD_SCRIPT',
     'function kronosJiraBoardScriptUri',
-    'function kronosMediaScriptInlineFallback',
-    "fs.readFileSync(vscode.Uri.joinPath(extensionUri, 'media', scriptFile).fsPath, 'utf8')",
     "vscode.Uri.joinPath(extensionUri, 'media', scriptFile)",
-    'buildJiraBoardHtml(state, nonce, scriptUri, inlineFallbackScript)',
+    'buildJiraBoardHtml(state, nonce, scriptUri)',
     'defer src="${escapeAttr(scriptUri)}"',
-    'data-kronos-inline-fallback="jira-board"',
-    'function sanitizeInlineScript(script: string): string',
     'data-kronos-ready-command="${escapeAttr(WEBVIEW_READY_COMMAND)}"',
     'function initKronosJiraBoard',
     'function claimKronosJiraBoard',
@@ -7154,7 +7165,7 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'return true;',
     'return false;',
     'unknownErrorMessage(e, `Failed to start ${skill} session.`)',
-    "import { deployMonitorHandoffCheckName, hasDeployMonitorHandoffIssue, hasHandledDeployMonitorRun, resolveDeployMonitorProject } from './services/deployMonitorHandoff'",
+    "import { deployMonitorAttentionIssue, deployMonitorHandoffCheckName, hasDeployMonitorHandoffIssue, hasHandledDeployMonitorRun, resolveDeployMonitorProject } from './services/deployMonitorHandoff'",
     'const started = await startDeployMonitorForMergedTicket(state, update.ticketKey, update.ticket)',
     'if (started) { reviewTerminalMergeRequestActions.add(actionKey); }',
     'console.warn(unknownErrorMessage(e, `Failed to load MR diff hints for ${ticketKey}.`))',
@@ -7164,8 +7175,12 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'projectNameOverride: projectName',
     'promptMetadata.mergeRequestIid = mrIid',
     'resolveDeployMonitorProject(state.state, ticketKey, ticket)',
-    'hasHandledDeployMonitorRun([...listRuns(), ...readArchivedRuns()], { projectName, projectPath, ticketKey, mrIid })',
+    'const deployMonitorRuns = [...listRuns(), ...readArchivedRuns()]',
+    'const deployMonitorMatch = { projectName, projectPath, ticketKey, mrIid }',
+    'hasHandledDeployMonitorRun(deployMonitorRuns, deployMonitorMatch)',
     'deploy monitor already handled',
+    'const attentionIssue = deployMonitorAttentionIssue(deployMonitorRuns, deployMonitorMatch)',
+    "vscode.window.showWarningMessage(attentionIssue, 'Run Center')",
     'recordDeployMonitorHandoffIssue(state, ticketKey, ticket, reason)',
     'const currentTicket = state.state?.tickets?.[ticketKey] || ticket',
     'hasDeployMonitorHandoffIssue(currentTicket, summary)',
@@ -7276,6 +7291,18 @@ test('extension webviews use shared UI shell and board filtering affordances', (
   ]) {
     assert.ok(uiSource.includes(marker), marker);
   }
+  for (const marker of [
+    'function kronosMediaScriptInlineFallback',
+    'inlineFallbackScript',
+    'function sanitizeInlineScript(script: string): string',
+  ]) {
+    assert.equal(source.includes(marker), false, `Jira Board should rely on packaged media scripts without inline fallback: ${marker}`);
+  }
+  assert.equal(
+    uiSource.includes('data-kronos-inline-fallback="jira-board"'),
+    false,
+    'Jira Board should not emit an inline fallback script when the packaged script is required',
+  );
   for (const marker of [
     'vscode.commands.executeCommand(`kronos.${command}`',
     'await vscode.commands.executeCommand(`kronos.${command}`',
