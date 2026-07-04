@@ -27,6 +27,16 @@ export interface DashboardPanelInput {
   actionScriptUri?: string | undefined;
 }
 
+interface DashboardOperatorBrief {
+  tone: 'good' | 'warn' | 'bad' | 'info' | 'neutral';
+  headline: string;
+  detail: string;
+  now: string;
+  next: string;
+  blockers: string;
+  evidence: string;
+}
+
 function dashboardBriefRecord(brief: unknown): Record<string, unknown> {
   return Boolean(brief) && typeof brief === 'object' && !Array.isArray(brief) ? brief as Record<string, unknown> : {};
 }
@@ -69,6 +79,20 @@ export function buildDashboardHtml(input: DashboardPanelInput): string {
   const cycleMetric = trendMetric('Average cycle time');
   const nextPlan = input.plans[0];
   const nextContext = nextPlan ? buildNextActionContext(nextPlan, { state: input.state, queue: input.queue }) : undefined;
+  const operatorBrief = buildDashboardOperatorBrief({
+    projectsCount: Object.keys(projects).length,
+    ticketsCount: Object.keys(allTickets).length,
+    activeRuns,
+    failedRuns,
+    needsHumanRuns,
+    waitingForReviewRuns,
+    evidenceGateFailures,
+    evidenceGateWarnings,
+    staleCritical: agingReport.summary.critical,
+    staleWarnings: agingReport.summary.warning,
+    nextPlan,
+    worklistLanes,
+  });
   const dashboardActions = actionRow([
     actionButton('nextBestAction', 'Next Best Action', { primary: true }),
     actionButton('refreshPanel', 'Refresh'),
@@ -99,6 +123,19 @@ export function buildDashboardHtml(input: DashboardPanelInput): string {
       ${nextContext ? `<div class="next-meta"><strong>Risk:</strong> ${escapeHtml(nextContext.risks.join(', '))}</div>` : ''}
       ${nextContext ? `<div class="next-meta"><strong>${nextContext.blockers.length ? 'Blocked' : 'Preflight'}:</strong> ${escapeHtml((nextContext.blockers.length ? nextContext.blockers : nextContext.preflight).join('; '))}</div>` : ''}
       <div class="next-action-controls">${dashboardActions}</div>
+    </div>
+  </div>`;
+  const operatorBriefHtml = `<div class="dashboard-operator-brief ${escapeClass(operatorBrief.tone)} kronos-panel kronos-soft">
+    <div class="dashboard-operator-copy">
+      <div class="kronos-section-title">Operator Brief</div>
+      <h2>${escapeHtml(operatorBrief.headline)}</h2>
+      <p>${escapeHtml(operatorBrief.detail)}</p>
+    </div>
+    <div class="dashboard-brief-grid">
+      ${dashboardBriefFact('Now', operatorBrief.now)}
+      ${dashboardBriefFact('Next', operatorBrief.next)}
+      ${dashboardBriefFact('Blockers', operatorBrief.blockers)}
+      ${dashboardBriefFact('Evidence', operatorBrief.evidence)}
     </div>
   </div>`;
   const projectCards = Object.entries(projects).map(([name, proj]) => {
@@ -132,6 +169,17 @@ export function buildDashboardHtml(input: DashboardPanelInput): string {
 <style>
   ${kronosWebviewBaseCss()}
   .dashboard-shell { max-width: 1320px; }
+  .dashboard-operator-brief { display: grid; grid-template-columns: minmax(280px, 0.9fr) minmax(0, 1.1fr); gap: 16px; padding: 16px; margin: 12px 0 16px; border-left: 4px solid var(--k-accent); }
+  .dashboard-operator-brief.good { border-left-color: var(--k-ok); }
+  .dashboard-operator-brief.warn { border-left-color: var(--k-warn); }
+  .dashboard-operator-brief.bad { border-left-color: var(--k-danger); }
+  .dashboard-operator-brief.info { border-left-color: #2196f3; }
+  .dashboard-operator-copy h2 { margin: 4px 0 6px; font-size: 19px; line-height: 1.25; }
+  .dashboard-operator-copy p { margin: 0; color: var(--k-muted); line-height: 1.45; }
+  .dashboard-brief-grid { display: grid; grid-template-columns: repeat(2, minmax(160px, 1fr)); gap: 8px; }
+  .dashboard-brief-fact { min-height: 74px; border: 1px solid var(--k-border); border-radius: var(--k-radius-sm); padding: 9px 10px; background: var(--k-surface); }
+  .dashboard-brief-fact .fact-label { color: var(--k-muted); font-size: 10px; font-weight: 650; text-transform: uppercase; }
+  .dashboard-brief-fact .fact-value { margin-top: 4px; font-size: 12px; line-height: 1.35; overflow-wrap: anywhere; }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; margin: 12px 0; }
   .cockpit { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 10px; margin: 12px 0 18px; }
   .metric, .next-action { border: 1px solid var(--k-border); border-radius: var(--k-radius); padding: 12px; background: var(--k-surface-soft); }
@@ -173,6 +221,8 @@ export function buildDashboardHtml(input: DashboardPanelInput): string {
   .dashboard-warning strong { display: block; margin-bottom: 4px; color: #ff9800; }
   .dashboard-warning div { color: var(--k-muted); font-size: 12px; line-height: 1.45; }
   @media (max-width: 820px) {
+    .dashboard-operator-brief { grid-template-columns: 1fr; }
+    .dashboard-brief-grid { grid-template-columns: 1fr; }
     .next-action { grid-column: 1; }
   }
 </style>
@@ -185,6 +235,7 @@ export function buildDashboardHtml(input: DashboardPanelInput): string {
     </div>
   </div>
   ${warningHtml}
+  ${operatorBriefHtml}
   ${cockpitHtml}
   ${briefHtml}
   ${worklistHtml}
@@ -195,6 +246,133 @@ export function buildDashboardHtml(input: DashboardPanelInput): string {
   </div>
 </div>${input.nonce ? kronosActionPanelScript(input.nonce, 'Kronos Dashboard', input.actionScriptUri) : ''}</body>
 </html>`;
+}
+
+function dashboardBriefFact(label: string, value: string): string {
+  return `<div class="dashboard-brief-fact">
+    <div class="fact-label">${escapeHtml(label)}</div>
+    <div class="fact-value">${escapeHtml(value)}</div>
+  </div>`;
+}
+
+function buildDashboardOperatorBrief(input: {
+  projectsCount: number;
+  ticketsCount: number;
+  activeRuns: number;
+  failedRuns: number;
+  needsHumanRuns: number;
+  waitingForReviewRuns: number;
+  evidenceGateFailures: number;
+  evidenceGateWarnings: number;
+  staleCritical: number;
+  staleWarnings: number;
+  nextPlan?: PlannedAction | undefined;
+  worklistLanes: DashboardWorklistLane[];
+}): DashboardOperatorBrief {
+  const needsHumanLane = dashboardLane(input.worklistLanes, 'needs_human');
+  const activeLane = dashboardLane(input.worklistLanes, 'active_runs');
+  const gateLane = dashboardLane(input.worklistLanes, 'failing_gates');
+  const staleLane = dashboardLane(input.worklistLanes, 'stale_items');
+  const recentLane = dashboardLane(input.worklistLanes, 'recent_completed');
+  const primaryAttention = [
+    needsHumanLane?.items[0],
+    gateLane?.items[0],
+    staleLane?.items[0],
+    activeLane?.items[0],
+    recentLane?.items[0],
+  ].find(Boolean);
+  const nextLabel = input.nextPlan
+    ? `${input.nextPlan.ticketKey || 'Refresh'} - ${actionToLabel(input.nextPlan.action)}`
+    : 'No planned queue action';
+  if (input.needsHumanRuns > 0 || (needsHumanLane?.items.length || 0) > 0) {
+    return {
+      tone: 'bad',
+      headline: `${input.needsHumanRuns || needsHumanLane?.items.length || 1} item${(input.needsHumanRuns || needsHumanLane?.items.length || 1) === 1 ? '' : 's'} need human attention`,
+      detail: primaryAttention ? `${primaryAttention.title}: ${primaryAttention.detail}` : 'Open Human Review or Run Center before starting more work.',
+      now: activeRunSummary(input.activeRuns),
+      next: nextLabel,
+      blockers: dashboardBlockerSummary(input),
+      evidence: dashboardEvidenceSummary(input),
+    };
+  }
+  if (input.evidenceGateFailures > 0) {
+    return {
+      tone: 'bad',
+      headline: `${input.evidenceGateFailures} evidence gate${input.evidenceGateFailures === 1 ? '' : 's'} blocking review`,
+      detail: primaryAttention ? `${primaryAttention.title}: ${primaryAttention.detail}` : 'Evidence must be added before queue removal or review handoff.',
+      now: activeRunSummary(input.activeRuns),
+      next: nextLabel,
+      blockers: dashboardBlockerSummary(input),
+      evidence: dashboardEvidenceSummary(input),
+    };
+  }
+  if (input.activeRuns > 0) {
+    return {
+      tone: 'info',
+      headline: `${input.activeRuns} run${input.activeRuns === 1 ? '' : 's'} active right now`,
+      detail: primaryAttention ? `${primaryAttention.title}: ${primaryAttention.detail}` : 'Watch active runs for file changes, tool errors, and readiness output.',
+      now: activeRunSummary(input.activeRuns),
+      next: nextLabel,
+      blockers: dashboardBlockerSummary(input),
+      evidence: dashboardEvidenceSummary(input),
+    };
+  }
+  if (input.waitingForReviewRuns > 0) {
+    return {
+      tone: 'good',
+      headline: `${input.waitingForReviewRuns} run${input.waitingForReviewRuns === 1 ? '' : 's'} ready for review`,
+      detail: primaryAttention ? `${primaryAttention.title}: ${primaryAttention.detail}` : 'Open review items and confirm evidence before archiving completed work.',
+      now: 'No active runs',
+      next: nextLabel,
+      blockers: dashboardBlockerSummary(input),
+      evidence: dashboardEvidenceSummary(input),
+    };
+  }
+  return {
+    tone: input.staleCritical > 0 || input.staleWarnings > 0 ? 'warn' : 'neutral',
+    headline: input.nextPlan ? `Next planned action is ${nextLabel}` : 'No urgent operator action detected',
+    detail: primaryAttention ? `${primaryAttention.title}: ${primaryAttention.detail}` : `${input.projectsCount} projects and ${input.ticketsCount} tickets are tracked.`,
+    now: activeRunSummary(input.activeRuns),
+    next: nextLabel,
+    blockers: dashboardBlockerSummary(input),
+    evidence: dashboardEvidenceSummary(input),
+  };
+}
+
+function dashboardLane(lanes: DashboardWorklistLane[], kind: DashboardWorklistLane['kind']): DashboardWorklistLane | undefined {
+  return lanes.find(lane => lane.kind === kind);
+}
+
+function activeRunSummary(count: number): string {
+  return count > 0 ? `${count} active run${count === 1 ? '' : 's'}` : 'No active runs';
+}
+
+function dashboardBlockerSummary(input: {
+  failedRuns: number;
+  needsHumanRuns: number;
+  staleCritical: number;
+  staleWarnings: number;
+}): string {
+  const parts = [
+    input.needsHumanRuns > 0 ? `${input.needsHumanRuns} needs human` : '',
+    input.failedRuns > 0 ? `${input.failedRuns} failed or cancelled` : '',
+    input.staleCritical > 0 ? `${input.staleCritical} stale critical` : '',
+    input.staleWarnings > 0 ? `${input.staleWarnings} stale warning${input.staleWarnings === 1 ? '' : 's'}` : '',
+  ].filter(Boolean);
+  return parts.length ? parts.join(', ') : 'No blockers detected';
+}
+
+function dashboardEvidenceSummary(input: {
+  evidenceGateFailures: number;
+  evidenceGateWarnings: number;
+}): string {
+  if (input.evidenceGateFailures > 0) {
+    return `${input.evidenceGateFailures} failing gate${input.evidenceGateFailures === 1 ? '' : 's'}`;
+  }
+  if (input.evidenceGateWarnings > 0) {
+    return `${input.evidenceGateWarnings} gate warning${input.evidenceGateWarnings === 1 ? '' : 's'}`;
+  }
+  return 'Evidence gates clear';
 }
 
 export function buildDashboardWorklistHtml(lanes: DashboardWorklistLane[]): string {

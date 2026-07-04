@@ -9622,6 +9622,12 @@ test('dashboard panel view renders escaped command center data', () => {
   });
 
   assert.match(html, /class="kronos-shell dashboard-shell"/);
+  assert.match(html, /Operator Brief/);
+  assert.match(html, /dashboard-operator-brief/);
+  assert.match(html, /1 run active right now/);
+  assert.match(html, /Now/);
+  assert.match(html, /Blockers/);
+  assert.match(html, /Evidence/);
   assert.match(html, /Command Center/);
   assert.match(html, /web&lt;script&gt;/);
   assert.match(html, /Project &lt;summary&gt; &amp; details/);
@@ -9749,6 +9755,9 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'webviewScriptCspOptions(panel.webview.cspSource, nonce)',
     'kronosWebviewBaseCss',
     'class="kronos-shell dashboard-shell"',
+    'dashboard-operator-brief',
+    'function buildDashboardOperatorBrief',
+    'function dashboardBriefFact',
     'let data: unknown = {}',
     'let loadWarning: string | undefined',
     "loadWarning = warnUnexpectedPanelIntegrationError(e, 'Morning brief unavailable.')",
