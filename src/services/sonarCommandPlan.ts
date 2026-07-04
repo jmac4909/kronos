@@ -1,6 +1,39 @@
 import type { SonarIssue } from './sonarReportView';
 import { recordFromUnknown } from './records';
 
+interface SonarBranchSummary {
+  name: string;
+  isMain?: boolean;
+  status?: {
+    qualityGateStatus?: string;
+  };
+}
+
+export interface SonarBranchPickItem {
+  label: string;
+  description: string;
+  detail?: string;
+}
+
+export function buildSonarBranchPickItems(
+  branches: SonarBranchSummary[],
+  fallbackBranch: string,
+  unavailableDetail = '',
+): SonarBranchPickItem[] {
+  if (branches.length > 0) {
+    return branches.map(branch => ({
+      label: branch.name,
+      description: `${branch.isMain ? '(main) ' : ''}${branch.status?.qualityGateStatus || ''}`,
+    }));
+  }
+  const item: SonarBranchPickItem = {
+    label: fallbackBranch,
+    description: unavailableDetail ? '(default; Sonar branches unavailable)' : '(default)',
+  };
+  if (unavailableDetail) { item.detail = unavailableDetail; }
+  return [item];
+}
+
 export function normalizeSonarIssueCommandList(value: unknown): SonarIssue[] {
   if (!Array.isArray(value)) { return []; }
   return value

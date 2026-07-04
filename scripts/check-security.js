@@ -426,6 +426,7 @@ const serviceOwnedSafetyMarkers = new Set([
   'function resolveRunArtifactFile(filePath: string | undefined): RunArtifactPathResult',
   'unknownErrorMessage(e, `Could not inspect run workspace ${candidate}.`)',
   'isCodeAction(target.action)',
+  "'(default; Sonar branches unavailable)'",
 ]);
 
 for (const marker of [
@@ -990,7 +991,7 @@ for (const marker of [
   'unknownErrorMessage(e, `Could not resolve MR branch for ${ticket.key}.`)',
   'unknownErrorMessage(e, `Could not find fallback remote branch for ${ticket.key}.`)',
   "import { buildSonarReport }",
-  "import { buildSonarFixBranchStrategy, buildSonarFixInstructionBlock } from './services/sonarCommandPlan'",
+  "import { buildSonarBranchPickItems, buildSonarFixBranchStrategy, buildSonarFixInstructionBlock } from './services/sonarCommandPlan'",
   "import { isRecord, recordFromUnknown, recordString } from './services/records'",
   "from './services/commandPayloads'",
   'resolveProjectName,',
@@ -3257,6 +3258,8 @@ for (const forbidden of [
 for (const marker of [
   "import type { SonarIssue } from './sonarReportView'",
   "import { recordFromUnknown } from './records'",
+  'export interface SonarBranchPickItem',
+  'export function buildSonarBranchPickItems',
   'export function normalizeSonarIssueCommandList(value: unknown): SonarIssue[]',
   'export function formatSonarIssuePromptLine(issue: SonarIssue): string',
   'export function buildKnownSonarIssuesBlock(value: unknown): string',

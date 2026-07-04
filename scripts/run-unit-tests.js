@@ -3545,6 +3545,19 @@ test('sonar command plan normalizes issue payloads and builds fix instructions',
     sonarCommandPlan.buildSonarFixBranchStrategy('AppSvc', 'feature/K-1'),
     /Stay on this branch — push directly/,
   );
+  assert.deepEqual(sonarCommandPlan.buildSonarBranchPickItems([
+    { name: 'main', isMain: true, status: { qualityGateStatus: 'OK' } },
+    { name: 'feature/K-1', isMain: false, status: { qualityGateStatus: 'ERROR' } },
+  ], 'develop'), [
+    { label: 'main', description: '(main) OK' },
+    { label: 'feature/K-1', description: 'ERROR' },
+  ]);
+  assert.deepEqual(sonarCommandPlan.buildSonarBranchPickItems([], 'develop'), [
+    { label: 'develop', description: '(default)' },
+  ]);
+  assert.deepEqual(sonarCommandPlan.buildSonarBranchPickItems([], 'develop', 'offline'), [
+    { label: 'develop', description: '(default; Sonar branches unavailable)', detail: 'offline' },
+  ]);
   const instructions = sonarCommandPlan.buildSonarFixInstructionBlock({
     customInstructions: 'skip S1192',
     branchStrategy: sonarCommandPlan.buildSonarFixBranchStrategy('AppSvc', 'main'),
@@ -3559,6 +3572,7 @@ test('sonar command plan normalizes issue payloads and builds fix instructions',
     "import type { SonarIssue } from './sonarReportView'",
     "import { recordFromUnknown } from './records'",
     'export function normalizeSonarIssueCommandList(value: unknown): SonarIssue[]',
+    'export function buildSonarBranchPickItems',
     'export function formatSonarIssuePromptLine(issue: SonarIssue): string',
     'export function buildKnownSonarIssuesBlock(value: unknown): string',
     'export function buildSonarFixBranchStrategy(projectName: string, sourceBranch: string): string',
@@ -10406,6 +10420,7 @@ test('extension MR and ticket link handlers normalize payloads and unknown error
 
 test('extension command handlers normalize remaining unknown errors', () => {
   const source = readSourceFixture('src', 'extension.ts');
+  const sourceWithSonarCommandPlan = `${source}\n${readSourceFixture('src', 'services', 'sonarCommandPlan.ts')}`;
   for (const marker of [
     "unknownErrorMessage(e, 'Failed to fetch SonarQube report.')",
     "unknownErrorMessage(e, 'Failed to update scan dirs.')",
@@ -10427,7 +10442,7 @@ test('extension command handlers normalize remaining unknown errors', () => {
     'unknownErrorMessage(e, `Could not resolve MR branch for ${k}.`)',
     'unknownErrorMessage(e, `Could not find fallback remote branch for ${ticket.key}.`)',
   ]) {
-    assert.ok(source.includes(marker), marker);
+    assert.ok(sourceWithSonarCommandPlan.includes(marker), marker);
   }
   for (const marker of [
     'catch (e: any)',
@@ -10455,7 +10470,7 @@ test('extension Sonar commands normalize webview and issue payloads', () => {
   const sonarCommandSource = source.slice(sonarCommandStart, sonarCommandEnd);
   for (const marker of [
     "import { buildSonarReport }",
-    "import { buildSonarFixBranchStrategy, buildSonarFixInstructionBlock } from './services/sonarCommandPlan'",
+    "import { buildSonarBranchPickItems, buildSonarFixBranchStrategy, buildSonarFixInstructionBlock } from './services/sonarCommandPlan'",
     "import { isRecord, recordFromUnknown, recordString } from './services/records'",
     'stringFromUnknown,',
     "vscode.commands.registerCommand('kronos.sonarScan', async (item: unknown)",
@@ -10482,6 +10497,7 @@ test('extension Sonar commands normalize webview and issue payloads', () => {
   for (const marker of [
     'function normalizeSonarIssueCommandValue(value: unknown): SonarIssue | null',
     'export function normalizeSonarIssueCommandList(value: unknown): SonarIssue[]',
+    'export function buildSonarBranchPickItems',
     'export function formatSonarIssuePromptLine(issue: SonarIssue): string',
     'export function buildKnownSonarIssuesBlock(value: unknown): string',
     'export function buildSonarFixBranchStrategy(projectName: string, sourceBranch: string): string',

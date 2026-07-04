@@ -58,7 +58,7 @@ import { buildCombinedVerificationPlan, buildCombinedVerificationPromptVars } fr
 import { buildDiscoveryQuickPickEntries, discoveryCandidateNeedsJiraKey, type DiscoveryQuickPickEntry } from './services/discoveryQuickPick';
 import { buildPromptWorkspaceModel, promptHistoryTemplatesForProjects } from './services/promptWorkspaceModel';
 import { buildSonarReport } from './services/sonarReportView';
-import { buildSonarFixBranchStrategy, buildSonarFixInstructionBlock } from './services/sonarCommandPlan';
+import { buildSonarBranchPickItems, buildSonarFixBranchStrategy, buildSonarFixInstructionBlock } from './services/sonarCommandPlan';
 import { buildAgingReportHtml } from './services/agingReportView';
 import { buildTicketHtml } from './services/ticketPanelView';
 import { buildDashboardHtml } from './services/dashboardPanelView';
@@ -2519,18 +2519,11 @@ export function activate(context: vscode.ExtensionContext) {
       let branchItems: vscode.QuickPickItem[] = [];
       try {
         const branchesData = await sonarAdapter.branches(sonarKey);
-        const branches = branchesData.branches;
-        branchItems = branches.map(b => ({
-          label: b.name,
-          description: `${b.isMain ? '(main) ' : ''}${b.status?.qualityGateStatus || ''}`,
-        }));
+        branchItems = buildSonarBranchPickItems(branchesData.branches, baseBranch);
       } catch (e: unknown) {
         const detail = unknownErrorMessage(e, 'Could not load SonarQube branches.');
         console.warn(detail);
-        branchItems = [{ label: baseBranch, description: '(default; Sonar branches unavailable)', detail }];
-      }
-      if (branchItems.length === 0) {
-        branchItems = [{ label: baseBranch, description: '(default)' }];
+        branchItems = buildSonarBranchPickItems([], baseBranch, detail);
       }
 
       const picked = await vscode.window.showQuickPick(branchItems, { placeHolder: 'Select branch' });
