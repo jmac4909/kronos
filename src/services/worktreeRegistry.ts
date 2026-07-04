@@ -13,7 +13,7 @@ export interface ActiveWorktreeEntry {
   createdAt: string;
 }
 
-export interface ActiveWorktreeRegistry {
+interface ActiveWorktreeRegistry {
   entries: ActiveWorktreeEntry[];
   issue?: string;
 }

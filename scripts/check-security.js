@@ -421,7 +421,7 @@ for (const marker of [
   'defer src="${escapeAttr(scriptUri)}"',
   'id="kronos-jira-ticket-data"',
   'class="kronos-data-payload"',
-  "import { createWebviewReadyMonitor, type WebviewReadyMonitor } from './services/webviewDiagnostics'",
+  "import { createWebviewReadyMonitor } from './services/webviewDiagnostics'",
   "import { isCodeAction, isProofSensitiveAction } from './services/actionSemantics'",
   "const logReady = createWebviewReadyMonitor(panel, 'Kronos Jira Board')",
   'logReady.arm();',
@@ -550,7 +550,7 @@ for (const marker of [
   'const EVIDENCE_HANDOFF_OPERATOR_COMMANDS = operatorCommandSet([',
   'const DOCTOR_OPERATOR_COMMANDS = operatorCommandSet([',
   'function operatorCommandSet(commands: string[]): ReadonlySet<string>',
-  'function attachOperatorCommandHandler(panel: vscode.WebviewPanel, webviewName: string, allowedCommands: ReadonlySet<string>): WebviewReadyMonitor',
+  'function attachOperatorCommandHandler(panel: vscode.WebviewPanel, webviewName: string, allowedCommands: ReadonlySet<string>): ReturnType<typeof createWebviewReadyMonitor>',
   'normalizeActionPanelMessage(msg, allowedCommands)',
   "attachOperatorCommandHandler(panel, 'Kronos Evidence Handoff', EVIDENCE_HANDOFF_OPERATOR_COMMANDS)",
   "const logReady = attachOperatorCommandHandler(panel, 'Kronos Doctor', DOCTOR_OPERATOR_COMMANDS)",
@@ -2396,8 +2396,8 @@ if (reviewTreeProvider.includes("ticket.mr.state === 'merged'")) {
 }
 
 for (const marker of [
-  'export interface WebviewDisposeTarget',
-  'export interface WebviewReadyMonitor',
+  'interface WebviewDisposeTarget',
+  'interface WebviewReadyMonitor',
   'arm(): void',
   'export function createWebviewReadyMonitor',
   'function logWebviewReadyMessage',
@@ -2765,7 +2765,7 @@ if (dispatcher.indexOf('trackWorktree(projectPath, wtDir, ticket || skill);') > 
 
 for (const marker of [
   'export const ACTIVE_WORKTREES_FILE',
-  'export interface ActiveWorktreeRegistry',
+  'interface ActiveWorktreeRegistry',
   'export function loadActiveWorktreeRegistry',
   'export function trackActiveWorktree',
   'export function untrackActiveWorktree',

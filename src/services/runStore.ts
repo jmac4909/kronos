@@ -27,7 +27,7 @@ export interface RunRecord {
   [key: string]: unknown;
 }
 
-export interface ArchivedRun {
+interface ArchivedRun {
   run: RunRecord;
   runPath: string;
   logPath?: string;
@@ -42,7 +42,7 @@ export interface RunStoreIssue {
   detail: string;
 }
 
-export interface RunStoreRepairResult {
+interface RunStoreRepairResult {
   repaired: number;
   runs: RunRecord[];
 }

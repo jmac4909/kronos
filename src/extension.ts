@@ -54,7 +54,7 @@ import { configIntervalMs, configIntervalSeconds, configIntervalSecondsMs, parse
 import { buildNextActionContext, buildNextActionStartDecision, skillForAction } from './services/nextActionContext';
 import { createWorkspaceDiffArtifact, firstRemoteBranchMatching, originProjectPath } from './services/gitWorkspace';
 import { signalProcessTree, stopProcessTree, supportsProcessTreeSuspend } from './services/processTree';
-import { createWebviewReadyMonitor, type WebviewReadyMonitor } from './services/webviewDiagnostics';
+import { createWebviewReadyMonitor } from './services/webviewDiagnostics';
 import { WEBVIEW_ACTION_PANEL_SCRIPT, WEBVIEW_JIRA_BOARD_SCRIPT, WEBVIEW_READY_COMMAND, createWebviewNonce, webviewScriptCspOptions, withWebviewCsp } from './services/webviewSecurity';
 import { escapeAttr, escapeClass, escapeHtml, kronosWebviewBaseCss, safeHttpHref } from './services/webviewHtml';
 import { kronosTerminalOptions } from './services/terminalProfiles';
@@ -4500,7 +4500,7 @@ async function tryExecuteTicketOperatorCommand(command: string, ticketKey: strin
   return true;
 }
 
-function attachOperatorCommandHandler(panel: vscode.WebviewPanel, webviewName: string, allowedCommands: ReadonlySet<string>): WebviewReadyMonitor {
+function attachOperatorCommandHandler(panel: vscode.WebviewPanel, webviewName: string, allowedCommands: ReadonlySet<string>): ReturnType<typeof createWebviewReadyMonitor> {
   const logReady = createWebviewReadyMonitor(panel, webviewName);
   panel.webview.onDidReceiveMessage(async msg => {
     if (logReady(msg)) { return; }

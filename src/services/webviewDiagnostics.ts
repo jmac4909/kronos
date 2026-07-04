@@ -1,10 +1,10 @@
 import { WEBVIEW_READY_COMMAND } from './webviewSecurity';
 
-export interface WebviewDisposeTarget {
+interface WebviewDisposeTarget {
   onDidDispose(listener: () => void): unknown;
 }
 
-export interface WebviewReadyMonitor {
+interface WebviewReadyMonitor {
   (raw: unknown): boolean;
   arm(): void;
 }
