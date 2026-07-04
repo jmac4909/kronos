@@ -4,7 +4,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
 import { createHash } from 'crypto';
-import { RUNS_DIR, appendRunLog as appendRunLogFile, markRunCancelled, readRunRecord, readRuns, writeRunPrompt, writeRunRecord } from '../services/runStore';
+import { RUNS_DIR, appendRunLog as appendRunLogFile, markRunCancelled, readRunRecord, repairActiveRunRecords, writeRunPrompt, writeRunRecord } from '../services/runStore';
 import { readStateFile } from '../services/stateStore';
 import { RunFailureKind, classifyRunFailure, type PostRunReadiness } from '../services/postRunReadiness';
 import { stopProcessTree, supportsProcessTreeSuspend } from '../services/processTree';
@@ -362,7 +362,7 @@ function updateRun(run: KronosRun, patch: Partial<KronosRun>): void {
 }
 
 export function listRuns(): KronosRun[] {
-  return readRuns(100) as KronosRun[];
+  return repairActiveRunRecords(100).runs as KronosRun[];
 }
 
 export interface DispatchOptions {

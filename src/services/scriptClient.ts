@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { unknownErrorField, unknownErrorMessage } from './errorUtils';
+import { stripUtf8Bom } from './jsonFiles';
 
 const SCRIPTS_DIR = process.env['KRONOS_SCRIPTS_DIR'] || path.join(os.homedir(), '.claude', 'scripts');
 const PYTHON = findPython();
@@ -155,10 +156,11 @@ function pythonCandidateAvailable(candidate: string): boolean {
 }
 
 function parseScriptJson<T = unknown>(scriptName: RequiredScriptName, args: string[], raw: string): T {
+  const content = stripUtf8Bom(raw);
   try {
-    return JSON.parse(raw) as T;
+    return JSON.parse(content) as T;
   } catch (e: unknown) {
-    const preview = raw.trim().substring(0, 300);
+    const preview = content.trim().substring(0, 300);
     throw new Error(`Invalid JSON from ${scriptName} ${args.join(' ')}: ${unknownErrorMessage(e, 'parse failed')}${preview ? `; output: ${preview}` : ''}`);
   }
 }

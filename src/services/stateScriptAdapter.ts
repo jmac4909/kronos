@@ -1,5 +1,6 @@
 import { ScriptRunOptions, runKronosStateScript } from './scriptClient';
 import { unknownErrorMessage } from './errorUtils';
+import { stripUtf8Bom } from './jsonFiles';
 import { DiscoveredProject } from '../state/types';
 
 export type StateScriptRunner = (args: string[], options?: ScriptRunOptions) => string;
@@ -106,10 +107,11 @@ export function readMorningBriefJson(options: StateScriptAdapterOptions = {}): M
 }
 
 function parseStateScriptJson(raw: string, label: string): unknown {
+  const content = stripUtf8Bom(raw);
   try {
-    return JSON.parse(raw);
+    return JSON.parse(content);
   } catch (e: unknown) {
-    const preview = raw.trim().substring(0, 300);
+    const preview = content.trim().substring(0, 300);
     throw new Error(`Invalid JSON from ${label}: ${unknownErrorMessage(e, 'parse failed')}${preview ? `; output: ${preview}` : ''}`);
   }
 }

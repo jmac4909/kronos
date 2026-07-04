@@ -3881,6 +3881,32 @@ test('run store returns normalized active views and repairs only on explicit req
   assert.equal(archivedRun.id, failed.id);
 });
 
+test('dispatcher listRuns persists stale active run repairs for UI callers', async () => {
+  const run = {
+    id: 'run-dispatcher-stale-active',
+    project: 'app',
+    skill: 'implement',
+    ticket: 'K-DISPATCHER-STALE',
+    status: 'running',
+    endedAt: '2026-07-02T10:10:00.000Z',
+  };
+  runStore.writeRunRecord(run);
+  assert.equal(JSON.parse(fs.readFileSync(runStore.runRecordPath(run.id), 'utf8')).status, 'running');
+
+  const vscodeStub = createVscodeTestModule();
+  await withPatchedModuleLoad(request => request === 'vscode' ? vscodeStub.vscode : undefined, async () => {
+    const dispatcherPath = require.resolve('../out/runners/sessionDispatcher.js');
+    delete require.cache[dispatcherPath];
+    const dispatcher = require(dispatcherPath);
+    const runs = dispatcher.listRuns();
+    assert.equal(runs.find(r => r.id === run.id).status, 'needs_human');
+  });
+
+  const persisted = JSON.parse(fs.readFileSync(runStore.runRecordPath(run.id), 'utf8'));
+  assert.equal(persisted.status, 'needs_human');
+  assert.match(persisted.failureReason, /terminal metadata/);
+});
+
 test('run store archive does not overwrite existing archived records or artifacts', () => {
   fs.mkdirSync(runStore.ARCHIVED_RUNS_DIR, { recursive: true });
   const existingRunPath = runStore.archivedRunRecordPath('run-collision');
@@ -4247,6 +4273,7 @@ test('dispatcher records branch and permission metadata for persisted runs', () 
     'updateRun(run, { warnings: [...(run.warnings || []), warning] })',
     "const nextStatus = run.status === 'completed' || run.status === 'waiting_for_review' ? 'needs_human' : run.status",
     'await runCompletionCallback(opts, code ?? 1, run',
+    "repairActiveRunRecords(100).runs as KronosRun[]",
   ]) {
     assert.ok(source.includes(marker), marker);
   }
@@ -5373,6 +5400,9 @@ test('script client reports required scripts and wraps Python JSON contracts', a
   assert.equal(scriptClient.runKronosStateScript(['--next']).trim(), 'state:--next');
   const parsed = await scriptClient.runPipelineJson(['--sonar-gate', 'app']);
   assert.deepEqual(parsed.args, ['--sonar-gate', 'app']);
+  fs.writeFileSync(pipelinePath, 'import json, sys\nprint("\\ufeff" + json.dumps({"args": sys.argv[1:], "bom": True}))\n');
+  const bomParsed = await scriptClient.runPipelineJson(['--sonar-gate', 'windows']);
+  assert.deepEqual(bomParsed, { args: ['--sonar-gate', 'windows'], bom: true });
 
   fs.writeFileSync(pipelinePath, 'print("not json")\n');
   await assert.rejects(
@@ -5423,6 +5453,8 @@ test('script client keeps raw JSON and process errors unknown by default', () =>
     'function parseScriptJson<T = unknown>',
     'function scriptError(scriptName: RequiredScriptName, args: string[], error: unknown)',
     'function pythonCandidateAvailable(candidate: string): boolean',
+    "import { stripUtf8Bom } from './jsonFiles'",
+    'const content = stripUtf8Bom(raw)',
     "import { unknownErrorField, unknownErrorMessage } from './errorUtils'",
     "unknownErrorField(error, 'stderr')",
   ]) {
@@ -5460,6 +5492,11 @@ test('state script adapter owns typed kronos_state operations', () => {
   assert.equal(stateScriptAdapter.refreshKronosState('api', options), 'ran:--refresh api');
   assert.deepEqual(stateScriptAdapter.discoverProjectsJson(options).candidates.map(c => c.repo_name), ['app']);
   assert.deepEqual(stateScriptAdapter.discoverProjectsJson({
+    runner: () => String.fromCharCode(0xFEFF) + JSON.stringify({
+      candidates: [{ repo_name: 'bom-app', path: '/repo/bom-app', has_project_json: true }],
+    }),
+  }).candidates.map(c => c.repo_name), ['bom-app']);
+  assert.deepEqual(stateScriptAdapter.discoverProjectsJson({
     runner: () => JSON.stringify({
       candidates: [
         null,
@@ -5492,6 +5529,9 @@ test('state script adapter owns typed kronos_state operations', () => {
   assert.equal(stateScriptAdapter.addAdhocTask('Fix docs', 'Update README', options), 'ran:--adhoc-add Fix docs Update README');
   assert.equal(stateScriptAdapter.completeAdhocTask('task-1', options), 'ran:--adhoc-done task-1');
   assert.deepEqual(stateScriptAdapter.readMorningBriefJson(options).ready_to_go, ['K-2']);
+  assert.deepEqual(stateScriptAdapter.readMorningBriefJson({
+    runner: () => String.fromCharCode(0xFEFF) + JSON.stringify({ ready_to_go: ['K-BOM'] }),
+  }).ready_to_go, ['K-BOM']);
   assert.deepEqual(stateScriptAdapter.discoverProjectsJson({ runner: () => JSON.stringify({}) }).candidates, []);
   assert.deepEqual(stateScriptAdapter.discoverProjectsJson({ runner: () => JSON.stringify(null) }).candidates, []);
   assert.deepEqual(stateScriptAdapter.readMorningBriefJson({ runner: () => JSON.stringify([]) }), {});
@@ -5532,6 +5572,8 @@ test('state script adapter keeps raw JSON payloads unknown until normalized', ()
     '[key: string]: unknown',
     'function parseStateScriptJson(raw: string, label: string): unknown',
     'function isPlainObject(value: unknown): value is Record<string, unknown>',
+    "import { stripUtf8Bom } from './jsonFiles'",
+    'const content = stripUtf8Bom(raw)',
     "import { unknownErrorMessage } from './errorUtils'",
   ]) {
     assert.ok(source.includes(marker), marker);
