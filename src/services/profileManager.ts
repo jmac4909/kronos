@@ -22,7 +22,7 @@ const DEFAULT_PROFILE: KronosProfile = {
     providers: { jira: true, gitlab: true, jenkins: true, sonar: true, githubActions: false },
 };
 
-export const BUILTIN_PROFILES: KronosProfile[] = [
+const BUILTIN_PROFILES: KronosProfile[] = [
   DEFAULT_PROFILE,
   {
     id: 'personal-local',

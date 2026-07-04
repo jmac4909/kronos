@@ -21,7 +21,7 @@ export interface MergeRequestDiffResult {
   [key: string]: unknown;
 }
 
-export interface MergeRequestStatusResult {
+interface MergeRequestStatusResult {
   state?: MergeRequest['state'];
   review_status?: MergeRequest['review_status'];
   url?: string;
@@ -63,7 +63,7 @@ interface SonarBranchSummary {
   branches: SonarBranch[];
 }
 
-export interface JiraComment {
+interface JiraComment {
   author?: string;
   authorName?: string;
   created?: string;

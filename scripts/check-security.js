@@ -1381,7 +1381,7 @@ for (const forbidden of [
 for (const marker of [
   'merge_request',
   'linkMrToTicket',
-  'RecoveryTicket',
+  'interface RecoveryTicket',
   'runStoreIssues',
   'recoveryItemForRunStoreIssue',
   'Invalid ${scopeLabel} run record',
@@ -2786,8 +2786,8 @@ for (const marker of [
   'export function restoreBackup',
   'export function listStateAuditEvents',
   'STATE_AUDIT_FILE',
-  'VALID_TICKET_ACTIONS',
-  'VALID_QUEUE_ACTIONS',
+  'const VALID_TICKET_ACTIONS',
+  'const VALID_QUEUE_ACTIONS',
   "import { QUEUE_ACTIONS, TICKET_ACTIONS } from './actionCatalog'",
   'function validateProjectRecord',
   'function validateProjectConfig',
@@ -2885,7 +2885,7 @@ if (!sources['src/state/KronosState.ts'].includes('const result = readStateFileW
   fail('KronosState must load UI state through readStateFileWithIssues.');
 }
 for (const marker of [
-  'export interface KronosStateLoadIssue',
+  'interface KronosStateLoadIssue',
   'private _loadIssues',
   'get loadIssues()',
   "import { unknownErrorMessage } from '../services/errorUtils'",
@@ -3200,7 +3200,7 @@ for (const marker of [
 }
 
 for (const marker of [
-  'export interface ScoreBreakdownItem',
+  'interface ScoreBreakdownItem',
   'scoreBreakdown',
   'Queue position',
   'Project link',
@@ -3325,13 +3325,13 @@ if (agentQualityScore.includes('type RunQualityRecord = RunRecord & Record<strin
 
 for (const marker of [
   'export function readIntegrationManifest',
-  'export function validateIntegrationManifest',
+  'function validateIntegrationManifest',
   'export function auditIntegrationManifest',
   'export function writeIntegrationManifestSnapshot',
-  'export function buildIntegrationManifestSnapshot',
-  'ManifestArtifactAudit',
+  'function buildIntegrationManifestSnapshot',
+  'interface ManifestArtifactAudit',
   'sha256File',
-  'PromptManifestSmokeTest',
+  'interface PromptManifestSmokeTest',
   'smoke_tests',
   'INTEGRATION_MANIFEST_FILE',
   'Required script not listed in manifest',
@@ -3365,7 +3365,7 @@ for (const marker of [
 }
 
 for (const marker of [
-  'export const BUILTIN_PROFILES',
+  'const BUILTIN_PROFILES',
   'enterprise-gitlab-jira',
   'personal-local',
   'github-actions',
@@ -3611,9 +3611,9 @@ for (const marker of [
   'export const jiraAdapter',
   'export const gitlabAdapter',
   'export const sonarAdapter',
-  'export interface JiraComment',
+  'interface JiraComment',
   'export function normalizeJiraComments',
-  'export interface MergeRequestStatusResult',
+  'interface MergeRequestStatusResult',
   'export function normalizeMergeRequestStatus',
   'export function normalizeMergeRequestComments',
   'async function runMergeRequestStatusJson',

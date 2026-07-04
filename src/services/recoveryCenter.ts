@@ -62,7 +62,7 @@ export interface RecoveryCheck {
   detail: string;
 }
 
-export interface RecoveryTicket {
+interface RecoveryTicket {
   summary?: string;
   source?: string;
   jira_url?: string;

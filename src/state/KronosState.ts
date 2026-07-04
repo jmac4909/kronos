@@ -8,7 +8,7 @@ import { DiscoverProjectsResult, MorningBriefResult, addAdhocTask, completeAdhoc
 import { readClaudeAgents } from '../services/cliProbes';
 import { unknownErrorMessage } from '../services/errorUtils';
 
-export interface KronosStateLoadIssue {
+interface KronosStateLoadIssue {
   target: 'state.json' | 'queue.json';
   filePath: string;
   detail: string;

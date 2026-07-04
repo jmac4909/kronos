@@ -20,7 +20,7 @@ export interface IntegrationManifest {
   providers?: Record<string, { enabled?: boolean; baseUrl?: string }>;
 }
 
-export interface PromptManifestSmokeTest {
+interface PromptManifestSmokeTest {
   name?: string;
   variables?: Record<string, string>;
   mustContain?: string[];
@@ -39,7 +39,7 @@ export interface IntegrationManifestStatus {
 
 type ManifestAuditStatus = 'pass' | 'warn' | 'fail';
 
-export interface ManifestArtifactAudit {
+interface ManifestArtifactAudit {
   kind: 'script' | 'prompt';
   name: string;
   path: string;
@@ -88,7 +88,7 @@ export function readIntegrationManifest(filePath = INTEGRATION_MANIFEST_FILE): I
   }
 }
 
-export function validateIntegrationManifest(manifest: IntegrationManifest): { errors: string[]; warnings: string[] } {
+function validateIntegrationManifest(manifest: IntegrationManifest): { errors: string[]; warnings: string[] } {
   const errors: string[] = [];
   const warnings: string[] = [];
   if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest)) {
@@ -146,7 +146,7 @@ export function validateIntegrationManifest(manifest: IntegrationManifest): { er
   return { errors, warnings };
 }
 
-export function buildIntegrationManifestSnapshot(
+function buildIntegrationManifestSnapshot(
   options: { promptDir?: string; providers?: IntegrationManifest['providers']; version?: string } = {},
 ): IntegrationManifest {
   const scripts: IntegrationManifest['scripts'] = {};

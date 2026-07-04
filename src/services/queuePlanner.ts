@@ -25,7 +25,7 @@ export interface PlannedAction {
   queueItem?: QueueItem;
 }
 
-export interface ScoreBreakdownItem {
+interface ScoreBreakdownItem {
   label: string;
   value: number;
   detail: string;
