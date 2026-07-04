@@ -137,7 +137,7 @@ export function removeWorktreeSafely(
     return inspected.reason;
   }
   try {
-    removeIgnorableWorktreeArtifacts(worktreePath);
+    removeIgnorableWorktreeArtifacts(worktreePath, runner);
     runner(['worktree', 'remove', worktreePath], { cwd: projectPath, timeoutMs: 10000 });
     options.onRemoved?.();
     return null;
@@ -195,11 +195,22 @@ function isIgnorableWorktreeStatusLine(line: string): boolean {
   return statusPath === '.claude' || statusPath === '.claude/' || statusPath.startsWith('.claude/');
 }
 
-function removeIgnorableWorktreeArtifacts(worktreePath: string): void {
-  const dotClaudePath = path.join(worktreePath, '.claude');
-  if (fs.existsSync(dotClaudePath)) {
-    fs.rmSync(dotClaudePath, { recursive: true, force: true });
+function removeIgnorableWorktreeArtifacts(worktreePath: string, runner: GitCommandRunner = runGit): void {
+  const status = runner(['status', '--porcelain'], { cwd: worktreePath, timeoutMs: 5000 }).trim();
+  for (const line of status.split('\n')) {
+    if (!isIgnorableWorktreeStatusLine(line)) { continue; }
+    const statusPath = line.slice(3).trim();
+    const artifactPath = path.resolve(worktreePath, statusPath);
+    if (!isPathInside(artifactPath, path.join(worktreePath, '.claude'))) { continue; }
+    if (fs.existsSync(artifactPath)) {
+      fs.rmSync(artifactPath, { recursive: true, force: true });
+    }
   }
+}
+
+function isPathInside(filePath: string, directoryPath: string): boolean {
+  const relative = path.relative(path.resolve(directoryPath), path.resolve(filePath));
+  return relative === '' || (Boolean(relative) && !relative.startsWith('..') && !path.isAbsolute(relative));
 }
 
 export function createWorkspaceDiffArtifact(

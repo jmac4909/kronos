@@ -2122,8 +2122,10 @@ for (const marker of [
   'function blockingWorktreeStatus',
   'function isIgnorableWorktreeStatusLine',
   'function removeIgnorableWorktreeArtifacts',
+  'function isPathInside',
   "path.join(worktreePath, '.claude')",
-  'fs.rmSync(dotClaudePath, { recursive: true, force: true })',
+  'const artifactPath = path.resolve(worktreePath, statusPath)',
+  'fs.rmSync(artifactPath, { recursive: true, force: true })',
   "statusPath === '.claude' || statusPath === '.claude/' || statusPath.startsWith('.claude/')",
   'pullWarning?: string',
   "pullWarning = unknownErrorMessage(e, 'Could not fast-forward managed worktree after creation.')",
@@ -2625,11 +2627,28 @@ for (const marker of [
   'trackActiveWorktree(projectPath, worktreePath, ticket)',
   'untrackActiveWorktree(worktreePath)',
   'Active worktree registry needs manual review before creating a worktree',
+  'let trackedManagedWorktree = false;',
+  'managedWorktreePath = wtDir;',
+  'trackWorktree(projectPath, wtDir, ticket || skill);',
+  'trackedManagedWorktree = true;',
+  'let spawnErrorHandled = false;',
+  'stopProcessTree(proc.pid);',
+  "const failureDetail = unknownErrorMessage(e, 'Failed to persist launched Claude process.');",
+  "label: 'Failed to persist launched Claude process'",
+  "console.warn(unknownErrorMessage(persistError, 'Failed to persist run launch failure.'));",
+  'const worktreeExists = fs.existsSync(wtDir);',
+  'if (trackedManagedWorktree && !worktreeExists)',
+  'untrackWorktree(wtDir);',
+  'failurePatch.worktreePath = wtDir;',
+  "action: 'cleanup-worktree'",
   'if (registry.issue) { report.registryIssue = registry.issue; }',
 ]) {
   if (!dispatcher.includes(marker)) {
     fail(`Missing worktree cleanup safety marker: ${marker}`);
   }
+}
+if (dispatcher.indexOf('trackWorktree(projectPath, wtDir, ticket || skill);') > dispatcher.indexOf('const prepared = prepareManagedWorktree({')) {
+  fail('Managed worktree setup must register cleanup tracking before git worktree creation.');
 }
 
 for (const marker of [

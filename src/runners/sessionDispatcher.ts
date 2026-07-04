@@ -715,6 +715,7 @@ export async function dispatchClaudeSession(
     const safeName = safeFileStem(ticket || skill, { fallback: 'worktree', maxLength: 80 });
     const wtName = `kronos-${safeName}-${Date.now().toString(36)}`;
     const wtDir = path.join(projectPath, '.claude', 'worktrees', wtName);
+    let trackedManagedWorktree = false;
 
     let targetBranch = opts.worktreeBranch || projectBaseRef;
     resolvedWorktreeRef = targetBranch;
@@ -731,6 +732,9 @@ export async function dispatchClaudeSession(
       if (registry.issue) {
         throw new Error(`Active worktree registry needs manual review before creating a worktree: ${registry.issue}`);
       }
+      managedWorktreePath = wtDir;
+      trackWorktree(projectPath, wtDir, ticket || skill);
+      trackedManagedWorktree = true;
       const prepared = prepareManagedWorktree({
         projectPath,
         worktreePath: wtDir,
@@ -747,8 +751,6 @@ export async function dispatchClaudeSession(
       }
       cwd = wtDir;
       worktreePath = wtDir;
-      managedWorktreePath = wtDir;
-      trackWorktree(projectPath, wtDir, ticket || skill);
       updateRun(run, {
         cwd,
         worktreePath,
@@ -770,17 +772,56 @@ export async function dispatchClaudeSession(
       const failureReason = failureDetail === 'Git worktree setup failed.'
         ? failureDetail
         : `Git worktree setup failed: ${failureDetail}`;
+      const worktreeExists = fs.existsSync(wtDir);
+      const failureWarnings: string[] = [];
+      if (trackedManagedWorktree && !worktreeExists) {
+        try {
+          untrackWorktree(wtDir);
+          trackedManagedWorktree = false;
+        } catch (untrackError: unknown) {
+          failureWarnings.push(unknownErrorMessage(untrackError, 'Failed to untrack missing managed worktree after setup failure.'));
+        }
+      }
       vscode.window.showWarningMessage('Git worktree setup failed; run marked failed before launch.');
       const event = { type: 'error' as const, label: 'Git worktree setup failed', detail: failureDetail, timestamp: new Date() };
       events.push(event);
       addRunEvent(run, event);
-      updateRun(run, {
+      const failurePatch: Partial<KronosRun> = {
         status: 'failed',
         endedAt: new Date().toISOString(),
         exitCode: 1,
         failureReason,
         failureKind: 'git',
-      });
+      };
+      if (failureWarnings.length > 0) {
+        failurePatch.warnings = [...(run.warnings || []), ...failureWarnings];
+      }
+      if (worktreeExists) {
+        failurePatch.cwd = wtDir;
+        failurePatch.worktreePath = wtDir;
+        failurePatch.branch = buildRunBranchMetadata({
+          cwd: wtDir,
+          projectBaseRef,
+          projectBaseBranch: baseRef.branch,
+          projectBaseSource: baseRef.source,
+          projectBaseWarning: baseRef.warning,
+          requestedWorktreeBranch,
+          resolvedWorktreeRef,
+          checkoutRef,
+          managedWorktree: true,
+        });
+        failurePatch.recoveryActions = [
+          ...(run.recoveryActions || []),
+          {
+            at: new Date().toISOString(),
+            action: 'cleanup-worktree',
+            reason: `Managed worktree setup failed after creating ${wtDir}. Review or run Kronos: Cleanup Worktrees.`,
+          },
+        ];
+      } else {
+        managedWorktreePath = null;
+      }
+      updateRun(run, failurePatch);
       panel.webview.html = withWebviewCsp(buildProgressHtml(projectName, skill, ticket || '', events, run));
       saveSession(projectName, skill, ticket || '', events);
       await runCompletionCallback(opts, 1, run, { projectName, skill, ticket: ticket || '', events, panel });
@@ -851,13 +892,47 @@ export async function dispatchClaudeSession(
     await runCompletionCallback(opts, 1, run, { projectName, skill, ticket: ticket || '', events, panel });
     return launchResult(run, false);
   }
-  const runningPatch: Partial<KronosRun> = { status: 'running', cwd };
-  if (proc.pid !== undefined) { runningPatch.processPid = proc.pid; }
-  updateRun(run, runningPatch);
-
   let buffer = '';
   let processClosed = false;
   let spawnErrorHandled = false;
+  const runningPatch: Partial<KronosRun> = { status: 'running', cwd };
+  if (proc.pid !== undefined) { runningPatch.processPid = proc.pid; }
+  try {
+    updateRun(run, runningPatch);
+  } catch (e: unknown) {
+    spawnErrorHandled = true;
+    processClosed = true;
+    stopProcessTree(proc.pid);
+    const failureDetail = unknownErrorMessage(e, 'Failed to persist launched Claude process.');
+    const failureReason = failureDetail.startsWith('Failed to persist launched Claude process')
+      ? failureDetail
+      : `Failed to persist launched Claude process: ${failureDetail}`;
+    const event = { type: 'error' as const, label: 'Failed to persist launched Claude process', detail: failureDetail, timestamp: new Date() };
+    events.push(event);
+    try {
+      addRunEvent(run, event);
+      updateRun(run, {
+        status: 'failed',
+        endedAt: new Date().toISOString(),
+        exitCode: 1,
+        failureReason,
+        failureKind: classifyRunFailure({ ...run, status: 'failed', failureReason, events: run.events }),
+      });
+    } catch (persistError: unknown) {
+      console.warn(unknownErrorMessage(persistError, 'Failed to persist run launch failure.'));
+      Object.assign(run, {
+        status: 'failed',
+        endedAt: new Date().toISOString(),
+        exitCode: 1,
+        failureReason,
+        failureKind: classifyRunFailure({ ...run, status: 'failed', failureReason, events: run.events }),
+      });
+    }
+    panel.webview.html = withWebviewCsp(buildProgressHtml(projectName, skill, ticket || '', events, run));
+    saveSession(projectName, skill, ticket || '', events);
+    await runCompletionCallback(opts, 1, run, { projectName, skill, ticket: ticket || '', events, panel });
+    return launchResult(run, false);
+  }
 
   proc.on('error', async (error: Error) => {
     spawnErrorHandled = true;

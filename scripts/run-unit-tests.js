@@ -1906,6 +1906,25 @@ test('git workspace service owns branch metadata and safe worktree lifecycle com
   });
   assert.equal(generatedWarning, null);
 
+  const trackedClaudeWorkspace = fs.mkdtempSync(path.join(os.tmpdir(), 'kronos-worktree-tracked-'));
+  fs.mkdirSync(path.join(trackedClaudeWorkspace, '.claude'), { recursive: true });
+  fs.writeFileSync(path.join(trackedClaudeWorkspace, '.claude', 'project.json'), '{}\n');
+  fs.writeFileSync(path.join(trackedClaudeWorkspace, '.claude', 'settings.local.json'), '{}\n');
+  const trackedClaudeWarning = gitWorkspace.removeWorktreeSafely(projectPath, trackedClaudeWorkspace, {
+    runner: args => {
+      const joined = args.join(' ');
+      if (joined === 'status --porcelain') { return '?? .claude/settings.local.json\n'; }
+      if (joined === 'branch --show-current') { return ''; }
+      if (joined === `worktree remove ${trackedClaudeWorkspace}`) {
+        assert.equal(fs.existsSync(path.join(trackedClaudeWorkspace, '.claude', 'project.json')), true);
+        assert.equal(fs.existsSync(path.join(trackedClaudeWorkspace, '.claude', 'settings.local.json')), false);
+        return '';
+      }
+      throw new Error(`unexpected git call: ${joined}`);
+    },
+  });
+  assert.equal(trackedClaudeWarning, null);
+
   const mixedClaudeArtifacts = gitWorkspace.inspectTrackedWorktree(entry, {
     exists: () => true,
     runner: args => {
@@ -1960,8 +1979,11 @@ test('git workspace service owns branch metadata and safe worktree lifecycle com
     'function blockingWorktreeStatus',
     'function isIgnorableWorktreeStatusLine',
     'function removeIgnorableWorktreeArtifacts',
+    'function isPathInside',
     "path.join(worktreePath, '.claude')",
-    'fs.rmSync(dotClaudePath, { recursive: true, force: true })',
+    "runner(['status', '--porcelain']",
+    'const artifactPath = path.resolve(worktreePath, statusPath)',
+    'fs.rmSync(artifactPath, { recursive: true, force: true })',
     "statusPath === '.claude' || statusPath === '.claude/' || statusPath.startsWith('.claude/')",
     'pullWarning?: string',
     "pullWarning = unknownErrorMessage(e, 'Could not fast-forward managed worktree after creation.')",
@@ -4342,6 +4364,20 @@ test('dispatcher records branch and permission metadata for persisted runs', () 
     'trackActiveWorktree(projectPath, worktreePath, ticket)',
     'untrackActiveWorktree(worktreePath)',
     'Active worktree registry needs manual review before creating a worktree',
+    'let trackedManagedWorktree = false;',
+    'managedWorktreePath = wtDir;',
+    'trackWorktree(projectPath, wtDir, ticket || skill);',
+    'trackedManagedWorktree = true;',
+    'let spawnErrorHandled = false;',
+    'stopProcessTree(proc.pid);',
+    "const failureDetail = unknownErrorMessage(e, 'Failed to persist launched Claude process.');",
+    "label: 'Failed to persist launched Claude process'",
+    "console.warn(unknownErrorMessage(persistError, 'Failed to persist run launch failure.'));",
+    'const worktreeExists = fs.existsSync(wtDir);',
+    'if (trackedManagedWorktree && !worktreeExists)',
+    'untrackWorktree(wtDir);',
+    'failurePatch.worktreePath = wtDir;',
+    "action: 'cleanup-worktree'",
     'if (registry.issue) { report.registryIssue = registry.issue; }',
     "const failureDetail = unknownErrorMessage(e, 'Git worktree setup failed.')",
     "vscode.window.showWarningMessage('Git worktree setup failed; run marked failed before launch.')",
@@ -4559,6 +4595,10 @@ test('dispatcher records branch and permission metadata for persisted runs', () 
   assert.ok(
     source.indexOf('const permissions = buildRunPermissionMetadata(addDirs)') < source.indexOf('proc = spawn(CLAUDE_PATH'),
     'final permissions should be persisted before process launch',
+  );
+  assert.ok(
+    source.indexOf('trackWorktree(projectPath, wtDir, ticket || skill);') < source.indexOf('const prepared = prepareManagedWorktree({'),
+    'managed worktrees should be registered before git setup so partial setup failures remain recoverable',
   );
 });
 
