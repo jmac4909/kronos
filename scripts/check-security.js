@@ -2257,6 +2257,7 @@ for (const [name, source, marker] of [
   ['src/services/runProgress.ts', runProgress, "import { toValidDate } from './dateValues'"],
   ['src/services/runStatus.ts', runStatus, "import { toValidDate } from './dateValues'"],
   ['src/services/runStore.ts', runStore, "import { toValidDate } from './dateValues'"],
+  ['src/services/ticketTimeline.ts', ticketTimeline, "import { toValidDate } from './dateValues'"],
   ['src/services/trendMetrics.ts', trendMetrics, "import { toValidDate } from './dateValues'"],
   ['src/runners/sessionDispatcher.ts', dispatcher, "import { toValidDate } from '../services/dateValues'"],
 ]) {

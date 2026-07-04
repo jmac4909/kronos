@@ -2,6 +2,7 @@ import { QueueState, Ticket } from '../state/types';
 import { evidenceChecks, evidenceEnvironmentResults, evidenceNotes, evidenceString } from './evidenceData';
 import { isAttentionRunStatus, runAttentionDetail } from './runAttention';
 import { recordString } from './records';
+import { toValidDate } from './dateValues';
 
 type TimelineSource = 'jira' | 'queue' | 'run' | 'evidence' | 'mr' | 'build' | 'ticket';
 type TimelineSeverity = 'info' | 'success' | 'warning' | 'failure';
@@ -183,9 +184,7 @@ function compareTimelineEvents(a: TimelineEvent, b: TimelineEvent): number {
 }
 
 function timestampValue(value: string | undefined): number {
-  if (!value) { return 0; }
-  const parsed = new Date(value).getTime();
-  return Number.isFinite(parsed) ? parsed : 0;
+  return toValidDate(value)?.getTime() || 0;
 }
 
 function severityForAction(action: string): TimelineSeverity {
