@@ -33,6 +33,8 @@ process.once('exit', cleanupTrackedTempDirs);
 process.env.KRONOS_DIR = makeTempDir('kronos-home-');
 process.env.KRONOS_SCRIPTS_DIR = makeTempDir('kronos-scripts-');
 
+const ACTION_SCRIPT_URI = 'vscode-resource://kronos/action-panel.js';
+
 function readSourceFixture(...segments) {
   return fs.readFileSync(path.join(__dirname, '..', ...segments), 'utf8').replace(/\r\n/g, '\n');
 }
@@ -2291,39 +2293,6 @@ test('webview security injects CSP and preserves existing nonce policies', () =>
   assert.doesNotMatch(apiScript, /const vscode =/);
   assert.doesNotMatch(apiScript, /var vscode =/);
   assert.equal(webviewSecurity.WEBVIEW_READY_COMMAND, '__kronosWebviewReady');
-  const readyScript = webviewSecurity.webviewReadyPostScript('Kronos Ready');
-  assert.match(readyScript, /__kronosWebviewReady/);
-  assert.match(readyScript, /api\.postMessage/);
-  assert.match(readyScript, /__kronosFallbackVsCodeApi/);
-  assert.match(readyScript, /Kronos webview could not post script readiness/);
-  assert.match(readyScript, /DOMContentLoaded/);
-  const readyPostedMessages = [];
-  const readyTimeouts = [];
-  let readyAcquireCalls = 0;
-  vm.runInNewContext(readyScript, {
-    kronosVsCodeApi() {
-      readyAcquireCalls += 1;
-      if (readyAcquireCalls === 1) {
-        return { __kronosFallbackVsCodeApi: true, postMessage: message => readyPostedMessages.push({ fallback: true, message }) };
-      }
-      return { postMessage: message => readyPostedMessages.push(message) };
-    },
-    console: { warn() {} },
-    navigator: { userAgent: 'Kronos Windows Webview Ready Retry Test' },
-    setTimeout(handler, ms) {
-      readyTimeouts.push(ms);
-      handler();
-    },
-    document: {
-      readyState: 'complete',
-      addEventListener() {},
-    },
-  });
-  assert.equal(readyAcquireCalls, 2);
-  assert.deepEqual(readyTimeouts, [0, 50]);
-  assert.equal(readyPostedMessages.length, 1);
-  assert.equal(readyPostedMessages[0].command, webviewSecurity.WEBVIEW_READY_COMMAND);
-  assert.equal(readyPostedMessages[0].webviewName, 'Kronos Ready');
   const diagnosticBanner = webviewSecurity.webviewScriptDiagnosticBanner();
   assert.match(diagnosticBanner, /data-kronos-script-required/);
   assert.match(diagnosticBanner, /Webview Developer Tools/);
@@ -2340,49 +2309,6 @@ test('webview security injects CSP and preserves existing nonce policies', () =>
     nonce: 'abc123',
   });
   assert.equal((alreadyDiagnosed.match(/data-kronos-script-required/g) || []).length, 1);
-  const actionScript = webviewSecurity.webviewActionPostScript('Kronos Actions', [
-    { messageKey: 'ticket', dataAttribute: 'data-ticket' },
-    { messageKey: 'runId', dataAttribute: 'data-run-id' },
-  ]);
-  assert.match(actionScript, /Kronos Actions/);
-  assert.match(actionScript, /function postKronosAction/);
-  assert.match(actionScript, /document\.addEventListener\('click', postKronosAction, true\)/);
-  assert.match(actionScript, /DOMContentLoaded/);
-  assert.match(actionScript, /data-kronos-actions-ready/);
-  assert.match(actionScript, /__kronosActionHandlerAttached/);
-  assert.match(actionScript, /data-kronos-action-handler-attached/);
-  assert.doesNotMatch(actionScript, /Symbol\.for\('kronos\.actionHandlerAttached'\)/);
-  assert.match(actionScript, /message\[field\.messageKey\]/);
-  assert.match(actionScript, /kronosVsCodeApi\(\)\.postMessage/);
-  assert.match(actionScript, /function closestKronosActionTarget/);
-  assert.match(actionScript, /target\.parentElement/);
-  assert.doesNotMatch(actionScript, /instanceof Element/);
-  assert.doesNotMatch(actionScript, /__kronosWebviewReady/);
-  const postedMessages = [];
-  const documentListeners = {};
-  const documentElementAttributes = {};
-  let acquireCalls = 0;
-  const sandbox = {
-    acquireVsCodeApi: () => {
-      acquireCalls += 1;
-      return { postMessage: message => postedMessages.push(message) };
-    },
-    console: { info() {}, warn() {}, error() {} },
-    navigator: { userAgent: 'Kronos Windows Webview Test' },
-    window: { addEventListener() {} },
-    document: {
-      readyState: 'complete',
-      documentElement: {
-        setAttribute(name, value) { documentElementAttributes[name] = value; },
-      },
-      addEventListener(type, handler) { documentListeners[type] = handler; },
-    },
-  };
-  vm.runInNewContext(actionScript, sandbox);
-  assert.equal(documentElementAttributes['data-kronos-script-ready'], 'true');
-  assert.equal(documentElementAttributes['data-kronos-actions-ready'], 'true');
-  assert.equal(typeof documentListeners.click, 'function');
-  let defaultPrevented = false;
   const fakeButton = {
     closest(selector) { return selector === '[data-action]' ? this : null; },
     getAttribute(name) {
@@ -2393,98 +2319,6 @@ test('webview security injects CSP and preserves existing nonce policies', () =>
       }[name] || '';
     },
   };
-  documentListeners.click({ target: fakeButton, preventDefault() { defaultPrevented = true; } });
-  assert.equal(defaultPrevented, true);
-  assert.equal(postedMessages.length, 1);
-  assert.equal(postedMessages[0].command, 'openRunRecord');
-  assert.equal(postedMessages[0].ticket, 'K-1');
-  assert.equal(postedMessages[0].runId, 'run-1');
-  assert.equal(acquireCalls, 1);
-  defaultPrevented = false;
-  const fakeTextTarget = { parentElement: fakeButton };
-  documentListeners.click({ target: fakeTextTarget, preventDefault() { defaultPrevented = true; } });
-  assert.equal(defaultPrevented, true);
-  assert.equal(postedMessages.length, 2);
-  assert.equal(postedMessages[1].command, 'openRunRecord');
-  assert.equal(postedMessages[1].ticket, 'K-1');
-  assert.equal(postedMessages[1].runId, 'run-1');
-  assert.equal(acquireCalls, 1);
-  const duplicateListeners = [];
-  let duplicateAcquireCalls = 0;
-  const duplicateSandbox = {
-    acquireVsCodeApi: () => {
-      duplicateAcquireCalls += 1;
-      return { postMessage() {} };
-    },
-    console: { info() {}, warn() {}, error() {} },
-    navigator: { userAgent: 'Kronos Windows Webview Test' },
-    window: { addEventListener() {} },
-    document: {
-      readyState: 'complete',
-      documentElement: { setAttribute() {} },
-      addEventListener(type, handler) {
-        if (type === 'click') { duplicateListeners.push(handler); }
-      },
-    },
-  };
-  assert.doesNotThrow(() => vm.runInNewContext(`${actionScript}\n${actionScript}`, duplicateSandbox));
-  assert.equal(duplicateListeners.length, 1);
-  duplicateListeners.forEach(handler => handler({ target: fakeButton, preventDefault() {} }));
-  assert.equal(duplicateAcquireCalls, 1);
-  const retryPostedMessages = [];
-  const retryDocumentListeners = {};
-  const retrySandbox = vm.createContext({
-    console: { info() {}, warn() {}, error() {} },
-    navigator: { userAgent: 'Kronos Windows Webview Retry Test' },
-    window: { addEventListener() {} },
-    document: {
-      readyState: 'complete',
-      documentElement: { setAttribute() {} },
-      addEventListener(type, handler) { retryDocumentListeners[type] = handler; },
-    },
-  });
-  vm.runInContext(actionScript, retrySandbox);
-  retryDocumentListeners.click({ target: fakeButton, preventDefault() {} });
-  assert.equal(retryPostedMessages.length, 0);
-  retrySandbox.acquireVsCodeApi = () => ({ postMessage: message => retryPostedMessages.push(message) });
-  retryDocumentListeners.click({ target: fakeButton, preventDefault() {} });
-  assert.equal(retryPostedMessages.length, 1);
-  assert.equal(retryPostedMessages[0].command, 'openRunRecord');
-  const rerenderListeners = [];
-  const rerenderDocuments = [];
-  const makeRerenderDocument = () => {
-    const attributes = {};
-    const doc = {
-      readyState: 'complete',
-      documentElement: {
-        setAttribute(name, value) { attributes[name] = value; },
-      },
-      addEventListener(type, handler) {
-        if (type === 'click') { rerenderListeners.push(handler); }
-      },
-    };
-    rerenderDocuments.push({ doc, attributes });
-    return doc;
-  };
-  const rerenderSandbox = vm.createContext({
-    acquireVsCodeApi: () => ({ postMessage() {} }),
-    console: { info() {}, warn() {}, error() {} },
-    navigator: { userAgent: 'Kronos Windows Webview Rerender Test' },
-    window: { addEventListener() {} },
-    document: makeRerenderDocument(),
-  });
-  vm.runInContext(actionScript, rerenderSandbox);
-  assert.equal(rerenderListeners.length, 1);
-  assert.equal(rerenderDocuments[0].attributes['data-kronos-action-handler-attached'], 'true');
-  rerenderSandbox.document = makeRerenderDocument();
-  vm.runInContext(actionScript, rerenderSandbox);
-  assert.equal(rerenderListeners.length, 2);
-  assert.equal(rerenderDocuments[1].attributes['data-kronos-action-handler-attached'], 'true');
-  const diagnosticActionScript = webviewSecurity.webviewActionPostScript('Kronos Actions', [
-    { messageKey: 'ticket', dataAttribute: 'data-ticket' },
-  ], { readyCommand: webviewSecurity.WEBVIEW_READY_COMMAND });
-  assert.match(diagnosticActionScript, /__kronosWebviewReady/);
-  assert.match(diagnosticActionScript, /Kronos webview could not post script readiness/);
   assert.equal(webviewSecurity.WEBVIEW_ACTION_PANEL_SCRIPT, 'kronos-action-panel.js');
   assert.equal(webviewSecurity.WEBVIEW_JIRA_BOARD_SCRIPT, 'kronos-jira-board.js');
   const externalScriptTag = webviewSecurity.webviewActionScriptTag('nonce<1>', 'Kronos External', [
@@ -2802,7 +2636,11 @@ test('webview security injects CSP and preserves existing nonce policies', () =>
   });
   assert.equal(operatorPanel.normalizeActionPanelMessage({ command: 'unknown' }, allowedActions), null);
   assert.equal(operatorPanel.normalizeActionPanelMessage(null, allowedActions), null);
-  const panelScript = operatorPanel.kronosActionPanelScript('nonce123', 'Kronos Test', true);
+  assert.throws(
+    () => operatorPanel.kronosActionPanelScript('nonce123', 'Kronos Missing Script', true),
+    /packaged webview script URI/,
+  );
+  const panelScript = operatorPanel.kronosActionPanelScript('nonce123', 'Kronos Test', true, 'vscode-resource://kronos/action.js');
   assert.match(panelScript, /script nonce="nonce123"/);
   assert.match(panelScript, /Kronos Test/);
   assert.match(panelScript, /data-ticket/);
@@ -2811,7 +2649,7 @@ test('webview security injects CSP and preserves existing nonce policies', () =>
   assert.match(panelScript, /data-item-id/);
   assert.match(panelScript, /data-recovery-action/);
   assert.match(panelScript, /__kronosWebviewReady/);
-  const defaultPanelScript = operatorPanel.kronosActionPanelScript('nonce-default');
+  const defaultPanelScript = operatorPanel.kronosActionPanelScript('nonce-default', undefined, true, 'vscode-resource://kronos/action.js');
   assert.match(defaultPanelScript, /__kronosWebviewReady/);
 
   const existing = '<html><head><meta http-equiv="Content-Security-Policy" content="default-src test"></head><body></body></html>';
@@ -3684,7 +3522,7 @@ test('queue planner panel view renders escaped actions for planning panels', () 
     source: 'ticket',
     ticketSummary: 'Summary <body>',
   };
-  const queueHtml = queuePlannerPanelView.buildQueuePlannerHtml([plan], 'nonce-queue');
+  const queueHtml = queuePlannerPanelView.buildQueuePlannerHtml([plan], 'nonce-queue', ACTION_SCRIPT_URI);
   assert.ok(queueHtml.includes('Priority &lt;x&gt;'));
   assert.ok(queueHtml.includes('High &amp; urgent'));
   assert.ok(queueHtml.includes('Implement &lt;unsafe&gt; &amp; verify'));
@@ -3700,7 +3538,7 @@ test('queue planner panel view renders escaped actions for planning panels', () 
       { ticketKey: 'K-HTML', summary: 'Unsafe <summary>', kind: 'unlinked', severity: 'critical', action: 'Link', projects: [], detail: 'Needs <project>' },
       { ticketKey: 'K-EVID', summary: 'Evidence gap', kind: 'evidence_gap', severity: 'warning', action: 'Evidence', projects: ['api'], detail: 'No notes' },
     ],
-  }, 'nonce-backlog');
+  }, 'nonce-backlog', ACTION_SCRIPT_URI);
   assert.ok(backlogHtml.includes('Unsafe &lt;summary&gt;'));
   assert.ok(backlogHtml.includes('Needs &lt;project&gt;'));
   assert.ok(backlogHtml.includes('data-action="linkTicket"'));
@@ -3708,25 +3546,25 @@ test('queue planner panel view renders escaped actions for planning panels', () 
 
   const projectHtml = queuePlannerPanelView.buildProjectBatchPlanHtml([
     { project: 'web<app>', plans: [plan], totalScore: 42, estimatedMinutes: 45, actionCounts: { implement: 1 } },
-  ], 'nonce-project');
+  ], 'nonce-project', ACTION_SCRIPT_URI);
   assert.ok(projectHtml.includes('web&lt;app&gt;'));
   assert.ok(projectHtml.includes('To Do: 1'));
   assert.ok(projectHtml.includes('45m'));
 
   const releaseHtml = queuePlannerPanelView.buildReleaseBatchPlanHtml([
     { release: '2026.07<release>', plans: [plan], totalScore: 42, estimatedMinutes: 45, actionCounts: { implement: 1 } },
-  ], 'nonce-release');
+  ], 'nonce-release', ACTION_SCRIPT_URI);
   assert.ok(releaseHtml.includes('2026.07&lt;release&gt;'));
   assert.ok(releaseHtml.includes('web&lt;script&gt;'));
 
   const collisionHtml = queuePlannerPanelView.buildCollisionReportHtml([
     { plan, collisions: [{ id: 'c1', severity: 'high', kind: 'active_run', title: 'Overlap <run>', detail: 'Same file & branch' }] },
-  ], 'nonce-collision');
+  ], 'nonce-collision', ACTION_SCRIPT_URI);
   assert.ok(collisionHtml.includes('Overlap &lt;run&gt;'));
   assert.ok(collisionHtml.includes('Same file &amp; branch'));
   assert.ok(collisionHtml.includes('data-action="startPlan"'));
 
-  const windowHtml = queuePlannerPanelView.buildQueuePlanModeHtml('Plan <Now>', '2 <hours>', [plan], 'nonce-window');
+  const windowHtml = queuePlannerPanelView.buildQueuePlanModeHtml('Plan <Now>', '2 <hours>', [plan], 'nonce-window', ACTION_SCRIPT_URI);
   assert.ok(windowHtml.includes('Plan &lt;Now&gt;'));
   assert.ok(windowHtml.includes('2 &lt;hours&gt;'));
 
@@ -3754,7 +3592,7 @@ test('operations report panel view renders escaped data and command actions', ()
     summary: 'Ready <ship> & review',
     components: [{ label: 'Run <completion>', score: 20, max: 25, detail: 'Good & improving' }],
     metrics: [{ label: 'Retries <low>', value: '1 & falling' }],
-  }, 'nonce-score');
+  }, 'nonce-score', ACTION_SCRIPT_URI);
   assert.ok(scoreHtml.includes('Ready &lt;ship&gt; &amp; review'));
   assert.ok(scoreHtml.includes('Run &lt;completion&gt;'));
   assert.ok(scoreHtml.includes('data-action="trendMetrics"'));
@@ -3767,7 +3605,7 @@ test('operations report panel view renders escaped data and command actions', ()
     ticketsConsidered: 2,
     summary: 'Trend <ok> & stable.',
     metrics: [{ label: 'Build <pass>', value: '95%', detail: 'Good & steady', status: 'good' }],
-  }, 'nonce-trend');
+  }, 'nonce-trend', ACTION_SCRIPT_URI);
   assert.ok(trendHtml.includes('Trend &lt;ok&gt; &amp; stable.'));
   assert.ok(trendHtml.includes('Build &lt;pass&gt;'));
   assert.ok(trendHtml.includes('data-action="agentQualityScore"'));
@@ -3794,7 +3632,7 @@ test('operations report panel view renders escaped data and command actions', ()
       expectedSha256: 'abcdef1234567890',
       actualSha256: '123456abcdef7890',
     }],
-  }, 'nonce-manifest');
+  }, 'nonce-manifest', ACTION_SCRIPT_URI);
   assert.ok(manifestHtml.includes('/tmp/manifest&lt;bad&gt;.json'));
   assert.ok(manifestHtml.includes('Bad &lt;json&gt;'));
   assert.ok(manifestHtml.includes('Warn &amp; watch'));
@@ -3802,14 +3640,14 @@ test('operations report panel view renders escaped data and command actions', ()
   assert.ok(manifestHtml.includes('data-action="snapshotIntegrationManifest"'));
 
   const activeProfile = profileManager.listProfiles()[0];
-  const profilesHtml = operationsReportPanelView.buildProfilesHtml(activeProfile, 'nonce-profiles');
+  const profilesHtml = operationsReportPanelView.buildProfilesHtml(activeProfile, 'nonce-profiles', ACTION_SCRIPT_URI);
   assert.ok(profilesHtml.includes('Kronos Profiles'));
   assert.ok(profilesHtml.includes('data-action="integrationManifest"'));
   assert.ok(profilesHtml.includes('ACTIVE'));
 
   const doctorHtml = operationsReportPanelView.buildDoctorHtml([
     { name: 'Git <cli>', status: 'fail', detail: 'Missing & blocked' },
-  ], 'nonce-doctor');
+  ], 'nonce-doctor', ACTION_SCRIPT_URI);
   assert.ok(doctorHtml.includes('Git &lt;cli&gt;'));
   assert.ok(doctorHtml.includes('Missing &amp; blocked'));
   assert.ok(doctorHtml.includes('data-action="setup"'));
@@ -5354,7 +5192,7 @@ test('recovery panel view renders escaped recovery and state audit rows', () => 
         ticketKey: 'K-1',
       },
     ],
-  }, 'nonce-1', 'run-1');
+  }, 'nonce-1', 'run-1', ACTION_SCRIPT_URI);
   assert.ok(recoveryHtml.includes('Kronos Recovery Center'));
   assert.ok(recoveryHtml.includes('focused on run-1'));
   assert.ok(recoveryHtml.includes('focused-recovery-item'));
@@ -5378,8 +5216,8 @@ test('recovery panel view renders escaped recovery and state audit rows', () => 
     generatedAt: '2026-07-01T12:00:00.000Z',
     summary: { critical: 0, warning: 0, info: 0, total: 0 },
     items: [],
-  }, 'nonce-ext', undefined, 'vscode-resource://kronos/action.js');
-  assert.match(externalRecoveryHtml, /src="vscode-resource:\/\/kronos\/action\.js"/);
+  }, 'nonce-ext', undefined, ACTION_SCRIPT_URI);
+  assert.match(externalRecoveryHtml, /src="vscode-resource:\/\/kronos\/action-panel\.js"/);
   assert.ok(externalRecoveryHtml.includes('data-kronos-webview-name="Kronos Recovery Center"'));
 
   const auditHtml = recoveryPanelView.buildStateAuditLogHtml([
@@ -5390,7 +5228,7 @@ test('recovery panel view renders escaped recovery and state audit rows', () => 
       backup: null,
       note: '<unsafe>',
     },
-  ], '/tmp/audit<log>.jsonl', 'nonce-2');
+  ], '/tmp/audit<log>.jsonl', 'nonce-2', ACTION_SCRIPT_URI);
   assert.ok(auditHtml.includes('Kronos State Audit Log'));
   assert.ok(auditHtml.includes('/tmp/audit&lt;log&gt;.jsonl'));
   assert.ok(auditHtml.includes('restore&lt;backup&gt;'));
@@ -7165,6 +7003,7 @@ test('human review inbox aggregates runs, tickets, evidence gaps, integrations, 
   const html = humanReviewPanelView.buildHumanReviewInboxHtml(inbox, {
     tickets: state.tickets,
     nonce: 'nonce-hr',
+    actionScriptUri: ACTION_SCRIPT_URI,
   });
   assert.ok(html.includes('Kronos Human Review Inbox'));
   assert.ok(html.includes('data-action="refreshPanel"'));
@@ -7188,6 +7027,7 @@ test('human review inbox aggregates runs, tickets, evidence gaps, integrations, 
   }, {
     tickets: { 'BAD-1': ticket({ projects: [] }) },
     nonce: 'nonce-escape',
+    actionScriptUri: ACTION_SCRIPT_URI,
   });
   assert.ok(escapedHtml.includes('Unsafe &lt;ticket&gt;'));
   assert.ok(escapedHtml.includes('Needs &amp; review'));
@@ -7205,7 +7045,7 @@ test('evidence panel renderers emit safe links and action buttons', () => {
       { kind: 'acceptance', status: 'warn', title: 'Acceptance criteria not extracted', detail: 'Run extraction' },
       { kind: 'environment', status: 'warn', title: 'Environment pending', detail: 'test: unknown' },
     ],
-  }], 'Gate <unsafe>', 'nonce-evidence');
+  }], 'Gate <unsafe>', 'nonce-evidence', ACTION_SCRIPT_URI);
 
   assert.ok(gateHtml.includes('Gate &lt;unsafe&gt;'));
   assert.ok(gateHtml.includes('Add &lt;note&gt; &amp; proof'));
@@ -7228,7 +7068,7 @@ test('evidence panel renderers emit safe links and action buttons', () => {
     exportPath: '/tmp/evidence-<unsafe>.md',
     comment: 'Comment <body> & evidence',
     manualSteps: ['Check <payload>'],
-  }, 'nonce-handoff');
+  }, 'nonce-handoff', ACTION_SCRIPT_URI);
 
   assert.ok(handoffHtml.includes('Summary &lt;unsafe&gt;'));
   assert.ok(handoffHtml.includes('Jira &lt;ticket&gt;'));
@@ -7242,7 +7082,7 @@ test('evidence panel renderers emit safe links and action buttons', () => {
   const publishHtml = evidencePanelView.buildEvidencePublishHtml([
     { kind: 'jira', label: 'Jira <comment>', status: 'failed', detail: 'Boom <body>', endpoint: 'https://jira.example/api?x=1&y=2', httpStatus: 500 },
     { kind: 'gitlab_mr', label: 'MR', status: 'posted', detail: 'OK & done', endpoint: 'javascript:alert(1)' },
-  ], 'K-1', 'nonce-publish');
+  ], 'K-1', 'nonce-publish', ACTION_SCRIPT_URI);
 
   assert.ok(publishHtml.includes('Jira &lt;comment&gt;'));
   assert.ok(publishHtml.includes('Boom &lt;body&gt;'));

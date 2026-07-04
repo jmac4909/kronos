@@ -1028,8 +1028,12 @@ function kronosScriptableWebviewOptions(extensionUri?: vscode.Uri): vscode.Webvi
     : { enableScripts: true, localResourceRoots: [] };
 }
 
-function kronosActionPanelScriptUri(panel: vscode.WebviewPanel, extensionUri?: vscode.Uri): string | undefined {
-  return kronosMediaScriptUri(panel, extensionUri, WEBVIEW_ACTION_PANEL_SCRIPT);
+function kronosActionPanelScriptUri(panel: vscode.WebviewPanel, extensionUri?: vscode.Uri): string {
+  const scriptUri = kronosMediaScriptUri(panel, extensionUri, WEBVIEW_ACTION_PANEL_SCRIPT);
+  if (!scriptUri) {
+    throw new Error('Kronos action panels require a packaged webview script URI.');
+  }
+  return scriptUri;
 }
 
 function kronosJiraBoardScriptUri(panel: vscode.WebviewPanel, extensionUri?: vscode.Uri): string {

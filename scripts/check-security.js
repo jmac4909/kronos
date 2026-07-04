@@ -2455,36 +2455,20 @@ for (const marker of [
   "console.error('Kronos webview script error', webviewName",
   "console.error('Kronos webview unhandled rejection', webviewName",
   'export const WEBVIEW_READY_COMMAND',
-  'export function webviewReadyPostScript',
-  'const api = kronosVsCodeApi()',
-  'if (api.__kronosFallbackVsCodeApi) { setTimeout(postReady, 50); return; }',
-  "api.postMessage({ command: readyCommand",
-  "console.warn('Kronos webview could not post script readiness', error)",
   'export function webviewScriptDiagnosticBanner',
   'data-kronos-script-required',
   'Webview Developer Tools',
   'Extension Host DevTools',
   'function injectWebviewScriptDiagnostic(html: string): string',
   'injectWebviewScriptDiagnostic(value)',
-  'export function webviewActionPostScript',
-  'function closestKronosActionTarget(target)',
-  'target.parentElement',
-  'function postKronosAction(event)',
-  "document.addEventListener('click', postKronosAction, true)",
-  "document.addEventListener('DOMContentLoaded', attachKronosActionHandler, { once: true })",
-  "document.documentElement.setAttribute('data-kronos-actions-ready', 'true')",
-  '__kronosActionHandlerAttached',
-  'data-kronos-action-handler-attached',
-  'message[field.messageKey]',
-  'options.readyCommand ? webviewReadyPostScript(webviewName, options.readyCommand) :',
   'export function webviewActionScriptTag',
+  'scriptUri: string',
   'id="kronos-action-panel-script"',
   'data-kronos-script-kind="action-panel"',
   'data-kronos-webview-name',
   'data-kronos-action-fields',
   'data-kronos-ready-command',
   'options.scriptUri',
-  '!options.scriptUri',
   'cspSource?: string',
   'options.cspSource?.trim()',
   'scriptSources.join',
@@ -2511,6 +2495,15 @@ for (const marker of [
 }
 
 for (const marker of [
+  'export function webviewReadyPostScript',
+  'export function webviewActionPostScript',
+]) {
+  if (webviewSecurity.includes(marker)) {
+    fail(`webviewSecurity must not reintroduce inline action startup helper: ${marker}`);
+  }
+}
+
+for (const marker of [
   'document.currentScript',
   'function findKronosActionScript()',
   'kronos-action-panel-script',
@@ -2530,6 +2523,9 @@ for (const marker of [
   "console.error('Kronos webview script error', webviewName",
   "console.error('Kronos webview unhandled rejection', webviewName",
   'function postReady()',
+  'var readyPosted = false',
+  'if (readyPosted) { return; }',
+  'readyPosted = true',
   'if (api.__kronosFallbackVsCodeApi) { setTimeout(postReady, 50); return; }',
   'function closestKronosActionTarget(target)',
   'target.parentElement',

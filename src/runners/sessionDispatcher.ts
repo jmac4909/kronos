@@ -1444,6 +1444,9 @@ function runCenterActionButtons(run: KronosRun): string {
 }
 
 function runCenterScript(nonce: string, scriptUri?: string): string {
+  if (!scriptUri) {
+    throw new Error('Kronos Run Center requires a packaged webview script URI for interactive actions.');
+  }
   return webviewActionScriptTag(nonce, 'Kronos Run Center', [
     { messageKey: 'runId', dataAttribute: 'data-run-id' },
   ], { readyCommand: WEBVIEW_READY_COMMAND, scriptUri });

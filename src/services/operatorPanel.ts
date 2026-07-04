@@ -56,6 +56,9 @@ export function normalizeActionPanelMessage(raw: unknown, allowed: ReadonlySet<s
 }
 
 export function kronosActionPanelScript(nonce: string, webviewName = 'Kronos action panel', readyDiagnostic = true, scriptUri?: string): string {
+  if (!scriptUri) {
+    throw new Error('Kronos action panel requires a packaged webview script URI.');
+  }
   const readyOptions = readyDiagnostic ? { readyCommand: WEBVIEW_READY_COMMAND } : {};
   return webviewActionScriptTag(nonce, webviewName, [
     { messageKey: 'ticket', dataAttribute: 'data-ticket' },

@@ -16,6 +16,7 @@
   var webviewName = script && script.getAttribute('data-kronos-webview-name') || 'Kronos action panel';
   var readyCommand = script && script.getAttribute('data-kronos-ready-command') || '';
   var fields = [];
+  var readyPosted = false;
 
   function kronosFallbackVsCodeApi() {
     return { __kronosFallbackVsCodeApi: true, postMessage: function(message) { console.warn('VS Code API unavailable for Kronos webview action', message); } };
@@ -87,6 +88,7 @@
   }
 
   function postReady() {
+    if (readyPosted) { return; }
     if (!readyCommand) { return; }
     try {
       var api = kronosVsCodeApi();
@@ -97,6 +99,7 @@
         userAgent: navigator.userAgent,
         readyState: document.readyState
       });
+      readyPosted = true;
     } catch (error) {
       console.warn('Kronos webview could not post script readiness', error);
     }

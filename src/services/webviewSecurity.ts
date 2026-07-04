@@ -13,12 +13,9 @@ export interface WebviewActionPostField {
   dataAttribute: string;
 }
 
-export interface WebviewActionPostOptions {
+export interface WebviewActionScriptTagOptions {
   readyCommand?: string | undefined;
-}
-
-export interface WebviewActionScriptTagOptions extends WebviewActionPostOptions {
-  scriptUri?: string | undefined;
+  scriptUri: string;
 }
 
 export const WEBVIEW_READY_COMMAND = '__kronosWebviewReady';
@@ -78,97 +75,12 @@ export function webviewVsCodeApiScript(webviewName = 'Kronos webview'): string {
   ].join('\n');
 }
 
-export function webviewReadyPostScript(webviewName = 'Kronos webview', command = WEBVIEW_READY_COMMAND): string {
-  const nameLiteral = JSON.stringify(webviewName) || '"Kronos webview"';
-  const commandLiteral = JSON.stringify(command) || JSON.stringify(WEBVIEW_READY_COMMAND);
-  return [
-    '(function() {',
-    `  const webviewName = ${nameLiteral};`,
-    `  const readyCommand = ${commandLiteral};`,
-    '  let posted = false;',
-    '  function postReady() {',
-    '    if (posted) { return; }',
-    '    try {',
-    '      const api = kronosVsCodeApi();',
-    '      if (api.__kronosFallbackVsCodeApi) { setTimeout(postReady, 50); return; }',
-    "      api.postMessage({ command: readyCommand, webviewName: webviewName, userAgent: navigator.userAgent, readyState: document.readyState });",
-    '      posted = true;',
-    '    } catch (error) {',
-    "      console.warn('Kronos webview could not post script readiness', error);",
-    '    }',
-    '  }',
-    "  if (document.readyState === 'loading') {",
-    "    document.addEventListener('DOMContentLoaded', function() { setTimeout(postReady, 0); }, { once: true });",
-    '  } else {',
-    '    setTimeout(postReady, 0);',
-    '  }',
-    '}());',
-  ].join('\n');
-}
-
-export function webviewActionPostScript(webviewName: string, fields: WebviewActionPostField[], options: WebviewActionPostOptions = {}): string {
-  const fieldsLiteral = JSON.stringify(fields);
-  return [
-    webviewVsCodeApiScript(webviewName),
-    options.readyCommand ? webviewReadyPostScript(webviewName, options.readyCommand) : '',
-    '(function() {',
-    "  const actionHandlerKey = '__kronosActionHandlerAttached';",
-    '  if (document[actionHandlerKey]) {',
-    '    try { document.documentElement.setAttribute(\'data-kronos-actions-ready\', \'true\'); } catch (error) {}',
-    '    return;',
-    '  }',
-    '  document[actionHandlerKey] = true;',
-    "  try { document.documentElement.setAttribute('data-kronos-action-handler-attached', 'true'); } catch (error) {}",
-    `  const fields = ${fieldsLiteral};`,
-    '  function closestKronosActionTarget(target) {',
-    '    if (!target) { return null; }',
-    "    if (typeof target.closest === 'function') {",
-    "      return target.closest('[data-action]');",
-    '    }',
-    "    let current = target.parentElement && typeof target.parentElement === 'object' ? target.parentElement : null;",
-    '    while (current) {',
-    "      if (typeof current.getAttribute === 'function' && current.getAttribute('data-action')) { return current; }",
-    "      if (typeof current.closest === 'function') {",
-    "        return current.closest('[data-action]');",
-    '      }',
-    "      current = current.parentElement && typeof current.parentElement === 'object' ? current.parentElement : null;",
-    '    }',
-    '    return null;',
-    '  }',
-    '  function postKronosAction(event) {',
-    '    const target = closestKronosActionTarget(event && event.target);',
-    '    if (!target) { return; }',
-    '    event.preventDefault();',
-    "    const message = { command: target.getAttribute('data-action') || '' };",
-    '    for (const field of fields) {',
-    "      message[field.messageKey] = target.getAttribute(field.dataAttribute) || '';",
-    '    }',
-    '    kronosVsCodeApi().postMessage(message);',
-    '  }',
-    '  function attachKronosActionHandler() {',
-    "    document.addEventListener('click', postKronosAction, true);",
-    "    document.documentElement.setAttribute('data-kronos-actions-ready', 'true');",
-    '  }',
-    "  if (document.readyState === 'loading') {",
-    "    document.addEventListener('DOMContentLoaded', attachKronosActionHandler, { once: true });",
-    '  } else {',
-    '    attachKronosActionHandler();',
-    '  }',
-    '}());',
-  ].filter(Boolean).join('\n');
-}
-
 export function webviewActionScriptTag(
   nonce: string,
   webviewName: string,
   fields: WebviewActionPostField[],
-  options: WebviewActionScriptTagOptions = {},
+  options: WebviewActionScriptTagOptions,
 ): string {
-  if (!options.scriptUri) {
-    return `<script nonce="${escapeAttr(nonce)}">
-${webviewActionPostScript(webviewName, fields, options)}
-</script>`;
-  }
   const readyAttr = options.readyCommand
     ? ` data-kronos-ready-command="${escapeAttr(options.readyCommand)}"`
     : '';
