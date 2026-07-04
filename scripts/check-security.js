@@ -2043,6 +2043,8 @@ for (const marker of [
 }
 
 for (const marker of [
+  'class KronosScriptMissingError extends Error',
+  'export function isKronosScriptMissingError(error: unknown): boolean',
   'export function runKronosStateScript',
   'export function runGitlabJson',
   'export function runPipelineJson',
@@ -2057,6 +2059,9 @@ for (const marker of [
 }
 if (scriptClient.includes('} catch {}')) {
   fail('Script client must not silently swallow Python discovery failures.');
+}
+if (scriptClient.includes('export class KronosScriptMissingError')) {
+  fail('KronosScriptMissingError should stay private behind isKronosScriptMissingError.');
 }
 
 for (const marker of [

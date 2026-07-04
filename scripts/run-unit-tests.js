@@ -6135,9 +6135,9 @@ test('script client reports required scripts and wraps Python JSON contracts', a
 test('script client keeps raw JSON and process errors unknown by default', () => {
   const source = readSourceFixture('src', 'services', 'scriptClient.ts');
   for (const marker of [
-    'export class KronosScriptMissingError extends Error',
+    'class KronosScriptMissingError extends Error',
     'Object.setPrototypeOf(this, KronosScriptMissingError.prototype)',
-    'export function isKronosScriptMissingError(error: unknown): error is KronosScriptMissingError',
+    'export function isKronosScriptMissingError(error: unknown): boolean',
     "const REQUIRED_SCRIPT_NAMES = new Set<RequiredScriptName>(['kronos_state.py', 'pipeline_monitor.py', 'gitlab_api.py'])",
     "const MISSING_SCRIPT_MESSAGE_PREFIX = 'Kronos integration script unavailable: '",
     'function isRequiredScriptName(value: unknown): value is RequiredScriptName',
@@ -6158,6 +6158,7 @@ test('script client keeps raw JSON and process errors unknown by default', () =>
   ]) {
     assert.ok(source.includes(marker), marker);
   }
+  assert.equal(source.includes('export class KronosScriptMissingError'), false);
   for (const marker of [
     '<T = any>',
     'catch (e: any)',

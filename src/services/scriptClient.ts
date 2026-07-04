@@ -21,7 +21,7 @@ export interface ScriptHealth {
   present: boolean;
 }
 
-export class KronosScriptMissingError extends Error {
+class KronosScriptMissingError extends Error {
   readonly scriptName: RequiredScriptName;
   readonly filePath: string;
 
@@ -34,7 +34,7 @@ export class KronosScriptMissingError extends Error {
   }
 }
 
-export function isKronosScriptMissingError(error: unknown): error is KronosScriptMissingError {
+export function isKronosScriptMissingError(error: unknown): boolean {
   if (error instanceof KronosScriptMissingError) { return true; }
   if (typeof error === 'string') { return isKronosScriptMissingMessage(error); }
   if (!error || typeof error !== 'object') { return false; }
