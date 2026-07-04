@@ -1,18 +1,18 @@
 import { execFileSync } from 'child_process';
 import { unknownErrorMessage } from './errorUtils';
 
-export type ProcessTreeSignal = 'SIGSTOP' | 'SIGCONT' | 'SIGTERM' | 'SIGKILL';
+type ProcessTreeSignal = 'SIGSTOP' | 'SIGCONT' | 'SIGTERM' | 'SIGKILL';
 
-export interface ProcessTreeCommandOptions {
+interface ProcessTreeCommandOptions {
   windowsHide: boolean;
   timeout: number;
 }
 
-export type ProcessTreeCommandRunner = (command: string, args: string[], options: ProcessTreeCommandOptions) => void;
-export type ProcessKillRunner = (pid: number, signal?: ProcessTreeSignal) => void;
-export type ProcessTreeScheduler = (callback: () => void, ms: number) => unknown;
+type ProcessTreeCommandRunner = (command: string, args: string[], options: ProcessTreeCommandOptions) => void;
+type ProcessKillRunner = (pid: number, signal?: ProcessTreeSignal) => void;
+type ProcessTreeScheduler = (callback: () => void, ms: number) => unknown;
 
-export interface ProcessTreeOptions {
+interface ProcessTreeOptions {
   platform?: NodeJS.Platform | string;
   commandRunner?: ProcessTreeCommandRunner;
   kill?: ProcessKillRunner;
@@ -20,7 +20,7 @@ export interface ProcessTreeOptions {
   sigkillDelayMs?: number;
 }
 
-export interface ProcessTreeResult {
+interface ProcessTreeResult {
   attempted: boolean;
   signalled: boolean;
   method: 'none' | 'taskkill' | 'process-group' | 'process' | 'unsupported';

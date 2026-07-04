@@ -1,14 +1,14 @@
 import { Ticket } from '../state/types';
 import { evidenceChecks, evidenceEnvironmentResults, evidenceString } from './evidenceData';
 
-export interface TrendMetricsInput {
+interface TrendMetricsInput {
   runs: unknown[];
   tickets: Record<string, Ticket>;
   now?: Date;
   windowDays?: number;
 }
 
-export interface TrendMetric {
+interface TrendMetric {
   label: string;
   value: string;
   detail: string;

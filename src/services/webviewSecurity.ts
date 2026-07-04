@@ -1,19 +1,19 @@
 import { randomBytes } from 'crypto';
 import { escapeAttr } from './webviewHtml';
 
-export interface WebviewCspOptions {
+interface WebviewCspOptions {
   nonce?: string;
   allowScripts?: boolean;
   cspSource?: string;
   imgSrc?: string[];
 }
 
-export interface WebviewActionPostField {
+interface WebviewActionPostField {
   messageKey: string;
   dataAttribute: string;
 }
 
-export interface WebviewActionScriptTagOptions {
+interface WebviewActionScriptTagOptions {
   readyCommand?: string | undefined;
   scriptUri: string;
 }
