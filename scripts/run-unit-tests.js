@@ -1886,11 +1886,55 @@ test('queue dispatch plan resolves registered, missing, and direct project targe
     resolveProjectPath,
   }).dispatchTargets, [{ projectName: 'app', projectPath: '/repo/app' }]);
 
+  assert.equal(
+    queueDispatchPlan.queueDispatchMissingProjectMessage({ target: 'K-1', missingProjects: ['missing'] }),
+    'Cannot start K-1; linked project missing is not registered.',
+  );
+  assert.equal(
+    queueDispatchPlan.queueDispatchNoProjectPathMessage(null),
+    'Cannot start queue item; no project path was found.',
+  );
+  assert.deepEqual(queueDispatchPlan.buildQueueDispatchCollisionTarget({
+    ticket: 'K-1',
+    id: 'queue-1',
+    projects: ['app'],
+    action: 'implement',
+  }), {
+    ticketKey: 'K-1',
+    projects: ['app'],
+    action: 'implement',
+    excludeQueueItemId: 'queue-1',
+  });
+  assert.equal(queueDispatchPlan.buildQueueDispatchExtraPrompt('focus auth'), '\n\nADDITIONAL CONTEXT FROM USER: focus auth');
+  assert.equal(
+    queueDispatchPlan.buildQueueDispatchScopeHint({ projectName: 'app', projectPath: '/repo/app' }, ['app', 'web']),
+    '\nYou are working in app. Focus ONLY on this codebase. Other projects: web.',
+  );
+  assert.equal(
+    queueDispatchPlan.buildQueueDispatchAppendPrompt({
+      codeAction: true,
+      implementPrompt: 'impl',
+      scopeHint: '\nscope',
+      extraPrompt: '\nextra',
+    }),
+    'impl\nscope\nextra',
+  );
+  assert.equal(queueDispatchPlan.buildQueueDispatchAppendPrompt({
+    codeAction: false,
+    implementPrompt: 'impl',
+    extraPrompt: '',
+  }), undefined);
+
   const source = readSourceFixture('src', 'services', 'queueDispatchPlan.ts');
   for (const marker of [
     'export interface QueueDispatchTarget',
     'export interface QueueDispatchPlan',
+    'export interface QueueDispatchCollisionTarget',
     'export function buildQueueDispatchPlan',
+    'export function buildQueueDispatchCollisionTarget',
+    'export function buildQueueDispatchExtraPrompt',
+    'export function buildQueueDispatchScopeHint',
+    'export function buildQueueDispatchAppendPrompt',
     'directProjectPath',
     'missingProjects',
   ]) {
@@ -10285,7 +10329,7 @@ test('extension run recovery helpers use typed run records', () => {
 test('extension dispatch command handlers normalize tree payloads before use', () => {
   const source = readSourceFixture('src', 'extension.ts');
   for (const marker of [
-    "import { buildQueueDispatchPlan } from './services/queueDispatchPlan'",
+    "from './services/queueDispatchPlan'",
     "vscode.commands.registerCommand('kronos.refreshProject', async (item: unknown)",
     "vscode.commands.registerCommand('kronos.implement', async (item: unknown)",
     "vscode.commands.registerCommand('kronos.deployMonitor', async (item: unknown)",
@@ -10298,7 +10342,10 @@ test('extension dispatch command handlers normalize tree payloads before use', (
     "vscode.commands.registerCommand('kronos.startNext', async () =>",
     'const selection = selectNextQueueItem();',
     'const dispatchPlan = buildQueueDispatchPlan({',
-    "vscode.window.showWarningMessage(`Cannot start ${item.ticket || item.id || 'queue item'}; linked project ${dispatchPlan.missingProjects.join(', ')} is not registered.`)",
+    'queueDispatchMissingProjectMessage({ target: item.ticket || item.id',
+    'queueDispatchNoProjectPathMessage(item.ticket)',
+    'buildQueueDispatchCollisionTarget({',
+    "buildQueueDispatchAppendPrompt({ codeAction, implementPrompt: codeAction ? getImplementPrompt(state) : '' })",
     'dispatchOptions.projectNameOverride = target.projectName',
     "vscode.commands.registerCommand('kronos.completeTask', async (item: unknown)",
     "vscode.commands.registerCommand('kronos.openProject', async (item: unknown)",
@@ -10434,8 +10481,11 @@ test('extension queue command handlers normalize payloads before use', () => {
     'if (projs.length === 0 && !dispatchPlan.directProjectPath)',
     'dispatchPlan.dispatchTargets',
     'dispatchPlan.missingProjects',
-    "vscode.window.showWarningMessage(`Cannot start ${target}; linked project ${dispatchPlan.missingProjects.join(', ')} is not registered.`)",
-    "vscode.window.showWarningMessage(`Cannot start ${queueData.ticket || 'queue item'}; no project path was found.`)",
+    'queueDispatchMissingProjectMessage({ target: queueData.ticket || queueData.id',
+    'queueDispatchNoProjectPathMessage(queueData.ticket)',
+    'const collisionTarget = buildQueueDispatchCollisionTarget({',
+    'const extraPrompt = buildQueueDispatchExtraPrompt(extra)',
+    'const scopeHint = buildQueueDispatchScopeHint(target, projs)',
     'if (target.projectName) { dispatchOptions.projectNameOverride = target.projectName; }',
     'const idx = resolveQueueIndex(treeItem);',
     'await startClaudeDispatch(target.projectPath, skill, queueData.ticket || undefined,',
