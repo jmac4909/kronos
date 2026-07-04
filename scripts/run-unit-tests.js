@@ -3629,6 +3629,14 @@ test('evidence publisher plans and posts Jira and GitLab comments through inject
     JIRA_API_TOKEN: 'jira-token',
   }).destinations.find(destination => destination.kind === 'jira');
   assert.equal(jiraWithBasePath.endpoint, 'https://jira.example/jira/rest/api/3/issue/K-77/comment');
+  const jiraFromIssuePath = evidencePublisher.buildEvidencePublishPlan('K-78', ticket({
+    summary: 'Publish evidence with Jira issue context path',
+    jira_url: 'https://jira.example/jira/browse/K-78',
+  }), 'body', {
+    JIRA_EMAIL: 'dev@example.com',
+    JIRA_API_TOKEN: 'jira-token',
+  }).destinations.find(destination => destination.kind === 'jira');
+  assert.equal(jiraFromIssuePath.endpoint, 'https://jira.example/jira/rest/api/3/issue/K-78/comment');
 
   const configuredGitlab = evidencePublisher.buildEvidencePublishPlan('K-77', {
     ...t,

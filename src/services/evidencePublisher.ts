@@ -238,6 +238,12 @@ function baseUrlFromIssueUrl(issueUrl: string | undefined): string | undefined {
   try {
     const parsed = new URL(issueUrl);
     if (!isHttpProtocol(parsed)) { return undefined; }
+    const browseIndex = parsed.pathname.indexOf('/browse/');
+    if (browseIndex > 0) {
+      const base = new URL(parsed.origin);
+      base.pathname = parsed.pathname.slice(0, browseIndex);
+      return base.toString();
+    }
     return parsed.origin;
   } catch {
     return undefined;
