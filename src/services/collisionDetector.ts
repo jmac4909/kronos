@@ -3,6 +3,7 @@ import { isCodeAction } from './actionSemantics';
 import { changedFilePaths } from './changedFiles';
 import { isActiveRun, isStaleActiveRun } from './runStatus';
 import { severityRank } from './severityRank';
+import { toValidDate } from './dateValues';
 
 type CollisionSeverity = 'high' | 'medium' | 'low';
 type CollisionKind = 'active_run' | 'queued_ticket' | 'queued_project' | 'open_mr' | 'recent_file' | 'ticket_area' | 'mr_file';
@@ -234,9 +235,8 @@ function pathTokens(filePath: string): Set<string> {
 
 function isRecentRun(run: CollisionRun, now: Date, recentRunHours: number): boolean {
   const value = run.endedAt || run.startedAt;
-  if (!value) { return false; }
-  const parsed = new Date(value);
-  if (!Number.isFinite(parsed.getTime())) { return false; }
+  const parsed = toValidDate(value);
+  if (!parsed) { return false; }
   return now.getTime() - parsed.getTime() <= recentRunHours * 60 * 60 * 1000;
 }
 
