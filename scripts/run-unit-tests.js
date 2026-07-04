@@ -8419,6 +8419,15 @@ test('security check validates semantic webview script policy', () => {
     "for (const panelId of ['kronosJiraBoard', 'kronosDashboard', 'kronosHumanReviewInbox', 'kronosEvidenceGate', 'kronosAgingReport'])",
     'kronosScriptableWebviewOptions for media-backed scripts',
     'const webviewOptions: vscode.WebviewOptions',
+    "'src/services/promptPanelView.ts'",
+    "'src/services/recoveryPanelView.ts'",
+    "'src/services/humanReviewPanelView.ts'",
+    "'src/services/evidencePanelView.ts'",
+    "'src/services/sonarReportView.ts'",
+    "'src/services/agingReportView.ts'",
+    "'src/services/webviewHtml.ts'",
+    "const promptPanelView = sources['src/services/promptPanelView.ts']",
+    "const webviewActionPanelScript = sources['media/kronos-action-panel.js']",
   ]) {
     assert.ok(source.includes(marker), marker);
   }

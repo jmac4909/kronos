@@ -14,6 +14,13 @@ const files = [
   'src/services/operationsReportPanelView.ts',
   'src/services/operatorPanel.ts',
   'src/services/webviewSecurity.ts',
+  'src/services/promptPanelView.ts',
+  'src/services/recoveryPanelView.ts',
+  'src/services/humanReviewPanelView.ts',
+  'src/services/evidencePanelView.ts',
+  'src/services/sonarReportView.ts',
+  'src/services/agingReportView.ts',
+  'src/services/webviewHtml.ts',
   'src/views/ProjectTreeProvider.ts',
   'src/views/TicketTreeProvider.ts',
   'media/kronos-action-panel.js',
@@ -88,19 +95,20 @@ const nextActionContext = readSource('src/services/nextActionContext.ts');
 const gitWorkspace = readSource('src/services/gitWorkspace.ts');
 const processTree = readSource('src/services/processTree.ts');
 const webviewDiagnostics = readSource('src/services/webviewDiagnostics.ts');
-const webviewSecurity = readSource('src/services/webviewSecurity.ts');
-const webviewActionPanelScript = readSource('media/kronos-action-panel.js');
-const operatorPanel = readSource('src/services/operatorPanel.ts');
-const promptPanelView = readSource('src/services/promptPanelView.ts');
-const recoveryPanelView = readSource('src/services/recoveryPanelView.ts');
-const humanReviewPanelView = readSource('src/services/humanReviewPanelView.ts');
-const evidencePanelView = readSource('src/services/evidencePanelView.ts');
+const webviewSecurity = sources['src/services/webviewSecurity.ts'];
+const webviewActionPanelScript = sources['media/kronos-action-panel.js'];
+const jiraBoardScript = sources['media/kronos-jira-board.js'];
+const operatorPanel = sources['src/services/operatorPanel.ts'];
+const promptPanelView = sources['src/services/promptPanelView.ts'];
+const recoveryPanelView = sources['src/services/recoveryPanelView.ts'];
+const humanReviewPanelView = sources['src/services/humanReviewPanelView.ts'];
+const evidencePanelView = sources['src/services/evidencePanelView.ts'];
 const cliProbes = readSource('src/services/cliProbes.ts');
 const combinedVerification = readSource('src/services/combinedVerification.ts');
 const changedFiles = readSource('src/services/changedFiles.ts');
-const sonarReportView = readSource('src/services/sonarReportView.ts');
-const agingReportView = readSource('src/services/agingReportView.ts');
-const webviewHtml = readSource('src/services/webviewHtml.ts');
+const sonarReportView = sources['src/services/sonarReportView.ts'];
+const agingReportView = sources['src/services/agingReportView.ts'];
+const webviewHtml = sources['src/services/webviewHtml.ts'];
 const relativeTime = readSource('src/services/relativeTime.ts');
 const unitTests = readSource('scripts/run-unit-tests.js');
 const vscodeIgnore = readSource('.vscodeignore');
@@ -314,7 +322,6 @@ for (const requiredIgnore of ['.git/**', '.claude/**', 'node_modules/**', 'scrip
     fail(`.vscodeignore must exclude ${requiredIgnore}`);
   }
 }
-const jiraBoardScript = readSource('media/kronos-jira-board.js');
 const extensionUiSource = `${extension}\n${queuePlannerPanelView}\n${operationsReportPanelView}\n${jiraBoardScript}`;
 for (const marker of [
   'function mockCommandName(command)',
