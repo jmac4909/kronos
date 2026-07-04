@@ -4122,14 +4122,7 @@ async function executePlanPanelAction(
 }
 
 function openBacklogTriagePanel(state: KronosState, extensionUri?: vscode.Uri): void {
-  const panel = vscode.window.createWebviewPanel(
-    'kronosBacklogTriage',
-    'Kronos Backlog Triage',
-    vscode.ViewColumn.One,
-    kronosScriptableWebviewOptions(extensionUri)
-  );
-  const nonce = createWebviewNonce();
-  const actionScriptUri = kronosActionPanelScriptUri(panel, extensionUri);
+  const { panel, nonce, actionScriptUri } = createKronosActionWebviewPanel('kronosBacklogTriage', 'Kronos Backlog Triage', extensionUri);
   const logReady = createWebviewReadyMonitor(panel, 'Kronos Backlog Triage');
   const render = () => {
     const report = buildBacklogTriageReport({ state: state.state, queue: state.queue });
@@ -4198,14 +4191,7 @@ function openReleaseBatchPlanPanel(state: KronosState, extensionUri?: vscode.Uri
 }
 
 async function openCollisionReportPanel(state: KronosState, extensionUri?: vscode.Uri): Promise<void> {
-  const panel = vscode.window.createWebviewPanel(
-    'kronosCollisionReport',
-    'Kronos Collision Report',
-    vscode.ViewColumn.One,
-    kronosScriptableWebviewOptions(extensionUri)
-  );
-  const nonce = createWebviewNonce();
-  const actionScriptUri = kronosActionPanelScriptUri(panel, extensionUri);
+  const { panel, nonce, actionScriptUri } = createKronosActionWebviewPanel('kronosCollisionReport', 'Kronos Collision Report', extensionUri);
   let plans: PlannedAction[] = [];
   const logReady = createWebviewReadyMonitor(panel, 'Kronos Collision Report');
   const render = async () => {
@@ -4307,14 +4293,7 @@ function openTrendMetricsPanel(state: KronosState, extensionUri?: vscode.Uri): v
 }
 
 function openAgingReportPanel(state: KronosState, extensionUri?: vscode.Uri): void {
-  const panel = vscode.window.createWebviewPanel(
-    'kronosAgingReport',
-    'Kronos Aging Report',
-    vscode.ViewColumn.One,
-    kronosScriptableWebviewOptions(extensionUri)
-  );
-  const nonce = createWebviewNonce();
-  const actionScriptUri = kronosActionPanelScriptUri(panel, extensionUri);
+  const { panel, nonce, actionScriptUri } = createKronosActionWebviewPanel('kronosAgingReport', 'Kronos Aging Report', extensionUri);
   const logReady = createWebviewReadyMonitor(panel, 'Kronos Aging Report');
   const render = () => {
     const report = analyzeAging({

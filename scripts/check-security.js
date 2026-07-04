@@ -284,8 +284,15 @@ function assertExplicitWebviewScriptPolicy(file, source) {
 
 function assertPanelUsesScriptableWebviewOptions(file, source, panelId) {
   const matches = listCreateWebviewPanelCalls(file, source).filter(call => call.text.includes(`'${panelId}'`));
-  if (matches.length !== 1) {
-    fail(`${file} must have exactly one ${panelId} webview panel, found ${matches.length}.`);
+  const sharedPanelMatches = [...source.matchAll(new RegExp(`createKronosActionWebviewPanel\\('${panelId}'`, 'g'))];
+  if (matches.length + sharedPanelMatches.length !== 1) {
+    fail(`${file} must have exactly one ${panelId} webview panel, found ${matches.length + sharedPanelMatches.length}.`);
+    return;
+  }
+  if (sharedPanelMatches.length === 1) {
+    if (!source.includes('function createKronosActionWebviewPanel') || !source.includes('kronosScriptableWebviewOptions(extensionUri)')) {
+      fail(`${file} ${panelId} must use a shared action panel backed by kronosScriptableWebviewOptions.`);
+    }
     return;
   }
   if (!/\bkronosScriptableWebviewOptions\s*\(/.test(matches[0].text)) {
