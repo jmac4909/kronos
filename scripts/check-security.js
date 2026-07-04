@@ -2314,7 +2314,7 @@ for (const [name, source, marker] of [
   ['src/services/operatorPanel.ts', operatorPanel, "import { recordFromUnknown } from './records'"],
   ['src/services/runAttention.ts', runAttention, "import { recordFromUnknown } from './records'"],
   ['src/services/runCompletionNotification.ts', runCompletionNotification, "import { recordFromUnknown, recordString } from './records'"],
-  ['src/services/runProgress.ts', runProgress, "import { isRecord, recordFromUnknown } from './records'"],
+  ['src/services/runProgress.ts', runProgress, "import { isRecord, recordFromUnknown, recordString } from './records'"],
   ['src/services/queueMutations.ts', queueMutations, "import { recordFromUnknown } from './records'"],
   ['src/services/postRunReadiness.ts', postRunReadiness, "import { recordFromUnknown } from './records'"],
 ]) {
@@ -2339,6 +2339,7 @@ for (const [name, source, marker] of [
   ['src/services/agentQualityScore.ts', agentQualityScore, "import { recordString } from './records'"],
   ['src/services/dashboardWorklist.ts', dashboardWorklist, "import { recordString } from './records'"],
   ['src/services/humanReviewInbox.ts', humanReviewInbox, "import { recordString } from './records'"],
+  ['src/services/runProgress.ts', runProgress, "import { isRecord, recordFromUnknown, recordString } from './records'"],
   ['src/services/ticketTimeline.ts', ticketTimeline, "import { recordString } from './records'"],
   ['src/services/trendMetrics.ts', trendMetrics, "import { isRecord, recordString } from './records'"],
 ]) {
@@ -2347,6 +2348,9 @@ for (const [name, source, marker] of [
   }
   if (source.includes('function runString(record: Record<string, unknown>, key: string): string')) {
     fail(`${name} must not carry a local runString record helper.`);
+  }
+  if (source.includes('function eventString')) {
+    fail(`${name} must not carry a local eventString helper.`);
   }
 }
 
@@ -3426,7 +3430,7 @@ for (const marker of [
   "import { toValidDate } from './dateValues'",
   'export function runProgressSummary',
   'export function formatRunProgress',
-  "import { isRecord, recordFromUnknown } from './records'",
+  "import { isRecord, recordFromUnknown, recordString } from './records'",
   'function elapsedRunSeconds',
   'function fileCount',
   'function formatElapsed',

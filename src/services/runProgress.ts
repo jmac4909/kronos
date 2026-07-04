@@ -1,5 +1,5 @@
 import { isActiveRunStatus } from './runStatus';
-import { isRecord, recordFromUnknown } from './records';
+import { isRecord, recordFromUnknown, recordString } from './records';
 import { toValidDate } from './dateValues';
 
 interface RunProgressSummary {
@@ -15,8 +15,8 @@ interface RunProgressSummary {
 export function runProgressSummary(run: unknown, now = new Date()): RunProgressSummary {
   const record = recordFromUnknown(run);
   const events = runEvents(record);
-  const toolCalls = events.filter(event => eventString(event, 'type') === 'tool').length;
-  const toolErrors = events.filter(event => eventString(event, 'type') === 'error').length;
+  const toolCalls = events.filter(event => recordString(event, 'type') === 'tool').length;
+  const toolErrors = events.filter(event => recordString(event, 'type') === 'error').length;
   const filesRead = fileCount(events, /^Reading /);
   const filesChanged = fileCount(events, /^(Editing |Writing )/);
   const elapsedSeconds = elapsedRunSeconds(record, events, now);
@@ -65,7 +65,7 @@ function runEvents(record: Record<string, unknown>): Array<Record<string, unknow
 function fileCount(events: Array<Record<string, unknown>>, pattern: RegExp): number {
   const files = new Set<string>();
   for (const event of events) {
-    const label = eventString(event, 'label');
+    const label = recordString(event, 'label');
     if (pattern.test(label)) {
       files.add(label.replace(pattern, ''));
     }
@@ -89,9 +89,4 @@ function formatElapsed(seconds: number): string {
     return remainder > 0 ? `${minutes}m ${remainder}s` : `${minutes}m`;
   }
   return `${seconds}s`;
-}
-
-function eventString(record: Record<string, unknown>, key: string): string {
-  const value = record[key];
-  return typeof value === 'string' || typeof value === 'number' ? String(value) : '';
 }

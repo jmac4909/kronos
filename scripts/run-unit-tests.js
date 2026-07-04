@@ -3445,7 +3445,7 @@ test('record guard helper centralizes unknown object narrowing', () => {
     ['operatorPanel.ts', "import { recordFromUnknown } from './records'"],
     ['runAttention.ts', "import { recordFromUnknown } from './records'"],
     ['runCompletionNotification.ts', "import { recordFromUnknown, recordString } from './records'"],
-    ['runProgress.ts', "import { isRecord, recordFromUnknown } from './records'"],
+    ['runProgress.ts', "import { isRecord, recordFromUnknown, recordString } from './records'"],
   ]) {
     const source = readSourceFixture('src', 'services', file);
     assert.ok(source.includes(marker), `${file} should import shared unknown-record helper`);
@@ -3461,14 +3461,18 @@ test('record guard helper centralizes unknown object narrowing', () => {
     'agentQualityScore.ts',
     'dashboardWorklist.ts',
     'humanReviewInbox.ts',
+    'runProgress.ts',
     'ticketTimeline.ts',
   ]) {
     const source = readSourceFixture('src', 'services', file);
     const marker = file === 'activeRunDisplay.ts'
       ? "import { recordFromUnknown, recordString } from './records'"
+      : file === 'runProgress.ts'
+        ? "import { isRecord, recordFromUnknown, recordString } from './records'"
       : "import { recordString } from './records'";
     assert.ok(source.includes(marker), `${file} should import shared record string helper`);
     assert.equal(source.includes('function runString'), false, `${file} should not carry a local runString helper`);
+    assert.equal(source.includes('function eventString'), false, `${file} should not carry a local eventString helper`);
   }
 });
 
@@ -6071,7 +6075,7 @@ test('run progress helper summarizes active run activity', () => {
   for (const marker of [
     "import { isActiveRunStatus } from './runStatus'",
     "import { toValidDate } from './dateValues'",
-    "import { isRecord, recordFromUnknown } from './records'",
+    "import { isRecord, recordFromUnknown, recordString } from './records'",
     'export function runProgressSummary',
     'export function formatRunProgress',
     'function elapsedRunSeconds',
