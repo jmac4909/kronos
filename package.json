@@ -1041,6 +1041,40 @@
           "when": "viewItem == queue_item"
         },
         {
+          "command": "kronos.runCenter",
+          "when": "viewItem == run",
+          "group": "inline"
+        },
+        {
+          "command": "kronos.openRunArtifact",
+          "when": "viewItem == run",
+          "group": "inline"
+        },
+        {
+          "command": "kronos.retryRun",
+          "when": "viewItem == run"
+        },
+        {
+          "command": "kronos.resumeRun",
+          "when": "viewItem == run"
+        },
+        {
+          "command": "kronos.pauseRun",
+          "when": "viewItem == run"
+        },
+        {
+          "command": "kronos.continueRun",
+          "when": "viewItem == run"
+        },
+        {
+          "command": "kronos.archiveRun",
+          "when": "viewItem == run"
+        },
+        {
+          "command": "kronos.cancelRun",
+          "when": "viewItem == run"
+        },
+        {
           "command": "kronos.unlinkTicket",
           "when": "viewItem == linked_project",
           "group": "inline"

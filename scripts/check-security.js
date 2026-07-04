@@ -807,7 +807,7 @@ for (const marker of [
   "unknownErrorMessage(e, 'Failed to cancel run.')",
   "unknownErrorMessage(e, 'Failed to open run diff.')",
   "unknownErrorMessage(e, 'Failed to mark run needs-human.')",
-  'runRecordPath(picked.run.id)',
+  'runRecordPath(run.id)',
   'let resolvedTicketKey = resolveDispatchTicketKey(ticketKey, run)',
   'await reloadStateAfterDispatch(state, projectName)',
   'function resolveDispatchTicketKey(ticketKey: string | undefined, run: KronosRun): string | undefined',

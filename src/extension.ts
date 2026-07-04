@@ -1024,6 +1024,25 @@ function findRunById(runId: string): KronosRun | undefined {
   return listRuns().find(run => run.id === runId);
 }
 
+function resolveRunItem(item: unknown): KronosRun | undefined {
+  const runId = resolveRunId(item);
+  return runId ? findRunById(runId) : undefined;
+}
+
+async function pickRun(runs: KronosRun[], placeHolder: string, emptyMessage: string): Promise<KronosRun | undefined> {
+  if (runs.length === 0) {
+    vscode.window.showInformationMessage(emptyMessage);
+    return undefined;
+  }
+  const picked = await vscode.window.showQuickPick(runs.map(run => ({
+    label: `${run.project} - ${run.skill}${run.ticket ? ` ${run.ticket}` : ''}`,
+    description: runQuickPickDescription(run),
+    detail: runQuickPickDetail(run),
+    run,
+  })), { placeHolder });
+  return picked?.run;
+}
+
 function kronosScriptableWebviewOptions(extensionUri?: vscode.Uri): vscode.WebviewOptions {
   return extensionUri
     ? { enableScripts: true, localResourceRoots: [vscode.Uri.joinPath(extensionUri, 'media')] }
@@ -3581,160 +3600,83 @@ export function activate(context: vscode.ExtensionContext) {
       openInteractiveRunCenter(state, context.extensionUri, resolveRunId(item));
     }),
 
-    vscode.commands.registerCommand('kronos.openRunArtifact', async () => {
-      const runs = listRuns();
-      if (runs.length === 0) {
-        vscode.window.showInformationMessage('No persisted Kronos runs yet.');
-        return;
-      }
-
-      const picked = await vscode.window.showQuickPick(runs.map(run => ({
-        label: `${run.project} - ${run.skill}${run.ticket ? ` ${run.ticket}` : ''}`,
-        description: runQuickPickDescription(run),
-        detail: runQuickPickDetail(run),
-        run,
-      })), { placeHolder: 'Select a Kronos run' });
-      if (!picked) { return; }
+    vscode.commands.registerCommand('kronos.openRunArtifact', async (item: unknown) => {
+      const run = resolveRunItem(item) || await pickRun(listRuns(), 'Select a Kronos run', 'No persisted Kronos runs yet.');
+      if (!run) { return; }
 
       const action = await vscode.window.showQuickPick(
         ['Open Log', 'Open Prompt', 'Open Run Record', 'Open Workspace Terminal', 'Open Workspace Diff', 'Mark Needs Human', 'Pause Run', 'Continue Run', 'Cancel Run', 'Resume Run', 'Retry Saved Prompt', 'Archive Run'],
-        { placeHolder: `Inspect ${picked.label}` }
+        { placeHolder: `Inspect ${run.project} - ${run.skill}${run.ticket ? ` ${run.ticket}` : ''}` }
       );
       if (!action) { return; }
 
       if (action === 'Open Log') {
-        await openRunArtifactFileIfExists(picked.run.logPath, 'Run log not found.');
+        await openRunArtifactFileIfExists(run.logPath, 'Run log not found.');
       } else if (action === 'Open Prompt') {
-        await openRunArtifactFileIfExists(picked.run.promptPath, 'Run prompt artifact not found.');
+        await openRunArtifactFileIfExists(run.promptPath, 'Run prompt artifact not found.');
       } else if (action === 'Open Run Record') {
-        await openRunArtifactFileIfExists(runRecordPath(picked.run.id), 'Run record not found.');
+        await openRunArtifactFileIfExists(runRecordPath(run.id), 'Run record not found.');
       } else if (action === 'Open Workspace Terminal') {
-        const cwd = picked.run.worktreePath || picked.run.cwd || picked.run.projectPath;
+        const cwd = run.worktreePath || run.cwd || run.projectPath;
         if (cwd && fs.existsSync(cwd)) {
-          const terminal = vscode.window.createTerminal(kronosTerminalOptions({ name: `Kronos ${picked.run.project}`, cwd }));
+          const terminal = vscode.window.createTerminal(kronosTerminalOptions({ name: `Kronos ${run.project}`, cwd }));
           terminal.show();
         } else {
           vscode.window.showWarningMessage('Run workspace no longer exists.');
         }
       } else if (action === 'Open Workspace Diff') {
-        await openRunDiffArtifact(picked.run);
+        await openRunDiffArtifact(run);
       } else if (action === 'Mark Needs Human') {
-        await markSelectedRunNeedsHuman(picked.run);
+        await markSelectedRunNeedsHuman(run);
       } else if (action === 'Pause Run') {
-        await pauseSelectedRun(picked.run);
+        await pauseSelectedRun(run);
       } else if (action === 'Continue Run') {
-        await continueSelectedRun(picked.run);
+        await continueSelectedRun(run);
       } else if (action === 'Cancel Run') {
-        await cancelSelectedRun(picked.run);
+        await cancelSelectedRun(run);
       } else if (action === 'Resume Run') {
-        await resumeSelectedRun(state, picked.run);
+        await resumeSelectedRun(state, run);
       } else if (action === 'Retry Saved Prompt') {
-        await retryRunFromPrompt(state, picked.run);
+        await retryRunFromPrompt(state, run);
       } else if (action === 'Archive Run') {
-        await archiveSelectedRun(picked.run.id);
+        await archiveSelectedRun(run.id);
       }
     }),
 
-    vscode.commands.registerCommand('kronos.retryRun', async () => {
-      const runs = listRuns().filter(isRetryableRun);
-      if (runs.length === 0) {
-        vscode.window.showInformationMessage('No runs with saved prompt artifacts found.');
-        return;
-      }
-
-      const picked = await vscode.window.showQuickPick(runs.map(run => ({
-        label: `${run.project} - ${run.skill}${run.ticket ? ` ${run.ticket}` : ''}`,
-        description: runQuickPickDescription(run),
-        detail: `${formatWebviewDateTime(run.startedAt)} - ${String(run.promptHash || '').substring(0, 12)}`,
-        run,
-      })), { placeHolder: 'Retry which saved Kronos prompt?' });
-      if (!picked) { return; }
-      await retryRunFromPrompt(state, picked.run);
+    vscode.commands.registerCommand('kronos.retryRun', async (item: unknown) => {
+      const run = resolveRunItem(item) || await pickRun(listRuns().filter(isRetryableRun), 'Retry which saved Kronos prompt?', 'No runs with saved prompt artifacts found.');
+      if (!run) { return; }
+      await retryRunFromPrompt(state, run);
     }),
 
-    vscode.commands.registerCommand('kronos.resumeRun', async () => {
-      const runs = listRuns().filter(isResumableRun);
-      if (runs.length === 0) {
-        vscode.window.showInformationMessage('No resumable Kronos runs found.');
-        return;
-      }
-
-      const picked = await vscode.window.showQuickPick(runs.map(run => ({
-        label: `${run.project} - ${run.skill}${run.ticket ? ` ${run.ticket}` : ''}`,
-        description: runQuickPickDescription(run),
-        detail: runQuickPickDetail(run),
-        run,
-      })), { placeHolder: 'Resume which Kronos run?' });
-      if (!picked) { return; }
-      await resumeSelectedRun(state, picked.run);
+    vscode.commands.registerCommand('kronos.resumeRun', async (item: unknown) => {
+      const run = resolveRunItem(item) || await pickRun(listRuns().filter(isResumableRun), 'Resume which Kronos run?', 'No resumable Kronos runs found.');
+      if (!run) { return; }
+      await resumeSelectedRun(state, run);
     }),
 
-    vscode.commands.registerCommand('kronos.pauseRun', async () => {
-      const runs = listRuns().filter(run => run.status === 'running' || run.status === 'preflight');
-      if (runs.length === 0) {
-        vscode.window.showInformationMessage('No running Kronos runs to pause.');
-        return;
-      }
-
-      const picked = await vscode.window.showQuickPick(runs.map(run => ({
-        label: `${run.project} - ${run.skill}${run.ticket ? ` ${run.ticket}` : ''}`,
-        description: runQuickPickDescription(run),
-        detail: runQuickPickDetail(run),
-        run,
-      })), { placeHolder: 'Pause which Kronos run?' });
-      if (!picked) { return; }
-      await pauseSelectedRun(picked.run);
+    vscode.commands.registerCommand('kronos.pauseRun', async (item: unknown) => {
+      const run = resolveRunItem(item) || await pickRun(listRuns().filter(run => run.status === 'running' || run.status === 'preflight'), 'Pause which Kronos run?', 'No running Kronos runs to pause.');
+      if (!run) { return; }
+      await pauseSelectedRun(run);
     }),
 
-    vscode.commands.registerCommand('kronos.continueRun', async () => {
-      const runs = listRuns().filter(run => run.status === 'paused');
-      if (runs.length === 0) {
-        vscode.window.showInformationMessage('No paused Kronos runs to continue.');
-        return;
-      }
-
-      const picked = await vscode.window.showQuickPick(runs.map(run => ({
-        label: `${run.project} - ${run.skill}${run.ticket ? ` ${run.ticket}` : ''}`,
-        description: runQuickPickDescription(run),
-        detail: runQuickPickDetail(run),
-        run,
-      })), { placeHolder: 'Continue which Kronos run?' });
-      if (!picked) { return; }
-      await continueSelectedRun(picked.run);
+    vscode.commands.registerCommand('kronos.continueRun', async (item: unknown) => {
+      const run = resolveRunItem(item) || await pickRun(listRuns().filter(run => run.status === 'paused'), 'Continue which Kronos run?', 'No paused Kronos runs to continue.');
+      if (!run) { return; }
+      await continueSelectedRun(run);
     }),
 
-    vscode.commands.registerCommand('kronos.archiveRun', async () => {
-      const runs = listRuns();
-      if (runs.length === 0) {
-        vscode.window.showInformationMessage('No persisted Kronos runs to archive.');
-        return;
-      }
-
-      const picked = await vscode.window.showQuickPick(runs.map(run => ({
-        label: `${run.project} - ${run.skill}${run.ticket ? ` ${run.ticket}` : ''}`,
-        description: runQuickPickDescription(run),
-        detail: runQuickPickDetail(run),
-        run,
-      })), { placeHolder: 'Archive which Kronos run?' });
-      if (!picked) { return; }
-      await archiveSelectedRun(picked.run.id);
+    vscode.commands.registerCommand('kronos.archiveRun', async (item: unknown) => {
+      const run = resolveRunItem(item) || await pickRun(listRuns(), 'Archive which Kronos run?', 'No persisted Kronos runs to archive.');
+      if (!run) { return; }
+      await archiveSelectedRun(run.id);
     }),
 
-    vscode.commands.registerCommand('kronos.cancelRun', async () => {
-      const runs = listRuns();
-      if (runs.length === 0) {
-        vscode.window.showInformationMessage('No persisted Kronos runs to cancel.');
-        return;
-      }
-
-      const picked = await vscode.window.showQuickPick(runs.map(run => ({
-        label: `${run.project} - ${run.skill}${run.ticket ? ` ${run.ticket}` : ''}`,
-        description: runQuickPickDescription(run),
-        detail: runQuickPickDetail(run),
-        run,
-      })), { placeHolder: 'Cancel which Kronos run?' });
-      if (!picked) { return; }
-      await cancelSelectedRun(picked.run);
+    vscode.commands.registerCommand('kronos.cancelRun', async (item: unknown) => {
+      const run = resolveRunItem(item) || await pickRun(listRuns(), 'Cancel which Kronos run?', 'No persisted Kronos runs to cancel.');
+      if (!run) { return; }
+      await cancelSelectedRun(run);
     }),
 
     vscode.commands.registerCommand('kronos.doctor', async () => {

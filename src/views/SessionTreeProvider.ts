@@ -91,6 +91,7 @@ class SessionTreeItem extends vscode.TreeItem {
       const progress = formatRunProgress(run);
       const attention = isAttentionRunStatus(run.status) ? runAttentionLine(run, 90) : '';
       this.contextValue = 'run';
+      this.id = run.id;
       this.description = attention ? `${run.status} - ${attention}` : `${run.status} - ${progress}`;
       this.tooltip = `Run: ${run.id}\nProject: ${run.project || 'unknown'}\nTicket: ${run.ticket || 'none'}\nSkill: ${run.skill || 'unknown'}\nStatus: ${run.status}${attention ? `\nReason: ${attention}` : ''}\nProgress: ${progress}\nStarted: ${run.startedAt || 'unknown'}`;
       this.iconPath = attention
