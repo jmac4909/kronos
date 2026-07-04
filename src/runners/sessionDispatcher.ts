@@ -920,9 +920,9 @@ export async function dispatchClaudeSession(
     if (spawnErrorHandled) { return; }
     processClosed = true;
     const persisted = readRunRecord(run.id) as KronosRun | null;
-    const wasCancelled = persisted?.status === 'cancelled';
-    if (wasCancelled && persisted) {
-      run.status = 'cancelled';
+    const preservedTerminalStatus = preservedTerminalRunStatus(persisted);
+    if (preservedTerminalStatus && persisted) {
+      run.status = preservedTerminalStatus;
       if (persisted.failureReason !== undefined) { run.failureReason = persisted.failureReason; }
       else { delete run.failureReason; }
       if (persisted.endedAt !== undefined) { run.endedAt = persisted.endedAt; }
@@ -934,15 +934,19 @@ export async function dispatchClaudeSession(
       else { delete run.processPid; }
     }
     const finalEvent = {
-      type: wasCancelled ? 'error' : code === 0 ? 'done' : 'error',
-      label: wasCancelled ? 'Session cancelled' : code === 0 ? 'Session complete' : `Session exited with code ${code}`,
+      type: preservedTerminalStatus ? 'error' : code === 0 ? 'done' : 'error',
+      label: preservedTerminalStatus === 'cancelled'
+        ? 'Session cancelled'
+        : preservedTerminalStatus === 'needs_human'
+          ? 'Session marked needs human'
+          : code === 0 ? 'Session complete' : `Session exited with code ${code}`,
       detail: '',
       timestamp: new Date(),
     } as ProgressEvent;
     events.push(finalEvent);
     addRunEvent(run, finalEvent);
-    const finalStatus = wasCancelled ? 'cancelled' : code === 0 ? 'completed' : 'failed';
-    const finalFailureReason = wasCancelled ? persisted?.failureReason : code === 0 ? undefined : `Process exited with code ${code}`;
+    const finalStatus = preservedTerminalStatus || (code === 0 ? 'completed' : 'failed');
+    const finalFailureReason = preservedTerminalStatus ? persisted?.failureReason : code === 0 ? undefined : `Process exited with code ${code}`;
     const finalPatch: Partial<KronosRun> = {
       status: finalStatus,
       endedAt: persisted?.endedAt || new Date().toISOString(),
@@ -963,8 +967,10 @@ export async function dispatchClaudeSession(
         const event = { type: 'error' as const, label: `Worktree not removed: ${warning}`, detail: '', timestamp: new Date() };
         events.push(event);
         addRunEvent(run, event);
-        const cleanupStatus = wasCancelled ? 'cancelled' : code === 0 ? 'needs_human' : 'failed';
-        const cleanupFailureReason = wasCancelled ? `${run.failureReason || 'Run cancelled'}; worktree cleanup blocked: ${warning}` : warning;
+        const cleanupStatus = preservedTerminalStatus || (code === 0 ? 'needs_human' : 'failed');
+        const cleanupFailureReason = preservedTerminalStatus
+          ? `${run.failureReason || terminalStatusLabel(preservedTerminalStatus)}; worktree cleanup blocked: ${warning}`
+          : warning;
         updateRun(run, {
           status: cleanupStatus,
           failureReason: cleanupFailureReason,
@@ -993,6 +999,14 @@ export async function dispatchClaudeSession(
     }
   });
   return launchResult(run, true);
+}
+
+function preservedTerminalRunStatus(run: KronosRun | null): 'cancelled' | 'needs_human' | undefined {
+  return run?.status === 'cancelled' || run?.status === 'needs_human' ? run.status : undefined;
+}
+
+function terminalStatusLabel(status: 'cancelled' | 'needs_human'): string {
+  return status === 'cancelled' ? 'Run cancelled' : 'Run marked needs human';
 }
 
 function launchResult(run: KronosRun, launched: boolean): DispatchLaunchResult {

@@ -1,4 +1,4 @@
-import { escapeClass, escapeHtml, kronosWebviewBaseCss } from './webviewHtml';
+import { escapeAttr, escapeClass, escapeHtml, kronosWebviewBaseCss } from './webviewHtml';
 import { webviewVsCodeApiScript } from './webviewSecurity';
 
 export interface SonarReportRenderInput {
@@ -216,7 +216,7 @@ export function buildSonarReport(input: SonarReportRenderInput): SonarReportRend
             <button class="kronos-button primary" id="fix-sonar" type="button">Fix Issues</button>
             ${dashboardUrl ? '<button class="kronos-button" id="open-sonar" type="button">Open in SonarQube</button>' : ''}
           </div>
-          <script nonce="${input.nonce}">
+          <script nonce="${escapeAttr(input.nonce)}">
             ${webviewVsCodeApiScript()}
             document.getElementById('fix-sonar').addEventListener('click', function() {
               kronosVsCodeApi().postMessage({ command: 'fixSonar' });

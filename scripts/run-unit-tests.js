@@ -2843,7 +2843,7 @@ test('sonar report view renders escaped report data and command buttons', () => 
     branch: 'feature/<x>',
     sonarKey: 'proj:key',
     host: 'https://sonar.example/base',
-    nonce: 'nonce123',
+    nonce: `nonce'"123`,
     gate: {
       projectStatus: {
         status: 'ERROR',
@@ -2863,7 +2863,8 @@ test('sonar report view renders escaped report data and command buttons', () => 
 
   assert.equal(report.issueList.length, 1);
   assert.equal(report.dashboardUrl, 'https://sonar.example/base/dashboard?id=proj%3Akey&branch=feature%2F%3Cx%3E');
-  assert.match(report.html, /script nonce="nonce123"/);
+  assert.match(report.html, /script nonce="nonce&#39;&quot;123"/);
+  assert.doesNotMatch(report.html, /script nonce="nonce'"123"/);
   assert.match(report.html, /kronosVsCodeApi\(\)\.postMessage\(\{ command: 'fixSonar' \}\)/);
   assert.match(report.html, /Open in SonarQube/);
   assert.match(report.html, /New Duplicated Lines Density/);
@@ -3926,6 +3927,37 @@ test('dispatcher listRuns persists stale active run repairs for UI callers', asy
   assert.match(persisted.failureReason, /terminal metadata/);
 });
 
+test('run store limit selects newest records before repairing active runs', () => {
+  const oldRun = {
+    id: 'zz-run-limit-old',
+    project: 'app',
+    skill: 'implement',
+    ticket: 'K-LIMIT-OLD',
+    status: 'running',
+    endedAt: '2026-07-01T10:00:00.000Z',
+  };
+  const newRun = {
+    id: 'aa-run-limit-new',
+    project: 'app',
+    skill: 'implement',
+    ticket: 'K-LIMIT-NEW',
+    status: 'running',
+    endedAt: '2026-07-02T10:00:00.000Z',
+  };
+  runStore.writeRunRecord(oldRun);
+  runStore.writeRunRecord(newRun);
+  fs.utimesSync(runStore.runRecordPath(oldRun.id), new Date('2035-01-01T00:00:00.000Z'), new Date('2035-01-01T00:00:00.000Z'));
+  fs.utimesSync(runStore.runRecordPath(newRun.id), new Date('2035-01-02T00:00:00.000Z'), new Date('2035-01-02T00:00:00.000Z'));
+
+  const limitedRuns = runStore.readRuns(1);
+  assert.deepEqual(limitedRuns.map(run => run.id), [newRun.id]);
+
+  const repaired = runStore.repairActiveRunRecords(1);
+  assert.equal(repaired.runs.some(run => run.id === newRun.id), true);
+  assert.equal(JSON.parse(fs.readFileSync(runStore.runRecordPath(newRun.id), 'utf8')).status, 'needs_human');
+  assert.equal(JSON.parse(fs.readFileSync(runStore.runRecordPath(oldRun.id), 'utf8')).status, 'running');
+});
+
 test('run store archive does not overwrite existing archived records or artifacts', () => {
   fs.mkdirSync(runStore.ARCHIVED_RUNS_DIR, { recursive: true });
   const existingRunPath = runStore.archivedRunRecordPath('run-collision');
@@ -4142,6 +4174,24 @@ test('run store surfaces invalid records and blocks strict mutations', () => {
     '[key: string]: any',
   ]) {
     assert.equal(source.includes(marker), false, marker);
+  }
+});
+
+test('dispatcher close handler preserves operator terminal run statuses', () => {
+  const source = readSourceFixture('src', 'runners', 'sessionDispatcher.ts');
+  for (const marker of [
+    'const preservedTerminalStatus = preservedTerminalRunStatus(persisted)',
+    'if (preservedTerminalStatus && persisted)',
+    "preservedTerminalStatus === 'needs_human'",
+    "'Session marked needs human'",
+    "const finalStatus = preservedTerminalStatus || (code === 0 ? 'completed' : 'failed')",
+    "const finalFailureReason = preservedTerminalStatus ? persisted?.failureReason",
+    "const cleanupStatus = preservedTerminalStatus || (code === 0 ? 'needs_human' : 'failed')",
+    "terminalStatusLabel(preservedTerminalStatus)",
+    "function preservedTerminalRunStatus(run: KronosRun | null): 'cancelled' | 'needs_human' | undefined",
+    "run?.status === 'cancelled' || run?.status === 'needs_human'",
+  ]) {
+    assert.ok(source.includes(marker), marker);
   }
 });
 
@@ -7187,7 +7237,7 @@ test('aging report view escapes data and only links HTTP URLs', () => {
   assert.match(html, /&lt;b&gt;unsafe&lt;\/b&gt;/);
   assert.match(html, /quote &quot; amp &amp; tag &lt;x&gt;/);
   assert.doesNotMatch(html, /href="javascript:/);
-  assert.match(html, /href="https:\/\/ci\.example\/job\?x=1&amp;name=&quot;bad&quot;"/);
+  assert.match(html, /href="https:\/\/ci\.example\/job\?x=1&amp;name=%22bad%22"/);
   assert.match(html, /class="kronos-shell aging-shell"/);
   assert.match(html, /class="kronos-stat-grid"/);
   assert.match(html, /class="kronos-table"/);
@@ -7200,6 +7250,7 @@ test('webview html helpers centralize escaping and safe HTTP links', () => {
   assert.equal(webviewHtml.safeHttpHref('file:///tmp/log.txt'), '');
   assert.equal(webviewHtml.safeHttpHref('javascript:alert(1)'), '');
   assert.equal(webviewHtml.safeHttpHref('https://example.test/a?b=1&c=2'), 'https://example.test/a?b=1&amp;c=2');
+  assert.equal(webviewHtml.safeHttpHref(' https://example.test/a\n?b=1&name="bad" '), 'https://example.test/a?b=1&amp;name=%22bad%22');
   const baseCss = webviewHtml.kronosWebviewBaseCss();
   assert.match(baseCss, /--k-bg: var\(--vscode-editor-background\)/);
   assert.match(baseCss, /\.kronos-header/);

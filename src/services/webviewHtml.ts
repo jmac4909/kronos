@@ -21,7 +21,7 @@ export function safeHttpHref(url: string | undefined): string {
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
       return '';
     }
-    return escapeAttr(url);
+    return escapeAttr(parsed.toString());
   } catch {
     return '';
   }

@@ -403,10 +403,13 @@ function listRunRecordFiles(dir: string, limit: number): string[] {
   if (!fs.existsSync(dir)) { return []; }
   return fs.readdirSync(dir)
     .filter(f => f.endsWith('.json'))
-    .sort()
-    .reverse()
+    .map(fileName => {
+      const filePath = path.join(dir, fileName);
+      return { fileName, filePath, modifiedMs: fs.statSync(filePath).mtimeMs };
+    })
+    .sort((a, b) => b.modifiedMs - a.modifiedMs || b.fileName.localeCompare(a.fileName))
     .slice(0, limit)
-    .map(f => path.join(dir, f));
+    .map(file => file.filePath);
 }
 
 function moveRunArtifactIfExists(filePath: string | undefined, destDir: string, warnings: string[], label: string): string | undefined {

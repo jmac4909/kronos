@@ -2556,7 +2556,7 @@ for (const marker of [
   'kronosWebviewBaseCss',
   'class="kronos-shell sonar-shell"',
   'class="kronos-button primary"',
-  'script nonce="${input.nonce}"',
+  'script nonce="${escapeAttr(input.nonce)}"',
   "kronosVsCodeApi().postMessage({ command: 'fixSonar' })",
   "kronosVsCodeApi().postMessage({ command: 'openSonar' })",
   'issueList.slice(0, 50)',
