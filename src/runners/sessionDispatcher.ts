@@ -393,6 +393,9 @@ async function runCompletionCallback(
   if (!opts.onComplete) { return; }
   try {
     await opts.onComplete(code, run);
+    writeRun(run);
+    context.panel.webview.html = withWebviewCsp(buildProgressHtml(context.projectName, context.skill, context.ticket, context.events, run));
+    saveSession(context.projectName, context.skill, context.ticket, context.events);
   } catch (e: unknown) {
     const detail = unknownErrorMessage(e, 'Post-run completion callback failed.');
     const event = { type: 'error' as const, label: 'Post-run completion callback failed', detail, timestamp: new Date() };

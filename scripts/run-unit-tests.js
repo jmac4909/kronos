@@ -4195,6 +4195,12 @@ test('dispatcher close handler preserves operator terminal run statuses', () => 
   }
 });
 
+test('dispatcher completion callback refreshes progress panel after successful mutations', () => {
+  const source = readSourceFixture('src', 'runners', 'sessionDispatcher.ts');
+  const successCallbackBlock = /try \{\n    await opts\.onComplete\(code, run\);\n    writeRun\(run\);\n    context\.panel\.webview\.html = withWebviewCsp\(buildProgressHtml\(context\.projectName, context\.skill, context\.ticket, context\.events, run\)\);\n    saveSession\(context\.projectName, context\.skill, context\.ticket, context\.events\);\n  \} catch/.exec(source);
+  assert.ok(successCallbackBlock, 'successful post-run callback should persist and re-render mutated run state');
+});
+
 test('dispatcher records branch and permission metadata for persisted runs', () => {
   const source = readSourceFixture('src', 'runners', 'sessionDispatcher.ts');
   for (const marker of [
