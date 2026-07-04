@@ -404,8 +404,10 @@ const RECOVERY_MESSAGE_COMMANDS = new Set([
   'executeRecoveryItem',
 ]);
 const OPERATOR_COMMAND_TO_VSCODE_COMMAND = new Map<string, string>([
+  ['addToQueue', 'kronos.addToQueue'],
   ['addEvidence', 'kronos.addEvidence'],
   ['addEvidenceCheck', 'kronos.addEvidenceCheck'],
+  ['linkTicket', 'kronos.linkTicket'],
   ['setup', 'kronos.setup'],
   ['settings', 'kronos.settings'],
   ['doctor', 'kronos.doctor'],
@@ -424,6 +426,8 @@ const OPERATOR_COMMAND_TO_VSCODE_COMMAND = new Map<string, string>([
   ['sessionHistory', 'kronos.sessionHistory'],
   ['viewTicket', 'kronos.viewTicket'],
   ['recordEnvironmentResult', 'kronos.recordEnvironmentResult'],
+  ['extractAcceptanceCriteria', 'kronos.extractAcceptanceCriteria'],
+  ['updateAcceptanceCriteria', 'kronos.updateAcceptanceCriteria'],
   ['evidenceGate', 'kronos.evidenceGate'],
   ['exportEvidence', 'kronos.exportEvidence'],
   ['evidenceHandoff', 'kronos.evidenceHandoff'],
@@ -515,9 +519,13 @@ const AGING_REPORT_MESSAGE_COMMANDS = new Set([
   'evidenceGate',
 ]);
 const TICKET_SCOPED_OPERATOR_COMMANDS = new Set([
+  'addToQueue',
   'addEvidence',
   'addEvidenceCheck',
+  'linkTicket',
   'recordEnvironmentResult',
+  'extractAcceptanceCriteria',
+  'updateAcceptanceCriteria',
   'viewTicket',
   'exportEvidence',
   'evidenceHandoff',
@@ -1112,25 +1120,13 @@ async function executeTicketDetailAction(state: KronosState, command: string, ti
   if (command === 'startTicket') {
     await startTicketFromActionPanel(state, ticketKey);
   } else if (command === 'addToQueue') {
-    await vscode.commands.executeCommand('kronos.addToQueue', { ticketKey });
+    await tryExecuteTicketOperatorCommand(command, ticketKey);
   } else if (command === 'removeFromQueue') {
     await removeTicketFromQueue(state, ticketKey, true, extensionUri);
   } else if (command === 'linkTicket') {
-    await vscode.commands.executeCommand('kronos.linkTicket', { ticketKey });
-  } else if (command === 'addEvidence') {
-    await vscode.commands.executeCommand('kronos.addEvidence', { ticketKey });
-  } else if (command === 'addEvidenceCheck') {
-    await vscode.commands.executeCommand('kronos.addEvidenceCheck', { ticketKey });
-  } else if (command === 'recordEnvironmentResult') {
-    await vscode.commands.executeCommand('kronos.recordEnvironmentResult', { ticketKey });
-  } else if (command === 'evidenceGate') {
-    await vscode.commands.executeCommand('kronos.evidenceGate', { ticketKey });
-  } else if (command === 'exportEvidence') {
-    await vscode.commands.executeCommand('kronos.exportEvidence', { ticketKey });
-  } else if (command === 'evidenceHandoff') {
-    await vscode.commands.executeCommand('kronos.evidenceHandoff', { ticketKey });
-  } else if (command === 'publishEvidence') {
-    await vscode.commands.executeCommand('kronos.publishEvidence', { ticketKey });
+    await tryExecuteTicketOperatorCommand(command, ticketKey);
+  } else if (await tryExecuteTicketOperatorCommand(command, ticketKey)) {
+    return;
   } else if (command === 'openJira') {
     openTicketExternalUrl(state, ticketKey, 'jira');
   } else if (command === 'openMr') {
@@ -1940,28 +1936,7 @@ export function activate(context: vscode.ExtensionContext) {
             }
             renderBoard();
             return;
-          } else if (command === 'addEvidence' && hasTicket(ticket)) {
-            await vscode.commands.executeCommand('kronos.addEvidence', { ticketKey: ticket });
-            renderBoard();
-            return;
-          } else if (command === 'addEvidenceCheck' && hasTicket(ticket)) {
-            await vscode.commands.executeCommand('kronos.addEvidenceCheck', { ticketKey: ticket });
-            renderBoard();
-            return;
-          } else if (command === 'recordEnvironmentResult' && hasTicket(ticket)) {
-            await vscode.commands.executeCommand('kronos.recordEnvironmentResult', { ticketKey: ticket });
-            renderBoard();
-            return;
-          } else if (command === 'exportEvidence' && hasTicket(ticket)) {
-            await vscode.commands.executeCommand('kronos.exportEvidence', { ticketKey: ticket });
-            renderBoard();
-            return;
-          } else if (command === 'evidenceHandoff' && hasTicket(ticket)) {
-            await vscode.commands.executeCommand('kronos.evidenceHandoff', { ticketKey: ticket });
-            renderBoard();
-            return;
-          } else if (command === 'publishEvidence' && hasTicket(ticket)) {
-            await vscode.commands.executeCommand('kronos.publishEvidence', { ticketKey: ticket });
+          } else if (hasTicket(ticket) && await tryExecuteTicketOperatorCommand(command, ticket)) {
             renderBoard();
             return;
           } else {
@@ -4276,22 +4251,10 @@ async function executeHumanReviewAction(state: KronosState, command: string, tic
     return;
   }
 
-  if (command === 'addEvidence' && ticketKey) {
-    await vscode.commands.executeCommand('kronos.addEvidence', { ticketKey });
-  } else if (command === 'addEvidenceCheck' && ticketKey) {
-    await vscode.commands.executeCommand('kronos.addEvidenceCheck', { ticketKey });
-  } else if (command === 'extractAcceptanceCriteria' && ticketKey) {
-    await vscode.commands.executeCommand('kronos.extractAcceptanceCriteria', { ticketKey });
-  } else if (command === 'updateAcceptanceCriteria' && ticketKey) {
-    await vscode.commands.executeCommand('kronos.updateAcceptanceCriteria', { ticketKey });
-  } else if (command === 'startTicket' && ticketKey) {
+  if (command === 'startTicket' && ticketKey) {
     await startTicketFromActionPanel(state, ticketKey);
-  } else if (command === 'addToQueue' && ticketKey) {
-    await vscode.commands.executeCommand('kronos.addToQueue', { ticketKey });
-  } else if (command === 'viewTicket' && ticketKey) {
-    await vscode.commands.executeCommand('kronos.viewTicket', { ticketKey });
-  } else if (command === 'evidenceGate' && ticketKey) {
-    await executeOperatorCommandAction(command, ticketKey);
+  } else if (ticketKey && await tryExecuteTicketOperatorCommand(command, ticketKey)) {
+    return;
   } else if (command === 'runCenter' || command === 'recoveryCenter' || command === 'doctor' || command === 'queuePlanner') {
     await executeOperatorCommandAction(command);
   } else {
@@ -4414,22 +4377,8 @@ function openEvidencePublishPanel(results: Array<EvidencePublishResult | Evidenc
 }
 
 async function executeEvidenceGateAction(command: string, ticketKey: string): Promise<void> {
-  if (command === 'addEvidence') {
-    await vscode.commands.executeCommand('kronos.addEvidence', { ticketKey });
-  } else if (command === 'addEvidenceCheck') {
-    await vscode.commands.executeCommand('kronos.addEvidenceCheck', { ticketKey });
-  } else if (command === 'recordEnvironmentResult') {
-    await vscode.commands.executeCommand('kronos.recordEnvironmentResult', { ticketKey });
-  } else if (command === 'extractAcceptanceCriteria') {
-    await vscode.commands.executeCommand('kronos.extractAcceptanceCriteria', { ticketKey });
-  } else if (command === 'updateAcceptanceCriteria') {
-    await vscode.commands.executeCommand('kronos.updateAcceptanceCriteria', { ticketKey });
-  } else if (command === 'viewTicket') {
-    await vscode.commands.executeCommand('kronos.viewTicket', { ticketKey });
-  } else if (command === 'evidenceHandoff') {
-    await vscode.commands.executeCommand('kronos.evidenceHandoff', { ticketKey });
-  } else if (command === 'publishEvidence') {
-    await vscode.commands.executeCommand('kronos.publishEvidence', { ticketKey });
+  if (!await tryExecuteTicketOperatorCommand(command, ticketKey)) {
+    vscode.window.showWarningMessage('Ignored Kronos evidence gate action without a valid target.');
   }
 }
 
@@ -4452,6 +4401,14 @@ async function executeOperatorCommandAction(command: string, ticketKey = ''): Pr
     return;
   }
   await vscode.commands.executeCommand(commandId);
+}
+
+async function tryExecuteTicketOperatorCommand(command: string, ticketKey: string): Promise<boolean> {
+  if (!TICKET_SCOPED_OPERATOR_COMMANDS.has(command) && command !== 'evidenceGate') {
+    return false;
+  }
+  await executeOperatorCommandAction(command, ticketKey);
+  return true;
 }
 
 function attachOperatorCommandHandler(panel: vscode.WebviewPanel, webviewName: string, allowedCommands: ReadonlySet<string>): void {
@@ -4536,9 +4493,9 @@ async function executePlanPanelAction(
     recordPlanDecision(state, plan, 'rejected', undefined, reason || undefined);
     vscode.window.showInformationMessage(`Rejected ${plan.ticketKey} recommendation.`);
   } else if (request.command === 'viewTicket' && plan.ticketKey) {
-    await vscode.commands.executeCommand('kronos.viewTicket', { ticketKey: plan.ticketKey });
+    await tryExecuteTicketOperatorCommand(request.command, plan.ticketKey);
   } else if (request.command === 'addEvidence' && plan.ticketKey) {
-    await vscode.commands.executeCommand('kronos.addEvidence', { ticketKey: plan.ticketKey });
+    await tryExecuteTicketOperatorCommand(request.command, plan.ticketKey);
   }
 }
 
@@ -4576,18 +4533,10 @@ async function executeBacklogTriageAction(state: KronosState, command: string, t
     vscode.window.showWarningMessage(`${ticketKey || 'Ticket'} is no longer in Kronos state.`);
     return;
   }
-  if (command === 'linkTicket') {
-    await vscode.commands.executeCommand('kronos.linkTicket', { ticketKey });
-  } else if (command === 'startTicket') {
+  if (command === 'startTicket') {
     await startTicketFromActionPanel(state, ticketKey);
-  } else if (command === 'addToQueue') {
-    await vscode.commands.executeCommand('kronos.addToQueue', { ticketKey });
-  } else if (command === 'addEvidence') {
-    await vscode.commands.executeCommand('kronos.addEvidence', { ticketKey });
-  } else if (command === 'addEvidenceCheck') {
-    await vscode.commands.executeCommand('kronos.addEvidenceCheck', { ticketKey });
-  } else if (command === 'viewTicket') {
-    await vscode.commands.executeCommand('kronos.viewTicket', { ticketKey });
+  } else if (await tryExecuteTicketOperatorCommand(command, ticketKey)) {
+    return;
   }
 }
 
@@ -5774,7 +5723,7 @@ async function executeDashboardAction(state: KronosState, request: ActionPanelMe
     await vscode.commands.executeCommand('kronos.humanReviewInbox');
   } else if (command === 'evidenceGate') {
     if (ticketKey) {
-      await executeOperatorCommandAction(command, ticketKey);
+      await tryExecuteTicketOperatorCommand(command, ticketKey);
     } else {
       await vscode.commands.executeCommand('kronos.evidenceGate');
     }
@@ -5783,7 +5732,7 @@ async function executeDashboardAction(state: KronosState, request: ActionPanelMe
   } else if (command === 'startTicket' && ticketKey) {
     await startTicketFromActionPanel(state, ticketKey);
   } else if ((command === 'viewTicket' || command === 'addEvidence' || command === 'addEvidenceCheck') && ticketKey) {
-    await executeOperatorCommandAction(command, ticketKey);
+    await tryExecuteTicketOperatorCommand(command, ticketKey);
   } else {
     vscode.window.showWarningMessage('Ignored Kronos dashboard action without a valid target.');
   }
