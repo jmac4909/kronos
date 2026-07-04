@@ -6,7 +6,7 @@ import { actionDisplayLabel as actionToLabel } from '../services/actionCatalog';
 import { activeRunForQueueItem } from '../services/queueActiveRun';
 import { formatRunProgress } from '../services/runProgress';
 import { isFreshActiveRun } from '../services/runStatus';
-import { queueActionIcon, themeIcon } from './actionIcons';
+import { queueActionIcon } from './actionIcons';
 
 export class QueueTreeProvider implements vscode.TreeDataProvider<QueueTreeItem> {
   private _onDidChangeTreeData = new vscode.EventEmitter<QueueTreeItem | undefined>();
@@ -106,6 +106,6 @@ class QueueTreeItem extends vscode.TreeItem {
 
     this.iconPath = activeRun
       ? new vscode.ThemeIcon('sync~spin', new vscode.ThemeColor('charts.blue'))
-      : themeIcon(queueActionIcon(item.action));
+      : queueActionIcon(item.action);
   }
 }

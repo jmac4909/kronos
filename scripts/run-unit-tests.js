@@ -9534,8 +9534,8 @@ test('tree providers share action labels and icons', () => {
   for (const marker of [
     "import { actionDisplayLabel as actionToLabel } from '../services/actionCatalog'",
     "import { evidenceRecordCount } from '../services/evidenceData'",
-    "import { themeIcon, ticketActionIcon } from './actionIcons'",
-    'themeIcon(ticketActionIcon(action))',
+    "import { ticketActionIcon } from './actionIcons'",
+    'this.iconPath = ticketActionIcon(action)',
     'evidenceRecordCount(t)',
   ]) {
     assert.ok(ticketTree.includes(marker), marker);
@@ -9561,8 +9561,8 @@ test('tree providers share action labels and icons', () => {
 
   for (const marker of [
     "import { actionDisplayLabel as actionToLabel } from '../services/actionCatalog'",
-    "import { queueActionIcon, themeIcon } from './actionIcons'",
-    'themeIcon(queueActionIcon(item.action))',
+    "import { queueActionIcon } from './actionIcons'",
+    'queueActionIcon(item.action)',
     "import { KronosRun, listRuns } from '../runners/sessionDispatcher'",
     "import { isFreshActiveRun } from '../services/runStatus'",
     "import { formatRunProgress } from '../services/runProgress'",
@@ -9777,32 +9777,14 @@ test('action icon helpers preserve ticket and queue icon semantics', async () =>
     const actionIconsPath = require.resolve('../out/views/actionIcons.js');
     delete require.cache[actionIconsPath];
     const actionIcons = require(actionIconsPath);
-    assert.deepEqual(actionIcons.ticketActionIcon('implement'), {
-      id: 'circle-outline',
-      color: new ThemeColor('disabledForeground'),
-    });
-    assert.deepEqual(actionIcons.queueActionIcon('implement'), {
-      id: 'play-circle',
-      color: new ThemeColor('charts.green'),
-    });
-    assert.deepEqual(actionIcons.ticketActionIcon('await_review'), {
-      id: 'git-pull-request',
-      color: new ThemeColor('charts.yellow'),
-    });
-    assert.deepEqual(actionIcons.queueActionIcon('await_review'), {
-      id: 'git-pull-request',
-      color: new ThemeColor('charts.yellow'),
-    });
-    assert.deepEqual(actionIcons.queueActionIcon('refresh'), { id: 'refresh' });
-    assert.deepEqual(actionIcons.ticketActionIcon('unknown'), {
-      id: 'circle-outline',
-      color: new ThemeColor('disabledForeground'),
-    });
-    assert.deepEqual(actionIcons.queueActionIcon('unknown'), { id: 'circle-outline' });
-    assert.deepEqual(
-      actionIcons.themeIcon({ id: 'rocket', color: new ThemeColor('charts.blue') }),
-      new ThemeIcon('rocket', new ThemeColor('charts.blue')),
-    );
+    assert.deepEqual(actionIcons.ticketActionIcon('implement'), new ThemeIcon('circle-outline', new ThemeColor('disabledForeground')));
+    assert.deepEqual(actionIcons.queueActionIcon('implement'), new ThemeIcon('play-circle', new ThemeColor('charts.green')));
+    assert.deepEqual(actionIcons.ticketActionIcon('await_review'), new ThemeIcon('git-pull-request', new ThemeColor('charts.yellow')));
+    assert.deepEqual(actionIcons.queueActionIcon('await_review'), new ThemeIcon('git-pull-request', new ThemeColor('charts.yellow')));
+    assert.deepEqual(actionIcons.queueActionIcon('refresh'), new ThemeIcon('refresh'));
+    assert.deepEqual(actionIcons.ticketActionIcon('unknown'), new ThemeIcon('circle-outline', new ThemeColor('disabledForeground')));
+    assert.deepEqual(actionIcons.queueActionIcon('unknown'), new ThemeIcon('circle-outline'));
+    assert.equal(Object.prototype.hasOwnProperty.call(actionIcons, 'themeIcon'), false);
   });
 });
 

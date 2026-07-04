@@ -4,7 +4,7 @@ import { Ticket } from '../state/types';
 import { actionDisplayLabel as actionToLabel } from '../services/actionCatalog';
 import { evidenceRecordCount } from '../services/evidenceData';
 import { TicketFilter, TicketGroupBy, describeTicketFilter, filterTickets, groupTicketEntries, hasTicketFilter } from '../services/ticketFilters';
-import { themeIcon, ticketActionIcon } from './actionIcons';
+import { ticketActionIcon } from './actionIcons';
 
 type TicketElement = TicketGroupItem | TicketItem | TicketDetailItem | EmptyTicketItem;
 
@@ -188,7 +188,7 @@ class TicketItem extends vscode.TreeItem {
     if (!linked) {
       this.iconPath = new vscode.ThemeIcon('circle-outline', new vscode.ThemeColor('disabledForeground'));
     } else {
-      this.iconPath = themeIcon(ticketActionIcon(action));
+      this.iconPath = ticketActionIcon(action);
     }
   }
 }
