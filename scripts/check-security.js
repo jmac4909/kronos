@@ -1016,7 +1016,10 @@ if (agingHandlerStart < 0 || agingHandlerEnd <= agingHandlerStart) {
   fail('Missing Aging Report message handler block.');
 }
 const agingHandlerSource = extension.slice(agingHandlerStart, agingHandlerEnd);
-if (!agingHandlerSource.includes("if (request.command === 'refreshPanel') {\n      state.reloadAndNotify();\n      render();\n      return;\n    }")) {
+if (!agingHandlerSource.includes("if (request.command === 'refreshPanel') {")
+  || !agingHandlerSource.includes("await runWebviewPanelAction(() => {\n        state.reloadAndNotify();\n        render();")
+  || !agingHandlerSource.includes("'Kronos aging report action failed.'")
+  || !agingHandlerSource.includes('return;')) {
   fail('Aging Report refresh should reload state before rendering.');
 }
 for (const forbidden of [

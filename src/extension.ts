@@ -2001,8 +2001,10 @@ export function activate(context: vscode.ExtensionContext) {
           vscode.window.showWarningMessage('Ignored invalid Kronos ticket action.');
           return;
         }
-        await executeTicketDetailAction(state, request.command, ticketKey, context.extensionUri);
-        render();
+        await runWebviewPanelAction(async () => {
+          await executeTicketDetailAction(state, request.command, ticketKey, context.extensionUri);
+          render();
+        }, 'Kronos ticket action failed.');
       });
     }),
 
@@ -4081,8 +4083,10 @@ function openRecoveryPanel(state: KronosState, initialInventory: RecoveryInvento
       vscode.window.showWarningMessage('Recovery item is no longer available.');
       return;
     }
-    await executeRecoveryAction(item, state, currentBackups, request.recoveryAction, extensionUri);
-    render(true);
+    await runWebviewPanelAction(async () => {
+      await executeRecoveryAction(item, state, currentBackups, request.recoveryAction, extensionUri);
+      render(true);
+    }, 'Kronos recovery action failed.');
   });
 }
 
@@ -4489,8 +4493,10 @@ function openQueuePlannerPanel(state: KronosState, extensionUri?: vscode.Uri): v
       vscode.window.showWarningMessage('Ignored invalid Kronos queue planner action.');
       return;
     }
-    await executePlanPanelAction(state, currentPlans, request);
-    render();
+    await runWebviewPanelAction(async () => {
+      await executePlanPanelAction(state, currentPlans, request);
+      render();
+    }, 'Kronos queue planner action failed.');
   });
 }
 
@@ -4558,8 +4564,10 @@ function openBacklogTriagePanel(state: KronosState, extensionUri?: vscode.Uri): 
       vscode.window.showWarningMessage('Ignored invalid Kronos backlog triage action.');
       return;
     }
-    await executeBacklogTriageAction(state, request.command, request.ticket);
-    render();
+    await runWebviewPanelAction(async () => {
+      await executeBacklogTriageAction(state, request.command, request.ticket);
+      render();
+    }, 'Kronos backlog triage action failed.');
   });
 }
 
@@ -4607,8 +4615,10 @@ function openProjectBatchPlanPanel(state: KronosState, extensionUri?: vscode.Uri
       vscode.window.showWarningMessage('Ignored invalid Kronos project batch action.');
       return;
     }
-    await executePlanPanelAction(state, currentPlans, request);
-    render();
+    await runWebviewPanelAction(async () => {
+      await executePlanPanelAction(state, currentPlans, request);
+      render();
+    }, 'Kronos project batch action failed.');
   });
 }
 
@@ -4636,8 +4646,10 @@ function openReleaseBatchPlanPanel(state: KronosState, extensionUri?: vscode.Uri
       vscode.window.showWarningMessage('Ignored invalid Kronos release batch action.');
       return;
     }
-    await executePlanPanelAction(state, currentPlans, request);
-    render();
+    await runWebviewPanelAction(async () => {
+      await executePlanPanelAction(state, currentPlans, request);
+      render();
+    }, 'Kronos release batch action failed.');
   });
 }
 
@@ -4679,8 +4691,10 @@ async function openCollisionReportPanel(state: KronosState, extensionUri?: vscod
       vscode.window.showWarningMessage('Ignored invalid Kronos collision report action.');
       return;
     }
-    await executePlanPanelAction(state, plans, request);
-    await render();
+    await runWebviewPanelAction(async () => {
+      await executePlanPanelAction(state, plans, request);
+      await render();
+    }, 'Kronos collision report action failed.');
   });
 }
 
@@ -4756,8 +4770,10 @@ function openQueuePlanWindowPanel(state: KronosState, extensionUri?: vscode.Uri)
       vscode.window.showWarningMessage('Ignored invalid Kronos planning action.');
       return;
     }
-    await executePlanPanelAction(state, currentPlans, request);
-    render();
+    await runWebviewPanelAction(async () => {
+      await executePlanPanelAction(state, currentPlans, request);
+      render();
+    }, 'Kronos planning action failed.');
   });
 }
 
@@ -4790,8 +4806,10 @@ function openOvernightCandidatesPanel(state: KronosState, extensionUri?: vscode.
       vscode.window.showWarningMessage('Ignored invalid Kronos overnight candidate action.');
       return;
     }
-    await executePlanPanelAction(state, currentPlans, request);
-    render();
+    await runWebviewPanelAction(async () => {
+      await executePlanPanelAction(state, currentPlans, request);
+      render();
+    }, 'Kronos overnight candidate action failed.');
   });
 }
 
@@ -4863,11 +4881,16 @@ function openAgingReportPanel(state: KronosState, extensionUri?: vscode.Uri): vo
       return;
     }
     if (request.command === 'refreshPanel') {
-      state.reloadAndNotify();
-      render();
+      await runWebviewPanelAction(() => {
+        state.reloadAndNotify();
+        render();
+      }, 'Kronos aging report action failed.');
       return;
     }
-    await executeOperatorCommandAction(request.command, request.ticket);
+    await runWebviewPanelAction(
+      () => executeOperatorCommandAction(request.command, request.ticket),
+      'Kronos aging report action failed.',
+    );
   });
 }
 

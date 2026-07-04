@@ -7638,10 +7638,12 @@ test('extension webviews use shared UI shell and board filtering affordances', (
   const agingHandlerEnd = source.indexOf('function openIntegrationManifestPanel', agingHandlerStart);
   assert.ok(agingHandlerStart >= 0 && agingHandlerEnd > agingHandlerStart, 'Aging Report message handler should be present');
   const agingHandlerSource = source.slice(agingHandlerStart, agingHandlerEnd);
+  assert.ok(agingHandlerSource.includes("if (request.command === 'refreshPanel') {"), 'Aging Report refresh branch should be present');
   assert.ok(
-    agingHandlerSource.includes("if (request.command === 'refreshPanel') {\n      state.reloadAndNotify();\n      render();\n      return;\n    }"),
-    'Aging Report refresh should reload state before rendering',
+    agingHandlerSource.includes("await runWebviewPanelAction(() => {\n        state.reloadAndNotify();\n        render();"),
+    'Aging Report refresh should reload state before rendering through the shared action wrapper',
   );
+  assert.ok(agingHandlerSource.includes("'Kronos aging report action failed.'"), 'Aging Report refresh should use panel action error handling');
   assert.equal(
     source.includes('normalizeActionPanelMessage(msg, OPERATOR_COMMAND_MESSAGE_COMMANDS)'),
     false,
