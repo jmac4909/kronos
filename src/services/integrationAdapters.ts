@@ -382,7 +382,7 @@ function copyString(target: Record<string, unknown>, key: string, value: unknown
 
 function normalizeMergeRequestState(value: unknown): MergeRequest['state'] | undefined {
   const normalized = stringField(value)?.toLowerCase();
-  if (normalized === 'open') { return 'opened'; }
+  if (normalized === 'open' || normalized === 'reopened' || normalized === 'locked') { return 'opened'; }
   if (normalized === 'opened' || normalized === 'merged' || normalized === 'closed') {
     return normalized;
   }
@@ -391,11 +391,25 @@ function normalizeMergeRequestState(value: unknown): MergeRequest['state'] | und
 
 function normalizeReviewStatus(value: unknown): MergeRequest['review_status'] | undefined {
   if (value === true) { return 'approved'; }
+  if (value === false) { return 'pending_review'; }
   const normalized = stringField(value)?.toLowerCase().replace(/[\s-]+/g, '_');
   if (normalized === 'approved' || normalized === 'changes_requested' || normalized === 'pending_review') {
     return normalized;
   }
-  if (normalized === 'changes_requested_by_reviewer') { return 'changes_requested'; }
+  if (normalized === 'changes_requested_by_reviewer' || normalized === 'requested_changes' || normalized === 'change_requested') {
+    return 'changes_requested';
+  }
+  if (
+    normalized === 'unapproved'
+    || normalized === 'not_approved'
+    || normalized === 'approval_required'
+    || normalized === 'approvals_syncing'
+    || normalized === 'pending'
+    || normalized === 'needs_review'
+    || normalized === 'review_required'
+  ) {
+    return 'pending_review';
+  }
   return undefined;
 }
 

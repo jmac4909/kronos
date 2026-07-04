@@ -6222,6 +6222,18 @@ test('integration adapters wrap selected Jira, GitLab, and Sonar script contract
     discussions_resolved: false,
   });
   assert.deepEqual(integrationAdapters.normalizeMergeRequestStatus({
+    mr: { state: 'reopened', approved: false, review_status: 'approval required' },
+  }), {
+    state: 'opened',
+    review_status: 'pending_review',
+  });
+  assert.deepEqual(integrationAdapters.normalizeMergeRequestStatus({
+    mr: { state: 'locked', review_status: 'requested changes' },
+  }), {
+    state: 'opened',
+    review_status: 'changes_requested',
+  });
+  assert.deepEqual(integrationAdapters.normalizeMergeRequestStatus({
     mr: {
       state: 'opened',
       review_status: 'pending_review',
