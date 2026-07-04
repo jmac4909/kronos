@@ -1697,6 +1697,7 @@ export function activate(context: vscode.ExtensionContext) {
       if (projectPath) {
         await startClaudeDispatch(projectPath, 'verify-fix', ticketKey, {
           onComplete: refreshAfterDispatch(state, projectName, ticketKey),
+          projectNameOverride: projectName,
         });
       } else {
         vscode.window.showWarningMessage(projectName ? `${projectName} is not registered as a Kronos project.` : 'No project linked. Link the ticket to a project first.');
@@ -1717,6 +1718,24 @@ export function activate(context: vscode.ExtensionContext) {
           vscode.window.showInformationMessage(`Starting: [${item.action}] ${projLabel}/${item.ticket || 'refresh'}`);
           for (const p of projs) { await state.refresh(p); }
         } else if (projs.length > 0) {
+          const dispatchTargets: Array<{ projectName: string; projectPath: string }> = [];
+          const missingProjects: string[] = [];
+          for (const projName of projs) {
+            const projectPath = getProjectPath(state, projName);
+            if (projectPath) {
+              dispatchTargets.push({ projectName: projName, projectPath });
+            } else {
+              missingProjects.push(projName);
+            }
+          }
+          if (missingProjects.length > 0) {
+            vscode.window.showWarningMessage(`Cannot start ${item.ticket || item.id || 'queue item'}; linked project ${missingProjects.join(', ')} is not registered.`);
+            return;
+          }
+          if (dispatchTargets.length === 0) {
+            vscode.window.showWarningMessage(`Cannot start ${item.ticket || 'queue item'}; no project path was found.`);
+            return;
+          }
           const canStart = await confirmDispatchCollisions(state, {
             ticketKey: item.ticket,
             projects: projs,
@@ -1725,18 +1744,17 @@ export function activate(context: vscode.ExtensionContext) {
           }, context.extensionUri);
           if (!canStart) { return; }
           vscode.window.showInformationMessage(`Starting: [${item.action}] ${projLabel}/${item.ticket || 'refresh'}`);
-          for (const projName of projs) {
-            const projectPath = getProjectPath(state, projName);
-            if (!projectPath) { continue; }
+          for (const target of dispatchTargets) {
             const skill = skillForAction(item.action);
             const codeAction = isCodeAction(item.action);
             const ticketKey = item.ticket || undefined;
             const dispatchOptions: DispatchOptions = {
-              onComplete: refreshAfterDispatch(state, projName, ticketKey),
+              onComplete: refreshAfterDispatch(state, target.projectName, ticketKey),
               parallel: codeAction,
+              projectNameOverride: target.projectName,
             };
             if (codeAction) { dispatchOptions.appendSystemPrompt = getImplementPrompt(state); }
-            await startClaudeDispatch(projectPath, skill, ticketKey, dispatchOptions);
+            await startClaudeDispatch(target.projectPath, skill, ticketKey, dispatchOptions);
           }
         }
       } catch (e: unknown) {
@@ -1901,7 +1919,6 @@ export function activate(context: vscode.ExtensionContext) {
             try {
               linkTicketToProject(ticket, project);
               state.reloadAndNotify();
-              renderBoard();
             } catch (e: unknown) {
               vscode.window.showWarningMessage(unknownErrorMessage(e, 'Failed to link ticket.'));
             }
@@ -1909,7 +1926,6 @@ export function activate(context: vscode.ExtensionContext) {
             try {
               unlinkTicketFromProject(ticket, project);
               state.reloadAndNotify();
-              renderBoard();
             } catch (e: unknown) {
               vscode.window.showWarningMessage(unknownErrorMessage(e, 'Failed to unlink ticket.'));
             }
@@ -1917,14 +1933,12 @@ export function activate(context: vscode.ExtensionContext) {
             try {
               const result = addTicketToQueue(ticket);
               state.reloadAndNotify();
-              renderBoard();
               if (result.alreadyInQueue) { vscode.window.showInformationMessage(`${ticket} is already in the queue.`); }
             } catch (e: unknown) {
               vscode.window.showWarningMessage(unknownErrorMessage(e, 'Failed to add ticket to queue.'));
             }
           } else if (command === 'removeFromQueue' && hasTicket(ticket)) {
             await removeTicketFromQueue(state, ticket, true, context.extensionUri);
-            renderBoard();
           } else if (command === 'start' && hasTicket(ticket)) {
             await startTicketFromActionPanel(state, ticket);
             return;
@@ -2504,19 +2518,34 @@ export function activate(context: vscode.ExtensionContext) {
         return;
       }
 
-      const actionLabel = queueData.action.replace(/_/g, ' ');
-      const extra = await vscode.window.showInputBox({
-        prompt: `Starting [${actionLabel}] on ${projLabel}/${queueData.ticket || ''}. Any additional context? (leave empty to just start)`,
-        placeHolder: 'e.g., focus on the auth flow, skip UI changes',
-      });
-      if (extra === undefined) { return; }
-
       const skill = skillForAction(queueData.action);
       const codeAction = isCodeAction(queueData.action);
-      const extraPrompt = extra ? `\n\nADDITIONAL CONTEXT FROM USER: ${extra}` : '';
 
       if (projs.length === 0 && !directProjectPath) {
         vscode.window.showWarningMessage(`${queueData.ticket} is not linked to any project.`);
+        return;
+      }
+
+      const dispatchTargets: Array<{ projectName?: string; projectPath: string }> = [];
+      const missingProjects: string[] = [];
+      for (const projName of projs) {
+        const projectPath = getProjectPath(state, projName);
+        if (projectPath) {
+          dispatchTargets.push({ projectName: projName, projectPath });
+        } else {
+          missingProjects.push(projName);
+        }
+      }
+      if (dispatchTargets.length === 0 && directProjectPath) {
+        dispatchTargets.push({ projectPath: directProjectPath });
+      }
+      if (missingProjects.length > 0) {
+        const target = queueData.ticket || queueData.id || 'queue item';
+        vscode.window.showWarningMessage(`Cannot start ${target}; linked project ${missingProjects.join(', ')} is not registered.`);
+        return;
+      }
+      if (dispatchTargets.length === 0) {
+        vscode.window.showWarningMessage(`Cannot start ${queueData.ticket || 'queue item'}; no project path was found.`);
         return;
       }
 
@@ -2529,14 +2558,13 @@ export function activate(context: vscode.ExtensionContext) {
       const canStart = await confirmDispatchCollisions(state, collisionTarget, context.extensionUri);
       if (!canStart) { return; }
 
-      const dispatchTargets: Array<{ projectName?: string; projectPath: string }> = [];
-      for (const projName of projs) {
-        const projectPath = getProjectPath(state, projName);
-        if (projectPath) { dispatchTargets.push({ projectName: projName, projectPath }); }
-      }
-      if (dispatchTargets.length === 0 && directProjectPath) {
-        dispatchTargets.push({ projectPath: directProjectPath });
-      }
+      const actionLabel = queueData.action.replace(/_/g, ' ');
+      const extra = await vscode.window.showInputBox({
+        prompt: `Starting [${actionLabel}] on ${projLabel}/${queueData.ticket || ''}. Any additional context? (leave empty to just start)`,
+        placeHolder: 'e.g., focus on the auth flow, skip UI changes',
+      });
+      if (extra === undefined) { return; }
+      const extraPrompt = extra ? `\n\nADDITIONAL CONTEXT FROM USER: ${extra}` : '';
 
       for (const target of dispatchTargets) {
         const otherProjects = target.projectName ? projs.filter(p => p !== target.projectName) : [];
@@ -2546,6 +2574,7 @@ export function activate(context: vscode.ExtensionContext) {
           onComplete: refreshAfterDispatch(state, target.projectName, queueData.ticket),
           parallel: codeAction,
         };
+        if (target.projectName) { dispatchOptions.projectNameOverride = target.projectName; }
         const appendSystemPrompt = codeAction ? getImplementPrompt(state) + scopeHint + extraPrompt : extraPrompt || undefined;
         if (appendSystemPrompt) { dispatchOptions.appendSystemPrompt = appendSystemPrompt; }
         await startClaudeDispatch(target.projectPath, skill, queueData.ticket || undefined, dispatchOptions);

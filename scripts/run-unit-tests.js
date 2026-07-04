@@ -7539,10 +7539,6 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'function normalizeCommentsPayload',
     "console.warn('Kronos Jira Board could not parse comments payload', error)",
     "post(t.isQueued ? 'removeFromQueue' : 'addToQueueFromModal'",
-    "linkTicketToProject(ticket, project);\n              state.reloadAndNotify();\n              renderBoard();",
-    "unlinkTicketFromProject(ticket, project);\n              state.reloadAndNotify();\n              renderBoard();",
-    "const result = addTicketToQueue(ticket);\n              state.reloadAndNotify();\n              renderBoard();",
-    "await removeTicketFromQueue(state, ticket, true, context.extensionUri);\n            renderBoard();",
     "await startTicketFromActionPanel(state, ticket);",
     "unknownErrorMessage(e, 'Failed to link ticket.')",
     "unknownErrorMessage(e, 'Failed to unlink ticket.')",
@@ -8341,6 +8337,11 @@ test('extension dispatch command handlers normalize tree payloads before use', (
     'promptMetadata.mergeRequestIid = mrIid',
     'promptMetadata,',
     "vscode.commands.registerCommand('kronos.verifyFix', async (item: unknown)",
+    "vscode.commands.registerCommand('kronos.startNext', async () =>",
+    'const selection = selectNextQueueItem();',
+    'const dispatchTargets: Array<{ projectName: string; projectPath: string }> = []',
+    "vscode.window.showWarningMessage(`Cannot start ${item.ticket || item.id || 'queue item'}; linked project ${missingProjects.join(', ')} is not registered.`)",
+    'projectNameOverride: target.projectName',
     "vscode.commands.registerCommand('kronos.completeTask', async (item: unknown)",
     "vscode.commands.registerCommand('kronos.openProject', async (item: unknown)",
     "vscode.commands.registerCommand('kronos.openInClaude', async (item: unknown)",
@@ -8357,6 +8358,16 @@ test('extension dispatch command handlers normalize tree payloads before use', (
   ]) {
     assert.ok(source.includes(marker), marker);
   }
+  const startNextStart = source.indexOf("vscode.commands.registerCommand('kronos.startNext'");
+  const startNextEnd = source.indexOf("    vscode.commands.registerCommand('kronos.nextBestAction'", startNextStart);
+  assert.ok(startNextStart >= 0 && startNextEnd > startNextStart, 'start next command handler should be present');
+  const startNextSource = source.slice(startNextStart, startNextEnd);
+  const startNextTargetResolutionIdx = startNextSource.indexOf('const dispatchTargets: Array<{ projectName: string; projectPath: string }> = []');
+  const startNextCollisionIdx = startNextSource.indexOf('const canStart = await confirmDispatchCollisions');
+  assert.ok(
+    startNextTargetResolutionIdx >= 0 && startNextCollisionIdx > startNextTargetResolutionIdx,
+    'Start Next should resolve dispatch targets before collision checks',
+  );
   for (const marker of [
     "vscode.commands.registerCommand('kronos.refreshProject', async (item: any)",
     "vscode.commands.registerCommand('kronos.implement', async (item: any)",
@@ -8442,6 +8453,11 @@ test('extension queue command handlers normalize payloads before use', () => {
     'const queueData = resolveQueueCommandItem(treeItemOrData);',
     'const pathProject = getProjectNameForPath(state, queueData.projectPath);',
     'const directProjectPath = projs.length === 0 ? queueData.projectPath : undefined;',
+    'const dispatchTargets: Array<{ projectName?: string; projectPath: string }> = []',
+    'const missingProjects: string[] = []',
+    "vscode.window.showWarningMessage(`Cannot start ${target}; linked project ${missingProjects.join(', ')} is not registered.`)",
+    "vscode.window.showWarningMessage(`Cannot start ${queueData.ticket || 'queue item'}; no project path was found.`)",
+    'if (target.projectName) { dispatchOptions.projectNameOverride = target.projectName; }',
     'dispatchTargets.push({ projectPath: directProjectPath });',
     'const idx = resolveQueueIndex(treeItem);',
     'await startClaudeDispatch(target.projectPath, skill, queueData.ticket || undefined,',
@@ -8458,6 +8474,11 @@ test('extension queue command handlers normalize payloads before use', () => {
   ]) {
     assert.ok(source.includes(marker), marker);
   }
+  const projectResolutionIdx = queueCommandSource.indexOf('const dispatchTargets: Array<{ projectName?: string; projectPath: string }> = []');
+  const collisionIdx = queueCommandSource.indexOf('const canStart = await confirmDispatchCollisions');
+  const contextPromptIdx = queueCommandSource.indexOf('const extra = await vscode.window.showInputBox');
+  assert.ok(projectResolutionIdx >= 0 && collisionIdx > projectResolutionIdx, 'queue dispatch should resolve project targets before collision checks');
+  assert.ok(contextPromptIdx > collisionIdx, 'queue dispatch should only ask for extra context after validation and collision checks');
   for (const marker of [
     "vscode.commands.registerCommand('kronos.addToQueue', async (treeItem: any)",
     "vscode.commands.registerCommand('kronos.removeFromQueue', async (treeItem: any)",
@@ -8475,6 +8496,14 @@ test('extension queue command handlers normalize payloads before use', () => {
     'await startClaudeDispatch(projectPath, skill, queueData.ticket,',
   ]) {
     assert.equal(queueCommandSource.includes(marker), false, marker);
+  }
+  for (const marker of [
+    "linkTicketToProject(ticket, project);\n              state.reloadAndNotify();\n              renderBoard();",
+    "unlinkTicketFromProject(ticket, project);\n              state.reloadAndNotify();\n              renderBoard();",
+    "const result = addTicketToQueue(ticket);\n              state.reloadAndNotify();\n              renderBoard();",
+    "await removeTicketFromQueue(state, ticket, true, context.extensionUri);\n            renderBoard();",
+  ]) {
+    assert.equal(source.includes(marker), false, marker);
   }
 });
 

@@ -1221,6 +1221,11 @@ for (const marker of [
   'promptMetadata.mergeRequestIid = mrIid',
   'promptMetadata,',
   "vscode.commands.registerCommand('kronos.verifyFix', async (item: unknown)",
+  "vscode.commands.registerCommand('kronos.startNext', async () =>",
+  'const selection = selectNextQueueItem();',
+  'const dispatchTargets: Array<{ projectName: string; projectPath: string }> = []',
+  "vscode.window.showWarningMessage(`Cannot start ${item.ticket || item.id || 'queue item'}; linked project ${missingProjects.join(', ')} is not registered.`)",
+  'projectNameOverride: target.projectName',
   "vscode.commands.registerCommand('kronos.completeTask', async (item: unknown)",
   "vscode.commands.registerCommand('kronos.openProject', async (item: unknown)",
   "vscode.commands.registerCommand('kronos.openInClaude', async (item: unknown)",
@@ -1254,6 +1259,11 @@ for (const marker of [
   "vscode.commands.registerCommand('kronos.linkTicket', async (ticketKeyOrItem: unknown)",
   "vscode.commands.registerCommand('kronos.unlinkTicket', async (item: unknown)",
   'const queueData = resolveQueueCommandItem(treeItemOrData);',
+  'const dispatchTargets: Array<{ projectName?: string; projectPath: string }> = []',
+  'const missingProjects: string[] = []',
+  "vscode.window.showWarningMessage(`Cannot start ${target}; linked project ${missingProjects.join(', ')} is not registered.`)",
+  "vscode.window.showWarningMessage(`Cannot start ${queueData.ticket || 'queue item'}; no project path was found.`)",
+  'if (target.projectName) { dispatchOptions.projectNameOverride = target.projectName; }',
   'const idx = resolveQueueIndex(treeItem);',
   'await startClaudeDispatch(target.projectPath, skill, queueData.ticket || undefined,',
   'interface QueueCommandPayload',
@@ -1479,10 +1489,6 @@ for (const marker of [
   'function normalizeCommentsPayload',
   "console.warn('Kronos Jira Board could not parse comments payload', error)",
   "post(t.isQueued ? 'removeFromQueue' : 'addToQueueFromModal'",
-  "linkTicketToProject(ticket, project);\n              state.reloadAndNotify();\n              renderBoard();",
-  "unlinkTicketFromProject(ticket, project);\n              state.reloadAndNotify();\n              renderBoard();",
-  "const result = addTicketToQueue(ticket);\n              state.reloadAndNotify();\n              renderBoard();",
-  "await removeTicketFromQueue(state, ticket, true, context.extensionUri);\n            renderBoard();",
   "unknownErrorMessage(e, 'Failed to link ticket.')",
   "unknownErrorMessage(e, 'Failed to unlink ticket.')",
   "unknownErrorMessage(e, 'Failed to add ticket to queue.')",
@@ -1516,6 +1522,16 @@ for (const marker of [
 ]) {
   if (!extensionUiSource.includes(marker)) {
     fail(`Missing UI/UX marker: ${marker}`);
+  }
+}
+for (const forbidden of [
+  "linkTicketToProject(ticket, project);\n              state.reloadAndNotify();\n              renderBoard();",
+  "unlinkTicketFromProject(ticket, project);\n              state.reloadAndNotify();\n              renderBoard();",
+  "const result = addTicketToQueue(ticket);\n              state.reloadAndNotify();\n              renderBoard();",
+  "await removeTicketFromQueue(state, ticket, true, context.extensionUri);\n            renderBoard();",
+]) {
+  if (extension.includes(forbidden)) {
+    fail('Jira board mutations must rely on the single final renderBoard call.');
   }
 }
 
