@@ -361,6 +361,23 @@ function updateRun(run: KronosRun, patch: Partial<KronosRun>): void {
   writeRun(run);
 }
 
+function addRunEventBestEffort(run: KronosRun, event: ProgressEvent, fallbackMessage: string): void {
+  try {
+    addRunEvent(run, event);
+  } catch (e: unknown) {
+    console.warn(unknownErrorMessage(e, fallbackMessage));
+  }
+}
+
+function updateRunBestEffort(run: KronosRun, patch: Partial<KronosRun>, fallbackMessage: string): void {
+  try {
+    updateRun(run, patch);
+  } catch (e: unknown) {
+    console.warn(unknownErrorMessage(e, fallbackMessage));
+    Object.assign(run, patch);
+  }
+}
+
 export function listRuns(): KronosRun[] {
   return repairActiveRunRecords(100).runs as KronosRun[];
 }
@@ -400,16 +417,16 @@ async function runCompletionCallback(
     const detail = unknownErrorMessage(e, 'Post-run completion callback failed.');
     const event = { type: 'error' as const, label: 'Post-run completion callback failed', detail, timestamp: new Date() };
     context.events.push(event);
-    addRunEvent(run, event);
+    addRunEventBestEffort(run, event, 'Failed to persist post-run callback failure event.');
     const nextStatus = run.status === 'completed' || run.status === 'waiting_for_review' ? 'needs_human' : run.status;
     const failureReason = run.failureReason
       ? `${run.failureReason}; post-run callback failed: ${detail}`
       : `Post-run callback failed: ${detail}`;
-    updateRun(run, {
+    updateRunBestEffort(run, {
       status: nextStatus,
       failureReason,
       failureKind: classifyRunFailure({ ...run, status: nextStatus, failureReason, events: run.events }),
-    });
+    }, 'Failed to persist post-run callback failure status.');
     context.panel.webview.html = withWebviewCsp(buildProgressHtml(context.projectName, context.skill, context.ticket, context.events, run));
     saveSession(context.projectName, context.skill, context.ticket, context.events);
     vscode.window.showWarningMessage(`Kronos post-run completion failed for ${run.id}. See Run Center.`);
@@ -1023,7 +1040,7 @@ export async function dispatchClaudeSession(
       timestamp: new Date(),
     } as ProgressEvent;
     events.push(finalEvent);
-    addRunEvent(run, finalEvent);
+    addRunEventBestEffort(run, finalEvent, 'Failed to persist terminal run event.');
     const finalStatus = preservedTerminalStatus || (code === 0 ? 'completed' : 'failed');
     const finalFailureReason = preservedTerminalStatus ? persisted?.failureReason : code === 0 ? undefined : `Process exited with code ${code}`;
     const finalPatch: Partial<KronosRun> = {
@@ -1033,7 +1050,7 @@ export async function dispatchClaudeSession(
       failureKind: classifyRunFailure({ ...run, status: finalStatus, failureReason: finalFailureReason }),
     };
     if (finalFailureReason !== undefined) { finalPatch.failureReason = finalFailureReason; }
-    updateRun(run, finalPatch);
+    updateRunBestEffort(run, finalPatch, 'Failed to persist terminal run status.');
     panel.webview.html = withWebviewCsp(buildProgressHtml(projectName, skill, ticket || '', events, run));
     saveSession(projectName, skill, ticket || '', events);
 
@@ -1045,16 +1062,16 @@ export async function dispatchClaudeSession(
         );
         const event = { type: 'error' as const, label: `Worktree not removed: ${warning}`, detail: '', timestamp: new Date() };
         events.push(event);
-        addRunEvent(run, event);
+        addRunEventBestEffort(run, event, 'Failed to persist worktree cleanup warning event.');
         const cleanupStatus = preservedTerminalStatus || (code === 0 ? 'needs_human' : 'failed');
         const cleanupFailureReason = preservedTerminalStatus
           ? `${run.failureReason || terminalStatusLabel(preservedTerminalStatus)}; worktree cleanup blocked: ${warning}`
           : warning;
-        updateRun(run, {
+        updateRunBestEffort(run, {
           status: cleanupStatus,
           failureReason: cleanupFailureReason,
           failureKind: classifyRunFailure({ ...run, status: cleanupStatus, failureReason: cleanupFailureReason }),
-        });
+        }, 'Failed to persist worktree cleanup blocked status.');
         panel.webview.html = withWebviewCsp(buildProgressHtml(projectName, skill, ticket || '', events, run));
       }
     }

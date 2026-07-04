@@ -4314,14 +4314,20 @@ test('run store surfaces invalid records and blocks strict mutations', () => {
 test('dispatcher close handler preserves operator terminal run statuses', () => {
   const source = readSourceFixture('src', 'runners', 'sessionDispatcher.ts');
   for (const marker of [
+    'function addRunEventBestEffort',
+    'function updateRunBestEffort',
     'const preservedTerminalStatus = preservedTerminalRunStatus(persisted)',
     'if (preservedTerminalStatus && persisted)',
     "preservedTerminalStatus === 'needs_human'",
     "'Session marked needs human'",
+    "addRunEventBestEffort(run, finalEvent, 'Failed to persist terminal run event.')",
     "const finalStatus = preservedTerminalStatus || (code === 0 ? 'completed' : 'failed')",
     "const finalFailureReason = preservedTerminalStatus ? persisted?.failureReason",
+    "updateRunBestEffort(run, finalPatch, 'Failed to persist terminal run status.')",
+    "addRunEventBestEffort(run, event, 'Failed to persist worktree cleanup warning event.')",
     "const cleanupStatus = preservedTerminalStatus || (code === 0 ? 'needs_human' : 'failed')",
     "terminalStatusLabel(preservedTerminalStatus)",
+    "'Failed to persist worktree cleanup blocked status.'",
     "function preservedTerminalRunStatus(run: KronosRun | null): 'cancelled' | 'needs_human' | undefined",
     "run?.status === 'cancelled' || run?.status === 'needs_human'",
   ]) {
@@ -4487,6 +4493,8 @@ test('dispatcher records branch and permission metadata for persisted runs', () 
     'await opts.onComplete(code, run)',
     "unknownErrorMessage(e, 'Post-run completion callback failed.')",
     "label: 'Post-run completion callback failed'",
+    "addRunEventBestEffort(run, event, 'Failed to persist post-run callback failure event.')",
+    "'Failed to persist post-run callback failure status.'",
     'buildProgressHtml(context.projectName, context.skill, context.ticket, context.events, run)',
     "function buildProgressHtml(project: string, skill: string, ticket: string, events: ProgressEvent[], run?: KronosRun)",
     'const attentionDetail = run && isAttentionRunStatus(run.status) ? runAttentionDetail(run) :',
