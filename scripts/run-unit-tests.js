@@ -161,6 +161,7 @@ const severityRank = require('../out/services/severityRank.js');
 const records = require('../out/services/records.js');
 const dateValues = require('../out/services/dateValues.js');
 const regexp = require('../out/services/regexp.js');
+const pathUtils = require('../out/services/pathUtils.js');
 const evidenceStore = require('../out/services/evidenceStore.js');
 const evidenceHandoff = require('../out/services/evidenceHandoff.js');
 const evidencePublisher = require('../out/services/evidencePublisher.js');
@@ -2134,7 +2135,7 @@ test('git workspace service owns branch metadata and safe worktree lifecycle com
     'function blockingWorktreeStatus',
     'function isIgnorableWorktreeStatusLine',
     'function removeIgnorableWorktreeArtifacts',
-    'function isPathInside',
+    "import { isPathInside } from './pathUtils'",
     "path.join(worktreePath, '.claude')",
     "runner(['status', '--porcelain']",
     "runner(['rev-list', '--count', `origin/${branch}..HEAD`]",
@@ -3454,6 +3455,19 @@ test('regexp helper centralizes regex literal escaping', () => {
     const source = readSourceFixture('src', 'services', file);
     assert.ok(source.includes("import { escapeRegExp } from './regexp'"), `${file} should import shared regexp escaping`);
     assert.equal(source.includes('function escapeRegExp'), false, `${file} should not carry a local escapeRegExp helper`);
+  }
+});
+
+test('path util helper centralizes directory containment checks', () => {
+  const root = path.join(os.tmpdir(), 'kronos-path-root');
+  assert.equal(pathUtils.isPathInside(path.join(root, 'child', 'file.txt'), root), true);
+  assert.equal(pathUtils.isPathInside(root, root), true);
+  assert.equal(pathUtils.isPathInside(path.join(root, '..', 'sibling.txt'), root), false);
+
+  for (const file of ['runStore.ts', 'gitWorkspace.ts']) {
+    const source = readSourceFixture('src', 'services', file);
+    assert.ok(source.includes("import { isPathInside } from './pathUtils'"), `${file} should import shared path containment`);
+    assert.equal(source.includes('function isPathInside'), false, `${file} should not carry a local isPathInside helper`);
   }
 });
 

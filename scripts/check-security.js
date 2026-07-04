@@ -91,6 +91,7 @@ const severityRank = readSource('src/services/severityRank.ts');
 const records = readSource('src/services/records.ts');
 const dateValues = readSource('src/services/dateValues.ts');
 const regexp = readSource('src/services/regexp.ts');
+const pathUtils = readSource('src/services/pathUtils.ts');
 const queuePlannerPanelView = sources['src/services/queuePlannerPanelView.ts'];
 const operationsReportPanelView = sources['src/services/operationsReportPanelView.ts'];
 const agentQualityScore = readSource('src/services/agentQualityScore.ts');
@@ -1647,7 +1648,7 @@ for (const marker of [
   "safeFileStem(runId, { fallback: 'run' })",
   'Refusing to append run log outside active runs directory',
   'function moveRunArtifactIfExists',
-  'function isPathInside',
+  "import { isPathInside } from './pathUtils'",
   'outside active runs directory',
   'run.archiveWarnings = warnings',
   "import { effectiveRunStatus, isActiveRunStatus, isStaleActiveRun } from './runStatus'",
@@ -2194,6 +2195,29 @@ for (const [name, source] of [
   }
 }
 
+for (const marker of [
+  'export function isPathInside(filePath: string, directoryPath: string): boolean',
+  'path.relative(path.resolve(directoryPath), path.resolve(filePath))',
+  "!relative.startsWith('..')",
+  '!path.isAbsolute(relative)',
+]) {
+  if (!pathUtils.includes(marker)) {
+    fail(`Missing path utils marker: ${marker}`);
+  }
+}
+
+for (const [name, source] of [
+  ['src/services/runStore.ts', runStore],
+  ['src/services/gitWorkspace.ts', gitWorkspace],
+]) {
+  if (!source.includes("import { isPathInside } from './pathUtils'")) {
+    fail(`${name} must import the shared path containment helper.`);
+  }
+  if (source.includes('function isPathInside')) {
+    fail(`${name} must not carry a local isPathInside helper.`);
+  }
+}
+
 for (const [name, source, marker] of [
   ['src/services/runCenterSort.ts', runCenterSort, "import { toValidDate } from './dateValues'"],
   ['src/runners/sessionDispatcher.ts', dispatcher, "import { toValidDate } from '../services/dateValues'"],
@@ -2379,7 +2403,7 @@ for (const marker of [
   'function blockingWorktreeStatus',
   'function isIgnorableWorktreeStatusLine',
   'function removeIgnorableWorktreeArtifacts',
-  'function isPathInside',
+  "import { isPathInside } from './pathUtils'",
   "path.join(worktreePath, '.claude')",
   'const artifactPath = path.resolve(worktreePath, statusPath)',
   'fs.rmSync(artifactPath, { recursive: true, force: true })',

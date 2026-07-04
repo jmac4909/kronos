@@ -6,6 +6,7 @@ import { unknownErrorCode, unknownErrorMessage } from './errorUtils';
 import { effectiveRunStatus, isActiveRunStatus, isStaleActiveRun } from './runStatus';
 import { readJsonFile } from './jsonFiles';
 import { isRecord } from './records';
+import { isPathInside } from './pathUtils';
 
 export const RUNS_DIR = path.join(KRONOS_DIR, 'runs');
 const ARCHIVED_RUNS_DIR = path.join(RUNS_DIR, 'archive');
@@ -491,13 +492,6 @@ function nextAvailablePath(filePath: string, warnings: string[], label: string):
   const fallback = path.join(parsed.dir, `${parsed.name}-${Date.now()}-${process.pid}${parsed.ext}`);
   warnings.push(`Archived ${label} as ${fallback} because ${filePath} already exists.`);
   return fallback;
-}
-
-function isPathInside(filePath: string, parentDir: string): boolean {
-  const resolvedFile = path.resolve(filePath);
-  const resolvedParent = path.resolve(parentDir);
-  const relative = path.relative(resolvedParent, resolvedFile);
-  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
 }
 
 function writeJsonAtomic(filePath: string, data: unknown): void {

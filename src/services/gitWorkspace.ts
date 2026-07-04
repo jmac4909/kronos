@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { safeFileStem } from './fileNames';
 import { unknownErrorMessage } from './errorUtils';
+import { isPathInside } from './pathUtils';
 
 interface GitCommandOptions {
   cwd: string;
@@ -208,11 +209,6 @@ function removeIgnorableWorktreeArtifacts(worktreePath: string, runner: GitComma
       fs.rmSync(artifactPath, { recursive: true, force: true });
     }
   }
-}
-
-function isPathInside(filePath: string, directoryPath: string): boolean {
-  const relative = path.relative(path.resolve(directoryPath), path.resolve(filePath));
-  return relative === '' || (Boolean(relative) && !relative.startsWith('..') && !path.isAbsolute(relative));
 }
 
 export function createWorkspaceDiffArtifact(
