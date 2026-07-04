@@ -392,7 +392,7 @@
     console.error('Kronos webview unhandled rejection', webviewName, kronosErrorText(event.reason));
   });
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initKronosJiraBoard);
+    document.addEventListener('DOMContentLoaded', initKronosJiraBoard, { once: true });
   } else {
     initKronosJiraBoard();
   }

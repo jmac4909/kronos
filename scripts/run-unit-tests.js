@@ -8024,7 +8024,7 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'data-kronos-ready-command="${escapeAttr(WEBVIEW_READY_COMMAND)}"',
     'function initKronosJiraBoard',
     'function claimKronosJiraBoard',
-    "document.addEventListener('DOMContentLoaded', initKronosJiraBoard)",
+    "document.addEventListener('DOMContentLoaded', initKronosJiraBoard, { once: true })",
     "document.documentElement.setAttribute('data-kronos-actions-ready', 'true')",
     'function applyBoardFilter',
     'data-search="${attr(searchText)}"',

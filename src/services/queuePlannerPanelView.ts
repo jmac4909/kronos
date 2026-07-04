@@ -5,6 +5,15 @@ import { estimatePlanMinutes } from './queuePlanner';
 import { actionButton, actionRow, kronosActionPanelScript, kronosOperatorPanelCss } from './operatorPanel';
 import { escapeClass, escapeHtml } from './webviewHtml';
 
+interface QueuePlannerPanelShellOptions {
+  title: string;
+  subtitle: string;
+  body: string;
+  nonce: string | undefined;
+  actionScriptUri: string | undefined;
+  extraCss?: string;
+}
+
 export function buildQueuePlannerHtml(plans: PlannedAction[], nonce?: string, actionScriptUri?: string): string {
   const rows = plans.map((plan, idx) => {
     const parts = plan.scoreBreakdown
@@ -23,18 +32,13 @@ export function buildQueuePlannerHtml(plans: PlannedAction[], nonce?: string, ac
   }).join('');
   const empty = plans.length === 0 ? '<div class="kronos-empty">No actionable queue recommendations found.</div>' : '';
 
-  return `<!DOCTYPE html>
-<html><head><style>
-  ${kronosOperatorPanelCss()}
-</style></head><body><div class="kronos-shell operator-shell">
-  <div class="kronos-header">
-    <div>
-      <h1 class="kronos-title">Kronos Queue Planner</h1>
-      <div class="kronos-subtitle">${plans.length} ranked recommendation${plans.length === 1 ? '' : 's'} from queue, Jira, and repository state</div>
-    </div>
-  </div>
-  ${empty || `<div class="plan-list">${rows}</div>`}
-</div>${nonce ? kronosActionPanelScript(nonce, 'Kronos Queue Planner', true, actionScriptUri) : ''}</body></html>`;
+  return queuePlannerPanelShell({
+    title: 'Kronos Queue Planner',
+    subtitle: `${plans.length} ranked recommendation${plans.length === 1 ? '' : 's'} from queue, Jira, and repository state`,
+    body: empty || `<div class="plan-list">${rows}</div>`,
+    nonce,
+    actionScriptUri,
+  });
 }
 
 export function buildBacklogTriageHtml(report: BacklogTriageReport, nonce?: string, actionScriptUri?: string): string {
@@ -55,22 +59,17 @@ export function buildBacklogTriageHtml(report: BacklogTriageReport, nonce?: stri
   const empty = report.items.length === 0 ? '<div class="kronos-empty">No backlog triage items found.</div>' : '';
   const summaryCards = cards || '<div class="kronos-empty">No active backlog categories.</div>';
 
-  return `<!DOCTYPE html>
-<html><head><style>
-  ${kronosOperatorPanelCss()}
-  tr.critical td { border-left: 3px solid #f44336; }
+  return queuePlannerPanelShell({
+    title: 'Kronos Backlog Triage',
+    subtitle: `Generated ${report.generatedAt}. Critical items sort first, then oldest tickets.`,
+    body: `<div class="operator-summary">${summaryCards}</div>
+  ${empty || `<div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Severity</th><th>Ticket</th><th>Category</th><th>Action</th><th>Projects</th><th>Age</th><th>Detail</th><th class="action-cell">Actions</th></tr>${rows}</table></div>`}`,
+    nonce,
+    actionScriptUri,
+    extraCss: `tr.critical td { border-left: 3px solid #f44336; }
   tr.warning td { border-left: 3px solid #ff9800; }
-  tr.info td { border-left: 3px solid #4caf50; }
-</style></head><body><div class="kronos-shell operator-shell">
-  <div class="kronos-header">
-    <div>
-      <h1 class="kronos-title">Kronos Backlog Triage</h1>
-      <div class="kronos-subtitle">Generated ${escapeHtml(report.generatedAt)}. Critical items sort first, then oldest tickets.</div>
-    </div>
-  </div>
-  <div class="operator-summary">${summaryCards}</div>
-  ${empty || `<div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Severity</th><th>Ticket</th><th>Category</th><th>Action</th><th>Projects</th><th>Age</th><th>Detail</th><th class="action-cell">Actions</th></tr>${rows}</table></div>`}
-</div>${nonce ? kronosActionPanelScript(nonce, 'Kronos Backlog Triage', true, actionScriptUri) : ''}</body></html>`;
+  tr.info td { border-left: 3px solid #4caf50; }`,
+  });
 }
 
 export function buildProjectBatchPlanHtml(batches: ProjectBatchPlan[], nonce?: string, actionScriptUri?: string): string {
@@ -94,18 +93,13 @@ export function buildProjectBatchPlanHtml(batches: ProjectBatchPlan[], nonce?: s
   }).join('');
   const empty = batches.length === 0 ? '<div class="kronos-empty">No project batch plan recommendations found.</div>' : '';
 
-  return `<!DOCTYPE html>
-<html><head><style>
-  ${kronosOperatorPanelCss()}
-</style></head><body><div class="kronos-shell operator-shell">
-  <div class="kronos-header">
-    <div>
-      <h1 class="kronos-title">Kronos Project Batch Plan</h1>
-      <div class="kronos-subtitle">Top grouped recommendations by project</div>
-    </div>
-  </div>
-  ${empty || `<div class="plan-list">${rows}</div>`}
-</div>${nonce ? kronosActionPanelScript(nonce, 'Kronos Project Batch Plan', true, actionScriptUri) : ''}</body></html>`;
+  return queuePlannerPanelShell({
+    title: 'Kronos Project Batch Plan',
+    subtitle: 'Top grouped recommendations by project',
+    body: empty || `<div class="plan-list">${rows}</div>`,
+    nonce,
+    actionScriptUri,
+  });
 }
 
 export function buildReleaseBatchPlanHtml(batches: ReleaseBatchPlan[], nonce?: string, actionScriptUri?: string): string {
@@ -130,18 +124,13 @@ export function buildReleaseBatchPlanHtml(batches: ReleaseBatchPlan[], nonce?: s
   }).join('');
   const empty = batches.length === 0 ? '<div class="kronos-empty">No release batch plan recommendations found.</div>' : '';
 
-  return `<!DOCTYPE html>
-<html><head><style>
-  ${kronosOperatorPanelCss()}
-</style></head><body><div class="kronos-shell operator-shell">
-  <div class="kronos-header">
-    <div>
-      <h1 class="kronos-title">Kronos Release Batch Plan</h1>
-      <div class="kronos-subtitle">Top grouped recommendations by release bucket</div>
-    </div>
-  </div>
-  ${empty || `<div class="plan-list">${rows}</div>`}
-</div>${nonce ? kronosActionPanelScript(nonce, 'Kronos Release Batch Plan', true, actionScriptUri) : ''}</body></html>`;
+  return queuePlannerPanelShell({
+    title: 'Kronos Release Batch Plan',
+    subtitle: 'Top grouped recommendations by release bucket',
+    body: empty || `<div class="plan-list">${rows}</div>`,
+    nonce,
+    actionScriptUri,
+  });
 }
 
 export function buildCollisionReportHtml(reports: Array<{ plan: PlannedAction; collisions: DispatchCollision[] }>, nonce?: string, actionScriptUri?: string): string {
@@ -154,22 +143,17 @@ export function buildCollisionReportHtml(reports: Array<{ plan: PlannedAction; c
   </tr>`)).join('');
   const empty = reports.length === 0 ? '<div class="kronos-empty">No collisions found for the top planned actions.</div>' : '';
 
-  return `<!DOCTYPE html>
-<html><head><style>
-  ${kronosOperatorPanelCss()}
-  .collision-plan-detail { color: var(--k-muted); }
+  return queuePlannerPanelShell({
+    title: 'Kronos Collision Report',
+    subtitle: 'Active runs, duplicate queue work, and open merge requests that overlap top planned actions',
+    body: empty || `<div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Severity</th><th>Plan</th><th>Kind</th><th>Detail</th><th class="action-cell">Actions</th></tr>${rows}</table></div>`,
+    nonce,
+    actionScriptUri,
+    extraCss: `.collision-plan-detail { color: var(--k-muted); }
   .pill.high { color: #f44336; background: rgba(244,67,54,0.16); }
   .pill.medium { color: #ff9800; background: rgba(255,152,0,0.16); }
-  .pill.low { color: #4caf50; background: rgba(76,175,80,0.16); }
-</style></head><body><div class="kronos-shell operator-shell">
-  <div class="kronos-header">
-    <div>
-      <h1 class="kronos-title">Kronos Collision Report</h1>
-      <div class="kronos-subtitle">Active runs, duplicate queue work, and open merge requests that overlap top planned actions</div>
-    </div>
-  </div>
-  ${empty || `<div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Severity</th><th>Plan</th><th>Kind</th><th>Detail</th><th class="action-cell">Actions</th></tr>${rows}</table></div>`}
-</div>${nonce ? kronosActionPanelScript(nonce, 'Kronos Collision Report', true, actionScriptUri) : ''}</body></html>`;
+  .pill.low { color: #4caf50; background: rgba(76,175,80,0.16); }`,
+  });
 }
 
 export function buildQueuePlanModeHtml(title: string, subtitle: string, plans: PlannedAction[], nonce?: string, actionScriptUri?: string): string {
@@ -185,18 +169,29 @@ export function buildQueuePlanModeHtml(title: string, subtitle: string, plans: P
   </tr>`).join('');
   const empty = plans.length === 0 ? '<div class="kronos-empty">No matching recommendations found.</div>' : '';
 
+  return queuePlannerPanelShell({
+    title,
+    subtitle,
+    body: empty || `<div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>#</th><th>Ticket</th><th>Action</th><th>Projects</th><th>Score</th><th>Estimate</th><th>Reason</th><th class="action-cell">Actions</th></tr>${rows}</table></div>`,
+    nonce,
+    actionScriptUri,
+  });
+}
+
+function queuePlannerPanelShell(options: QueuePlannerPanelShellOptions): string {
   return `<!DOCTYPE html>
 <html><head><style>
   ${kronosOperatorPanelCss()}
+  ${options.extraCss || ''}
 </style></head><body><div class="kronos-shell operator-shell">
   <div class="kronos-header">
     <div>
-      <h1 class="kronos-title">${escapeHtml(title)}</h1>
-      <div class="kronos-subtitle">${escapeHtml(subtitle)}</div>
+      <h1 class="kronos-title">${escapeHtml(options.title)}</h1>
+      <div class="kronos-subtitle">${escapeHtml(options.subtitle)}</div>
     </div>
   </div>
-  ${empty || `<div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>#</th><th>Ticket</th><th>Action</th><th>Projects</th><th>Score</th><th>Estimate</th><th>Reason</th><th class="action-cell">Actions</th></tr>${rows}</table></div>`}
-</div>${nonce ? kronosActionPanelScript(nonce, title, true, actionScriptUri) : ''}</body></html>`;
+  ${options.body}
+</div>${options.nonce ? kronosActionPanelScript(options.nonce, options.title, true, options.actionScriptUri) : ''}</body></html>`;
 }
 
 function planActionRow(plan: PlannedAction): string {
