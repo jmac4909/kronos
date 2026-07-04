@@ -2317,14 +2317,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     vscode.commands.registerCommand('kronos.openDashboard', async () => {
       try {
-        const panel = vscode.window.createWebviewPanel(
-          'kronosDashboard',
-          'Kronos Dashboard',
-          vscode.ViewColumn.One,
-          kronosScriptableWebviewOptions(context.extensionUri)
-        );
-        const nonce = createWebviewNonce();
-        const actionScriptUri = kronosActionPanelScriptUri(panel, context.extensionUri);
+        const { panel, nonce, actionScriptUri } = createKronosActionWebviewPanel('kronosDashboard', 'Kronos Dashboard', context.extensionUri);
         const logReady = createWebviewReadyMonitor(panel, 'Kronos Dashboard');
         const render = async () => {
           let data: unknown = {};
@@ -3175,9 +3168,7 @@ export function activate(context: vscode.ExtensionContext) {
         }
         return;
       }
-      const panel = vscode.window.createWebviewPanel('kronosStats', 'Kronos: Session Stats', vscode.ViewColumn.One, kronosScriptableWebviewOptions(context.extensionUri));
-      const nonce = createWebviewNonce();
-      const actionScriptUri = kronosActionPanelScriptUri(panel, context.extensionUri);
+      const { panel, nonce, actionScriptUri } = createKronosActionWebviewPanel('kronosStats', 'Kronos: Session Stats', context.extensionUri);
       attachOperatorCommandHandler(panel, 'Kronos Session Stats', SESSION_STATS_OPERATOR_COMMANDS);
       panel.webview.html = withWebviewCsp(buildSessionStatsHtml(stats, nonce, actionScriptUri), webviewScriptCspOptions(panel.webview.cspSource, nonce));
     }),
@@ -3578,14 +3569,7 @@ function buildRecoveryInventoryForState(state: KronosState, backups = listBackup
 }
 
 function openRecoveryPanel(state: KronosState, initialInventory: RecoveryInventory, initialBackups = listBackups(), focusItemId?: string, extensionUri?: vscode.Uri): void {
-  const panel = vscode.window.createWebviewPanel(
-    'kronosRecoveryCenter',
-    'Kronos Recovery Center',
-    vscode.ViewColumn.One,
-    kronosScriptableWebviewOptions(extensionUri)
-  );
-  const nonce = createWebviewNonce();
-  const actionScriptUri = kronosActionPanelScriptUri(panel, extensionUri);
+  const { panel, nonce, actionScriptUri } = createKronosActionWebviewPanel('kronosRecoveryCenter', 'Kronos Recovery Center', extensionUri);
   const logReady = createWebviewReadyMonitor(panel, 'Kronos Recovery Center');
   let currentInventory = initialInventory;
   let currentBackups = initialBackups;
@@ -3754,14 +3738,7 @@ async function pickAndRestoreBackup(state: KronosState, backups = listBackups(),
 }
 
 function openHumanReviewInbox(state: KronosState, extensionUri?: vscode.Uri): void {
-  const panel = vscode.window.createWebviewPanel(
-    'kronosHumanReviewInbox',
-    'Kronos Human Review Inbox',
-    vscode.ViewColumn.One,
-    kronosScriptableWebviewOptions(extensionUri)
-  );
-  const nonce = createWebviewNonce();
-  const actionScriptUri = kronosActionPanelScriptUri(panel, extensionUri);
+  const { panel, nonce, actionScriptUri } = createKronosActionWebviewPanel('kronosHumanReviewInbox', 'Kronos Human Review Inbox', extensionUri);
   const logReady = createWebviewReadyMonitor(panel, 'Kronos Human Review Inbox');
   const render = () => {
     const inbox = buildHumanReviewInbox({
@@ -3849,14 +3826,7 @@ function openEvidenceGatePanel(
   title: string,
   options: { refreshAllEvidenceGates?: boolean; extensionUri?: vscode.Uri } = {},
 ): void {
-  const panel = vscode.window.createWebviewPanel(
-    'kronosEvidenceGate',
-    title,
-    vscode.ViewColumn.One,
-    kronosScriptableWebviewOptions(options.extensionUri)
-  );
-  const nonce = createWebviewNonce();
-  const actionScriptUri = kronosActionPanelScriptUri(panel, options.extensionUri);
+  const { panel, nonce, actionScriptUri } = createKronosActionWebviewPanel('kronosEvidenceGate', title, options.extensionUri);
   const gateTicketKeys = gates.map(gate => gate.ticketKey);
   const logReady = createWebviewReadyMonitor(panel, title);
   const render = () => {
