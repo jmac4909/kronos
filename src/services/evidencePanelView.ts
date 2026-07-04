@@ -1,7 +1,7 @@
 import type { EvidenceGateResult } from './evidenceGate';
 import type { EvidenceHandoffPlan } from './evidenceHandoff';
 import type { EvidencePublishDestination, EvidencePublishResult } from './evidencePublisher';
-import { actionButton, actionRow, kronosActionPanelScript, kronosOperatorPanelCss, operatorCommandRow } from './operatorPanel';
+import { actionButton, actionRow, kronosActionPanelScript, kronosOperatorPanelCss, operatorCommandRow, operatorDecisionBrief } from './operatorPanel';
 import { escapeClass, escapeHtml, safeHttpHref } from './webviewHtml';
 
 export function buildEvidenceHandoffHtml(plan: EvidenceHandoffPlan, nonce?: string, actionScriptUri?: string): string {
@@ -94,19 +94,10 @@ export function buildEvidenceGateHtml(gates: EvidenceGateResult[], title: string
   return `<!DOCTYPE html>
 <html><head><style>
   ${kronosOperatorPanelCss()}
-  .decision-brief { margin: 12px 0 16px; }
-  .decision-brief strong { display: block; font-size: 15px; margin-bottom: 4px; }
-  .decision-brief.fail { border-left-color: var(--k-danger); }
-  .decision-brief.warn { border-left-color: var(--k-warn); }
-  .decision-brief.pass { border-left-color: var(--k-ok); }
 </style></head><body><div class="kronos-shell operator-shell">
   <div class="kronos-header"><div><h1 class="kronos-title">${escapeHtml(title)}</h1><div class="kronos-subtitle">Evidence readiness by ticket and check</div></div></div>
   ${actions}
-  <div class="operator-note decision-brief ${escapeClass(brief.status)}">
-    <strong>${escapeHtml(brief.headline)}</strong>
-    <div>${escapeHtml(brief.detail)}</div>
-    <div class="muted"><strong>Next:</strong> ${escapeHtml(brief.nextStep)}</div>
-  </div>
+  ${operatorDecisionBrief({ tone: brief.status, headline: brief.headline, detail: brief.detail, nextStep: brief.nextStep })}
   <div class="operator-summary">
     <div class="summary-card"><div class="num">${summary.fail}</div><div class="lbl">Failing</div></div>
     <div class="summary-card"><div class="num">${summary.warn}</div><div class="lbl">Warnings</div></div>

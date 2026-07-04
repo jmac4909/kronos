@@ -1,6 +1,6 @@
 import type { Ticket } from '../state/types';
 import type { HumanReviewInbox, HumanReviewItem } from './humanReviewInbox';
-import { actionButton, actionRow, kronosActionPanelScript, kronosOperatorPanelCss, operatorCommandRow } from './operatorPanel';
+import { actionButton, actionRow, kronosActionPanelScript, kronosOperatorPanelCss, operatorCommandRow, operatorDecisionBrief } from './operatorPanel';
 import { escapeHtml } from './webviewHtml';
 
 interface HumanReviewInboxHtmlOptions {
@@ -27,19 +27,10 @@ export function buildHumanReviewInboxHtml(inbox: HumanReviewInbox, options: Huma
   return `<!DOCTYPE html>
 <html><head><style>
   ${kronosOperatorPanelCss()}
-  .decision-brief { margin: 12px 0 16px; }
-  .decision-brief strong { display: block; font-size: 15px; margin-bottom: 4px; }
-  .decision-brief.critical { border-left-color: var(--k-danger); }
-  .decision-brief.warning { border-left-color: var(--k-warn); }
-  .decision-brief.info { border-left-color: var(--k-accent); }
 </style></head><body><div class="kronos-shell operator-shell">
   <div class="kronos-header"><div><h1 class="kronos-title">Kronos Human Review Inbox</h1><div class="kronos-subtitle">Items where an operator decision is safer than automation</div></div></div>
   ${actions}
-  <div class="operator-note decision-brief ${brief.severity}">
-    <strong>${escapeHtml(brief.headline)}</strong>
-    <div>${escapeHtml(brief.detail)}</div>
-    <div class="muted"><strong>Next:</strong> ${escapeHtml(brief.nextStep)}</div>
-  </div>
+  ${operatorDecisionBrief({ tone: brief.severity, headline: brief.headline, detail: brief.detail, nextStep: brief.nextStep })}
   <div class="operator-summary">
     <div class="summary-card"><div class="num">${inbox.summary.critical}</div><div class="lbl">Critical</div></div>
     <div class="summary-card"><div class="num">${inbox.summary.warning}</div><div class="lbl">Warnings</div></div>

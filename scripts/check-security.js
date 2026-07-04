@@ -1151,9 +1151,12 @@ for (const marker of [
   'export function actionButton',
   'export function actionRow',
   'export function operatorCommandRow',
+  'export interface OperatorDecisionBrief',
+  'export function operatorDecisionBrief',
   "export { normalizeActionPanelMessage, type ActionPanelMessage } from './webviewMessages'",
   'export function kronosActionPanelScript',
   'export function kronosOperatorPanelCss',
+  '.decision-brief',
   'kronosWebviewBaseCss',
   'webviewActionScriptTag',
   'scriptUri?: string',
@@ -1684,7 +1687,7 @@ for (const marker of [
   'export function buildHumanReviewInboxHtml',
   'interface HumanReviewInboxHtmlOptions',
   'Kronos Human Review Inbox',
-  'decision-brief',
+  'operatorDecisionBrief',
   'function humanReviewBrief',
   'function humanReviewNextStep',
   'humanReviewActionButtons',
@@ -1710,7 +1713,7 @@ for (const marker of [
   'Evidence Handoff:',
   'Evidence Publish:',
   'Kronos Evidence Gate',
-  'decision-brief',
+  'operatorDecisionBrief',
   'function evidenceGateBrief',
   'function evidenceGateNextStep',
   'Kronos did not call a posting API',
@@ -1729,6 +1732,9 @@ for (const marker of [
   if (!evidencePanelView.includes(marker)) {
     fail(`Missing evidence panel view marker: ${marker}`);
   }
+}
+if (humanReviewPanelView.includes('.decision-brief {') || evidencePanelView.includes('.decision-brief {')) {
+  fail('Decision brief CSS must stay in the shared operator panel helper.');
 }
 
 for (const marker of [

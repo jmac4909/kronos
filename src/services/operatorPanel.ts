@@ -1,6 +1,13 @@
 import { WEBVIEW_READY_COMMAND, webviewActionScriptTag } from './webviewSecurity';
-import { escapeAttr, escapeHtml, kronosWebviewBaseCss } from './webviewHtml';
+import { escapeAttr, escapeClass, escapeHtml, kronosWebviewBaseCss } from './webviewHtml';
 export { normalizeActionPanelMessage, type ActionPanelMessage } from './webviewMessages';
+
+export interface OperatorDecisionBrief {
+  tone: string;
+  headline: string;
+  detail: string;
+  nextStep: string;
+}
 
 interface ActionButtonOptions {
   ticket?: string;
@@ -31,6 +38,14 @@ export function operatorCommandRow(buttons: string[]): string {
   return buttons.length > 0
     ? `<div class="kronos-action-row operator-command-row">${buttons.join('')}</div>`
     : '';
+}
+
+export function operatorDecisionBrief(brief: OperatorDecisionBrief): string {
+  return `<div class="operator-note decision-brief ${escapeClass(brief.tone)}">
+    <strong>${escapeHtml(brief.headline)}</strong>
+    <div>${escapeHtml(brief.detail)}</div>
+    <div class="muted"><strong>Next:</strong> ${escapeHtml(brief.nextStep)}</div>
+  </div>`;
 }
 
 export function kronosActionPanelScript(nonce: string, webviewName = 'Kronos action panel', scriptUri?: string): string {
@@ -72,6 +87,16 @@ export function kronosOperatorPanelCss(): string {
   .operator-card-meta { color: var(--k-muted); font-size: 11px; }
   .operator-card .subtitle { margin-bottom: 10px; }
   .operator-note { border-left: 3px solid var(--k-accent); padding: 10px 12px; border-radius: var(--k-radius); background: var(--k-surface-soft); }
+  .decision-brief { margin: 12px 0 16px; }
+  .decision-brief strong { display: block; font-size: 15px; margin-bottom: 4px; }
+  .decision-brief.critical,
+  .decision-brief.fail,
+  .decision-brief.bad { border-left-color: var(--k-danger); }
+  .decision-brief.warning,
+  .decision-brief.warn { border-left-color: var(--k-warn); }
+  .decision-brief.info { border-left-color: var(--k-accent); }
+  .decision-brief.pass,
+  .decision-brief.good { border-left-color: var(--k-ok); }
   .operator-hero { border: 1px solid var(--k-border); border-left: 3px solid var(--k-accent); border-radius: var(--k-radius); padding: 14px 16px; background: var(--k-surface-soft); }
   .operator-hero .score { font-size: 34px; line-height: 1; font-weight: 750; }
   .operator-hero .grade { color: var(--k-muted); font-size: 18px; margin-left: 8px; }
