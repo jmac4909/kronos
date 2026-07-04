@@ -3458,6 +3458,7 @@ test('record guard helper centralizes unknown object narrowing', () => {
 
   for (const [file, marker] of [
     ['changedFiles.ts', "import { isRecord } from './records'"],
+    ['evidenceData.ts', "import { isRecord } from './records'"],
     ['integrationAdapters.ts', "import { isRecord } from './records'"],
     ['queuePlanner.ts', "import { isRecord } from './records'"],
     ['runStatus.ts', "import { isRecord } from './records'"],
@@ -9806,11 +9807,14 @@ test('ticket detail rendering uses typed tickets and evidence records', () => {
     "const discussionCount = ticketStringField(mr, 'discussion_count')",
     'Discussions: ${esc(discussionCount ||',
     'function existingAcceptanceCriterion(record: object)',
+    "import { isRecord } from './records'",
     'type EvidenceRecord = object',
-    'Reflect.get(record, key)',
-    "Reflect.get(record, 'checked')",
+    'if (!isRecord(record)) { return fallback; }',
+    'const value = record[key]',
+    "return isRecord(record) && record['checked'] === true",
+    'return Array.isArray(value) ? value.filter(isRecord) : []',
   ]) {
-    assert.ok((marker === 'type EvidenceRecord = object' || marker.startsWith('Reflect.') || marker.startsWith('function evidenceRecordCount'))
+    assert.ok((marker.includes('records') || marker.startsWith('type EvidenceRecord') || marker.startsWith('if (!isRecord') || marker.startsWith('const value') || marker.startsWith('return isRecord') || marker.startsWith('return Array') || marker.startsWith('function evidenceRecordCount'))
       ? evidenceData.includes(marker)
       : extensionSource.includes(marker), marker);
   }
@@ -9825,6 +9829,13 @@ test('ticket detail rendering uses typed tickets and evidence records', () => {
     'const ticketData: Record<string, any>',
   ]) {
     assert.equal(extensionSource.includes(marker) || evidenceData.includes(marker), false, marker);
+  }
+  for (const marker of [
+    'type EvidenceRecord = Record<string, unknown>',
+    'Reflect.get(record',
+    'function isEvidenceRecord',
+  ]) {
+    assert.equal(evidenceData.includes(marker), false, marker);
   }
 });
 

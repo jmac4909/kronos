@@ -1,4 +1,5 @@
 import { Ticket } from '../state/types';
+import { isRecord } from './records';
 
 type EvidenceRecord = object;
 
@@ -20,8 +21,8 @@ export function evidenceRiskNotes(ticket: Ticket): EvidenceRecord[] {
 
 export function evidenceEnvironmentResults(ticket: Ticket): EvidenceRecord[] {
   const value = ticket.evidence?.environment_results;
-  if (!isEvidenceRecord(value)) { return []; }
-  return Object.values(value).filter(isEvidenceRecord);
+  if (!isRecord(value)) { return []; }
+  return Object.values(value).filter(isRecord);
 }
 
 export function evidenceRecordCount(ticket: Ticket | null | undefined): number {
@@ -30,18 +31,15 @@ export function evidenceRecordCount(ticket: Ticket | null | undefined): number {
 }
 
 export function evidenceString(record: EvidenceRecord | null | undefined, key: string, fallback = ''): string {
-  const value = record ? Reflect.get(record, key) : undefined;
+  if (!isRecord(record)) { return fallback; }
+  const value = record[key];
   return typeof value === 'string' ? value.trim() : fallback;
 }
 
 export function evidenceChecked(record: EvidenceRecord): boolean {
-  return Reflect.get(record, 'checked') === true;
+  return isRecord(record) && record['checked'] === true;
 }
 
 function arrayRecords(value: unknown): EvidenceRecord[] {
-  return Array.isArray(value) ? value.filter(isEvidenceRecord) : [];
-}
-
-function isEvidenceRecord(value: unknown): value is EvidenceRecord {
-  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+  return Array.isArray(value) ? value.filter(isRecord) : [];
 }

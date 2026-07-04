@@ -2342,6 +2342,7 @@ for (const [name, source, marker] of [
 for (const [name, source, marker] of [
   ['src/extension.ts', extension, "import { isRecord, recordFromUnknown } from './services/records'"],
   ['src/services/changedFiles.ts', changedFiles, "import { isRecord } from './records'"],
+  ['src/services/evidenceData.ts', evidenceData, "import { isRecord } from './records'"],
   ['src/services/integrationAdapters.ts', integrationAdapters, "import { isRecord } from './records'"],
   ['src/services/queuePlanner.ts', queuePlanner, "import { isRecord } from './records'"],
   ['src/services/runStatus.ts', runStatus, "import { isRecord } from './records'"],
@@ -3369,15 +3370,30 @@ for (const marker of [
 }
 
 for (const marker of [
+  "import { isRecord } from './records'",
+  'type EvidenceRecord = object',
   'export function evidenceNotes',
   'export function evidenceChecks',
   'export function evidenceRiskNotes',
   'export function evidenceEnvironmentResults',
   'export function evidenceString',
+  'if (!isRecord(record)) { return fallback; }',
+  'const value = record[key]',
+  "return isRecord(record) && record['checked'] === true",
   'function arrayRecords',
+  'return Array.isArray(value) ? value.filter(isRecord) : []',
 ]) {
   if (!evidenceData.includes(marker)) {
     fail(`Missing evidence data marker: ${marker}`);
+  }
+}
+for (const forbidden of [
+  'type EvidenceRecord = Record<string, unknown>',
+  'Reflect.get(record',
+  'function isEvidenceRecord',
+]) {
+  if (evidenceData.includes(forbidden)) {
+    fail(`Evidence data must use shared record helpers: ${forbidden}`);
   }
 }
 
