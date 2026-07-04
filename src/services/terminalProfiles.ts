@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 
-export interface KronosTerminalOptions {
+interface KronosTerminalOptions {
   name: string;
   cwd?: string;
   shellPath?: string;

@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 
-export interface RunResumeSource {
+interface RunResumeSource {
   id?: string;
   project?: string;
   skill?: string;

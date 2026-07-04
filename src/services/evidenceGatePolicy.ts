@@ -1,7 +1,7 @@
 import { Ticket } from '../state/types';
 import { EvidenceGateCheck, EvidenceGateResult, evaluateEvidenceGate } from './evidenceGate';
 
-export interface EvidenceHandoffDecision {
+interface EvidenceHandoffDecision {
   allowed: boolean;
   requiresConfirmation: boolean;
   gate: EvidenceGateResult;
