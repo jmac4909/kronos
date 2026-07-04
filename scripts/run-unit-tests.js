@@ -877,6 +877,11 @@ test('ticket mutation helpers centralize evidence, acceptance, and MR state writ
         ],
       },
     }),
+    'K-RUN': ticket({
+      summary: 'Completion evidence target',
+      next_action: 'await_review',
+      projects: ['app'],
+    }),
     'orphan-99': ticket({
       summary: 'Orphan MR',
       projects: ['app', 'api'],
@@ -899,6 +904,22 @@ test('ticket mutation helpers centralize evidence, acceptance, and MR state writ
     artifactPath: '',
     confidence: 'high',
     now: new Date('2026-07-01T01:05:00.000Z'),
+  });
+  ticketMutations.addTicketRunCompletionEvidence('K-RUN', {
+    note: {
+      kind: 'note',
+      text: 'Kronos implement run run-atomic completed.',
+      now: new Date('2026-07-01T01:07:00.000Z'),
+    },
+    check: {
+      name: 'Kronos implement completion',
+      result: 'pass',
+      environment: 'kronos',
+      command: 'kronos run run-atomic',
+      summary: 'run run-atomic completed; 1 changed file',
+      confidence: 'high',
+      now: new Date('2026-07-01T01:07:00.000Z'),
+    },
   });
   ticketMutations.recordTicketEnvironmentResult('K-1', {
     environment: 'test',
@@ -953,6 +974,10 @@ test('ticket mutation helpers centralize evidence, acceptance, and MR state writ
   assert.equal(target.mr.iid, 99);
   assert.ok(target.projects.includes('api'));
   assert.equal(persisted.tickets['orphan-99'], undefined);
+  assert.equal(persisted.tickets['K-RUN'].evidence.notes[0].text, 'Kronos implement run run-atomic completed.');
+  assert.equal(persisted.tickets['K-RUN'].evidence.checks[0].name, 'Kronos implement completion');
+  assert.equal(persisted.tickets['K-RUN'].evidence.checks[0].command, 'kronos run run-atomic');
+  assert.equal(persisted.tickets['K-RUN'].evidence.updated_at, '2026-07-01T01:07:00.000Z');
 
   const failingPreview = ticketMutations.previewLinkMergeRequestToTicket(baseState({
     'K-2': ticket({ projects: ['app'] }),
@@ -1196,6 +1221,16 @@ test('merge request notifications summarize review status and new comment change
   }), {
     severity: 'info',
     message: 'K-4E: MR !44 new MR discussion activity.',
+  });
+  assert.deepEqual(mergeRequestNotifications.describeMergeRequestStatusChange('K-4F', {
+    ...baseUpdate,
+    previousMr: { iid: 45, state: 'opened', review_status: 'pending_review', url: 'https://gitlab.example/45' },
+    ticket: ticket({
+      mr: { iid: 45, state: 'opened', review_status: 'pending_review', url: 'https://gitlab.example/45', last_discussion_at: '2026-07-02T02:00:00.000Z' },
+    }),
+  }), {
+    severity: 'info',
+    message: 'K-4F: MR !45 new MR discussion activity.',
   });
   assert.deepEqual(mergeRequestNotifications.describeMergeRequestStatusChange('K-5', {
     ...baseUpdate,
@@ -7300,20 +7335,23 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'projectName,',
     'const refreshWarning = await reloadStateAfterDispatch(state, projectName);',
     'run.warnings = [...(run.warnings || []), refreshWarning];',
-    'addTicketEvidenceNote(resolvedTicketKey, {',
+    'addTicketRunCompletionEvidence(resolvedTicketKey, {',
+    'note: {',
     "kind: 'note'",
     'buildRunCompletionEvidenceText(run, ticket)',
-    'addTicketEvidenceCheck(resolvedTicketKey, buildRunCompletionEvidenceCheck(run, ticket))',
+    'check: buildRunCompletionEvidenceCheck(run, ticket)',
     "unknownErrorMessage(e, 'Failed to add run completion evidence.')",
     'const reloadedTicketInput:',
     'const reloadedTicket = resolvePostRunTicket(reloadedTicketInput)',
     'resolvedTicketKey = reloadedTicket.ticketKey || resolvedTicketKey',
     'ticket = reloadedTicket.ticket',
+    "run.status === 'completed' && (run.readiness.status === 'needs_human' || run.readiness.status === 'blocked')",
     'run.failureReason = run.failureReason || run.readiness.summary',
     'let resolvedTicketKey = resolveDispatchTicketKey(ticketKey, run)',
     'await reloadStateAfterDispatch(state, projectName)',
     'function resolveDispatchTicketKey(ticketKey: string | undefined, run: KronosRun): string | undefined',
     "import { buildRunCompletionEvidenceCheck, buildRunCompletionEvidenceText, evaluatePostRunReadiness, resolvePostRunTicket, shouldRecordRunCompletionEvidence } from './services/postRunReadiness'",
+    'addTicketRunCompletionEvidence',
     'await showRunCompletionToast(resolvedTicketKey, ticket, run)',
     'async function showRunCompletionToast(ticketKey: string, ticket: Ticket | undefined, run: KronosRun): Promise<void>',
     "import { buildRunCompletionNotification } from './services/runCompletionNotification'",

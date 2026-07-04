@@ -43,6 +43,11 @@ export interface TicketEnvironmentResultInput {
   now?: Date;
 }
 
+export interface TicketRunCompletionEvidenceInput {
+  note: TicketEvidenceNoteInput;
+  check: TicketEvidenceCheckInput;
+}
+
 export interface LinkMergeRequestInput {
   orphanKey: string;
   targetTicketKey: string;
@@ -85,18 +90,7 @@ export function addTicketEvidenceNote(ticketKey: string, input: TicketEvidenceNo
   return mutateState('add-ticket-evidence', state => {
     const ticket = requireTicket(state, ticketKey);
     const evidence = ensureEvidence(ticket);
-    const at = isoNow(input.now);
-    if (!Array.isArray(evidence.notes)) {
-      evidence.notes = [];
-    }
-    evidence.notes.push({ at, kind: input.kind, text: input.text.trim() });
-    if (input.kind === 'risk') {
-      if (!Array.isArray(evidence.risk_notes)) {
-        evidence.risk_notes = [];
-      }
-      evidence.risk_notes.push({ at, text: input.text.trim(), severity: 'medium' });
-    }
-    evidence.updated_at = at;
+    appendEvidenceNote(evidence, input);
   });
 }
 
@@ -104,27 +98,17 @@ export function addTicketEvidenceCheck(ticketKey: string, input: TicketEvidenceC
   return mutateState('add-evidence-check', state => {
     const ticket = requireTicket(state, ticketKey);
     const evidence = ensureEvidence(ticket);
-    const at = isoNow(input.now);
-    if (!Array.isArray(evidence.checks)) {
-      evidence.checks = [];
-    }
-    const check: TicketEvidenceCheck = {
-      id: `check-${at.replace(/[^0-9]/g, '')}`,
-      at,
-      name: input.name.trim(),
-      result: input.result,
-      confidence: input.confidence,
-    };
-    const environment = optionalTrim(input.environment);
-    const command = optionalTrim(input.command);
-    const summary = optionalTrim(input.summary);
-    const artifactPath = optionalTrim(input.artifactPath);
-    if (environment) { check.environment = environment; }
-    if (command) { check.command = command; }
-    if (summary) { check.summary = summary; }
-    if (artifactPath) { check.artifact_path = artifactPath; }
-    evidence.checks.push(check);
-    evidence.updated_at = at;
+    appendEvidenceCheck(evidence, input);
+  });
+}
+
+export function addTicketRunCompletionEvidence(ticketKey: string, input: TicketRunCompletionEvidenceInput): KronosState {
+  return mutateState('add-run-completion-evidence', state => {
+    const ticket = requireTicket(state, ticketKey);
+    const evidence = ensureEvidence(ticket);
+    const fallbackNow = input.note.now || input.check.now || new Date();
+    appendEvidenceNote(evidence, input.note, fallbackNow);
+    appendEvidenceCheck(evidence, input.check, fallbackNow);
   });
 }
 
@@ -350,6 +334,46 @@ function ensureEvidence(ticket: Ticket): TicketEvidence {
     ticket.evidence = {};
   }
   return ticket.evidence;
+}
+
+function appendEvidenceNote(evidence: TicketEvidence, input: TicketEvidenceNoteInput, fallbackNow?: Date): void {
+  const at = isoNow(input.now || fallbackNow);
+  const text = input.text.trim();
+  if (!Array.isArray(evidence.notes)) {
+    evidence.notes = [];
+  }
+  evidence.notes.push({ at, kind: input.kind, text });
+  if (input.kind === 'risk') {
+    if (!Array.isArray(evidence.risk_notes)) {
+      evidence.risk_notes = [];
+    }
+    evidence.risk_notes.push({ at, text, severity: 'medium' });
+  }
+  evidence.updated_at = at;
+}
+
+function appendEvidenceCheck(evidence: TicketEvidence, input: TicketEvidenceCheckInput, fallbackNow?: Date): void {
+  const at = isoNow(input.now || fallbackNow);
+  if (!Array.isArray(evidence.checks)) {
+    evidence.checks = [];
+  }
+  const check: TicketEvidenceCheck = {
+    id: `check-${at.replace(/[^0-9]/g, '')}`,
+    at,
+    name: input.name.trim(),
+    result: input.result,
+    confidence: input.confidence,
+  };
+  const environment = optionalTrim(input.environment);
+  const command = optionalTrim(input.command);
+  const summary = optionalTrim(input.summary);
+  const artifactPath = optionalTrim(input.artifactPath);
+  if (environment) { check.environment = environment; }
+  if (command) { check.command = command; }
+  if (summary) { check.summary = summary; }
+  if (artifactPath) { check.artifact_path = artifactPath; }
+  evidence.checks.push(check);
+  evidence.updated_at = at;
 }
 
 function mergeRequestStatus(target: MergeRequest, status: Partial<MergeRequest>): boolean {

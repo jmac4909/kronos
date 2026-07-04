@@ -40,7 +40,7 @@ import { SafetyPlan, assessSafetyGate } from './services/safetyGate';
 import { computeTrendMetrics } from './services/trendMetrics';
 import { TicketFilter, TicketGroupBy, TICKET_FILTER_PRESETS, describeTicketFilter } from './services/ticketFilters';
 import { buildRunResumePrompt, readRunLogTail } from './services/runRecovery';
-import { addTicketEvidenceCheck, addTicketEvidenceNote, linkMergeRequestToTicket, previewLinkMergeRequestToTicket, reconcileTerminalMergeRequestState, recordTicketEnvironmentResult, replaceTicketAcceptanceCriteria, updateTicketAcceptanceCriteria, updateTicketMergeRequestStatus, type TicketEvidenceCheckInput } from './services/ticketMutations';
+import { addTicketEvidenceCheck, addTicketEvidenceNote, addTicketRunCompletionEvidence, linkMergeRequestToTicket, previewLinkMergeRequestToTicket, reconcileTerminalMergeRequestState, recordTicketEnvironmentResult, replaceTicketAcceptanceCriteria, updateTicketAcceptanceCriteria, updateTicketMergeRequestStatus, type TicketEvidenceCheckInput } from './services/ticketMutations';
 import { addPlanToQueue as addPlanToQueueState, addTicketToQueue, linkTicketToProject, recordPlanQueueDecision, removeTicketFromQueue as removeTicketFromQueueState, reorderQueueItem, selectNextQueueItem, unlinkTicketFromProject } from './services/queueMutations';
 import { removeProject as removeProjectFromState, setProjectConfigValue, setProjectIntegrationConfig, setScanDirs, writeProjectSetupConfig } from './services/projectMutations';
 import { DoctorCheck, runDoctorChecks as collectDoctorChecks, runDoctorReachabilityChecks as collectDoctorReachabilityChecks } from './services/doctorChecks';
@@ -5195,11 +5195,13 @@ function refreshAfterDispatch(state: KronosState, projectName?: string, ticketKe
       let ticket = resolvedTicket.ticket;
       if (ticket && shouldRecordRunCompletionEvidence({ run, ticket })) {
         try {
-          addTicketEvidenceNote(resolvedTicketKey, {
-            kind: 'note',
-            text: buildRunCompletionEvidenceText(run, ticket),
+          addTicketRunCompletionEvidence(resolvedTicketKey, {
+            note: {
+              kind: 'note',
+              text: buildRunCompletionEvidenceText(run, ticket),
+            },
+            check: buildRunCompletionEvidenceCheck(run, ticket),
           });
-          addTicketEvidenceCheck(resolvedTicketKey, buildRunCompletionEvidenceCheck(run, ticket));
         } catch (e: unknown) {
           vscode.window.showWarningMessage(unknownErrorMessage(e, 'Failed to add run completion evidence.'));
         }
@@ -5217,7 +5219,7 @@ function refreshAfterDispatch(state: KronosState, projectName?: string, ticketKe
       run.failureKind = run.readiness.failureKind;
       if (run.status === 'completed' && run.readiness.status === 'ready') {
         run.status = 'waiting_for_review';
-      } else if (run.status === 'completed' && run.readiness.status === 'needs_human') {
+      } else if (run.status === 'completed' && (run.readiness.status === 'needs_human' || run.readiness.status === 'blocked')) {
         run.status = 'needs_human';
         run.failureReason = run.failureReason || run.readiness.summary;
       }

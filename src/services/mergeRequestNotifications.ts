@@ -105,6 +105,9 @@ function discussionActivityDetail(previous: MergeRequest, current: MergeRequest)
   if (previous.last_discussion_at && laterIsoTimestamp(current.last_discussion_at, previous.last_discussion_at)) {
     return 'new MR discussion activity';
   }
+  if (!previous.last_discussion_at && current.last_discussion_at) {
+    return 'new MR discussion activity';
+  }
   return null;
 }
 
