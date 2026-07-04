@@ -4,7 +4,7 @@ import * as tls from 'tls';
 import { URL } from 'url';
 import { unknownErrorMessage } from './errorUtils';
 
-export type ProviderReachabilityStatus = 'pass' | 'warn' | 'fail';
+type ProviderReachabilityStatus = 'pass' | 'warn' | 'fail';
 
 export interface ProviderReachabilityTarget {
   name: string;
@@ -12,7 +12,7 @@ export interface ProviderReachabilityTarget {
   url?: string;
 }
 
-export interface ProviderReachabilityResult {
+interface ProviderReachabilityResult {
   name: string;
   status: ProviderReachabilityStatus;
   detail: string;

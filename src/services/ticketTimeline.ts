@@ -2,10 +2,10 @@ import { QueueState, Ticket } from '../state/types';
 import { evidenceChecks, evidenceEnvironmentResults, evidenceNotes, evidenceString } from './evidenceData';
 import { isAttentionRunStatus, runAttentionDetail } from './runAttention';
 
-export type TimelineSource = 'jira' | 'queue' | 'run' | 'evidence' | 'mr' | 'build' | 'ticket';
-export type TimelineSeverity = 'info' | 'success' | 'warning' | 'failure';
+type TimelineSource = 'jira' | 'queue' | 'run' | 'evidence' | 'mr' | 'build' | 'ticket';
+type TimelineSeverity = 'info' | 'success' | 'warning' | 'failure';
 
-export interface TimelineRun {
+interface TimelineRun {
   id: string;
   ticket?: string;
   project?: string;
@@ -31,7 +31,7 @@ export interface TimelineEvent {
   artifactPath?: string;
 }
 
-export interface TicketTimelineInput {
+interface TicketTimelineInput {
   ticketKey: string;
   ticket: Ticket;
   queue?: QueueState | null;

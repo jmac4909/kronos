@@ -16,7 +16,7 @@ export interface SafetyPlan {
   confirmationLabel?: string;
 }
 
-export interface SafetyAssessment {
+interface SafetyAssessment {
   operationId: string;
   title: string;
   target?: string;

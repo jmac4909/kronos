@@ -6,12 +6,12 @@ import { evidenceRecordCount } from './evidenceData';
 import { PlannedAction } from './queuePlanner';
 import { SafetyPlan, SafetyRisk } from './safetyGate';
 
-export interface NextActionContextInput {
+interface NextActionContextInput {
   state: KronosState | null;
   queue: QueueState | null;
 }
 
-export interface NextActionOperationalContext {
+interface NextActionOperationalContext {
   commandId: string;
   commandLabel: string;
   skill: string;
@@ -21,7 +21,7 @@ export interface NextActionOperationalContext {
   summary: string;
 }
 
-export interface NextActionStartDecision {
+interface NextActionStartDecision {
   allowed: boolean;
   commandId: string;
   reason?: string;
