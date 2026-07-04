@@ -2880,7 +2880,7 @@ test('webview diagnostics can re-arm readiness checks after rerender', () => {
     };
     const monitor = webviewDiagnostics.createWebviewReadyMonitor(panel, 'Kronos Rerender Panel', 123);
     assert.equal(typeof monitor.arm, 'function');
-    assert.equal(scheduled.length, 1);
+    assert.equal(scheduled.length, 0);
     assert.equal(monitor({ command: 'noop' }), false);
     assert.equal(cleared.length, 0);
     assert.equal(monitor({
@@ -2888,19 +2888,19 @@ test('webview diagnostics can re-arm readiness checks after rerender', () => {
       webviewName: 'Kronos Rerender Panel',
       readyState: 'complete',
     }), true);
-    assert.equal(cleared.length, 1);
+    assert.equal(cleared.length, 0);
 
+    monitor.arm();
+    assert.equal(scheduled.length, 1);
+    assert.equal(cleared.length, 0);
     monitor.arm();
     assert.equal(scheduled.length, 2);
     assert.equal(cleared.length, 1);
-    monitor.arm();
-    assert.equal(scheduled.length, 3);
-    assert.equal(cleared.length, 2);
     assert.equal(typeof disposeListener, 'function');
     disposeListener();
-    assert.equal(cleared.length, 3);
+    assert.equal(cleared.length, 2);
     monitor.arm();
-    assert.equal(scheduled.length, 3);
+    assert.equal(scheduled.length, 2);
   } finally {
     global.setTimeout = originalSetTimeout;
     global.clearTimeout = originalClearTimeout;
@@ -8464,6 +8464,8 @@ test('security check validates semantic webview script policy', () => {
     "for (const panelId of ['kronosJiraBoard', 'kronosDashboard', 'kronosHumanReviewInbox', 'kronosEvidenceGate', 'kronosAgingReport'])",
     'kronosScriptableWebviewOptions for media-backed scripts',
     'const webviewOptions: vscode.WebviewOptions',
+    ': { enableScripts: true, localResourceRoots: [] }',
+    "createWebviewPanel('sonarReport', `Sonar: ${projectName}`, vscode.ViewColumn.One, { enableScripts: true, localResourceRoots: [] })",
     "'src/services/promptPanelView.ts'",
     "'src/services/recoveryPanelView.ts'",
     "'src/services/humanReviewPanelView.ts'",

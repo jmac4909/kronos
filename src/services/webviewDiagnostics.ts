@@ -39,7 +39,6 @@ export function createWebviewReadyMonitor(panel: WebviewDisposeTarget, webviewNa
     disposed = true;
     clearTimer();
   });
-  arm();
   return monitor;
 }
 

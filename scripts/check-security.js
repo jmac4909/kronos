@@ -222,7 +222,7 @@ function callHasExplicitWebviewScriptPolicy(file, source, call) {
     && /\bwebviewOptions\b/.test(call.text)
     && source.includes('const webviewOptions: vscode.WebviewOptions')
     && source.includes("{ enableScripts: interactive, localResourceRoots: [vscode.Uri.joinPath(options.extensionUri, 'media')] }")
-    && source.includes('{ enableScripts: interactive }')
+    && source.includes('{ enableScripts: interactive, localResourceRoots: [] }')
   ) {
     return true;
   }
@@ -426,6 +426,8 @@ for (const marker of [
   "const logReady = createWebviewReadyMonitor(panel, 'Kronos Jira Board')",
   'logReady.arm();',
   'if (logReady(msg)) { return; }',
+  ': { enableScripts: true, localResourceRoots: [] }',
+  "createWebviewPanel('sonarReport', `Sonar: ${projectName}`, vscode.ViewColumn.One, { enableScripts: true, localResourceRoots: [] })",
   'BOARD_MESSAGE_COMMANDS',
   'function normalizeWebviewCommand',
   'function normalizeBoardMessage',

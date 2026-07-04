@@ -578,7 +578,7 @@ export function openRunCenter(options: RunCenterOptions = {}): void {
   const nonce = interactive ? createWebviewNonce() : '';
   const webviewOptions: vscode.WebviewOptions = interactive && options.extensionUri
     ? { enableScripts: interactive, localResourceRoots: [vscode.Uri.joinPath(options.extensionUri, 'media')] }
-    : { enableScripts: interactive };
+    : { enableScripts: interactive, localResourceRoots: [] };
   const panel = vscode.window.createWebviewPanel(
     'kronosRunCenter',
     'Kronos Run Center',

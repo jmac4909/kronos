@@ -1025,7 +1025,7 @@ function findRunById(runId: string): KronosRun | undefined {
 function kronosScriptableWebviewOptions(extensionUri?: vscode.Uri): vscode.WebviewOptions {
   return extensionUri
     ? { enableScripts: true, localResourceRoots: [vscode.Uri.joinPath(extensionUri, 'media')] }
-    : { enableScripts: true };
+    : { enableScripts: true, localResourceRoots: [] };
 }
 
 function kronosActionPanelScriptUri(panel: vscode.WebviewPanel, extensionUri?: vscode.Uri): string | undefined {
@@ -2843,7 +2843,7 @@ export function activate(context: vscode.ExtensionContext) {
         };
         if (process.env['SONAR_HOST_URL']) { Object.assign(reportInput, { host: process.env['SONAR_HOST_URL'] }); }
         const report = buildSonarReport(reportInput);
-        const panel = vscode.window.createWebviewPanel('sonarReport', `Sonar: ${projectName}`, vscode.ViewColumn.One, { enableScripts: true });
+        const panel = vscode.window.createWebviewPanel('sonarReport', `Sonar: ${projectName}`, vscode.ViewColumn.One, { enableScripts: true, localResourceRoots: [] });
         panel.webview.html = withWebviewCsp(report.html, webviewScriptCspOptions(panel.webview.cspSource, nonce));
 
         const sonarCommands = new Set(['fixSonar', 'openSonar']);
