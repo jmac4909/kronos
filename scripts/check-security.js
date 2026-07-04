@@ -2375,6 +2375,7 @@ for (const [name, source, marker] of [
   ['src/services/agentQualityScore.ts', agentQualityScore, "import { recordString } from './records'"],
   ['src/services/dashboardWorklist.ts', dashboardWorklist, "import { recordString } from './records'"],
   ['src/services/humanReviewInbox.ts', humanReviewInbox, "import { recordString } from './records'"],
+  ['src/services/queueActiveRun.ts', queueActiveRun, "import { recordString } from './records'"],
   ['src/services/runProgress.ts', runProgress, "import { isRecord, recordFromUnknown, recordString } from './records'"],
   ['src/services/ticketTimeline.ts', ticketTimeline, "import { recordString } from './records'"],
   ['src/services/trendMetrics.ts', trendMetrics, "import { isRecord, recordString } from './records'"],
@@ -2643,7 +2644,7 @@ for (const marker of [
   'function runMatchesQueueProject(run: QueueActiveRunLike, item: QueueItem): boolean',
   'function runMatchesQueueProjectScope(run: QueueActiveRunLike, item: QueueItem): boolean',
   'function runMatchesQueueAction(run: QueueActiveRunLike, item: QueueItem): boolean',
-  'runString(run.skill) === skillForAction(item.action)',
+  "recordString(run, 'skill') === skillForAction(item.action)",
 ]) {
   if (!queueActiveRun.includes(marker)) {
     fail(`Missing queue active-run service marker: ${marker}`);

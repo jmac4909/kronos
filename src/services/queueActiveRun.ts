@@ -1,8 +1,10 @@
 import type { QueueItem } from '../state/types';
 import { skillForAction } from './nextActionContext';
+import { recordString } from './records';
 import { isFreshActiveRun } from './runStatus';
 
 interface QueueActiveRunLike {
+  [key: string]: unknown;
   project?: unknown;
   projectPath?: unknown;
   ticket?: unknown;
@@ -32,13 +34,13 @@ function runMatchesQueueItem(run: QueueActiveRunLike, item: QueueItem): boolean 
 }
 
 function runMatchesQueueTicket(run: QueueActiveRunLike, item: QueueItem): boolean {
-  return Boolean(item.ticket && runString(run.ticket) === item.ticket);
+  return Boolean(item.ticket && recordString(run, 'ticket') === item.ticket);
 }
 
 function runMatchesQueueProject(run: QueueActiveRunLike, item: QueueItem): boolean {
   const projects = item.projects || [];
-  const runProject = runString(run.project);
-  const runProjectPath = runString(run.projectPath);
+  const runProject = recordString(run, 'project');
+  const runProjectPath = recordString(run, 'projectPath');
   return Boolean((runProject && projects.includes(runProject)) || (runProjectPath && runProjectPath === item.project_path));
 }
 
@@ -50,9 +52,5 @@ function runMatchesQueueProjectScope(run: QueueActiveRunLike, item: QueueItem): 
 }
 
 function runMatchesQueueAction(run: QueueActiveRunLike, item: QueueItem): boolean {
-  return !item.action || runString(run.skill) === skillForAction(item.action);
-}
-
-function runString(value: unknown): string {
-  return typeof value === 'string' ? value.trim() : '';
+  return !item.action || recordString(run, 'skill') === skillForAction(item.action);
 }

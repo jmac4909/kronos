@@ -3482,6 +3482,7 @@ test('record guard helper centralizes unknown object narrowing', () => {
     'agentQualityScore.ts',
     'dashboardWorklist.ts',
     'humanReviewInbox.ts',
+    'queueActiveRun.ts',
     'runProgress.ts',
     'ticketTimeline.ts',
   ]) {
@@ -3490,7 +3491,7 @@ test('record guard helper centralizes unknown object narrowing', () => {
       ? "import { recordFromUnknown, recordString } from './records'"
       : file === 'runProgress.ts'
         ? "import { isRecord, recordFromUnknown, recordString } from './records'"
-      : "import { recordString } from './records'";
+        : "import { recordString } from './records'";
     assert.ok(source.includes(marker), `${file} should import shared record string helper`);
     assert.equal(source.includes('function runString'), false, `${file} should not carry a local runString helper`);
     assert.equal(source.includes('function eventString'), false, `${file} should not carry a local eventString helper`);
@@ -6213,7 +6214,7 @@ test('queue active-run helper matches active runs without broad fallbacks', () =
     'function runMatchesQueueProject(run: QueueActiveRunLike, item: QueueItem): boolean',
     'function runMatchesQueueProjectScope(run: QueueActiveRunLike, item: QueueItem): boolean',
     'function runMatchesQueueAction(run: QueueActiveRunLike, item: QueueItem): boolean',
-    'runString(run.skill) === skillForAction(item.action)',
+    "recordString(run, 'skill') === skillForAction(item.action)",
   ]) {
     assert.ok(source.includes(marker), marker);
   }
@@ -9832,7 +9833,7 @@ test('tree providers share action labels and icons', () => {
     'function runMatchesQueueProject(run: QueueActiveRunLike, item: QueueItem): boolean',
     'function runMatchesQueueProjectScope(run: QueueActiveRunLike, item: QueueItem): boolean',
     'function runMatchesQueueAction(run: QueueActiveRunLike, item: QueueItem): boolean',
-    'runString(run.skill) === skillForAction(item.action)',
+    "recordString(run, 'skill') === skillForAction(item.action)",
   ]) {
     assert.ok(queueActiveRunSource.includes(marker), marker);
   }
