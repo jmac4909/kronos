@@ -2,14 +2,14 @@ import { Ticket } from '../state/types';
 import { evidenceRecordCount } from './evidenceData';
 import { EvidenceGateResult, evaluateEvidenceGate } from './evidenceGate';
 
-export type QueueRemovalDecisionKind =
+type QueueRemovalDecisionKind =
   | 'allow'
   | 'block_failing_gate'
   | 'block_missing_evidence'
   | 'confirm_failing_gate'
   | 'confirm_missing_evidence';
 
-export interface QueueRemovalDecision {
+interface QueueRemovalDecision {
   kind: QueueRemovalDecisionKind;
   allowed: boolean;
   requiresConfirmation: boolean;

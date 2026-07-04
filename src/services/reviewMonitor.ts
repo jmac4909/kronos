@@ -1,13 +1,12 @@
-import type { MergeRequestStatusNotification } from './mergeRequestNotifications';
 import { describeMergeRequestStatusChange } from './mergeRequestNotifications';
 import type { MergeRequestStatusUpdate } from './ticketMutations';
 
-export type ReviewMonitorDecisionKind = 'deploy_monitor' | 'blocked' | 'notify' | 'none';
+type ReviewMonitorDecisionKind = 'deploy_monitor' | 'blocked' | 'notify' | 'none';
 
-export interface ReviewMonitorDecision {
+interface ReviewMonitorDecision {
   kind: ReviewMonitorDecisionKind;
   message?: string;
-  severity?: MergeRequestStatusNotification['severity'];
+  severity?: 'info' | 'warning';
   url?: string;
 }
 

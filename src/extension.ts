@@ -65,7 +65,7 @@ import { isFreshActiveRun } from './services/runStatus';
 import { isAttentionRunStatus, runAttentionDetail, runAttentionLine } from './services/runAttention';
 import { buildRunCompletionNotification } from './services/runCompletionNotification';
 import { openReviewTicketEntries, reviewBranchTickets as buildReviewBranchTickets, type ReviewBranchTicket, type TicketWithOpenMergeRequest } from './services/reviewWork';
-import { decideReviewMonitorAction, type ReviewMonitorDecision } from './services/reviewMonitor';
+import { decideReviewMonitorAction } from './services/reviewMonitor';
 import { decideQueueRemoval } from './services/queueRemovalPolicy';
 import { deployMonitorAttentionIssue, deployMonitorHandoffCheckName, hasDeployMonitorHandoffIssue, hasHandledDeployMonitorRun, resolveDeployMonitorProject } from './services/deployMonitorHandoff';
 import { actionButton, actionRow, kronosActionPanelScript, kronosOperatorPanelCss, normalizeActionPanelMessage, operatorCommandRow, type ActionPanelMessage } from './services/operatorPanel';
@@ -5684,7 +5684,7 @@ function notifyReviewMergeRequestPollFailure(ticketKey: string, error: unknown):
   });
 }
 
-function notifyReviewMonitorDecision(decision: ReviewMonitorDecision): void {
+function notifyReviewMonitorDecision(decision: ReturnType<typeof decideReviewMonitorAction>): void {
   if (!decision.message) { return; }
   const actions = decision.url ? ['Open MR', 'Open Review'] : ['Open Review'];
   const selection = decision.severity === 'warning'

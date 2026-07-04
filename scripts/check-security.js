@@ -622,7 +622,7 @@ for (const marker of [
   "e.affectsConfiguration('kronos.pollIntervalSec')",
   "e.affectsConfiguration('kronos.sessionPollIntervalMs')",
   "e.affectsConfiguration('kronos.reviewPollIntervalSec')",
-  "import { decideReviewMonitorAction, type ReviewMonitorDecision } from './services/reviewMonitor'",
+  "import { decideReviewMonitorAction } from './services/reviewMonitor'",
   'const REVIEW_POLL_FAILURE_NOTIFICATION_MS = 15 * 60 * 1000',
   "const sessionPollMs = configIntervalMs(config.get<number>('sessionPollIntervalMs', 5000), 5000, 1000)",
   'startBackgroundRefreshPoll(throttledRefresh, configIntervalSecondsMs(config.get<number>(\'pollIntervalSec\', 300), 300, 1))',
@@ -653,7 +653,7 @@ for (const marker of [
   'MR status polling failed:',
   'function rememberReviewTerminalMergeRequestAction',
   'function reviewTerminalMergeRequestActionKey',
-  'function notifyReviewMonitorDecision(decision: ReviewMonitorDecision): void',
+  'function notifyReviewMonitorDecision(decision: ReturnType<typeof decideReviewMonitorAction>): void',
   "const actions = decision.url ? ['Open MR', 'Open Review'] : ['Open Review']",
   "action === 'Open MR' && decision.url",
   'openExternalHttpUrl(decision.url)',
@@ -917,8 +917,8 @@ for (const marker of [
   }
 }
 for (const marker of [
-  'export type ReviewMonitorDecisionKind',
-  'export interface ReviewMonitorDecision',
+  'type ReviewMonitorDecisionKind',
+  'interface ReviewMonitorDecision',
   'export function decideReviewMonitorAction',
   'update.mergedNow',
   "kind: 'deploy_monitor'",
@@ -3041,8 +3041,8 @@ for (const marker of [
 }
 
 for (const marker of [
-  'export type QueueRemovalDecisionKind',
-  'export interface QueueRemovalDecision',
+  'type QueueRemovalDecisionKind',
+  'interface QueueRemovalDecision',
   'export function decideQueueRemoval',
   "'block_failing_gate'",
   "'confirm_failing_gate'",

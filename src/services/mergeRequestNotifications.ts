@@ -1,7 +1,7 @@
 import type { MergeRequest } from '../state/types';
 import type { MergeRequestStatusUpdate } from './ticketMutations';
 
-export interface MergeRequestStatusNotification {
+interface MergeRequestStatusNotification {
   severity: 'info' | 'warning';
   message: string;
 }
