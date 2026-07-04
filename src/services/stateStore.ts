@@ -59,12 +59,8 @@ const DEFAULT_OVERNIGHT = {
   vpn_check_interval_sec: 60,
 };
 
-const VALID_TICKET_ACTIONS = TICKET_ACTIONS;
-
-const VALID_QUEUE_ACTIONS = QUEUE_ACTIONS;
-
-const VALID_TICKET_ACTION_SET = new Set<string>(VALID_TICKET_ACTIONS);
-const VALID_QUEUE_ACTION_SET = new Set<string>(VALID_QUEUE_ACTIONS);
+const VALID_TICKET_ACTION_SET = new Set<string>(TICKET_ACTIONS);
+const VALID_QUEUE_ACTION_SET = new Set<string>(QUEUE_ACTIONS);
 
 export function readStateFile(): KronosState | null {
   if (!fs.existsSync(STATE_FILE)) { return null; }
