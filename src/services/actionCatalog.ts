@@ -13,7 +13,7 @@ export const QUEUE_ACTIONS = [...TICKET_ACTIONS, 'refresh'] as const;
 
 type ActionName = typeof QUEUE_ACTIONS[number];
 
-export interface ActionIconSpec {
+interface ActionIconSpec {
   id: string;
   color?: string;
 }

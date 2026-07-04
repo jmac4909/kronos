@@ -9199,7 +9199,7 @@ test('tree providers share action labels and icons', () => {
     'queue active-run matching should not mark a row active from ticket-only or project-only fallbacks',
   );
 
-  assert.ok(actionIcons.includes("import { queueActionIconSpec, ticketActionIconSpec, type ActionIconSpec } from '../services/actionCatalog'"));
+  assert.ok(actionIcons.includes("import { queueActionIconSpec, ticketActionIconSpec } from '../services/actionCatalog'"));
   assert.ok(actionCatalog.includes("ticketIcon: { id: 'tools'"), 'shared icons should use the valid tools codicon');
   assert.equal(actionIcons.includes("'wrench'"), false, 'shared action icons should not use the invalid wrench codicon');
   for (const marker of [

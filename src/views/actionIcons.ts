@@ -1,9 +1,14 @@
 import * as vscode from 'vscode';
-import { queueActionIconSpec, ticketActionIconSpec, type ActionIconSpec } from '../services/actionCatalog';
+import { queueActionIconSpec, ticketActionIconSpec } from '../services/actionCatalog';
 
 interface ActionThemeIcon {
   id: string;
   color?: vscode.ThemeColor;
+}
+
+interface ActionIconSpec {
+  id: string;
+  color?: string;
 }
 
 export function ticketActionIcon(action: string): ActionThemeIcon {
