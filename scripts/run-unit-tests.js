@@ -2660,19 +2660,6 @@ test('webview diagnostics centralize host ready monitoring', () => {
   const originalInfo = console.info;
   console.info = (...args) => infoMessages.push(args.join(' '));
   try {
-    assert.equal(webviewDiagnostics.logWebviewReadyMessage({ command: 'other' }, 'Kronos Test Panel'), false);
-    assert.equal(webviewDiagnostics.logWebviewReadyMessage({
-      command: webviewSecurity.WEBVIEW_READY_COMMAND,
-      readyState: 'complete',
-    }, 'Kronos Test Panel'), true);
-    assert.match(infoMessages.join('\n'), /Kronos Test Panel/);
-    assert.equal(webviewDiagnostics.logWebviewReadyMessage({
-      command: webviewSecurity.WEBVIEW_READY_COMMAND,
-      webviewName: 'Kronos action panel',
-      readyState: 'complete',
-    }, 'Specific Panel'), true);
-    assert.match(infoMessages.join('\n'), /Specific Panel/);
-
     let disposeListener;
     const panel = {
       onDidDispose(listener) {
@@ -2684,9 +2671,22 @@ test('webview diagnostics centralize host ready monitoring', () => {
     assert.equal(monitor({ command: 'noop' }), false);
     assert.equal(monitor({
       command: webviewSecurity.WEBVIEW_READY_COMMAND,
+      readyState: 'complete',
+    }), true);
+    assert.match(infoMessages.join('\n'), /Kronos Monitor Panel/);
+    assert.equal(monitor({
+      command: webviewSecurity.WEBVIEW_READY_COMMAND,
       webviewName: 'Kronos Monitor Panel',
       readyState: 'interactive',
     }), true);
+    assert.match(infoMessages.join('\n'), /interactive/);
+    const specificPanelMonitor = webviewDiagnostics.createWebviewReadyMonitor(panel, 'Specific Panel', 10000);
+    assert.equal(specificPanelMonitor({
+      command: webviewSecurity.WEBVIEW_READY_COMMAND,
+      webviewName: 'Kronos action panel',
+      readyState: 'complete',
+    }), true);
+    assert.match(infoMessages.join('\n'), /Specific Panel/);
     assert.equal(typeof disposeListener, 'function');
     disposeListener();
   } finally {
@@ -2865,21 +2865,21 @@ test('error utils normalize unknown error shapes', () => {
 test('CLI probes resolve gcloud.cmd on Windows', () => {
   const gcloudCmd = 'C:\\Users\\dev\\AppData\\Local\\Google\\Cloud SDK\\google-cloud-sdk\\bin\\gcloud.cmd';
   const env = { LocalAppData: 'C:\\Users\\dev\\AppData\\Local' };
-  assert.equal(
-    cliProbes.resolveGcloudCommand({
+  assert.deepEqual(
+    cliProbes.resolveGcloudCommandStatus({
       platform: 'win32',
       env,
       existsSync: filePath => filePath === gcloudCmd,
     }),
-    gcloudCmd,
+    { command: gcloudCmd, available: true },
   );
-  assert.equal(
-    cliProbes.resolveGcloudCommand({
+  assert.deepEqual(
+    cliProbes.resolveGcloudCommandStatus({
       platform: 'win32',
       env: {},
       existsSync: () => false,
     }),
-    'gcloud.cmd',
+    { command: 'gcloud.cmd', available: false },
   );
   assert.deepEqual(
     cliProbes.resolveGcloudCommandStatus({
@@ -6653,10 +6653,6 @@ test('provider reachability probes configured endpoints without secrets', async 
     assert.equal(results.find(result => result.name === 'Disabled Provider').status, 'pass');
     assert.equal(results.find(result => result.name === 'Bad Scheme').status, 'fail');
     assert.doesNotMatch(results.find(result => result.name === 'Local HEAD').detail, /secret/);
-    const systemCa = providerReachability.systemCaCertificatesForHttps();
-    if (systemCa) {
-      assert.equal(systemCa.length > 0, true);
-    }
   } finally {
     await new Promise(resolve => server.close(resolve));
   }

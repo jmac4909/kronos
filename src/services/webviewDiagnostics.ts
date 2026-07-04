@@ -42,7 +42,7 @@ export function createWebviewReadyMonitor(panel: WebviewDisposeTarget, webviewNa
   return monitor;
 }
 
-export function logWebviewReadyMessage(raw: unknown, fallbackWebviewName = 'Kronos webview'): boolean {
+function logWebviewReadyMessage(raw: unknown, fallbackWebviewName = 'Kronos webview'): boolean {
   if (!raw || typeof raw !== 'object') { return false; }
   const message = raw as { command?: unknown; webviewName?: unknown; readyState?: unknown; userAgent?: unknown };
   if (message.command !== WEBVIEW_READY_COMMAND) { return false; }

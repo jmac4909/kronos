@@ -1,11 +1,11 @@
 import type { Ticket } from '../state/types';
 import { isAttentionRunStatus, runAttentionLine } from './runAttention';
 
-export type RunCompletionNotificationKind = 'review_ready' | 'attention';
-export type RunCompletionNotificationSeverity = 'info' | 'warning';
-export type RunCompletionReviewTarget = 'mr' | 'ticket';
+type RunCompletionNotificationKind = 'review_ready' | 'attention';
+type RunCompletionNotificationSeverity = 'info' | 'warning';
+type RunCompletionReviewTarget = 'mr' | 'ticket';
 
-export interface RunCompletionNotification {
+interface RunCompletionNotification {
   kind: RunCompletionNotificationKind;
   severity: RunCompletionNotificationSeverity;
   message: string;

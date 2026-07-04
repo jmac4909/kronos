@@ -118,7 +118,7 @@ function safeUrlLabel(url: URL): string {
   return `${url.protocol}//${url.host}${path}`;
 }
 
-export function systemCaCertificatesForHttps(): string[] | undefined {
+function systemCaCertificatesForHttps(): string[] | undefined {
   const getCACertificates = (tls as TlsWithCaCertificates).getCACertificates;
   if (typeof getCACertificates !== 'function') {
     return undefined;

@@ -2399,7 +2399,7 @@ for (const marker of [
   'export interface WebviewReadyMonitor',
   'arm(): void',
   'export function createWebviewReadyMonitor',
-  'export function logWebviewReadyMessage',
+  'function logWebviewReadyMessage',
   'const arm = (): void =>',
   'reportedReady = false',
   'monitor.arm = arm',
@@ -3128,8 +3128,8 @@ for (const marker of [
 }
 
 for (const marker of [
-  'export type RunCompletionNotificationKind',
-  'export interface RunCompletionNotification',
+  'type RunCompletionNotificationKind',
+  'interface RunCompletionNotification',
   'export function buildRunCompletionNotification',
   "status === 'waiting_for_review'",
   "kind: 'review_ready'",

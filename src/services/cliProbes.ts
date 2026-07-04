@@ -114,10 +114,6 @@ export function resolveGcloudCommandStatus(options: Pick<CliProbeOptions, 'platf
   };
 }
 
-export function resolveGcloudCommand(options: Pick<CliProbeOptions, 'platform' | 'env' | 'existsSync'> = {}): string {
-  return resolveGcloudCommandStatus(options).command;
-}
-
 export function commandNeedsCmdWrapper(command: string, platform = process.platform): boolean {
   return platform === 'win32' && /\.(cmd|bat)$/i.test(command);
 }
