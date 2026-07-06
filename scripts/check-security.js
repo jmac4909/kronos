@@ -1084,8 +1084,10 @@ for (const marker of [
   }
 }
 for (const marker of [
+  "import { arrayFromUnknown } from './records'",
   "export const REVIEW_SEEN_KEYS_STORAGE_KEY = 'kronos.review.seenKeys.v1'",
   'export function normalizeReviewSeenKeys',
+  'for (const item of arrayFromUnknown(value))',
   'export function planNewReviewNotification',
   'nextNotifiedKeys',
   'newReviewNotificationMessage',
@@ -2883,7 +2885,7 @@ for (const [name, source, marker] of [
   ['src/services/runCompletionNotification.ts', runCompletionNotification, "import { recordFromUnknown, recordString } from './records'"],
   ['src/services/runProgress.ts', runProgress, "import { recordsFromUnknown, recordFromUnknown, recordString } from './records'"],
   ['src/services/queueMutations.ts', queueMutations, "import { recordFromUnknown } from './records'"],
-  ['src/services/postRunReadiness.ts', postRunReadiness, "import { recordFromUnknown } from './records'"],
+  ['src/services/postRunReadiness.ts', postRunReadiness, "import { arrayFromUnknown, recordFromUnknown } from './records'"],
 ]) {
   if (!source.includes(marker)) {
     fail(`${name} must import the shared unknown-record helper.`);
@@ -3018,6 +3020,7 @@ for (const marker of [
   'function normalizeDiscoveredProjects',
   'function normalizeDiscoveredProject',
   "normalizeDiscoveredProjects(data['candidates'])",
+  'for (const item of arrayFromUnknown(value))',
   'export function registerProject',
   'export function addAdhocTask',
   'export function completeAdhocTask',
@@ -3673,7 +3676,7 @@ for (const forbidden of [
 }
 for (const marker of [
   "import type { SonarIssue } from './sonarReportView'",
-  "import { recordFromUnknown } from './records'",
+  "import { arrayFromUnknown, recordFromUnknown } from './records'",
   'export interface SonarBranchPickItem',
   'export function buildSonarBranchPickItems',
   'export function normalizeSonarIssueCommandList(value: unknown): SonarIssue[]',
@@ -4886,7 +4889,8 @@ for (const marker of [
   'exitCode === 124',
   "skill.includes('sonar')",
   "skill.includes('verify')",
-  "import { recordFromUnknown } from './records'",
+  "import { arrayFromUnknown, recordFromUnknown } from './records'",
+  'arrayFromUnknown(value).flatMap',
   'function runString(value: unknown): string',
   'function runText(value: unknown): string | undefined',
   'function runFailureReason(record: Record<string, unknown>): string',

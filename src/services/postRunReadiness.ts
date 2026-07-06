@@ -6,7 +6,7 @@ import { evidenceChecks, evidenceNotes, evidenceString } from './evidenceData';
 import { runProgressSummary } from './runProgress';
 import { isSuccessfulRunStatus, terminalRunOutcome } from './runStatus';
 import { escapeRegExp } from './regexp';
-import { recordFromUnknown } from './records';
+import { arrayFromUnknown, recordFromUnknown } from './records';
 
 type PostRunReadinessStatus = 'ready' | 'needs_human' | 'blocked' | 'not_ready' | 'unknown';
 export type RunFailureKind = 'none' | 'auth' | 'model' | 'script' | 'git' | 'build' | 'test' | 'sonar' | 'timeout' | 'cancelled' | 'unknown';
@@ -377,8 +377,7 @@ function failureSummaryDetail(kind: RunFailureKind, reason: string): string {
 }
 
 function runEventDetails(value: unknown): unknown[] {
-  if (!Array.isArray(value)) { return []; }
-  return value.flatMap(event => {
+  return arrayFromUnknown(value).flatMap(event => {
     const record = recordFromUnknown(event);
     return [record['label'], record['detail']];
   });

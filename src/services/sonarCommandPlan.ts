@@ -1,5 +1,5 @@
 import type { SonarIssue } from './sonarReportView';
-import { recordFromUnknown } from './records';
+import { arrayFromUnknown, recordFromUnknown } from './records';
 
 interface SonarBranchSummary {
   name: string;
@@ -35,8 +35,7 @@ export function buildSonarBranchPickItems(
 }
 
 export function normalizeSonarIssueCommandList(value: unknown): SonarIssue[] {
-  if (!Array.isArray(value)) { return []; }
-  return value
+  return arrayFromUnknown(value)
     .map(normalizeSonarIssueCommandValue)
     .filter((issue): issue is SonarIssue => Boolean(issue));
 }

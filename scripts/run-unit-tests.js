@@ -3851,7 +3851,7 @@ test('sonar command plan normalizes issue payloads and builds fix instructions',
   const source = readSourceFixture('src', 'services', 'sonarCommandPlan.ts');
   for (const marker of [
     "import type { SonarIssue } from './sonarReportView'",
-    "import { recordFromUnknown } from './records'",
+    "import { arrayFromUnknown, recordFromUnknown } from './records'",
     'export function normalizeSonarIssueCommandList(value: unknown): SonarIssue[]',
     'export function buildSonarBranchPickItems',
     'export function formatSonarIssuePromptLine(issue: SonarIssue): string',
@@ -4653,6 +4653,9 @@ test('review notification helpers normalize seen keys and plan new-item toasts',
   assert.equal(reviewNotifications.normalizeReviewSeenKeys(undefined), undefined);
   assert.deepEqual(reviewNotifications.normalizeReviewSeenKeys('bad'), []);
   assert.deepEqual(reviewNotifications.normalizeReviewSeenKeys([' K-2 ', 'K-1', '', 42, 'K-2']), ['K-1', 'K-2']);
+  const source = readSourceFixture('src', 'services', 'reviewNotifications.ts');
+  assert.ok(source.includes("import { arrayFromUnknown } from './records'"));
+  assert.ok(source.includes('for (const item of arrayFromUnknown(value))'));
 
   const items = [
     { ticketKey: 'K-1', activityKey: 'K-1|mr:11|opened|approved', mrIid: 11, activity: 'approved' },
@@ -8082,6 +8085,7 @@ test('state script adapter keeps raw JSON payloads unknown until normalized', ()
     "parseJsonWithLabel(discoverProjects(options), 'kronos_state.py --discover', { includePreview: true })",
     "import { arrayFromUnknown, isRecord as isPlainObject } from './records'",
     "import { parseJsonWithLabel } from './jsonFiles'",
+    'for (const item of arrayFromUnknown(value))',
     "completed: arrayFromUnknown(parsed['completed'])",
     "ready_to_go: arrayFromUnknown(parsed['ready_to_go'])",
   ]) {
@@ -9823,13 +9827,14 @@ test('post-run readiness distinguishes process completion from handoff readiness
     "import { isPassingBuildStatus } from './buildStatus'",
     'function isPassingSonar',
     'export function classifyRunFailure(run: unknown): RunFailureKind',
-    "import { recordFromUnknown } from './records'",
+    "import { arrayFromUnknown, recordFromUnknown } from './records'",
     'function runCompletedForEvidence(record: Record<string, unknown>): boolean',
     'function runString(value: unknown): string',
     'function runText(value: unknown): string | undefined',
     'function runFailureReason(record: Record<string, unknown>): string',
     'function failureSummaryDetail(kind: RunFailureKind, reason: string): string',
     'function runEventDetails(value: unknown): unknown[]',
+    'arrayFromUnknown(value).flatMap',
     'function mergeRequestChangedFileCount(ticket?: Ticket): number | undefined',
     'function firstStringField(record: Record<string, unknown>, keys: string[]): string | undefined',
     'function firstNumberField(record: Record<string, unknown>, keys: string[]): number | undefined',
@@ -11431,6 +11436,7 @@ test('extension Sonar commands normalize webview and issue payloads', () => {
   }
   for (const marker of [
     'function normalizeSonarIssueCommandValue(value: unknown): SonarIssue | null',
+    "import { arrayFromUnknown, recordFromUnknown } from './records'",
     'export function normalizeSonarIssueCommandList(value: unknown): SonarIssue[]',
     'export function buildSonarBranchPickItems',
     'export function formatSonarIssuePromptLine(issue: SonarIssue): string',

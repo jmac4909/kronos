@@ -1,3 +1,5 @@
+import { arrayFromUnknown } from './records';
+
 export const REVIEW_SEEN_KEYS_STORAGE_KEY = 'kronos.review.seenKeys.v1';
 
 export interface ReviewNotificationItem {
@@ -14,9 +16,8 @@ export interface NewReviewNotificationPlan {
 
 export function normalizeReviewSeenKeys(value: unknown): string[] | undefined {
   if (value === undefined) { return undefined; }
-  if (!Array.isArray(value)) { return []; }
   const keys = new Set<string>();
-  for (const item of value) {
+  for (const item of arrayFromUnknown(value)) {
     if (typeof item === 'string' && item.trim()) {
       keys.add(item.trim());
     }
