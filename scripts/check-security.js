@@ -5148,9 +5148,24 @@ for (const marker of [
   'repairRequiredPromptTemplates',
   'STARTER_PROMPT_VARIABLES',
   'Rendered prompt still contains one or more unresolved {{VARIABLE}} placeholders.',
+  "import { arrayFromUnknown, finiteNumberFromUnknown, isRecord, recordString, trimmedStringFromUnknown } from './records'",
+  'function promptHistorySnapshotFromUnknown(raw: unknown): PromptHistorySnapshot | null',
+  'function promptHistoryTemplateFromUnknown(value: unknown): PromptHistoryTemplate | null',
+  'if (!isRecord(raw)) { return null; }',
+  "const templatesValue = raw['templates']",
+  'templateCount: templates.length',
+  "variables: arrayFromUnknown(value['variables']).map(item => trimmedStringFromUnknown(item)).filter(Boolean)",
 ]) {
   if (!promptManager.includes(marker)) {
     fail(`Missing prompt manager marker: ${marker}`);
+  }
+}
+for (const marker of [
+  'const raw = readJsonFile(filePath) as PromptHistorySnapshot',
+  "if (!raw || typeof raw !== 'object' || !Array.isArray(raw.templates)) { return null; }",
+]) {
+  if (promptManager.includes(marker)) {
+    fail(`Prompt manager should normalize prompt history snapshots instead of ${marker}.`);
   }
 }
 if (promptManager.includes('placeholder(s)')) {

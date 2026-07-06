@@ -6,6 +6,7 @@ import { KRONOS_DIR } from './stateStore';
 import { unknownErrorMessage } from './errorUtils';
 import { readJsonFile } from './jsonFiles';
 import { escapeRegExp } from './regexp';
+import { arrayFromUnknown, finiteNumberFromUnknown, isRecord, recordString, trimmedStringFromUnknown } from './records';
 
 const GLOBAL_PROMPTS_DIR = path.join(KRONOS_DIR, 'prompts');
 const PROMPT_HISTORY_DIR = path.join(KRONOS_DIR, 'prompt-history');
@@ -376,12 +377,48 @@ function promptSnapshotPath(snapshotId: string): string {
 
 function readPromptSnapshot(filePath: string): PromptHistorySnapshot | null {
   try {
-    const raw = readJsonFile(filePath) as PromptHistorySnapshot;
-    if (!raw || typeof raw !== 'object' || !Array.isArray(raw.templates)) { return null; }
-    return raw;
+    return promptHistorySnapshotFromUnknown(readJsonFile(filePath));
   } catch {
     return null;
   }
+}
+
+function promptHistorySnapshotFromUnknown(raw: unknown): PromptHistorySnapshot | null {
+  if (!isRecord(raw)) { return null; }
+  const templatesValue = raw['templates'];
+  if (!Array.isArray(templatesValue)) { return null; }
+  const templates = templatesValue
+    .map(promptHistoryTemplateFromUnknown)
+    .filter((template): template is PromptHistoryTemplate => Boolean(template))
+    .sort(compareHistoryTemplates);
+  const snapshot: PromptHistorySnapshot = {
+    id: recordString(raw, 'id'),
+    createdAt: recordString(raw, 'createdAt'),
+    scope: recordString(raw, 'scope'),
+    templateCount: templates.length,
+    templates,
+  };
+  const projectPath = recordString(raw, 'projectPath');
+  if (projectPath) { snapshot.projectPath = projectPath; }
+  return snapshot;
+}
+
+function promptHistoryTemplateFromUnknown(value: unknown): PromptHistoryTemplate | null {
+  if (!isRecord(value)) { return null; }
+  const source = recordString(value, 'source');
+  if (source !== 'project' && source !== 'global') { return null; }
+  const name = recordString(value, 'name');
+  const templatePath = recordString(value, 'path');
+  if (!name || !templatePath) { return null; }
+  return {
+    name,
+    path: templatePath,
+    source,
+    hash: recordString(value, 'hash'),
+    modifiedAt: recordString(value, 'modifiedAt'),
+    bytes: finiteNumberFromUnknown(value['bytes']),
+    variables: arrayFromUnknown(value['variables']).map(item => trimmedStringFromUnknown(item)).filter(Boolean),
+  };
 }
 
 function writeJsonAtomic(filePath: string, data: unknown): void {

@@ -546,6 +546,49 @@ test('prompt manager snapshots prompt history and diffs metadata changes', () =>
   assert.ok(diff.changes.some(change => change.kind === 'changed' && change.name === 'alpha' && change.afterVariables.includes('TWO')));
   assert.ok(fs.existsSync(secondPath));
   assert.equal(promptManager.latestPromptHistorySnapshot('test-history').id, second.id);
+
+  const malformedSnapshotId = '2026-07-01T09-00-00-000Z-test-history-malformed';
+  fs.writeFileSync(path.join(kronosTestPath('prompt-history'), `${malformedSnapshotId}.json`), JSON.stringify({
+    id: malformedSnapshotId,
+    createdAt: '2026-07-01T09:00:00.000Z',
+    scope: 'test-history',
+    templateCount: 3,
+    templates: [
+      { name: ' delta ', path: ' /repo/delta.md ', source: 'project', hash: ' h ', modifiedAt: ' m ', bytes: '12', variables: [' THREE ', 7, 'FOUR'] },
+      null,
+      { name: 'bad-source', path: '/repo/bad.md', source: 'external' },
+    ],
+  }));
+  const malformedSnapshot = promptManager.listPromptHistorySnapshots(10).find(snapshot => snapshot.id === malformedSnapshotId);
+  assert.equal(malformedSnapshot.templateCount, 1);
+  assert.deepEqual(malformedSnapshot.templates[0], {
+    name: 'delta',
+    path: '/repo/delta.md',
+    source: 'project',
+    hash: 'h',
+    modifiedAt: 'm',
+    bytes: 12,
+    variables: ['THREE', 'FOUR'],
+  });
+
+  const source = readSourceFixture('src', 'services', 'promptManager.ts');
+  for (const marker of [
+    "import { arrayFromUnknown, finiteNumberFromUnknown, isRecord, recordString, trimmedStringFromUnknown } from './records'",
+    'function promptHistorySnapshotFromUnknown(raw: unknown): PromptHistorySnapshot | null',
+    'function promptHistoryTemplateFromUnknown(value: unknown): PromptHistoryTemplate | null',
+    'if (!isRecord(raw)) { return null; }',
+    "const templatesValue = raw['templates']",
+    'templateCount: templates.length',
+    "variables: arrayFromUnknown(value['variables']).map(item => trimmedStringFromUnknown(item)).filter(Boolean)",
+  ]) {
+    assert.ok(source.includes(marker), marker);
+  }
+  for (const marker of [
+    'const raw = readJsonFile(filePath) as PromptHistorySnapshot',
+    "if (!raw || typeof raw !== 'object' || !Array.isArray(raw.templates)) { return null; }",
+  ]) {
+    assert.equal(source.includes(marker), false, marker);
+  }
 });
 
 test('prompt manager keeps long prompt history scopes in distinct snapshot files', () => {
