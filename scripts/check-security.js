@@ -4686,12 +4686,17 @@ for (const marker of [
   'Evidence readiness',
   'Build and review health',
   'Retry discipline',
+  "import { countLabel } from './countLabels'",
   "import { isActiveRun, isFailedOrCancelledRunStatus, isSuccessfulRunStatus } from './runStatus'",
   "isSuccessfulRunStatus(recordString(run, 'status'))",
   "isFailedOrCancelledRunStatus(recordString(run, 'status'))",
   'gradeForScore',
   'const runs = runLikeRecordsFromUnknown(input.runs)',
   "import { recordString } from './records'",
+  "countLabel(totalRuns, 'run')",
+  "countLabel(gateFailures, 'failing evidence gate')",
+  "countLabel(needsHumanRuns, 'needs-human run')",
+  "countLabel(changesRequestedMrs, 'change-requested MR')",
 ]) {
   if (!agentQualityScore.includes(marker)) {
     fail(`Missing agent quality score marker: ${marker}`);
@@ -4710,6 +4715,11 @@ for (const forbidden of [
 }
 if (agentQualityScore.includes('type RunQualityRecord = RunRecord & Record<string, any>')) {
   fail('Agent quality run records must preserve unknown extension fields.');
+}
+for (const forbidden of ['build(s)', 'MR(s)', 'evidence gate(s)', 'run(s)']) {
+  if (agentQualityScore.includes(forbidden)) {
+    fail(`Agent quality score must use the shared count label helper instead of ${forbidden}.`);
+  }
 }
 
 for (const marker of [

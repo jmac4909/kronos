@@ -5,6 +5,7 @@ import { evaluateEvidenceGates } from './evidenceGate';
 import { isActiveRun, isFailedOrCancelledRunStatus, isSuccessfulRunStatus } from './runStatus';
 import { recordString } from './records';
 import { hasRetryMetadata, runLikeRecordsFromUnknown } from './runRecords';
+import { countLabel } from './countLabels';
 
 interface QualityComponent {
   label: string;
@@ -61,37 +62,37 @@ export function computeAgentQualityScore(input: {
       label: 'Run completion',
       max: 25,
       score: proportionalScore(completedRuns, totalRuns, 25),
-      detail: totalRuns === 0 ? 'No persisted runs yet.' : `${completedRuns}/${totalRuns} runs completed.`,
+      detail: totalRuns === 0 ? 'No persisted runs yet.' : `${completedRuns}/${countLabel(totalRuns, 'run')} completed.`,
     },
     {
       label: 'Low run failure',
       max: 20,
       score: inverseProportionalScore(failedRuns, totalRuns, 20),
-      detail: totalRuns === 0 ? 'No persisted runs yet.' : `${failedRuns}/${totalRuns} runs failed or were cancelled.`,
+      detail: totalRuns === 0 ? 'No persisted runs yet.' : `${failedRuns}/${countLabel(totalRuns, 'run')} failed or were cancelled.`,
     },
     {
       label: 'Low manual intervention',
       max: 15,
       score: inverseProportionalScore(needsHumanRuns, totalRuns, 15),
-      detail: totalRuns === 0 ? 'No persisted runs yet.' : `${needsHumanRuns}/${totalRuns} runs need human recovery.`,
+      detail: totalRuns === 0 ? 'No persisted runs yet.' : `${needsHumanRuns}/${countLabel(totalRuns, 'run')} need human recovery.`,
     },
     {
       label: 'Evidence readiness',
       max: 20,
       score: evidenceReadinessScore(gatePasses, gateWarnings, gateFailures, reviewRelevantGates.length),
-      detail: reviewRelevantGates.length === 0 ? 'No review-ready tickets yet.' : `${gatePasses} passing, ${gateWarnings} warning, ${gateFailures} failing evidence gates.`,
+      detail: reviewRelevantGates.length === 0 ? 'No review-ready tickets yet.' : `${countLabel(gatePasses, 'passing evidence gate')}, ${countLabel(gateWarnings, 'warning evidence gate')}, ${countLabel(gateFailures, 'failing evidence gate')}.`,
     },
     {
       label: 'Build and review health',
       max: 15,
       score: buildReviewScore(successfulBuilds, failedBuilds, approvedMrs, changesRequestedMrs),
-      detail: `${successfulBuilds} successful build(s), ${failedBuilds} failed build(s), ${approvedMrs} approved MR(s), ${changesRequestedMrs} change-requested MR(s).`,
+      detail: `${countLabel(successfulBuilds, 'successful build')}, ${countLabel(failedBuilds, 'failed build')}, ${countLabel(approvedMrs, 'approved MR')}, ${countLabel(changesRequestedMrs, 'change-requested MR')}.`,
     },
     {
       label: 'Retry discipline',
       max: 5,
       score: inverseProportionalScore(retryRuns, totalRuns, 5),
-      detail: totalRuns === 0 ? 'No persisted runs yet.' : `${retryRuns}/${totalRuns} runs are retries.`,
+      detail: totalRuns === 0 ? 'No persisted runs yet.' : `${retryRuns}/${countLabel(totalRuns, 'run')} are retries.`,
     },
   ];
 
@@ -99,7 +100,7 @@ export function computeAgentQualityScore(input: {
   return {
     score,
     grade: gradeForScore(score),
-    summary: `${score}/100 (${gradeForScore(score)}) - ${completedRuns}/${totalRuns} completed runs, ${gateFailures} failing evidence gate(s), ${needsHumanRuns} needs-human run(s).`,
+    summary: `${score}/100 (${gradeForScore(score)}) - ${completedRuns}/${countLabel(totalRuns, 'run')} completed, ${countLabel(gateFailures, 'failing evidence gate')}, ${countLabel(needsHumanRuns, 'needs-human run')}.`,
     components,
     metrics: [
       { label: 'Runs', value: String(totalRuns) },

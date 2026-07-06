@@ -12205,20 +12205,28 @@ test('agent quality score combines run outcomes, evidence gates, builds, reviews
 
   assert.ok(score.score < 80);
   assert.ok(score.components.some(component => component.label === 'Run completion'));
-  assert.ok(score.components.some(component => component.label === 'Evidence readiness' && component.detail.includes('failing evidence gates')));
+  assert.ok(score.components.some(component => component.label === 'Evidence readiness' && component.detail.includes('failing evidence gate')));
   assert.ok(score.metrics.some(metric => metric.label === 'Retries' && metric.value === '1'));
   assert.match(score.summary, /needs-human run/);
 
   const source = readSourceFixture('src', 'services', 'agentQualityScore.ts');
   assert.ok(source.includes("import { isActiveRun, isFailedOrCancelledRunStatus, isSuccessfulRunStatus } from './runStatus'"));
   assert.ok(source.includes("import { hasRetryMetadata, runLikeRecordsFromUnknown } from './runRecords'"));
+  assert.ok(source.includes("import { countLabel } from './countLabels'"));
   assert.ok(source.includes('runs: unknown[]'));
   assert.ok(source.includes('const runs = runLikeRecordsFromUnknown(input.runs)'));
   assert.ok(source.includes("isSuccessfulRunStatus(recordString(run, 'status'))"));
   assert.ok(source.includes("isFailedOrCancelledRunStatus(recordString(run, 'status'))"));
+  assert.ok(source.includes("countLabel(totalRuns, 'run')"));
+  assert.ok(source.includes("countLabel(gateFailures, 'failing evidence gate')"));
+  assert.ok(source.includes("countLabel(needsHumanRuns, 'needs-human run')"));
+  assert.ok(source.includes("countLabel(changesRequestedMrs, 'change-requested MR')"));
   assert.equal(source.includes('const SUCCESS_RUN_STATUSES'), false);
   assert.equal(source.includes('filter(isRunLikeRecord)'), false);
   assert.equal(source.includes('type RunQualityRecord'), false);
   assert.equal(source.includes('type RunQualityRecord = RunRecord & Record<string, any>'), false);
   assert.equal(source.includes('function hasRetryMetadata'), false);
+  for (const marker of ['build(s)', 'MR(s)', 'evidence gate(s)', 'run(s)']) {
+    assert.equal(source.includes(marker), false, marker);
+  }
 });
