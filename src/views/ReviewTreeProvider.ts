@@ -3,6 +3,7 @@ import { KronosState } from '../state/KronosState';
 import { Ticket } from '../state/types';
 import { mergeRequestReviewStatusLabel } from '../services/mergeRequestLabels';
 import { compactSingleLineText } from '../services/textFormat';
+import { ticketStringArray } from '../services/ticketFields';
 import { TicketFilter, describeTicketFilter, hasTicketFilter, ticketMatchesFilter } from '../services/ticketFilters';
 import { openReviewTicketEntries } from '../services/reviewWork';
 
@@ -71,7 +72,7 @@ export class ReviewTreeProvider implements vscode.TreeDataProvider<ReviewItem> {
         const summary: NewReviewItemSummary = {
           ticketKey,
           summary: ticket.summary,
-          projectNames: ticket.projects || [],
+          projectNames: ticketStringArray(ticket.projects),
           activityKey,
         };
         if (ticket.mr?.iid !== undefined) { summary.mrIid = ticket.mr.iid; }

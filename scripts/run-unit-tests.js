@@ -11949,6 +11949,7 @@ test('tree providers share action labels and icons', () => {
     "import { formatRunProgress } from '../services/runProgress'",
     "import { activeRunForQueueItem } from '../services/queueActiveRun'",
     "import { configIntervalMs } from '../services/intervalConfig'",
+    "import { ticketStringArray } from '../services/ticketFields'",
     'const activeRuns = listRuns().filter(run => isFreshActiveRun(run))',
     'private hadActiveRuns = false',
     'this.hadActiveRuns = activeRuns.length > 0',
@@ -11958,13 +11959,16 @@ test('tree providers share action labels and icons', () => {
     'new QueueTreeItem(item, idx, activeRunForQueueItem(item, activeRuns))',
     'startPolling(intervalMs: number): void',
     'const safeIntervalMs = configIntervalMs(intervalMs, 5000)',
+    'const projectLabel = ticketStringArray(item.projects).join(\', \') || \'unlinked\'',
     'const progress = activeRun ? formatRunProgress(activeRun) :',
+    '${projectLabel} / ${item.ticket || \'refresh\'}',
     'Active run: ${activeRun.id}',
     "new vscode.ThemeIcon('sync~spin'",
   ]) {
     assert.ok(queueTree.includes(marker), marker);
   }
   assert.equal(queueTree.includes('Number.isFinite(intervalMs)'), false, 'queue tree polling should use shared interval config helper');
+  assert.equal(queueTree.includes('item.projects || []'), false, 'queue tree project labels should normalize through ticketStringArray');
   for (const marker of [
     "import { skillForAction } from './nextActionContext'",
     "import { isFreshActiveRun } from './runStatus'",
@@ -12064,12 +12068,15 @@ test('tree providers share action labels and icons', () => {
     "new vscode.ThemeIcon('sync~spin', new vscode.ThemeColor('charts.yellow'))",
     "new vscode.ThemeIcon('circle-filled'",
     "new vscode.ThemeIcon('git-pull-request', color)",
+    "import { ticketStringArray } from '../services/ticketFields'",
+    'projectNames: ticketStringArray(ticket.projects)',
     "import { openReviewTicketEntries } from '../services/reviewWork'",
     'type TicketWithOpenMergeRequest = ReturnType<typeof openReviewTicketEntries>[number][1]',
     'return openReviewTicketEntries(state.tickets)',
   ]) {
     assert.ok(reviewTree.includes(marker), marker);
   }
+  assert.equal(reviewTree.includes('projectNames: ticket.projects || []'), false, 'review new-item summaries should normalize project names through ticketStringArray');
   for (const marker of [
     'projectTree.dispose()',
     'ticketTree.dispose()',

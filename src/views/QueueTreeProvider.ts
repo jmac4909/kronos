@@ -7,6 +7,7 @@ import { activeRunForQueueItem } from '../services/queueActiveRun';
 import { configIntervalMs } from '../services/intervalConfig';
 import { formatRunProgress } from '../services/runProgress';
 import { isFreshActiveRun } from '../services/runStatus';
+import { ticketStringArray } from '../services/ticketFields';
 import { queueActionIcon } from './actionIcons';
 
 export class QueueTreeProvider implements vscode.TreeDataProvider<QueueTreeItem> {
@@ -84,14 +85,14 @@ class QueueTreeItem extends vscode.TreeItem {
 
     this.contextValue = 'queue_item';
     const actionLabel = actionToLabel(item.action);
-    const projs = (item.projects || []).join(', ') || 'unlinked';
+    const projectLabel = ticketStringArray(item.projects).join(', ') || 'unlinked';
     const progress = activeRun ? formatRunProgress(activeRun) : '';
     this.description = activeRun
-      ? `$(sync~spin) ${projs} · [${actionLabel}] ${item.priority_score} · ${progress}`
-      : `${projs} · [${actionLabel}] ${item.priority_score}`;
+      ? `$(sync~spin) ${projectLabel} · [${actionLabel}] ${item.priority_score} · ${progress}`
+      : `${projectLabel} · [${actionLabel}] ${item.priority_score}`;
 
     this.tooltip = new vscode.MarkdownString(
-      `**${(item.projects || []).join(', ')} / ${item.ticket || 'refresh'}**${summaryPart}\n\n` +
+      `**${projectLabel} / ${item.ticket || 'refresh'}**${summaryPart}\n\n` +
       `Action: ${actionLabel}\n\n` +
       `Score: ${item.priority_score}\n\n` +
       (activeRun ? `Active run: ${activeRun.id}\n\nProgress: ${progress}\n\n` : '') +

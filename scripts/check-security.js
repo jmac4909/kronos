@@ -3370,13 +3370,16 @@ for (const marker of [
   "import { formatRunProgress } from '../services/runProgress'",
   "import { activeRunForQueueItem } from '../services/queueActiveRun'",
   "import { configIntervalMs } from '../services/intervalConfig'",
+  "import { ticketStringArray } from '../services/ticketFields'",
   'const activeRuns = listRuns().filter(run => isFreshActiveRun(run))',
   'new QueueTreeItem(item, idx, activeRunForQueueItem(item, activeRuns))',
   'startPolling(intervalMs: number): void',
   'const safeIntervalMs = configIntervalMs(intervalMs, 5000)',
   'queueTree.startPolling(sessionPollMs)',
   'queueTree.dispose()',
+  'const projectLabel = ticketStringArray(item.projects).join(\', \') || \'unlinked\'',
   'const progress = activeRun ? formatRunProgress(activeRun) :',
+  '${projectLabel} / ${item.ticket || \'refresh\'}',
   'Active run: ${activeRun.id}',
   "new vscode.ThemeIcon('sync~spin'",
 ]) {
@@ -3412,6 +3415,9 @@ if (queueTreeProvider.includes('export class QueueTreeItem')) {
 }
 if (queueTreeProvider.includes('Number.isFinite' + '(intervalMs)')) {
   fail('Queue tree polling must use the shared interval config helper.');
+}
+if (queueTreeProvider.includes('item.projects || []')) {
+  fail('Queue tree must normalize project labels through ticketStringArray.');
 }
 
 for (const marker of [
@@ -4550,6 +4556,12 @@ if (runOperatorSummary.includes("['failed', 'cancelled', 'needs_human'].includes
 }
 if (!reviewTreeProvider.includes('const summary = compactSingleLineText(latest.body, 180)')) {
   fail('ReviewTreeProvider should use shared compact text helper for MR comment summaries.');
+}
+if (!reviewTreeProvider.includes("import { ticketStringArray } from '../services/ticketFields'") || !reviewTreeProvider.includes('projectNames: ticketStringArray(ticket.projects)')) {
+  fail('ReviewTreeProvider should normalize project names through ticketStringArray.');
+}
+if (reviewTreeProvider.includes('projectNames: ticket.projects || []')) {
+  fail('ReviewTreeProvider must not expose raw ticket project arrays.');
 }
 for (const [name, source] of [
   ['src/services/runAttention.ts', runAttention],
