@@ -10,6 +10,14 @@ export function arrayFromUnknown(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
 }
 
+export function recordsFromUnknown(value: unknown): Record<string, unknown>[] {
+  return arrayFromUnknown(value).filter(isRecord);
+}
+
+export function recordValuesFromUnknown(value: unknown): Record<string, unknown>[] {
+  return isRecord(value) ? Object.values(value).filter(isRecord) : [];
+}
+
 export function recordString(record: Record<string, unknown>, key: string): string {
   const value = record[key];
   return typeof value === 'string' ? value.trim() : '';

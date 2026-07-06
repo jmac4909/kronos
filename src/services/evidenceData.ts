@@ -1,28 +1,26 @@
 import { Ticket } from '../state/types';
-import { isRecord } from './records';
+import { isRecord, recordsFromUnknown, recordValuesFromUnknown } from './records';
 
 type EvidenceRecord = object;
 
 export function evidenceNotes(ticket: Ticket): EvidenceRecord[] {
-  return arrayRecords(ticket.evidence?.notes);
+  return recordsFromUnknown(ticket.evidence?.notes);
 }
 
 export function evidenceAcceptanceCriteria(ticket: Ticket): EvidenceRecord[] {
-  return arrayRecords(ticket.evidence?.acceptance_criteria);
+  return recordsFromUnknown(ticket.evidence?.acceptance_criteria);
 }
 
 export function evidenceChecks(ticket: Ticket): EvidenceRecord[] {
-  return arrayRecords(ticket.evidence?.checks);
+  return recordsFromUnknown(ticket.evidence?.checks);
 }
 
 export function evidenceRiskNotes(ticket: Ticket): EvidenceRecord[] {
-  return arrayRecords(ticket.evidence?.risk_notes);
+  return recordsFromUnknown(ticket.evidence?.risk_notes);
 }
 
 export function evidenceEnvironmentResults(ticket: Ticket): EvidenceRecord[] {
-  const value = ticket.evidence?.environment_results;
-  if (!isRecord(value)) { return []; }
-  return Object.values(value).filter(isRecord);
+  return recordValuesFromUnknown(ticket.evidence?.environment_results);
 }
 
 export function evidenceRecordCount(ticket: Ticket | null | undefined): number {
@@ -38,8 +36,4 @@ export function evidenceString(record: EvidenceRecord | null | undefined, key: s
 
 export function evidenceChecked(record: EvidenceRecord): boolean {
   return isRecord(record) && record['checked'] === true;
-}
-
-function arrayRecords(value: unknown): EvidenceRecord[] {
-  return Array.isArray(value) ? value.filter(isRecord) : [];
 }

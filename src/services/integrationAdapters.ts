@@ -3,7 +3,7 @@ import { MergeRequest, MergeRequestChangedFile, MergeRequestComment } from '../s
 import { normalizeChangedFiles } from './changedFiles';
 import { unknownErrorMessage } from './errorUtils';
 import { parseJsonWithLabel } from './jsonFiles';
-import { isRecord } from './records';
+import { isRecord, recordsFromUnknown } from './records';
 import { sortMergeRequestCommentsByCreated } from './mergeRequestComments';
 import { toValidDate } from './dateValues';
 
@@ -429,7 +429,7 @@ function normalizeMergeRequestDiscussionStats(value: unknown): MergeRequestDiscu
   const timestamps: string[] = [];
   for (const discussion of value) {
     if (!isRecord(discussion)) { continue; }
-    const notes = Array.isArray(discussion['notes']) ? discussion['notes'].filter(isRecord) : [];
+    const notes = recordsFromUnknown(discussion['notes']);
     const discussionResolved = booleanField(discussion['resolved']);
     const noteResolvedValues = notes
       .map(note => booleanField(note['resolved']))

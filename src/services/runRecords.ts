@@ -1,13 +1,9 @@
-import { arrayFromUnknown, isRecord, recordString } from './records';
+import { isRecord, recordsFromUnknown, recordString } from './records';
 
 export type RunLikeRecord = Record<string, unknown>;
 
-export function isRunLikeRecord(value: unknown): value is RunLikeRecord {
-  return isRecord(value);
-}
-
 export function runLikeRecordsFromUnknown(value: unknown): RunLikeRecord[] {
-  return arrayFromUnknown(value).filter(isRunLikeRecord);
+  return recordsFromUnknown(value);
 }
 
 export function hasRetryMetadata(run: RunLikeRecord): boolean {

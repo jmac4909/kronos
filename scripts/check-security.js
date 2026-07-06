@@ -2511,9 +2511,13 @@ for (const marker of [
   'export function isRecord(value: unknown): value is Record<string, unknown>',
   'export function recordFromUnknown(value: unknown): Record<string, unknown>',
   'export function arrayFromUnknown(value: unknown): unknown[]',
+  'export function recordsFromUnknown(value: unknown): Record<string, unknown>[]',
+  'export function recordValuesFromUnknown(value: unknown): Record<string, unknown>[]',
   'export function recordString(record: Record<string, unknown>, key: string): string',
   'return isRecord(value) ? value : {}',
   'return Array.isArray(value) ? value : []',
+  'return arrayFromUnknown(value).filter(isRecord)',
+  'return isRecord(value) ? Object.values(value).filter(isRecord) : []',
   "typeof value === 'object'",
   '!Array.isArray(value)',
   "typeof value === 'string' ? value.trim() : ''",
@@ -2805,14 +2809,14 @@ if (runActionHelpers.includes('function formatRunDateTime')) {
 for (const [name, source, marker] of [
   ['src/extension.ts', extension, "import { isRecord, recordFromUnknown, recordString } from './services/records'"],
   ['src/services/changedFiles.ts', changedFiles, "import { isRecord } from './records'"],
-  ['src/services/evidenceData.ts', evidenceData, "import { isRecord } from './records'"],
-  ['src/services/integrationAdapters.ts', integrationAdapters, "import { isRecord } from './records'"],
+  ['src/services/evidenceData.ts', evidenceData, "import { isRecord, recordsFromUnknown, recordValuesFromUnknown } from './records'"],
+  ['src/services/integrationAdapters.ts', integrationAdapters, "import { isRecord, recordsFromUnknown } from './records'"],
   ['src/services/queuePlanner.ts', queuePlanner, "import { arrayFromUnknown, isRecord } from './records'"],
   ['src/services/runStatus.ts', runStatus, "import { isRecord } from './records'"],
-  ['src/services/runRecords.ts', runRecords, "import { arrayFromUnknown, isRecord, recordString } from './records'"],
+  ['src/services/runRecords.ts', runRecords, "import { isRecord, recordsFromUnknown, recordString } from './records'"],
   ['src/services/runStore.ts', runStore, "import { isRecord, recordString } from './records'"],
   ['src/services/sessionStore.ts', sessionStore, "import { isRecord } from './records'"],
-  ['src/services/sonarReportView.ts', sonarReportView, "import { isRecord } from './records'"],
+  ['src/services/sonarReportView.ts', sonarReportView, "import { isRecord, recordsFromUnknown } from './records'"],
   ['src/services/trendMetrics.ts', trendMetrics, "import { recordString } from './records'"],
   ['src/services/stateStore.ts', stateStore, "import { isRecord as isPlainObject } from './records'"],
   ['src/services/stateScriptAdapter.ts', stateScriptAdapter, "import { arrayFromUnknown, isRecord as isPlainObject } from './records'"],
@@ -3939,7 +3943,7 @@ for (const marker of [
 }
 
 for (const marker of [
-  "import { isRecord } from './records'",
+  "import { isRecord, recordsFromUnknown, recordValuesFromUnknown } from './records'",
   'type EvidenceRecord = object',
   'export function evidenceNotes',
   'export function evidenceChecks',
@@ -3949,8 +3953,11 @@ for (const marker of [
   'if (!isRecord(record)) { return fallback; }',
   'const value = record[key]',
   "return isRecord(record) && record['checked'] === true",
-  'function arrayRecords',
-  'return Array.isArray(value) ? value.filter(isRecord) : []',
+  'recordsFromUnknown(ticket.evidence?.notes)',
+  'recordsFromUnknown(ticket.evidence?.acceptance_criteria)',
+  'recordsFromUnknown(ticket.evidence?.checks)',
+  'recordsFromUnknown(ticket.evidence?.risk_notes)',
+  'recordValuesFromUnknown(ticket.evidence?.environment_results)',
 ]) {
   if (!evidenceData.includes(marker)) {
     fail(`Missing evidence data marker: ${marker}`);
@@ -3960,6 +3967,8 @@ for (const forbidden of [
   'type EvidenceRecord = Record<string, unknown>',
   'Reflect.get(record',
   'function isEvidenceRecord',
+  'function arrayRecords',
+  'value.filter(isRecord)',
 ]) {
   if (evidenceData.includes(forbidden)) {
     fail(`Evidence data must use shared record helpers: ${forbidden}`);
@@ -4510,10 +4519,8 @@ for (const [name, source, marker] of [
 
 for (const marker of [
   'export type RunLikeRecord = Record<string, unknown>',
-  'export function isRunLikeRecord',
-  'return isRecord(value)',
   'export function runLikeRecordsFromUnknown',
-  'arrayFromUnknown(value).filter(isRunLikeRecord)',
+  'return recordsFromUnknown(value)',
   'export function hasRetryMetadata',
   "const promptMetadata = run['promptMetadata']",
   "recordString(promptMetadata, 'retryOfRunId')",
@@ -4521,6 +4528,9 @@ for (const marker of [
   if (!runRecords.includes(marker)) {
     fail(`Missing run records helper marker: ${marker}`);
   }
+}
+if (runRecords.includes('export function isRunLikeRecord')) {
+  fail('runRecords must not export unused run-like record predicates.');
 }
 
 for (const marker of [

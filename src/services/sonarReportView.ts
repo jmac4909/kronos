@@ -1,6 +1,6 @@
 import { escapeClass, escapeHtml, kronosWebviewBaseCss } from './webviewHtml';
 import { kronosActionPanelScript } from './operatorPanel';
-import { isRecord } from './records';
+import { isRecord, recordsFromUnknown } from './records';
 
 interface SonarReportRenderInput {
   projectName: string;
@@ -87,8 +87,7 @@ function sonarGateStatus(gate: unknown): string {
 
 function sonarConditionList(gate: unknown): SonarCondition[] {
   const projectStatus = projectStatusRecord(gate);
-  if (!Array.isArray(projectStatus['conditions'])) { return []; }
-  return projectStatus['conditions'].filter(isRecord).map(condition => {
+  return recordsFromUnknown(projectStatus['conditions']).map(condition => {
     const normalized: SonarCondition = {
       errorThreshold: condition['errorThreshold'],
       actualValue: condition['actualValue'],
@@ -104,10 +103,10 @@ function sonarMeasureList(measures: unknown): SonarMeasure[] {
   if (!isRecord(measures)) { return []; }
   const component = isRecord(measures['component']) ? measures['component'] : undefined;
   const componentMeasures = component && Array.isArray(component['measures'])
-    ? component['measures']
+    ? recordsFromUnknown(component['measures'])
     : undefined;
-  const list = componentMeasures || (Array.isArray(measures['measures']) ? measures['measures'] : []);
-  return list.filter(isRecord).map(measure => {
+  const list = componentMeasures || recordsFromUnknown(measures['measures']);
+  return list.map(measure => {
     const normalized: SonarMeasure = { value: measure['value'] };
     if (typeof measure['metric'] === 'string') { normalized.metric = measure['metric']; }
     if (isRecord(measure['period'])) { normalized.period = { value: measure['period']['value'] }; }
@@ -116,8 +115,8 @@ function sonarMeasureList(measures: unknown): SonarMeasure[] {
 }
 
 function sonarIssueList(issues: unknown): SonarIssue[] {
-  if (!isRecord(issues) || !Array.isArray(issues['issues'])) { return []; }
-  return issues['issues'].filter(isRecord).map(issue => {
+  if (!isRecord(issues)) { return []; }
+  return recordsFromUnknown(issues['issues']).map(issue => {
     const normalized: SonarIssue = { line: issue['line'] };
     if (typeof issue['severity'] === 'string') { normalized.severity = issue['severity']; }
     if (typeof issue['rule'] === 'string') { normalized.rule = issue['rule']; }

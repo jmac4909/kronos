@@ -4045,6 +4045,8 @@ test('record guard helper centralizes unknown object narrowing', () => {
   assert.deepEqual(records.recordFromUnknown(null), {});
   assert.deepEqual(records.arrayFromUnknown(['ok']), ['ok']);
   assert.deepEqual(records.arrayFromUnknown({ ok: true }), []);
+  assert.deepEqual(records.recordsFromUnknown([{ ok: true }, null, [], 'raw']), [{ ok: true }]);
+  assert.deepEqual(records.recordValuesFromUnknown({ a: { ok: true }, b: null, c: [] }), [{ ok: true }]);
   assert.equal(records.recordString({ ticket: ' K-1 ' }, 'ticket'), 'K-1');
   assert.equal(records.recordString({ ticket: 42 }, 'ticket'), '');
   assert.equal(ticketFields.ticketStringField({ ticket: 42 }, 'ticket'), '42');
@@ -4057,8 +4059,6 @@ test('record guard helper centralizes unknown object narrowing', () => {
   assert.equal(mergeRequestLabels.mergeRequestReviewStatusLabel('changes_requested'), 'changes requested');
   assert.equal(mergeRequestLabels.mergeRequestReviewStatusLabel(undefined, 'merge request'), 'merge request');
   assert.equal(mergeRequestLabels.mergeRequestReviewStatusLabel('', 'merge request'), 'merge request');
-  assert.equal(runRecords.isRunLikeRecord({ id: 'run-1' }), true);
-  assert.equal(runRecords.isRunLikeRecord([]), false);
   assert.deepEqual(runRecords.runLikeRecordsFromUnknown([{ id: 'run-1' }, null, [], 'raw']), [{ id: 'run-1' }]);
   assert.deepEqual(runRecords.runLikeRecordsFromUnknown({ id: 'not-array' }), []);
   assert.equal(runRecords.hasRetryMetadata({ promptMetadata: { retryOfRunId: 'run-0' } }), true);
@@ -4069,27 +4069,32 @@ test('record guard helper centralizes unknown object narrowing', () => {
     'export function isRecord(value: unknown): value is Record<string, unknown>',
     'export function recordFromUnknown(value: unknown): Record<string, unknown>',
     'export function arrayFromUnknown(value: unknown): unknown[]',
+    'export function recordsFromUnknown(value: unknown): Record<string, unknown>[]',
+    'export function recordValuesFromUnknown(value: unknown): Record<string, unknown>[]',
     'export function recordString(record: Record<string, unknown>, key: string): string',
     'return isRecord(value) ? value : {}',
     'return Array.isArray(value) ? value : []',
+    'return arrayFromUnknown(value).filter(isRecord)',
+    'return isRecord(value) ? Object.values(value).filter(isRecord) : []',
   ]) {
     assert.ok(recordsSource.includes(marker), marker);
   }
 
   const runRecordsSource = readSourceFixture('src', 'services', 'runRecords.ts');
   assert.ok(runRecordsSource.includes('export function runLikeRecordsFromUnknown(value: unknown): RunLikeRecord[]'));
-  assert.ok(runRecordsSource.includes('return arrayFromUnknown(value).filter(isRunLikeRecord)'));
+  assert.ok(runRecordsSource.includes('return recordsFromUnknown(value)'));
+  assert.equal(runRecordsSource.includes('export function isRunLikeRecord'), false);
 
   for (const [file, marker] of [
     ['changedFiles.ts', "import { isRecord } from './records'"],
-    ['evidenceData.ts', "import { isRecord } from './records'"],
-    ['integrationAdapters.ts', "import { isRecord } from './records'"],
+    ['evidenceData.ts', "import { isRecord, recordsFromUnknown, recordValuesFromUnknown } from './records'"],
+    ['integrationAdapters.ts', "import { isRecord, recordsFromUnknown } from './records'"],
     ['queuePlanner.ts', "import { arrayFromUnknown, isRecord } from './records'"],
     ['runStatus.ts', "import { isRecord } from './records'"],
-    ['runRecords.ts', "import { arrayFromUnknown, isRecord, recordString } from './records'"],
+    ['runRecords.ts', "import { isRecord, recordsFromUnknown, recordString } from './records'"],
     ['runStore.ts', "import { isRecord, recordString } from './records'"],
     ['sessionStore.ts', "import { isRecord } from './records'"],
-    ['sonarReportView.ts', "import { isRecord } from './records'"],
+    ['sonarReportView.ts', "import { isRecord, recordsFromUnknown } from './records'"],
     ['stateStore.ts', "import { isRecord as isPlainObject } from './records'"],
     ['stateScriptAdapter.ts', "import { arrayFromUnknown, isRecord as isPlainObject } from './records'"],
   ]) {
@@ -8397,7 +8402,7 @@ test('integration adapters keep raw provider payloads unknown until normalized',
     "import { parseJsonWithLabel } from './jsonFiles'",
     'parseJsonWithLabel(await runner.runScript',
     'catch (e: unknown)',
-    "import { isRecord } from './records'",
+    "import { isRecord, recordsFromUnknown } from './records'",
     "import { unknownErrorMessage } from './errorUtils'",
     'async function runMergeRequestStatusJson',
     "runner.runScript(['--mr-status', ticketKey], options)",
@@ -11478,15 +11483,21 @@ test('ticket detail rendering uses typed tickets and evidence records', () => {
   assert.equal(ticketPanelViewSource.includes('function ticketStringArray'), false);
   assert.equal(ticketPanelViewSource.includes('function mergeRequestComments'), false);
   for (const marker of [
-    "import { isRecord } from './records'",
+    "import { isRecord, recordsFromUnknown, recordValuesFromUnknown } from './records'",
     'type EvidenceRecord = object',
     'if (!isRecord(record)) { return fallback; }',
     'const value = record[key]',
     "return isRecord(record) && record['checked'] === true",
-    'return Array.isArray(value) ? value.filter(isRecord) : []',
+    'recordsFromUnknown(ticket.evidence?.notes)',
+    'recordsFromUnknown(ticket.evidence?.acceptance_criteria)',
+    'recordsFromUnknown(ticket.evidence?.checks)',
+    'recordsFromUnknown(ticket.evidence?.risk_notes)',
+    'recordValuesFromUnknown(ticket.evidence?.environment_results)',
   ]) {
     assert.ok(evidenceData.includes(marker), marker);
   }
+  assert.equal(evidenceData.includes('function arrayRecords'), false);
+  assert.equal(evidenceData.includes('value.filter(isRecord)'), false);
   const html = ticketPanelView.buildTicketHtml('K-DETAIL', ticket({
     summary: '<b>unsafe</b>',
     description: 'quote " amp & tag <x>',
