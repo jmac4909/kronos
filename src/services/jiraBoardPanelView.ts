@@ -1,5 +1,6 @@
 import type { KronosState as KronosStateSnapshot, QueueState } from '../state/types';
 import { evidenceRecordCount } from './evidenceData';
+import { mergeRequestReviewStatusLabel } from './mergeRequestLabels';
 import { isRecord } from './records';
 import { ticketStringArray, ticketStringField } from './ticketFields';
 import { WEBVIEW_READY_COMMAND, webviewRuntimeScriptTag, webviewRuntimeScriptUri } from './webviewSecurity';
@@ -104,7 +105,7 @@ export function buildJiraBoardHtml(input: JiraBoardPanelInput): string {
     const typeClass = ticketType.toLowerCase().includes('bug') || ticketType.toLowerCase().includes('defect') ? 'bug' : 'story';
     const mrReviewStatus = mr ? ticketStringField(mr, 'review_status') : '';
     const hasMrUrl = Boolean(mr && ticketStringField(mr, 'url'));
-    const mrLabel = mr ? `MR !${esc(ticketStringField(mr, 'iid', '?'))} &middot; ${esc(mrReviewStatus.replace(/_/g, ' '))}` : '';
+    const mrLabel = mr ? `MR !${esc(ticketStringField(mr, 'iid', '?'))} &middot; ${esc(mergeRequestReviewStatusLabel(mrReviewStatus))}` : '';
     const mrLink = mr
       ? hasMrUrl
         ? `<button type="button" class="badge mr clickable" data-action="openMr" data-ticket="${attr(key)}">${mrLabel}</button>`

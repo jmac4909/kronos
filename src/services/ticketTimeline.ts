@@ -1,6 +1,7 @@
 import { QueueState, Ticket } from '../state/types';
 import { buildStatusKind } from './buildStatus';
 import { evidenceChecks, evidenceEnvironmentResults, evidenceNotes, evidenceString } from './evidenceData';
+import { mergeRequestReviewStatusLabel } from './mergeRequestLabels';
 import { isAttentionRunStatus, runAttentionDetail } from './runAttention';
 import { recordString } from './records';
 import { toValidDate } from './dateValues';
@@ -136,7 +137,7 @@ export function buildTicketTimeline(input: TicketTimelineInput): TimelineEvent[]
       source: 'mr',
       severity: ticket.mr.review_status === 'changes_requested' ? 'failure' : ticket.mr.review_status === 'approved' ? 'success' : 'warning',
       title: `MR !${ticket.mr.iid}: ${ticket.mr.state}`,
-      detail: ticket.mr.review_status.replace(/_/g, ' '),
+      detail: mergeRequestReviewStatusLabel(ticket.mr.review_status),
     }, { at: ticket.updated || ticket.last_action_at || undefined, url: ticket.mr.url }));
   }
 

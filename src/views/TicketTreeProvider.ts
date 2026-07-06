@@ -4,6 +4,7 @@ import { Ticket } from '../state/types';
 import { actionDisplayLabel as actionToLabel } from '../services/actionCatalog';
 import { buildStatusKind } from '../services/buildStatus';
 import { evidenceRecordCount } from '../services/evidenceData';
+import { mergeRequestReviewStatusLabel } from '../services/mergeRequestLabels';
 import { TicketFilter, TicketGroupBy, describeTicketFilter, filterTickets, groupTicketEntries, hasTicketFilter } from '../services/ticketFilters';
 import { ticketActionIcon } from './actionIcons';
 
@@ -99,7 +100,7 @@ export class TicketTreeProvider implements vscode.TreeDataProvider<TicketElement
 
       if (t.mr) {
         const isMerged = t.mr.state === 'merged';
-        const mrLabel = isMerged ? 'merged' : t.mr.review_status.replace(/_/g, ' ');
+        const mrLabel = isMerged ? 'merged' : mergeRequestReviewStatusLabel(t.mr.review_status);
         const mrIcon = isMerged ? 'git-merge' : t.mr.review_status === 'approved' ? 'pass' : t.mr.review_status === 'changes_requested' ? 'warning' : 'git-pull-request';
         const mrColor = isMerged ? 'testing.iconPassed' : t.mr.review_status === 'approved' ? 'testing.iconPassed' : t.mr.review_status === 'changes_requested' ? 'testing.iconFailed' : 'charts.yellow';
         const mrItem = new TicketDetailItem(`MR !${t.mr.iid} — ${mrLabel}`, t.mr.url);

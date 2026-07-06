@@ -1,6 +1,7 @@
 import { Ticket } from '../state/types';
 import { isFailingBuildStatus } from './buildStatus';
 import { toValidDate } from './dateValues';
+import { mergeRequestReviewStatusLabel } from './mergeRequestLabels';
 import { isOpenReviewTicket } from './reviewWork';
 import { severityRank } from './severityRank';
 
@@ -63,7 +64,7 @@ export function analyzeAging(input: {
         reference,
         thresholdDays: thresholds.reviewDays,
         title: `${ticketKey} has been waiting for review`,
-        detail: `MR !${ticket.mr.iid} is ${ticket.mr.review_status.replace(/_/g, ' ')}.`,
+        detail: `MR !${ticket.mr.iid} is ${mergeRequestReviewStatusLabel(ticket.mr.review_status)}.`,
         url: ticket.mr.url,
       });
     }

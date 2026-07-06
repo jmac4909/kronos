@@ -208,6 +208,7 @@ const providerReachability = require('../out/services/providerReachability.js');
 const ticketMutations = require('../out/services/ticketMutations.js');
 const mergeRequestNotifications = require('../out/services/mergeRequestNotifications.js');
 const mergeRequestComments = require('../out/services/mergeRequestComments.js');
+const mergeRequestLabels = require('../out/services/mergeRequestLabels.js');
 const queueMutations = require('../out/services/queueMutations.js');
 const projectMutations = require('../out/services/projectMutations.js');
 const doctorChecks = require('../out/services/doctorChecks.js');
@@ -3956,6 +3957,9 @@ test('record guard helper centralizes unknown object narrowing', () => {
     comments: [{ body: 'ok', author: 'Reviewer' }, { author: 'missing body' }, 'raw'],
   }), [{ body: 'ok', author: 'Reviewer' }]);
   assert.deepEqual(mergeRequestComments.mergeRequestCommentsFromRecord(null), []);
+  assert.equal(mergeRequestLabels.mergeRequestReviewStatusLabel('changes_requested'), 'changes requested');
+  assert.equal(mergeRequestLabels.mergeRequestReviewStatusLabel(undefined, 'merge request'), 'merge request');
+  assert.equal(mergeRequestLabels.mergeRequestReviewStatusLabel('', 'merge request'), 'merge request');
   assert.equal(runRecords.isRunLikeRecord({ id: 'run-1' }), true);
   assert.equal(runRecords.isRunLikeRecord([]), false);
   assert.equal(runRecords.hasRetryMetadata({ promptMetadata: { retryOfRunId: 'run-0' } }), true);
@@ -3987,6 +3991,7 @@ test('record guard helper centralizes unknown object narrowing', () => {
 
   const ticketFieldsSource = readSourceFixture('src', 'services', 'ticketFields.ts');
   const mergeRequestCommentsSource = readSourceFixture('src', 'services', 'mergeRequestComments.ts');
+  const mergeRequestLabelsSource = readSourceFixture('src', 'services', 'mergeRequestLabels.ts');
   for (const marker of [
     'export function ticketStringField(record: object | null | undefined, key: string, fallback = \'\'): string',
     'Reflect.get(record, key)',
@@ -4001,6 +4006,31 @@ test('record guard helper centralizes unknown object narrowing', () => {
     "value.filter((item): item is MergeRequestComment => isRecord(item) && typeof item['body'] === 'string')",
   ]) {
     assert.ok(mergeRequestCommentsSource.includes(marker), marker);
+  }
+  for (const marker of [
+    'export function mergeRequestReviewStatusLabel(status: unknown, fallback = \'\'): string',
+    "status.replace(/_/g, ' ')",
+  ]) {
+    assert.ok(mergeRequestLabelsSource.includes(marker), marker);
+  }
+
+  for (const [file, marker] of [
+    ['src/extension.ts', "import { mergeRequestReviewStatusLabel } from './services/mergeRequestLabels'"],
+    ['src/services/agingAnalyzer.ts', "import { mergeRequestReviewStatusLabel } from './mergeRequestLabels'"],
+    ['src/services/collisionDetector.ts', "import { mergeRequestReviewStatusLabel } from './mergeRequestLabels'"],
+    ['src/services/jiraBoardPanelView.ts', "import { mergeRequestReviewStatusLabel } from './mergeRequestLabels'"],
+    ['src/services/queuePlanner.ts', "import { mergeRequestReviewStatusLabel } from './mergeRequestLabels'"],
+    ['src/services/recoveryCenter.ts', "import { mergeRequestReviewStatusLabel } from './mergeRequestLabels'"],
+    ['src/services/ticketPanelView.ts', "import { mergeRequestReviewStatusLabel } from './mergeRequestLabels'"],
+    ['src/services/ticketTimeline.ts', "import { mergeRequestReviewStatusLabel } from './mergeRequestLabels'"],
+    ['src/views/ReviewTreeProvider.ts', "import { mergeRequestReviewStatusLabel } from '../services/mergeRequestLabels'"],
+    ['src/views/TicketTreeProvider.ts', "import { mergeRequestReviewStatusLabel } from '../services/mergeRequestLabels'"],
+  ]) {
+    const source = readSourceFixture(...file.split('/'));
+    assert.ok(source.includes(marker), `${file} should import shared MR review status label helper`);
+    assert.equal(/review_status\??\.replace\(/.test(source), false, `${file} should not format MR review_status locally`);
+    assert.equal(/reviewStatus\??\.replace\(/.test(source), false, `${file} should not format MR reviewStatus locally`);
+    assert.equal(/mrReviewStatus\??\.replace\(/.test(source), false, `${file} should not format mrReviewStatus locally`);
   }
 
   const dispatcherSource = readSourceFixture('src', 'runners', 'sessionDispatcher.ts');

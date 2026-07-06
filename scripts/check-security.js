@@ -41,6 +41,7 @@ const namedFiles = [
   'src/services/agingReportView.ts',
   'src/services/dateLabels.ts',
   'src/services/ticketFields.ts',
+  'src/services/mergeRequestLabels.ts',
   'src/services/webviewFormat.ts',
   'src/services/webviewHtml.ts',
   'src/views/ProjectTreeProvider.ts',
@@ -110,6 +111,7 @@ const commandPayloads = readSource('src/services/commandPayloads.ts');
 const dateValues = readSource('src/services/dateValues.ts');
 const dateLabels = sources['src/services/dateLabels.ts'];
 const ticketFields = sources['src/services/ticketFields.ts'];
+const mergeRequestLabels = sources['src/services/mergeRequestLabels.ts'];
 const buildStatus = readSource('src/services/buildStatus.ts');
 const regexp = readSource('src/services/regexp.ts');
 const pathUtils = readSource('src/services/pathUtils.ts');
@@ -2517,6 +2519,35 @@ for (const marker of [
 ]) {
   if (!mergeRequestComments.includes(marker)) {
     fail(`Missing merge request comment helper marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  'export function mergeRequestReviewStatusLabel(status: unknown, fallback = \'\'): string',
+  "status.replace(/_/g, ' ')",
+]) {
+  if (!mergeRequestLabels.includes(marker)) {
+    fail(`Missing merge request label helper marker: ${marker}`);
+  }
+}
+
+for (const [name, source, marker] of [
+  ['src/extension.ts', extension, "import { mergeRequestReviewStatusLabel } from './services/mergeRequestLabels'"],
+  ['src/services/agingAnalyzer.ts', agingAnalyzer, "import { mergeRequestReviewStatusLabel } from './mergeRequestLabels'"],
+  ['src/services/collisionDetector.ts', collisionDetector, "import { mergeRequestReviewStatusLabel } from './mergeRequestLabels'"],
+  ['src/services/jiraBoardPanelView.ts', jiraBoardPanelView, "import { mergeRequestReviewStatusLabel } from './mergeRequestLabels'"],
+  ['src/services/queuePlanner.ts', queuePlanner, "import { mergeRequestReviewStatusLabel } from './mergeRequestLabels'"],
+  ['src/services/recoveryCenter.ts', recoveryCenter, "import { mergeRequestReviewStatusLabel } from './mergeRequestLabels'"],
+  ['src/services/ticketPanelView.ts', ticketPanelView, "import { mergeRequestReviewStatusLabel } from './mergeRequestLabels'"],
+  ['src/services/ticketTimeline.ts', ticketTimeline, "import { mergeRequestReviewStatusLabel } from './mergeRequestLabels'"],
+  ['src/views/ReviewTreeProvider.ts', reviewTreeProvider, "import { mergeRequestReviewStatusLabel } from '../services/mergeRequestLabels'"],
+  ['src/views/TicketTreeProvider.ts', ticketTreeProvider, "import { mergeRequestReviewStatusLabel } from '../services/mergeRequestLabels'"],
+]) {
+  if (!source.includes(marker)) {
+    fail(`${name} must import the shared MR review status label helper.`);
+  }
+  if (/review_status\??\.replace\(|reviewStatus\??\.replace\(|mrReviewStatus\??\.replace\(/.test(source)) {
+    fail(`${name} must not format MR review status labels locally.`);
   }
 }
 

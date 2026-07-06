@@ -1,6 +1,7 @@
 import { MergeRequestChangedFile, QueueState, Ticket } from '../state/types';
 import { isCodeAction } from './actionSemantics';
 import { changedFilePaths } from './changedFiles';
+import { mergeRequestReviewStatusLabel } from './mergeRequestLabels';
 import { isActiveRun, isStaleActiveRun } from './runStatus';
 import { severityRank } from './severityRank';
 import { toValidDate } from './dateValues';
@@ -178,7 +179,7 @@ export function detectDispatchCollisions(input: DispatchCollisionInput): Dispatc
         kind: 'open_mr',
         severity: 'low',
         title: `Open MR for ${otherKey} shares ${ticket.projects.filter(project => targetProjects.has(project)).join(', ')}`,
-        detail: `MR !${ticket.mr.iid} is ${ticket.mr.review_status.replace(/_/g, ' ')}`,
+        detail: `MR !${ticket.mr.iid} is ${mergeRequestReviewStatusLabel(ticket.mr.review_status)}`,
       });
       const mrFiles = changedFilesForTicket(otherKey, ticket, input.mrFiles);
       const directOverlap = sharedFilePaths(targetMrFiles, mrFiles);

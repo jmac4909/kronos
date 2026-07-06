@@ -3,6 +3,7 @@ import { buildStatusKind } from './buildStatus';
 import { evidenceAcceptanceCriteria, evidenceChecked, evidenceChecks, evidenceEnvironmentResults, evidenceNotes, evidenceString } from './evidenceData';
 import { EvidenceGateResult, evaluateEvidenceGate } from './evidenceGate';
 import { mergeRequestCommentsFromRecord } from './mergeRequestComments';
+import { mergeRequestReviewStatusLabel } from './mergeRequestLabels';
 import { actionButton, kronosActionPanelScript } from './operatorPanel';
 import { ticketStringArray, ticketStringField } from './ticketFields';
 import { TimelineEvent, buildTicketTimeline } from './ticketTimeline';
@@ -132,7 +133,7 @@ export function buildTicketHtml(key: string, ticket: Ticket, input: TicketPanelR
     mrHtml = `<div class="section">
       <h3>Merge Request</h3>
       <div class="mr-card">
-        <div><strong>MR !${esc(ticketStringField(mr, 'iid', '?'))}</strong> — <span style="color:${reviewColor}">${esc(reviewStatus.replace(/_/g, ' '))}</span></div>
+        <div><strong>MR !${esc(ticketStringField(mr, 'iid', '?'))}</strong> — <span style="color:${reviewColor}">${esc(mergeRequestReviewStatusLabel(reviewStatus))}</span></div>
         <div>State: ${esc(ticketStringField(mr, 'state', 'unknown'))}</div>
         ${commentCount ? `<div>Comments: ${esc(commentCount)}${lastCommentAt ? ` · latest ${esc(formatWebviewDateTime(lastCommentAt))}` : ''}</div>` : ''}
         ${discussionCount || unresolvedDiscussions ? `<div>Discussions: ${esc(discussionCount || '?')}${unresolvedDiscussions ? ` · ${esc(unresolvedDiscussions)} unresolved` : ''}${discussionsResolved ? ` · ${discussionsResolved === 'true' ? 'resolved' : 'open'}` : ''}${lastDiscussionAt ? ` · latest ${esc(formatWebviewDateTime(lastDiscussionAt))}` : ''}</div>` : ''}

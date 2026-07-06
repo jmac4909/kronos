@@ -1,5 +1,6 @@
 import type { RunStoreIssue } from './runStore';
 import { toValidDate } from './dateValues';
+import { mergeRequestReviewStatusLabel } from './mergeRequestLabels';
 import { runAttentionDetail } from './runAttention';
 import { severityRank } from './severityRank';
 
@@ -196,7 +197,7 @@ export function buildRecoveryInventory(input: RecoveryInventoryInput): RecoveryI
 function recoveryItemForOrphanMergeRequest(ticketKey: string, ticket: RecoveryTicket): RecoveryItem | null {
   if (ticket.source !== 'adhoc' || ticket.mr?.state !== 'opened') { return null; }
   const iid = ticket.mr.iid ? `!${ticket.mr.iid}` : 'unknown MR';
-  const status = ticket.mr.review_status ? ticket.mr.review_status.replace(/_/g, ' ') : 'unknown review status';
+  const status = mergeRequestReviewStatusLabel(ticket.mr.review_status, 'unknown review status');
   const item: RecoveryItem = {
     id: `mr:${ticketKey}:${ticket.mr.iid || 'unknown'}`,
     kind: 'merge_request',

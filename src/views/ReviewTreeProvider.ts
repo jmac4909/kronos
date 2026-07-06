@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { KronosState } from '../state/KronosState';
 import { Ticket } from '../state/types';
+import { mergeRequestReviewStatusLabel } from '../services/mergeRequestLabels';
 import { TicketFilter, describeTicketFilter, hasTicketFilter, ticketMatchesFilter } from '../services/ticketFilters';
 import { openReviewTicketEntries } from '../services/reviewWork';
 
@@ -302,7 +303,7 @@ function reviewActivityKey(ticketKey: string, ticket: TicketWithOpenMergeRequest
 
 function reviewActivitySummary(ticket: TicketWithOpenMergeRequest): string {
   const mr = ticket.mr;
-  const parts = [mr.review_status.replace(/_/g, ' ')];
+  const parts = [mergeRequestReviewStatusLabel(mr.review_status)];
   if (mr.comment_count !== undefined) {
     parts.push(`${mr.comment_count} comment${mr.comment_count === 1 ? '' : 's'}`);
   }
@@ -341,7 +342,7 @@ class ReviewItem extends vscode.TreeItem {
 
     this.contextValue = 'review_item';
     const mr = ticket.mr!;
-    const reviewStatus = mr.review_status.replace(/_/g, ' ');
+    const reviewStatus = mergeRequestReviewStatusLabel(mr.review_status);
     const projs = ticket.projects?.join(', ') || 'unlinked';
     const latestComment = latestMergeRequestCommentSummary(ticket);
     const commentSuffix = mr.comment_count !== undefined ? ` · ${mr.comment_count} comment${mr.comment_count === 1 ? '' : 's'}` : '';

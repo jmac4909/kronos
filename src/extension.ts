@@ -89,6 +89,7 @@ import { buildJiraBoardHtml } from './services/jiraBoardPanelView';
 import { computeAttentionBadge } from './services/attentionBadge';
 import { configIntervalMs, configIntervalSeconds, configIntervalSecondsMs, parsePositiveNumberInput, positiveConfigNumber } from './services/intervalConfig';
 import { buildNextActionContext, buildNextActionStartDecision, skillForAction } from './services/nextActionContext';
+import { mergeRequestReviewStatusLabel } from './services/mergeRequestLabels';
 import { createWorkspaceDiffArtifact, firstRemoteBranchMatching, originProjectPath } from './services/gitWorkspace';
 import { signalProcessTree, stopProcessTree, supportsProcessTreeSuspend } from './services/processTree';
 import { createWebviewReadyMonitor } from './services/webviewDiagnostics';
@@ -4550,7 +4551,7 @@ async function pickOrphanMergeRequestTicket(state: KronosStateSnapshot): Promise
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([ticketKey, ticket]) => ({
       label: `${ticketKey} - MR !${ticket.mr?.iid || '?'}`,
-      description: ticket.mr?.review_status.replace(/_/g, ' ') || 'merge request',
+      description: mergeRequestReviewStatusLabel(ticket.mr?.review_status, 'merge request'),
       detail: ticket.summary,
       ticketKey,
     }));

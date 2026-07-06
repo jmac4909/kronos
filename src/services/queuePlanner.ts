@@ -5,6 +5,7 @@ import { isCodeAction } from './actionSemantics';
 import { isFailingBuildStatus, isPassingBuildStatus } from './buildStatus';
 import { toValidDate } from './dateValues';
 import { evidenceRecordCount } from './evidenceData';
+import { mergeRequestReviewStatusLabel } from './mergeRequestLabels';
 import { isRecord } from './records';
 import { severityRank } from './severityRank';
 
@@ -127,7 +128,7 @@ export function planNextActions(input: PlannerInput): PlannedAction[] {
       { label: 'Action', value: actionScore, detail: actionToLabel(ticket.next_action) },
       { label: 'Priority', value: priorityScore, detail: ticket.priority || 'unknown' },
       { label: 'Build', value: buildScore, detail: ticket.build?.status || 'no build' },
-      { label: 'MR', value: mrScore, detail: ticket.mr?.review_status?.replace(/_/g, ' ') || 'no MR' },
+      { label: 'MR', value: mrScore, detail: mergeRequestReviewStatusLabel(ticket.mr?.review_status, 'no MR') },
       { label: 'Project link', value: linkScore, detail: (ticket.projects || []).length > 0 ? ticket.projects.join(', ') : 'not linked' },
       { label: 'Evidence', value: evidenceScore, detail: evidenceCount === 0 ? 'no evidence records yet' : `${evidenceCount} evidence record${evidenceCount === 1 ? '' : 's'}` },
     ];
@@ -139,7 +140,7 @@ export function planNextActions(input: PlannerInput): PlannedAction[] {
       `${ticket.priority || 'unknown'} priority`,
     ];
     if (ticket.build?.status) { reasons.push(`build ${ticket.build.status}`); }
-    if (ticket.mr?.review_status) { reasons.push(`MR ${ticket.mr.review_status.replace(/_/g, ' ')}`); }
+    if (ticket.mr?.review_status) { reasons.push(`MR ${mergeRequestReviewStatusLabel(ticket.mr.review_status)}`); }
     if ((ticket.projects || []).length === 0) { reasons.push('not linked to a project'); }
     if (evidenceCount === 0) { reasons.push('no evidence records yet'); }
 
