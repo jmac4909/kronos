@@ -4078,6 +4078,7 @@ for (const marker of [
   "unknownErrorMessage(e, 'claude unavailable')",
   "import { normalizeMergeRequestStatus } from './integrationAdapters'",
   "import { parseJsonWithLabel } from './jsonFiles'",
+  "import { recordEntriesFromUnknown, recordFromUnknown, recordKeysFromUnknown } from './records'",
   "import { ticketStringArray } from './ticketFields'",
   'Values are not displayed',
   'DoctorCommandRunner',
@@ -4092,6 +4093,7 @@ for (const marker of [
   "countLabel(input.queue.items?.length || 0, 'queue item')",
   "countLabel(openReviewTickets.length, 'open review MR')",
   'for (const projectName of ticketStringArray(ticket.projects))',
+  'const config = recordFromUnknown(project.config)',
 ]) {
   if (!doctorChecks.includes(marker)) {
     fail(`Missing doctor checks marker: ${marker}`);
@@ -4099,6 +4101,9 @@ for (const marker of [
 }
 if (doctorChecks.includes('ticket.projects || []')) {
   fail('Doctor checks must normalize ticket project links through ticketStringArray.');
+}
+if (doctorChecks.includes('(project.config || {}) as Record<string, unknown>')) {
+  fail('Doctor checks must normalize project config through recordFromUnknown.');
 }
 for (const forbidden of ['template(s)', 'project(s)', 'ticket(s)', 'queue item(s)', 'issue(s)', 'open review MR(s)']) {
   if (doctorChecks.includes(forbidden)) {

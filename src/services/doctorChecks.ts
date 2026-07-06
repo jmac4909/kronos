@@ -12,7 +12,7 @@ import { unknownErrorMessage } from './errorUtils';
 import { normalizeMergeRequestStatus } from './integrationAdapters';
 import { parseJsonWithLabel } from './jsonFiles';
 import { countLabel } from './countLabels';
-import { recordEntriesFromUnknown, recordKeysFromUnknown } from './records';
+import { recordEntriesFromUnknown, recordFromUnknown, recordKeysFromUnknown } from './records';
 import { ticketStringArray } from './ticketFields';
 
 export interface DoctorCheck {
@@ -426,7 +426,7 @@ function firstConfiguredUrl(...values: Array<string | undefined>): string | unde
 
 function firstProjectConfigValue(state: KronosState | null, keys: string[]): string | undefined {
   for (const [, project] of recordEntriesFromUnknown(state?.projects)) {
-    const config = (project.config || {}) as Record<string, unknown>;
+    const config = recordFromUnknown(project.config);
     for (const key of keys) {
       const value = config[key];
       if (typeof value === 'string' && value.trim()) {
