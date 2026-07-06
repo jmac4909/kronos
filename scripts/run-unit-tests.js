@@ -4128,7 +4128,7 @@ test('date value helper centralizes valid date coercion', () => {
   assert.ok(runCenterSortSource.includes("import { toValidDate } from './dateValues'"));
   assert.equal(runCenterSortSource.includes('function toValidDate'), false);
 
-  for (const file of ['agingAnalyzer.ts', 'agingReportView.ts', 'collisionDetector.ts', 'dashboardWorklist.ts', 'integrationAdapters.ts', 'mergeRequestComments.ts', 'mergeRequestNotifications.ts', 'queuePlanner.ts', 'relativeTime.ts', 'recoveryCenter.ts', 'runProgress.ts', 'runStatus.ts', 'runStore.ts', 'sessionStore.ts', 'ticketFilters.ts', 'ticketTimeline.ts', 'trendMetrics.ts']) {
+  for (const file of ['agingAnalyzer.ts', 'collisionDetector.ts', 'dashboardWorklist.ts', 'integrationAdapters.ts', 'mergeRequestComments.ts', 'mergeRequestNotifications.ts', 'queuePlanner.ts', 'relativeTime.ts', 'recoveryCenter.ts', 'runProgress.ts', 'runStatus.ts', 'runStore.ts', 'sessionStore.ts', 'ticketFilters.ts', 'ticketTimeline.ts', 'trendMetrics.ts']) {
     const source = readSourceFixture('src', 'services', file);
     assert.ok(source.includes("import { toValidDate } from './dateValues'"), `${file} should use shared date value helper`);
     assert.equal(source.includes('function dateValue'), false, `${file} should not carry a local dateValue helper`);
@@ -4152,6 +4152,10 @@ test('date value helper centralizes valid date coercion', () => {
   const operationsReportPanelViewSource = readSourceFixture('src', 'services', 'operationsReportPanelView.ts');
   assert.ok(operationsReportPanelViewSource.includes("import { formatWebviewDateTime } from './webviewFormat'"));
   assert.equal(operationsReportPanelViewSource.includes('function formatWebviewDateTime'), false);
+
+  const agingReportViewSource = readSourceFixture('src', 'services', 'agingReportView.ts');
+  assert.ok(agingReportViewSource.includes("import { formatWebviewDateTime } from './webviewFormat'"));
+  assert.equal(agingReportViewSource.includes('function formatDateTime'), false);
 
   const webviewFormatSource = readSourceFixture('src', 'services', 'webviewFormat.ts');
   assert.ok(webviewFormatSource.includes("import { toValidDate } from './dateValues'"));

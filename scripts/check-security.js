@@ -2603,7 +2603,6 @@ if (!runActionHelpers.includes('isExistingRealPathInside(filePath, RUNS_DIR)')) 
 for (const [name, source, marker] of [
   ['src/extension.ts', extension, "import { toValidDate } from './services/dateValues'"],
   ['src/services/agingAnalyzer.ts', agingAnalyzer, "import { toValidDate } from './dateValues'"],
-  ['src/services/agingReportView.ts', agingReportView, "import { toValidDate } from './dateValues'"],
   ['src/services/collisionDetector.ts', collisionDetector, "import { toValidDate } from './dateValues'"],
   ['src/services/dashboardWorklist.ts', dashboardWorklist, "import { toValidDate } from './dateValues'"],
   ['src/services/integrationAdapters.ts', integrationAdapters, "import { toValidDate } from './dateValues'"],
@@ -3888,6 +3887,7 @@ for (const staleMarker of [
 
 for (const [name, source, marker] of [
   ['src/extension.ts', extension, "import { formatWebviewDateTime } from './services/webviewFormat'"],
+  ['src/services/agingReportView.ts', agingReportView, "import { formatWebviewDateTime } from './webviewFormat'"],
   ['src/services/operationsReportPanelView.ts', operationsReportPanelView, "import { formatWebviewDateTime } from './webviewFormat'"],
   ['src/services/ticketPanelView.ts', ticketPanelView, "import { formatWebviewDate, formatWebviewDateTime } from './webviewFormat'"],
 ]) {
@@ -4279,6 +4279,7 @@ for (const marker of [
 for (const marker of [
   'export function buildAgingReportHtml',
   "from './webviewHtml'",
+  "import { formatWebviewDateTime } from './webviewFormat'",
   'safeHttpHref(item.url)',
   'kronosWebviewBaseCss',
   'class="kronos-shell aging-shell"',

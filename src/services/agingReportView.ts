@@ -1,6 +1,6 @@
 import { AgingReport } from './agingAnalyzer';
-import { toValidDate } from './dateValues';
 import { escapeClass, escapeHtml, kronosWebviewBaseCss, safeHttpHref } from './webviewHtml';
+import { formatWebviewDateTime } from './webviewFormat';
 
 interface AgingReportHtmlOptions {
   actionsHtml?: string;
@@ -8,7 +8,7 @@ interface AgingReportHtmlOptions {
 }
 
 export function buildAgingReportHtml(report: AgingReport, options: AgingReportHtmlOptions = {}): string {
-  const generated = formatDateTime(report.generatedAt);
+  const generated = formatWebviewDateTime(report.generatedAt);
   const rows = report.items.map(item => {
     const href = safeHttpHref(item.url);
     const severity = escapeClass(item.severity);
@@ -47,9 +47,4 @@ export function buildAgingReportHtml(report: AgingReport, options: AgingReportHt
   </div>
   ${empty || `<div class="kronos-table-wrap kronos-panel"><table class="kronos-table"><tr><th>Severity</th><th>Ticket</th><th>Kind</th><th>Age</th><th>Issue</th><th>Ref</th></tr>${rows}</table></div>`}
 </div>${options.scriptHtml || ''}</body></html>`;
-}
-
-function formatDateTime(value: unknown): string {
-  if (typeof value !== 'string' && typeof value !== 'number') { return 'N/A'; }
-  return toValidDate(value)?.toLocaleString() || 'N/A';
 }
