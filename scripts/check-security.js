@@ -35,6 +35,7 @@ const nonScriptClientSource = [
 const stateStore = readSource('src/services/stateStore.ts');
 const runStore = readSource('src/services/runStore.ts');
 const runMetadata = readSource('src/services/runMetadata.ts');
+const errorUtils = readSource('src/services/errorUtils.ts');
 const fileNames = readSource('src/services/fileNames.ts');
 const jsonFiles = readSource('src/services/jsonFiles.ts');
 const sessionStore = readSource('src/services/sessionStore.ts');
@@ -2772,6 +2773,19 @@ for (const marker of [
   if (!records.includes(marker)) {
     fail(`Missing record helper marker: ${marker}`);
   }
+}
+
+for (const marker of [
+  "import { isRecord } from './records'",
+  'export function unknownErrorField(error: unknown, key: string): unknown',
+  'return isRecord(error) ? Reflect.get(error, key) : undefined',
+]) {
+  if (!errorUtils.includes(marker)) {
+    fail(`Missing error utils marker: ${marker}`);
+  }
+}
+if (errorUtils.includes("return error && typeof error === 'object' ? Reflect.get(error, key) : undefined")) {
+  fail('Error utils must use the shared record guard before reflecting unknown error fields.');
 }
 
 for (const marker of [

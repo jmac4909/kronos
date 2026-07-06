@@ -1,3 +1,5 @@
+import { isRecord } from './records';
+
 export function unknownErrorMessage(error: unknown, fallback: string): string {
   if (typeof error === 'string' && error.trim()) {
     return error;
@@ -15,5 +17,5 @@ export function unknownErrorCode(error: unknown): string {
 }
 
 export function unknownErrorField(error: unknown, key: string): unknown {
-  return error && typeof error === 'object' ? Reflect.get(error, key) : undefined;
+  return isRecord(error) ? Reflect.get(error, key) : undefined;
 }

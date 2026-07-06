@@ -3598,19 +3598,27 @@ test('error utils normalize unknown error shapes', () => {
   assert.equal(errorUtils.unknownErrorMessage('string failure', 'fallback'), 'string failure');
   assert.equal(errorUtils.unknownErrorMessage({ message: '   ' }, 'fallback'), 'fallback');
   assert.equal(errorUtils.unknownErrorMessage(null, 'fallback'), 'fallback');
+  assert.equal(errorUtils.unknownErrorMessage(['array failure'], 'fallback'), 'fallback');
   assert.equal(errorUtils.unknownErrorField({ stderr: 'stderr failure' }, 'stderr'), 'stderr failure');
+  assert.equal(errorUtils.unknownErrorField(['stderr failure'], 'stderr'), undefined);
   assert.equal(errorUtils.unknownErrorCode({ code: 'ENOENT' }), 'ENOENT');
   assert.equal(errorUtils.unknownErrorCode({ code: 13 }), '13');
   assert.equal(errorUtils.unknownErrorCode({ code: '   ' }), '');
 
   const source = readSourceFixture('src', 'services', 'errorUtils.ts');
   for (const marker of [
+    "import { isRecord } from './records'",
     'export function unknownErrorMessage(error: unknown, fallback: string): string',
     'export function unknownErrorCode(error: unknown): string',
     'export function unknownErrorField(error: unknown, key: string): unknown',
-    "Reflect.get(error, key)",
+    'return isRecord(error) ? Reflect.get(error, key) : undefined',
   ]) {
     assert.ok(source.includes(marker), marker);
+  }
+  for (const marker of [
+    "return error && typeof error === 'object' ? Reflect.get(error, key) : undefined",
+  ]) {
+    assert.equal(source.includes(marker), false, marker);
   }
 });
 
@@ -4253,6 +4261,7 @@ test('record guard helper centralizes unknown object narrowing', () => {
   for (const [file, marker] of [
     ['changedFiles.ts', "import { arrayFromUnknown, isRecord } from './records'"],
     ['agingAnalyzer.ts', "import { recordEntriesFromUnknown } from './records'"],
+    ['errorUtils.ts', "import { isRecord } from './records'"],
     ['evidenceData.ts', "import { isRecord, recordsFromUnknown, recordValuesFromUnknown, trimmedStringFromUnknown } from './records'"],
     ['integrationAdapters.ts', "import { arrayFromUnknown, isRecord, optionalFiniteNumberFromUnknown, optionalTrimmedStringFromUnknown, recordsFromUnknown } from './records'"],
     ['ticketMutations.ts', "import { isRecord, optionalTrimmedStringFromUnknown } from './records'"],
