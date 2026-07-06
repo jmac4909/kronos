@@ -3416,7 +3416,10 @@ if (queueTreeProvider.includes('Number.isFinite' + '(intervalMs)')) {
 
 for (const marker of [
   "import { evidenceRecordCount } from '../services/evidenceData'",
+  "import { ticketStringArray } from '../services/ticketFields'",
   'evidenceRecordCount(t)',
+  'const projs = ticketStringArray(t.projects)',
+  'const projs = ticketStringArray(ticket.projects)',
 ]) {
   if (!ticketTreeProvider.includes(marker)) {
     fail(`Missing ticket tree evidence-count marker: ${marker}`);
@@ -3424,6 +3427,9 @@ for (const marker of [
 }
 if (ticketTreeProvider.includes('function evidenceItemCount')) {
   fail('Ticket tree must not duplicate evidence counting.');
+}
+if (ticketTreeProvider.includes('t.projects || []') || ticketTreeProvider.includes('ticket.projects || []')) {
+  fail('Ticket tree must use ticketStringArray before rendering linked projects.');
 }
 if (extension.includes('function evidenceCountForTicket')) {
   fail('Extension must call shared evidenceRecordCount directly instead of wrapping it locally.');

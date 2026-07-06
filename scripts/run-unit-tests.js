@@ -11906,13 +11906,18 @@ test('tree providers share action labels and icons', () => {
     "import { actionDisplayLabel as actionToLabel } from '../services/actionCatalog'",
     "import { buildStatusKind } from '../services/buildStatus'",
     "import { evidenceRecordCount } from '../services/evidenceData'",
+    "import { ticketStringArray } from '../services/ticketFields'",
     "import { ticketActionIcon } from './actionIcons'",
     'this.iconPath = ticketActionIcon(action)',
     'const buildKind = buildStatusKind(t.build.status)',
     'evidenceRecordCount(t)',
+    'const projs = ticketStringArray(t.projects)',
+    'const projs = ticketStringArray(ticket.projects)',
   ]) {
     assert.ok(ticketTree.includes(marker), marker);
   }
+  assert.equal(ticketTree.includes('t.projects || []'), false, 'ticket tree detail rows should normalize linked projects through ticketStringArray');
+  assert.equal(ticketTree.includes('ticket.projects || []'), false, 'ticket tree labels should normalize linked projects through ticketStringArray');
   for (const marker of [
     "import { countLabel } from '../services/countLabels'",
     "import { formatRelativeTime } from '../services/relativeTime'",

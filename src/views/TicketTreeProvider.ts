@@ -5,6 +5,7 @@ import { actionDisplayLabel as actionToLabel } from '../services/actionCatalog';
 import { buildStatusKind } from '../services/buildStatus';
 import { evidenceRecordCount } from '../services/evidenceData';
 import { mergeRequestReviewStatusLabel } from '../services/mergeRequestLabels';
+import { ticketStringArray } from '../services/ticketFields';
 import { TicketFilter, TicketGroupBy, describeTicketFilter, filterTickets, groupTicketEntries, hasTicketFilter } from '../services/ticketFilters';
 import { ticketActionIcon } from './actionIcons';
 
@@ -72,7 +73,7 @@ export class TicketTreeProvider implements vscode.TreeDataProvider<TicketElement
     if (element instanceof TicketItem) {
       const items: TicketDetailItem[] = [];
       const t = element.ticket;
-      const projs = t.projects || [];
+      const projs = ticketStringArray(t.projects);
 
       if (projs.length > 0) {
         for (const p of projs) {
@@ -159,7 +160,7 @@ class TicketItem extends vscode.TreeItem {
     public readonly ticket: Ticket
   ) {
     const action = ticket.next_action;
-    const projs = ticket.projects || [];
+    const projs = ticketStringArray(ticket.projects);
     const linked = projs.length > 0;
     const projTag = linked ? projs.join(', ') : '';
 
