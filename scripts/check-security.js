@@ -3951,6 +3951,7 @@ for (const marker of [
   "unknownErrorMessage(e, 'claude unavailable')",
   "import { normalizeMergeRequestStatus } from './integrationAdapters'",
   "import { parseJsonWithLabel } from './jsonFiles'",
+  "import { ticketStringArray } from './ticketFields'",
   'Values are not displayed',
   'DoctorCommandRunner',
   'function reviewMergeRequestStatusContractIssue',
@@ -3963,10 +3964,14 @@ for (const marker of [
   "countLabel(projectCount, 'project')",
   "countLabel(input.queue.items?.length || 0, 'queue item')",
   "countLabel(openReviewTickets.length, 'open review MR')",
+  'for (const projectName of ticketStringArray(ticket.projects))',
 ]) {
   if (!doctorChecks.includes(marker)) {
     fail(`Missing doctor checks marker: ${marker}`);
   }
+}
+if (doctorChecks.includes('ticket.projects || []')) {
+  fail('Doctor checks must normalize ticket project links through ticketStringArray.');
 }
 for (const forbidden of ['template(s)', 'project(s)', 'ticket(s)', 'queue item(s)', 'issue(s)', 'open review MR(s)']) {
   if (doctorChecks.includes(forbidden)) {

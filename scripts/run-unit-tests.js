@@ -8979,7 +8979,7 @@ test('doctor checks centralize command, credential, project config, and reachabi
     'K-REVIEW': ticket({
       summary: 'Review ticket',
       next_action: 'await_review',
-      projects: ['app'],
+      projects: [' ', 'app', 42],
       mr: { iid: 7, state: 'opened', review_status: 'pending_review', url: 'https://gitlab.example/mr/7' },
     }),
   });
@@ -9220,6 +9220,7 @@ test('doctor checks centralize command, credential, project config, and reachabi
     "unknownErrorMessage(e, 'claude unavailable')",
     "import { normalizeMergeRequestStatus } from './integrationAdapters'",
     "import { parseJsonWithLabel } from './jsonFiles'",
+    "import { ticketStringArray } from './ticketFields'",
     'function addReviewPollingPrerequisiteCheck',
     'function reviewMergeRequestStatusContractIssue',
     'function hasMergeRequestCommentSignal',
@@ -9232,9 +9233,11 @@ test('doctor checks centralize command, credential, project config, and reachabi
     "countLabel(projectCount, 'project')",
     "countLabel(input.queue.items?.length || 0, 'queue item')",
     "countLabel(openReviewTickets.length, 'open review MR')",
+    'for (const projectName of ticketStringArray(ticket.projects))',
   ]) {
     assert.ok(source.includes(marker), marker);
   }
+  assert.equal(source.includes('ticket.projects || []'), false, 'doctor checks should normalize ticket project links through ticketStringArray');
   for (const marker of [
     'catch (e: any)',
     'e?.message',

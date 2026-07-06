@@ -13,6 +13,7 @@ import { normalizeMergeRequestStatus } from './integrationAdapters';
 import { parseJsonWithLabel } from './jsonFiles';
 import { countLabel } from './countLabels';
 import { recordEntriesFromUnknown, recordKeysFromUnknown } from './records';
+import { ticketStringArray } from './ticketFields';
 
 export interface DoctorCheck {
   name: string;
@@ -366,7 +367,7 @@ function addReviewPollingPrerequisiteCheck(
     issues.push('missing GITLAB_TOKEN');
   }
   for (const [ticketKey, ticket] of openReviewTickets) {
-    for (const projectName of ticket.projects || []) {
+    for (const projectName of ticketStringArray(ticket.projects)) {
       const project = state.projects?.[projectName];
       if (!project?.config?.gitlab_project_id) {
         issues.push(`${ticketKey}/${projectName}: missing gitlab_project_id`);
