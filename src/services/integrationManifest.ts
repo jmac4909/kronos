@@ -6,6 +6,7 @@ import { RequiredScriptName, ScriptHealth, requiredScripts } from './scriptClien
 import { safePromptFileName } from './fileNames';
 import { unknownErrorMessage } from './errorUtils';
 import { readJsonFile } from './jsonFiles';
+import { countLabel } from './countLabels';
 
 export const INTEGRATION_MANIFEST_FILE = path.join(KRONOS_DIR, 'manifest.json');
 
@@ -233,7 +234,7 @@ export function auditIntegrationManifest(
   const aggregateStatus: ManifestAuditStatus = failures > 0 ? 'fail' : warnings > 0 ? 'warn' : 'pass';
   return {
     status: aggregateStatus,
-    summary: `${passes} artifact hash check(s) passed, ${warnings} warning(s), ${failures} failure(s).`,
+    summary: `${countLabel(passes, 'artifact hash check')} passed, ${countLabel(warnings, 'warning')}, ${countLabel(failures, 'failure')}.`,
     artifacts,
   };
 }

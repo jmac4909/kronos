@@ -4745,9 +4745,18 @@ for (const marker of [
   'INTEGRATION_MANIFEST_FILE',
   'Required script not listed in manifest',
   'Unknown script in manifest',
+  "import { countLabel } from './countLabels'",
+  "countLabel(passes, 'artifact hash check')",
+  "countLabel(warnings, 'warning')",
+  "countLabel(failures, 'failure')",
 ]) {
   if (!integrationManifest.includes(marker)) {
     fail(`Missing integration manifest marker: ${marker}`);
+  }
+}
+for (const forbidden of ['check(s)', 'warning(s)', 'failure(s)']) {
+  if (integrationManifest.includes(forbidden)) {
+    fail(`Integration manifest must use the shared count label helper instead of ${forbidden}.`);
   }
 }
 

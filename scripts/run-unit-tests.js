@@ -8597,15 +8597,22 @@ test('integration manifest reports missing, valid, and malformed manifests', () 
 
   const source = readSourceFixture('src', 'services', 'integrationManifest.ts');
   for (const marker of [
+    "import { countLabel } from './countLabels'",
     "import { unknownErrorMessage } from './errorUtils'",
     'catch (e: unknown)',
     "unknownErrorMessage(e, 'Could not parse integration manifest.')",
+    "countLabel(passes, 'artifact hash check')",
+    "countLabel(warnings, 'warning')",
+    "countLabel(failures, 'failure')",
   ]) {
     assert.ok(source.includes(marker), marker);
   }
   for (const marker of [
     'catch (e: any)',
     'e?.message',
+    'check(s)',
+    'warning(s)',
+    'failure(s)',
   ]) {
     assert.equal(source.includes(marker), false, marker);
   }
@@ -8642,6 +8649,7 @@ test('integration manifest audits script and prompt SHA-256 drift', () => {
   const status = integrationManifest.readIntegrationManifest(manifestPath);
   const audit = integrationManifest.auditIntegrationManifest(status, { promptDir });
   assert.equal(audit.status, 'pass');
+  assert.equal(audit.summary, '4 artifact hash checks passed, 0 warnings, 0 failures.');
   assert.equal(audit.artifacts.filter(artifact => artifact.status === 'pass').length, 4);
 
   fs.writeFileSync(path.join(scriptDir, 'gitlab_api.py'), 'print("changed")\n');
