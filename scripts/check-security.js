@@ -2978,6 +2978,8 @@ if (runActionHelpers.includes('function formatRunDateTime')) {
 for (const [name, source, marker] of [
   ['src/services/jiraBoardPanelView.ts', jiraBoardPanelView, "import { finiteNumberFromUnknown, isRecord, recordEntriesFromUnknown, recordKeysFromUnknown, recordsFromUnknown } from './records'"],
   ['src/services/jiraBoardPanelView.ts', jiraBoardPanelView, "size: finiteNumberFromUnknown(item['size'])"],
+  ['src/services/mergeRequestNotifications.ts', mergeRequestNotifications, "import { optionalFiniteNumberFromUnknown } from './records'"],
+  ['src/services/mergeRequestNotifications.ts', mergeRequestNotifications, 'const numeric = optionalFiniteNumberFromUnknown(value)'],
   ['src/services/stateStore.ts', stateStore, "version: finiteNumberFromUnknown(raw['version'], 1)"],
   ['src/services/stateStore.ts', stateStore, "priority: finiteNumberFromUnknown(p['priority'])"],
   ['src/services/stateStore.ts', stateStore, "open_mr_count: finiteNumberFromUnknown(p['open_mr_count'])"],

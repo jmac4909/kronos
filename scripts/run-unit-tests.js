@@ -1343,9 +1343,9 @@ test('merge request notifications summarize review status and new comment change
   });
   assert.deepEqual(mergeRequestNotifications.describeMergeRequestStatusChange('K-3', {
     ...baseUpdate,
-    previousMr: { iid: 3, state: 'opened', review_status: 'pending_review', url: 'https://gitlab.example/3', comment_count: 2 },
+    previousMr: { iid: 3, state: 'opened', review_status: 'pending_review', url: 'https://gitlab.example/3', comment_count: '2' },
     ticket: ticket({
-      mr: { iid: 3, state: 'opened', review_status: 'pending_review', url: 'https://gitlab.example/3', comment_count: 4 },
+      mr: { iid: 3, state: 'opened', review_status: 'pending_review', url: 'https://gitlab.example/3', comment_count: '4' },
     }),
   }), {
     severity: 'info',
@@ -1373,9 +1373,9 @@ test('merge request notifications summarize review status and new comment change
   });
   assert.deepEqual(mergeRequestNotifications.describeMergeRequestStatusChange('K-4C', {
     ...baseUpdate,
-    previousMr: { iid: 42, state: 'opened', review_status: 'pending_review', url: 'https://gitlab.example/42', unresolved_discussion_count: 1 },
+    previousMr: { iid: 42, state: 'opened', review_status: 'pending_review', url: 'https://gitlab.example/42', unresolved_discussion_count: '1' },
     ticket: ticket({
-      mr: { iid: 42, state: 'opened', review_status: 'pending_review', url: 'https://gitlab.example/42', unresolved_discussion_count: 3 },
+      mr: { iid: 42, state: 'opened', review_status: 'pending_review', url: 'https://gitlab.example/42', unresolved_discussion_count: '3' },
     }),
   }), {
     severity: 'warning',
@@ -1433,6 +1433,11 @@ test('merge request notifications summarize review status and new comment change
   });
   assert.equal(mergeRequestNotifications.describeMergeRequestStatusChange('K-6', { ...baseUpdate, mergedNow: true }), null);
   assert.equal(mergeRequestNotifications.describeMergeRequestStatusChange('K-7', { ...baseUpdate, closedNow: true }), null);
+
+  const source = readSourceFixture('src', 'services', 'mergeRequestNotifications.ts');
+  assert.ok(source.includes("import { optionalFiniteNumberFromUnknown } from './records'"));
+  assert.ok(source.includes('const numeric = optionalFiniteNumberFromUnknown(value)'));
+  assert.equal(source.includes("typeof value === 'number' && Number.isFinite(value)"), false);
 });
 
 test('review monitor decisions route merged, closed, comment, and no-op MR polls', () => {

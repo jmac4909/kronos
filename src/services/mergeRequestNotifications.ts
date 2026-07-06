@@ -1,5 +1,6 @@
 import type { MergeRequest } from '../state/types';
 import { toValidDate } from './dateValues';
+import { optionalFiniteNumberFromUnknown } from './records';
 import type { MergeRequestStatusUpdate } from './ticketMutations';
 
 interface MergeRequestStatusNotification {
@@ -113,7 +114,8 @@ function discussionActivityDetail(previous: MergeRequest, current: MergeRequest)
 }
 
 function finiteCommentCount(value: unknown): number | undefined {
-  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? Math.floor(value) : undefined;
+  const numeric = optionalFiniteNumberFromUnknown(value);
+  return numeric !== undefined && numeric >= 0 ? Math.floor(numeric) : undefined;
 }
 
 function laterIsoTimestamp(next: string | undefined, previous: string): boolean {
