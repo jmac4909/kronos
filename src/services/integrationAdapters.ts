@@ -3,7 +3,7 @@ import { MergeRequest, MergeRequestChangedFile, MergeRequestComment } from '../s
 import { normalizeChangedFiles } from './changedFiles';
 import { unknownErrorMessage } from './errorUtils';
 import { parseJsonWithLabel } from './jsonFiles';
-import { isRecord, recordsFromUnknown } from './records';
+import { arrayFromUnknown, isRecord, recordsFromUnknown } from './records';
 import { sortMergeRequestCommentsByCreated } from './mergeRequestComments';
 import { toValidDate } from './dateValues';
 
@@ -155,11 +155,7 @@ function normalizeSonarBranches(value: unknown): SonarBranch[] {
 }
 
 function normalizeJiraComments(value: unknown): JiraComment[] {
-  const rawComments = Array.isArray(value)
-    ? value
-    : isRecord(value) && Array.isArray(value['comments'])
-      ? value['comments']
-      : [];
+  const rawComments = Array.isArray(value) ? value : isRecord(value) ? arrayFromUnknown(value['comments']) : [];
   return rawComments.slice(0, 100).map(normalizeJiraComment);
 }
 
@@ -299,10 +295,21 @@ function isUnsupportedMergeRequestStatusText(value: string): boolean {
 }
 
 function normalizeMergeRequestComments(value: unknown): MergeRequestComment[] {
-  if (!Array.isArray(value)) { return []; }
-  const flattened = value.flatMap(item => isRecord(item) && Array.isArray(item['notes']) ? item['notes'] : [item]);
-  const comments = sortMergeRequestCommentsByCreated(flattened.map(normalizeMergeRequestComment));
+  const comments = sortMergeRequestCommentsByCreated(mergeRequestCommentInputs(value).map(normalizeMergeRequestComment));
   return comments.some(comment => comment.created) ? comments.slice(-100) : comments.slice(0, 100);
+}
+
+function mergeRequestCommentInputs(value: unknown): unknown[] {
+  const inputs: unknown[] = [];
+  for (const item of arrayFromUnknown(value)) {
+    if (!isRecord(item)) {
+      inputs.push(item);
+      continue;
+    }
+    const notes = arrayFromUnknown(item['notes']);
+    inputs.push(...(notes.length > 0 ? notes : [item]));
+  }
+  return inputs;
 }
 
 function normalizeJiraComment(value: unknown): JiraComment {

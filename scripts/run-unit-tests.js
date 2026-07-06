@@ -4088,7 +4088,7 @@ test('record guard helper centralizes unknown object narrowing', () => {
   for (const [file, marker] of [
     ['changedFiles.ts', "import { isRecord } from './records'"],
     ['evidenceData.ts', "import { isRecord, recordsFromUnknown, recordValuesFromUnknown } from './records'"],
-    ['integrationAdapters.ts', "import { isRecord, recordsFromUnknown } from './records'"],
+    ['integrationAdapters.ts', "import { arrayFromUnknown, isRecord, recordsFromUnknown } from './records'"],
     ['queuePlanner.ts', "import { arrayFromUnknown, isRecord } from './records'"],
     ['runStatus.ts', "import { isRecord, recordsFromUnknown } from './records'"],
     ['runRecords.ts', "import { isRecord, recordsFromUnknown, recordString } from './records'"],
@@ -8348,6 +8348,16 @@ test('integration adapters wrap selected Jira, GitLab, and Sonar script contract
   assert.deepEqual(integrationAdapters.normalizeMergeRequestStatus({
     comments: ['plain', { body: 42 }],
   }).comments, [{ body: 'plain' }, { body: '' }]);
+  const threadedCommentStatus = integrationAdapters.normalizeMergeRequestStatus({
+    comments: [
+      { id: 'discussion-wrapper', notes: [{ id: 'n1', body: 'thread note', created_at: '2026-07-02T08:00:00.000Z' }] },
+    ],
+  });
+  assert.deepEqual(threadedCommentStatus.comments, [
+    { id: 'n1', created: '2026-07-02T08:00:00.000Z', body: 'thread note' },
+  ]);
+  assert.equal(threadedCommentStatus.comment_count, 1);
+  assert.equal(threadedCommentStatus.last_comment_at, '2026-07-02T08:00:00.000Z');
   await assert.rejects(
     () => integrationAdapters.jiraAdapter.ticketComments({ runScript: async () => 'not json' }, 'K-8'),
     /Invalid JSON from Jira comments/
@@ -8415,13 +8425,15 @@ test('integration adapters keep raw provider payloads unknown until normalized',
     "import { parseJsonWithLabel } from './jsonFiles'",
     'parseJsonWithLabel(await runner.runScript',
     'catch (e: unknown)',
-    "import { isRecord, recordsFromUnknown } from './records'",
+    "import { arrayFromUnknown, isRecord, recordsFromUnknown } from './records'",
     "import { unknownErrorMessage } from './errorUtils'",
     'async function runMergeRequestStatusJson',
     "runner.runScript(['--mr-status', ticketKey], options)",
     "runner.runScript(['--mr-diff', ticketKey], options)",
     'function isUnsupportedMergeRequestStatusCommand',
     'function isUnsupportedMergeRequestStatusText',
+    'function mergeRequestCommentInputs',
+    "const notes = arrayFromUnknown(item['notes'])",
   ]) {
     assert.ok(source.includes(marker), marker);
   }
