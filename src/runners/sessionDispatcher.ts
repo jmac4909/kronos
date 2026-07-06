@@ -181,9 +181,7 @@ function configuredProjectExtraDirs(projectPath: string): { dirs: string[]; warn
     const project = recordEntriesFromUnknown(state?.projects).find(([, candidate]) => candidate.path === projectPath)?.[1];
     const dirs = project?.config?.extra_dirs;
     return {
-      dirs: Array.isArray(dirs)
-        ? dirs.filter((dir): dir is string => typeof dir === 'string' && dir.trim().length > 0)
-        : [],
+      dirs: arrayFromUnknown(dirs).map(dir => trimmedStringFromUnknown(dir)).filter(Boolean),
     };
   } catch (e: unknown) {
     return { dirs: [], warning: unknownErrorMessage(e, 'Failed to read Kronos state.') };

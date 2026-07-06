@@ -515,6 +515,7 @@ for (const marker of [
   "import { readStateFile } from '../services/stateStore'",
   'function configuredProjectExtraDirs',
   'const state = readStateFile()',
+  'dirs: arrayFromUnknown(dirs).map(dir => trimmedStringFromUnknown(dir)).filter(Boolean)',
   'Could not read project extra_dirs',
 ]) {
   if (!dispatcher.includes(marker)) {
@@ -2353,6 +2354,7 @@ for (const staleMarker of [
   'function arrayField(record: Record<string, unknown>, key: string): unknown[]',
   "arrayField(message, 'content')",
   'const runEvents = Array.isArray(run.events) ? run.events : []',
+  'dirs: Array.isArray(dirs)',
   'const missingVariables = arrayFromUnknown(rawMissingVariables).map(String)',
   'const missingVariables = Array.isArray(rawMissingVariables) ? rawMissingVariables.map(String) : []',
 ]) {
