@@ -24,6 +24,7 @@ import { isFreshActiveRun } from '../services/runStatus';
 import { runProgressSummary } from '../services/runProgress';
 import { buildRunOperatorSummary, type RunOperatorSummary, type RunOperatorTone } from '../services/runOperatorSummary';
 import { isAttentionRunStatus, runAttentionDetail } from '../services/runAttention';
+import { appendRunRecoveryActions, appendRunWarnings } from '../services/runMetadata';
 import { sortedRunCenterRuns } from '../services/runCenterSort';
 import { readJsonFile } from '../services/jsonFiles';
 import { arrayFromUnknown, isRecord, recordEntriesFromUnknown, recordFromUnknown } from '../services/records';
@@ -836,7 +837,7 @@ export async function dispatchClaudeSession(
         const event = { type: 'error' as const, label: 'Managed worktree pull skipped', detail: prepared.pullWarning, timestamp: new Date() };
         events.push(event);
         addRunEvent(run, event);
-        updateRun(run, { warnings: [...(run.warnings || []), warning] });
+        updateRun(run, { warnings: appendRunWarnings(run.warnings, [warning]) });
       }
       cwd = wtDir;
       worktreePath = wtDir;
@@ -883,7 +884,7 @@ export async function dispatchClaudeSession(
         failureKind: 'git',
       };
       if (failureWarnings.length > 0) {
-        failurePatch.warnings = [...(run.warnings || []), ...failureWarnings];
+        failurePatch.warnings = appendRunWarnings(run.warnings, failureWarnings);
       }
       if (worktreeExists) {
         failurePatch.cwd = wtDir;
@@ -899,14 +900,13 @@ export async function dispatchClaudeSession(
           checkoutRef,
           managedWorktree: true,
         });
-        failurePatch.recoveryActions = [
-          ...(run.recoveryActions || []),
+        failurePatch.recoveryActions = appendRunRecoveryActions(run.recoveryActions, [
           {
             at: new Date().toISOString(),
             action: 'cleanup-worktree',
             reason: `Managed worktree setup failed after creating ${wtDir}. Review or run Kronos: Cleanup Worktrees.`,
           },
-        ];
+        ]);
       } else {
         managedWorktreePath = null;
       }

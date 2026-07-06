@@ -125,6 +125,7 @@ import { isKronosScriptMissingError } from './services/scriptClient';
 import { activeRunStatusBarSummary } from './services/activeRunDisplay';
 import { isFreshActiveRun } from './services/runStatus';
 import { buildRunCompletionNotification } from './services/runCompletionNotification';
+import { appendRunWarnings } from './services/runMetadata';
 import { LIVE_MR_DIFF_TIMEOUT_MS, loadMrFileHints } from './services/mergeRequestFileHints';
 import { countLabel } from './services/countLabels';
 import { ticketStringArray } from './services/ticketFields';
@@ -4363,7 +4364,7 @@ function refreshAfterDispatch(state: KronosState, projectName?: string, ticketKe
     let resolvedTicketKey = resolveDispatchTicketKey(ticketKey, run);
     const refreshWarning = await reloadStateAfterDispatch(state, projectName);
     if (refreshWarning) {
-      run.warnings = [...(run.warnings || []), refreshWarning];
+      run.warnings = appendRunWarnings(run.warnings, [refreshWarning]);
     }
     const ticketResolutionInput: { tickets?: Record<string, Ticket>; ticketKey?: string; projectName?: string; run?: unknown } = { run };
     if (state.state?.tickets) { ticketResolutionInput.tickets = state.state.tickets; }

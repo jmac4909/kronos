@@ -34,6 +34,7 @@ const nonScriptClientSource = [
 ].join('\n');
 const stateStore = readSource('src/services/stateStore.ts');
 const runStore = readSource('src/services/runStore.ts');
+const runMetadata = readSource('src/services/runMetadata.ts');
 const fileNames = readSource('src/services/fileNames.ts');
 const jsonFiles = readSource('src/services/jsonFiles.ts');
 const sessionStore = readSource('src/services/sessionStore.ts');
@@ -570,13 +571,14 @@ for (const marker of [
   'function refreshAfterDispatch(state: KronosState, projectName?: string, ticketKey?: string): (code: number, run: KronosRun) => Promise<void>',
   'return async (_code: number, run: KronosRun)',
   'await refreshAfterDispatch(state, projectName)(code, run)',
+  "import { appendRunWarnings } from './services/runMetadata'",
   "import { isAttentionRunStatus, runAttentionDetail, runAttentionLine } from './runAttention'",
   'function runQuickPickDescription(run: RunActionRecord)',
   'export const RUN_ACTION_QUICK_PICK_ITEMS',
   'export function buildRunQuickPickItems<T extends RunActionRecord>',
   'description: runQuickPickDescription(run)',
   'const refreshWarning = await reloadStateAfterDispatch(state, projectName);',
-  'run.warnings = [...(run.warnings || []), refreshWarning];',
+  'run.warnings = appendRunWarnings(run.warnings, [refreshWarning]);',
   'async function reloadStateAfterDispatch(state: KronosState, projectName?: string): Promise<string | undefined>',
   "unknownErrorMessage(e, `Failed to refresh Kronos state after dispatch for ${projectName}.`)",
   'vscode.window.showWarningMessage(refreshWarning);',
@@ -2078,6 +2080,31 @@ if (runStore.includes('function numericPid(value: unknown): number | undefined')
 }
 
 for (const marker of [
+  'export interface RunRecoveryActionMetadata',
+  'export function runWarningStrings(value: unknown): string[]',
+  'export function appendRunWarnings(current: unknown, warnings: unknown[]): string[]',
+  'export function runRecoveryActions(value: unknown): RunRecoveryActionMetadata[]',
+  'export function appendRunRecoveryActions(current: unknown, actions: RunRecoveryActionMetadata[]): RunRecoveryActionMetadata[]',
+  'arrayFromUnknown(value).map(warningString).filter(Boolean)',
+  'actions.flatMap(recoveryActionFromUnknown)',
+  'const at = trimmedStringFromUnknown',
+  'return at && action && reason ? [{ at, action, reason }] : []',
+]) {
+  if (!runMetadata.includes(marker)) {
+    fail(`Missing run metadata marker: ${marker}`);
+  }
+}
+for (const forbidden of [
+  'Record<string, any>',
+  'as any',
+  'JSON.parse',
+]) {
+  if (runMetadata.includes(forbidden)) {
+    fail(`Run metadata must normalize unknown values instead of using ${forbidden}.`);
+  }
+}
+
+for (const marker of [
   'export function safeFileStem',
   'export function safePromptFileName',
   'Invalid prompt template name',
@@ -2163,11 +2190,14 @@ for (const marker of [
   "label: 'Failed to launch Claude CLI'",
   'GCP auth expired or missing.',
   'Authenticate and retry the saved prompt from Run Center.',
+  "import { appendRunRecoveryActions, appendRunWarnings } from '../services/runMetadata'",
   "const failureDetail = unknownErrorMessage(e, 'Git worktree setup failed.')",
   "vscode.window.showWarningMessage('Git worktree setup failed; run marked failed before launch.')",
   "label: 'Git worktree setup failed'",
   "label: 'Managed worktree pull skipped'",
-  'updateRun(run, { warnings: [...(run.warnings || []), warning] })',
+  'updateRun(run, { warnings: appendRunWarnings(run.warnings, [warning]) })',
+  'failurePatch.warnings = appendRunWarnings(run.warnings, failureWarnings)',
+  'failurePatch.recoveryActions = appendRunRecoveryActions(run.recoveryActions, [',
   "failureKind: 'git'",
   'classifyRunFailure({ ...run',
   'spawnErrorHandled',

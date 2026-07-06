@@ -243,6 +243,7 @@ const runLabels = require('../out/services/runLabels.js');
 const runCompletionNotification = require('../out/services/runCompletionNotification.js');
 const runCenterSort = require('../out/services/runCenterSort.js');
 const runActionHelpers = require('../out/services/runActionHelpers.js');
+const runMetadata = require('../out/services/runMetadata.js');
 const attentionBadge = require('../out/services/attentionBadge.js');
 const intervalConfig = require('../out/services/intervalConfig.js');
 const commandPayloads = require('../out/services/commandPayloads.js');
@@ -6118,6 +6119,25 @@ test('run store marks runs cancelled with recovery metadata', () => {
   assert.equal(persisted.events[0].label, 'Run cancelled');
 });
 
+test('run metadata helpers normalize warnings and recovery actions', () => {
+  assert.deepEqual(runMetadata.runWarningStrings([' keep ', 42, '', null, 'second']), ['keep', 'second']);
+  assert.deepEqual(runMetadata.appendRunWarnings(['old', { bad: true }], [' new ', null]), ['old', 'new']);
+  assert.deepEqual(runMetadata.runRecoveryActions([
+    null,
+    { at: ' 2026-07-06T00:00:00.000Z ', action: ' cleanup-worktree ', reason: ' dirty worktree ' },
+    { at: 'missing-action', action: '', reason: 'ignored' },
+  ]), [
+    { at: '2026-07-06T00:00:00.000Z', action: 'cleanup-worktree', reason: 'dirty worktree' },
+  ]);
+  assert.deepEqual(runMetadata.appendRunRecoveryActions(
+    [{ at: 'old-at', action: 'pause-run', reason: 'operator pause' }, { bad: true }],
+    [{ at: 'new-at', action: 'cleanup-worktree', reason: 'review generated worktree' }],
+  ), [
+    { at: 'old-at', action: 'pause-run', reason: 'operator pause' },
+    { at: 'new-at', action: 'cleanup-worktree', reason: 'review generated worktree' },
+  ]);
+});
+
 test('run store pauses and continues runs with recovery metadata', () => {
   const run = {
     id: 'run-paused',
@@ -6469,6 +6489,7 @@ test('dispatcher records branch and permission metadata for persisted runs', () 
     "import { runProgressSummary } from '../services/runProgress'",
     "import { buildRunOperatorSummary, type RunOperatorSummary, type RunOperatorTone } from '../services/runOperatorSummary'",
     "import { isAttentionRunStatus, runAttentionDetail } from '../services/runAttention'",
+    "import { appendRunRecoveryActions, appendRunWarnings } from '../services/runMetadata'",
     'createWebviewNonce',
     'webviewScriptCspOptions',
     'WEBVIEW_ACTION_PANEL_SCRIPT',
@@ -6574,7 +6595,9 @@ test('dispatcher records branch and permission metadata for persisted runs', () 
     '<strong>Needs Attention</strong>',
     "renderProgressPanel(panel, projectName, skill, ticket || '', events, run)",
     "label: 'Managed worktree pull skipped'",
-    'updateRun(run, { warnings: [...(run.warnings || []), warning] })',
+    'updateRun(run, { warnings: appendRunWarnings(run.warnings, [warning]) })',
+    'failurePatch.warnings = appendRunWarnings(run.warnings, failureWarnings)',
+    'failurePatch.recoveryActions = appendRunRecoveryActions(run.recoveryActions, [',
     'await runCompletionCallback(opts, code ?? 1, run',
     "repairActiveRunRecords(100).runs as KronosRun[]",
     'function backfillRunReadiness(runs: KronosRun[]): KronosRun[]',
@@ -6644,6 +6667,16 @@ test('dispatcher records branch and permission metadata for persisted runs', () 
     source.includes('run.events[run.events.length - 1]'),
     false,
     'run center should tolerate missing or malformed run.events',
+  );
+  assert.equal(
+    source.includes('run.warnings || []'),
+    false,
+    'dispatcher should append warning metadata through runMetadata',
+  );
+  assert.equal(
+    source.includes('run.recoveryActions || []'),
+    false,
+    'dispatcher should append recovery metadata through runMetadata',
   );
   assert.equal(
     source.includes('catch (e: any)'),
@@ -10782,7 +10815,7 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'const resolvedTicket = resolvePostRunTicket(ticketResolutionInput)',
     'projectName,',
     'const refreshWarning = await reloadStateAfterDispatch(state, projectName);',
-    'run.warnings = [...(run.warnings || []), refreshWarning];',
+    'run.warnings = appendRunWarnings(run.warnings, [refreshWarning]);',
     'addTicketRunCompletionEvidence(resolvedTicketKey, {',
     'note: {',
     "kind: 'note'",
@@ -10798,6 +10831,7 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'await reloadStateAfterDispatch(state, projectName)',
     'function resolveDispatchTicketKey(ticketKey: string | undefined, run: KronosRun): string | undefined',
     "import { buildRunCompletionEvidenceCheck, buildRunCompletionEvidenceText, evaluatePostRunReadiness, postRunReadinessRunPatch, resolvePostRunTicket, shouldRecordRunCompletionEvidence } from './services/postRunReadiness'",
+    "import { appendRunWarnings } from './services/runMetadata'",
     'addTicketRunCompletionEvidence',
     'await showRunCompletionToast(resolvedTicketKey, ticket, run)',
     'async function showRunCompletionToast(ticketKey: string, ticket: Ticket | undefined, run: KronosRun): Promise<void>',
@@ -11092,6 +11126,11 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     source.includes('run.events[run.events.length - 1]'),
     false,
     'extension run pickers should tolerate missing or malformed run.events',
+  );
+  assert.equal(
+    source.includes('run.warnings || []'),
+    false,
+    'extension should append run warning metadata through runMetadata',
   );
   assert.ok(source.includes('function startActiveRunPanelRefresh('), 'webview panels should share active-run auto-refresh');
   assert.ok(source.includes("warnUnexpectedPanelIntegrationError(e, 'Kronos panel auto-refresh failed.')"), 'panel auto-refresh errors should be normalized');
