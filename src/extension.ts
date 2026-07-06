@@ -26,7 +26,7 @@ import {
 } from './services/queueDispatchPlan';
 import { actionDisplayLabel as actionToLabel } from './services/actionCatalog';
 import { isCodeAction } from './services/actionSemantics';
-import { toValidDate } from './services/dateValues';
+import { formatDateTimeLabel } from './services/dateLabels';
 import { writeEvidenceExport } from './services/evidenceStore';
 import { evidenceAcceptanceCriteria, evidenceChecked, evidenceString } from './services/evidenceData';
 import { EvidenceHandoffPlan, buildEvidenceHandoffPlan } from './services/evidenceHandoff';
@@ -93,7 +93,6 @@ import { createWorkspaceDiffArtifact, firstRemoteBranchMatching, originProjectPa
 import { signalProcessTree, stopProcessTree, supportsProcessTreeSuspend } from './services/processTree';
 import { createWebviewReadyMonitor } from './services/webviewDiagnostics';
 import { WEBVIEW_ACTION_PANEL_SCRIPT, WEBVIEW_JIRA_BOARD_SCRIPT, createWebviewNonce, webviewScriptCspOptions, withWebviewCsp } from './services/webviewSecurity';
-import { formatWebviewDateTime } from './services/webviewFormat';
 import { normalizeBoardMessage, normalizeWebviewCommand } from './services/webviewMessages';
 import {
   AGENT_QUALITY_OPERATOR_COMMANDS,
@@ -3045,12 +3044,11 @@ export function activate(context: vscode.ExtensionContext) {
         return;
       }
       const items = sessions.map(s => {
-        const date = toValidDate(s.startedAt);
         const isDone = s.events.some(e => e.type === 'done');
         const icon = isDone ? '$(check)' : '$(error)';
         return {
           label: `${icon} ${s.project} — ${s.skill} ${s.ticket}`,
-          description: date?.toLocaleString() || 'Unknown',
+          description: formatDateTimeLabel(s.startedAt, 'Unknown'),
           detail: s.events.find(e => e.type === 'done')?.label || s.events[s.events.length - 1]?.label || '',
           session: s,
         };
@@ -3588,7 +3586,7 @@ async function pickAndRestoreBackup(state: KronosState, backups = listBackups(),
   }
 
   const choices = backups.map(backup => ({
-    label: `${backup.targetName} - ${formatWebviewDateTime(backup.createdAt)}`,
+    label: `${backup.targetName} - ${formatDateTimeLabel(backup.createdAt)}`,
     description: `${Math.max(1, Math.round(backup.size / 1024))} KB`,
     detail: backup.filePath,
     backup,
@@ -3614,7 +3612,7 @@ async function pickAndRestoreBackup(state: KronosState, backups = listBackups(),
     target: picked.backup.targetName,
     risks: ['state-write'],
     changes: [
-      `Restore ${picked.backup.targetName} from ${formatWebviewDateTime(picked.backup.createdAt)}.`,
+      `Restore ${picked.backup.targetName} from ${formatDateTimeLabel(picked.backup.createdAt)}.`,
       'Back up the current file before replacing it.',
     ],
     confirmationLabel: 'Restore',

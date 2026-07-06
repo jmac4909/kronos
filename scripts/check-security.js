@@ -39,6 +39,7 @@ const namedFiles = [
   'src/services/sonarCommandPlan.ts',
   'src/services/sonarReportView.ts',
   'src/services/agingReportView.ts',
+  'src/services/dateLabels.ts',
   'src/services/webviewFormat.ts',
   'src/services/webviewHtml.ts',
   'src/views/ProjectTreeProvider.ts',
@@ -106,6 +107,7 @@ const severityRank = readSource('src/services/severityRank.ts');
 const records = readSource('src/services/records.ts');
 const commandPayloads = readSource('src/services/commandPayloads.ts');
 const dateValues = readSource('src/services/dateValues.ts');
+const dateLabels = sources['src/services/dateLabels.ts'];
 const buildStatus = readSource('src/services/buildStatus.ts');
 const regexp = readSource('src/services/regexp.ts');
 const pathUtils = readSource('src/services/pathUtils.ts');
@@ -2146,6 +2148,7 @@ for (const marker of [
   'export { getAggregateStats, listSavedSessions, listSessionStoreIssues }',
   'const id = safeSessionId',
   "import { toValidDate } from '../services/dateValues'",
+  "import { formatDateTimeLabel, formatTimeLabel } from '../services/dateLabels'",
   'function progressDateOr',
   'function progressEventTimeLabel',
   'function progressDateTimeLabel',
@@ -2491,10 +2494,24 @@ for (const marker of [
 
 for (const marker of [
   "import { toValidDate } from './dateValues'",
-  'export function formatWebviewDateTime(value: unknown',
+  'export function formatDateTimeLabel(value: unknown',
   'return toValidDate(value)?.toLocaleString() || fallback',
-  'export function formatWebviewDate(value: unknown',
+  'export function formatDateLabel(value: unknown',
   'return toValidDate(value)?.toLocaleDateString() || fallback',
+  'export function formatTimeLabel(value: unknown',
+  'return toValidDate(value)?.toLocaleTimeString() || fallback',
+]) {
+  if (!dateLabels.includes(marker)) {
+    fail(`Missing date label helper marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  "import { formatDateLabel, formatDateTimeLabel } from './dateLabels'",
+  'export function formatWebviewDateTime(value: unknown',
+  'return formatDateTimeLabel(value, fallback)',
+  'export function formatWebviewDate(value: unknown',
+  'return formatDateLabel(value, fallback)',
 ]) {
   if (!webviewFormat.includes(marker)) {
     fail(`Missing webview date format helper marker: ${marker}`);
@@ -2601,9 +2618,9 @@ if (!runActionHelpers.includes('isExistingRealPathInside(filePath, RUNS_DIR)')) 
 }
 
 for (const [name, source, marker] of [
-  ['src/extension.ts', extension, "import { toValidDate } from './services/dateValues'"],
   ['src/services/agingAnalyzer.ts', agingAnalyzer, "import { toValidDate } from './dateValues'"],
   ['src/services/collisionDetector.ts', collisionDetector, "import { toValidDate } from './dateValues'"],
+  ['src/services/dateLabels.ts', dateLabels, "import { toValidDate } from './dateValues'"],
   ['src/services/dashboardWorklist.ts', dashboardWorklist, "import { toValidDate } from './dateValues'"],
   ['src/services/integrationAdapters.ts', integrationAdapters, "import { toValidDate } from './dateValues'"],
   ['src/services/mergeRequestComments.ts', mergeRequestComments, "import { toValidDate } from './dateValues'"],
@@ -2619,9 +2636,7 @@ for (const [name, source, marker] of [
   ['src/services/ticketFilters.ts', ticketFilters, "import { toValidDate } from './dateValues'"],
   ['src/services/ticketTimeline.ts', ticketTimeline, "import { toValidDate } from './dateValues'"],
   ['src/services/trendMetrics.ts', trendMetrics, "import { toValidDate } from './dateValues'"],
-  ['src/services/webviewFormat.ts', webviewFormat, "import { toValidDate } from './dateValues'"],
   ['src/runners/sessionDispatcher.ts', dispatcher, "import { toValidDate } from '../services/dateValues'"],
-  ['src/views/SessionTreeProvider.ts', sessionTreeProvider, "import { toValidDate } from '../services/dateValues'"],
 ]) {
   if (!source.includes(marker)) {
     fail(`${name} must import the shared date value helper.`);
@@ -2632,6 +2647,27 @@ for (const [name, source, marker] of [
   if (source.includes('function dateValue') || source.includes('function validDate') || source.includes('function parseDate')) {
     fail(`${name} must not carry a local date coercion helper.`);
   }
+}
+
+for (const [name, source, marker] of [
+  ['src/extension.ts', extension, "import { formatDateTimeLabel } from './services/dateLabels'"],
+  ['src/runners/sessionDispatcher.ts', dispatcher, "import { formatDateTimeLabel, formatTimeLabel } from '../services/dateLabels'"],
+  ['src/services/runActionHelpers.ts', runActionHelpers, "import { formatDateTimeLabel } from './dateLabels'"],
+  ['src/services/webviewFormat.ts', webviewFormat, "import { formatDateLabel, formatDateTimeLabel } from './dateLabels'"],
+  ['src/views/SessionTreeProvider.ts', sessionTreeProvider, "import { formatTimeLabel } from '../services/dateLabels'"],
+]) {
+  if (!source.includes(marker)) {
+    fail(`${name} must import the shared date label helper.`);
+  }
+}
+if (extension.includes("import { toValidDate } from './services/dateValues'")) {
+  fail('src/extension.ts must use shared date label helpers instead of importing date coercion directly for labels.');
+}
+if (sessionTreeProvider.includes("import { toValidDate } from '../services/dateValues'")) {
+  fail('Session tree provider must use shared date label helpers instead of importing date coercion directly for labels.');
+}
+if (runActionHelpers.includes('function formatRunDateTime')) {
+  fail('Run action helpers must not carry a local date-time label helper.');
 }
 
 for (const [name, source, marker] of [
@@ -3886,7 +3922,6 @@ for (const staleMarker of [
 }
 
 for (const [name, source, marker] of [
-  ['src/extension.ts', extension, "import { formatWebviewDateTime } from './services/webviewFormat'"],
   ['src/services/agingReportView.ts', agingReportView, "import { formatWebviewDateTime } from './webviewFormat'"],
   ['src/services/operationsReportPanelView.ts', operationsReportPanelView, "import { formatWebviewDateTime } from './webviewFormat'"],
   ['src/services/ticketPanelView.ts', ticketPanelView, "import { formatWebviewDate, formatWebviewDateTime } from './webviewFormat'"],

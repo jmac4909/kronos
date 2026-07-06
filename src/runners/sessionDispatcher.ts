@@ -28,6 +28,7 @@ import { sortedRunCenterRuns } from '../services/runCenterSort';
 import { readJsonFile } from '../services/jsonFiles';
 import { isRecord } from '../services/records';
 import { toValidDate } from '../services/dateValues';
+import { formatDateTimeLabel, formatTimeLabel } from '../services/dateLabels';
 import type { KronosState as KronosStateFile } from '../state/types';
 export { getAggregateStats, listSavedSessions, listSessionStoreIssues } from '../services/sessionStore';
 export type { RunCenterActionRequest } from '../services/webviewMessages';
@@ -1213,11 +1214,11 @@ function progressDateOr(value: unknown, fallback: Date): Date {
 }
 
 function progressEventTimeLabel(value: unknown): string {
-  return toValidDate(value)?.toLocaleTimeString() || 'Unknown';
+  return formatTimeLabel(value);
 }
 
 function progressDateTimeLabel(value: unknown, fallback = 'Unknown'): string {
-  return toValidDate(value)?.toLocaleString() || fallback;
+  return formatDateTimeLabel(value, fallback);
 }
 
 function stringOrDefault(value: unknown, fallback: string): string {

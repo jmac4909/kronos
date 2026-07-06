@@ -1,9 +1,9 @@
-import { toValidDate } from './dateValues';
+import { formatDateLabel, formatDateTimeLabel } from './dateLabels';
 
 export function formatWebviewDateTime(value: unknown, fallback = 'N/A'): string {
-  return toValidDate(value)?.toLocaleString() || fallback;
+  return formatDateTimeLabel(value, fallback);
 }
 
 export function formatWebviewDate(value: unknown, fallback = 'N/A'): string {
-  return toValidDate(value)?.toLocaleDateString() || fallback;
+  return formatDateLabel(value, fallback);
 }

@@ -5,7 +5,7 @@ import { isExistingRealPathInside } from './pathUtils';
 import { unknownErrorMessage } from './errorUtils';
 import { isFreshActiveRun } from './runStatus';
 import { isAttentionRunStatus, runAttentionDetail, runAttentionLine } from './runAttention';
-import { toValidDate } from './dateValues';
+import { formatDateTimeLabel } from './dateLabels';
 
 export interface RunActionRecord {
   id?: string;
@@ -125,7 +125,7 @@ export function runQuickPickDetail(run: RunActionRecord): string {
   const detail = isAttentionRunStatus(status)
     ? runAttentionDetail(run)
     : runLastEventLabel(run);
-  return `${formatRunDateTime(run.startedAt)} - ${detail || run.cwd || ''}`;
+  return `${formatDateTimeLabel(run.startedAt)} - ${detail || run.cwd || ''}`;
 }
 
 export function runQuickPickDescription(run: RunActionRecord): string {
@@ -149,8 +149,4 @@ export function buildRunQuickPickItems<T extends RunActionRecord>(runs: T[]): Ru
 export function runProcessPid(run: RunActionRecord): number | undefined {
   const pid = Number(run.processPid ?? Reflect.get(run, 'pid'));
   return Number.isFinite(pid) && pid > 0 ? pid : undefined;
-}
-
-function formatRunDateTime(value: unknown, fallback = 'N/A'): string {
-  return toValidDate(value)?.toLocaleString() || fallback;
 }

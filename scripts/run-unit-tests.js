@@ -172,6 +172,7 @@ const buildStatus = require('../out/services/buildStatus.js');
 const severityRank = require('../out/services/severityRank.js');
 const records = require('../out/services/records.js');
 const dateValues = require('../out/services/dateValues.js');
+const dateLabels = require('../out/services/dateLabels.js');
 const regexp = require('../out/services/regexp.js');
 const pathUtils = require('../out/services/pathUtils.js');
 const jsonFiles = require('../out/services/jsonFiles.js');
@@ -4123,12 +4124,17 @@ test('date value helper centralizes valid date coercion', () => {
   assert.equal(dateValues.toValidDate(date.getTime())?.toISOString(), date.toISOString());
   assert.equal(dateValues.toValidDate('not-a-date'), null);
   assert.equal(dateValues.toValidDate({}), null);
+  assert.equal(dateLabels.formatDateTimeLabel('not-a-date', 'fallback'), 'fallback');
+  assert.equal(dateLabels.formatDateLabel('not-a-date', 'fallback'), 'fallback');
+  assert.equal(dateLabels.formatTimeLabel('not-a-date', 'fallback'), 'fallback');
+  assert.match(dateLabels.formatDateTimeLabel(date.toISOString()), /2026|7\/2\/2026|02\/07\/2026/);
+  assert.match(dateLabels.formatDateLabel(date.toISOString()), /2026|7\/2\/2026|02\/07\/2026/);
 
   const runCenterSortSource = readSourceFixture('src', 'services', 'runCenterSort.ts');
   assert.ok(runCenterSortSource.includes("import { toValidDate } from './dateValues'"));
   assert.equal(runCenterSortSource.includes('function toValidDate'), false);
 
-  for (const file of ['agingAnalyzer.ts', 'collisionDetector.ts', 'dashboardWorklist.ts', 'integrationAdapters.ts', 'mergeRequestComments.ts', 'mergeRequestNotifications.ts', 'queuePlanner.ts', 'relativeTime.ts', 'recoveryCenter.ts', 'runProgress.ts', 'runStatus.ts', 'runStore.ts', 'sessionStore.ts', 'ticketFilters.ts', 'ticketTimeline.ts', 'trendMetrics.ts']) {
+  for (const file of ['agingAnalyzer.ts', 'collisionDetector.ts', 'dashboardWorklist.ts', 'dateLabels.ts', 'integrationAdapters.ts', 'mergeRequestComments.ts', 'mergeRequestNotifications.ts', 'queuePlanner.ts', 'relativeTime.ts', 'recoveryCenter.ts', 'runProgress.ts', 'runStatus.ts', 'runStore.ts', 'sessionStore.ts', 'ticketFilters.ts', 'ticketTimeline.ts', 'trendMetrics.ts']) {
     const source = readSourceFixture('src', 'services', file);
     assert.ok(source.includes("import { toValidDate } from './dateValues'"), `${file} should use shared date value helper`);
     assert.equal(source.includes('function dateValue'), false, `${file} should not carry a local dateValue helper`);
@@ -4138,12 +4144,15 @@ test('date value helper centralizes valid date coercion', () => {
 
   const dispatcherSource = readSourceFixture('src', 'runners', 'sessionDispatcher.ts');
   assert.ok(dispatcherSource.includes("import { toValidDate } from '../services/dateValues'"));
+  assert.ok(dispatcherSource.includes("import { formatDateTimeLabel, formatTimeLabel } from '../services/dateLabels'"));
   assert.equal(dispatcherSource.includes('function toValidDate'), false);
 
   const extensionSource = readSourceFixture('src', 'extension.ts');
-  assert.ok(extensionSource.includes("import { toValidDate } from './services/dateValues'"));
-  assert.ok(extensionSource.includes("import { formatWebviewDateTime } from './services/webviewFormat'"));
+  assert.ok(extensionSource.includes("import { formatDateTimeLabel } from './services/dateLabels'"));
+  assert.equal(extensionSource.includes("import { toValidDate } from './services/dateValues'"), false);
+  assert.equal(extensionSource.includes("import { formatWebviewDateTime } from './services/webviewFormat'"), false);
   assert.equal(extensionSource.includes('function formatWebviewDateTime'), false);
+  assert.ok(extensionSource.includes("description: formatDateTimeLabel(s.startedAt, 'Unknown')"));
   const ticketPanelViewSource = readSourceFixture('src', 'services', 'ticketPanelView.ts');
   assert.ok(ticketPanelViewSource.includes("import { formatWebviewDate, formatWebviewDateTime } from './webviewFormat'"));
   assert.equal(ticketPanelViewSource.includes('function formatWebviewDateTime'), false);
@@ -4158,12 +4167,15 @@ test('date value helper centralizes valid date coercion', () => {
   assert.equal(agingReportViewSource.includes('function formatDateTime'), false);
 
   const webviewFormatSource = readSourceFixture('src', 'services', 'webviewFormat.ts');
-  assert.ok(webviewFormatSource.includes("import { toValidDate } from './dateValues'"));
+  assert.ok(webviewFormatSource.includes("import { formatDateLabel, formatDateTimeLabel } from './dateLabels'"));
   assert.ok(webviewFormatSource.includes('export function formatWebviewDateTime(value: unknown'));
   assert.ok(webviewFormatSource.includes('export function formatWebviewDate(value: unknown'));
+  assert.ok(webviewFormatSource.includes('return formatDateTimeLabel(value, fallback)'));
+  assert.ok(webviewFormatSource.includes('return formatDateLabel(value, fallback)'));
 
   const sessionTreeSource = readSourceFixture('src', 'views', 'SessionTreeProvider.ts');
-  assert.ok(sessionTreeSource.includes("import { toValidDate } from '../services/dateValues'"));
+  assert.ok(sessionTreeSource.includes("import { formatTimeLabel } from '../services/dateLabels'"));
+  assert.equal(sessionTreeSource.includes("import { toValidDate } from '../services/dateValues'"), false);
   assert.equal(sessionTreeSource.includes('new Date(session.startedAt)'), false);
 });
 
@@ -4230,6 +4242,10 @@ test('run action helpers resolve safe artifacts and quick-pick labels', () => {
   assert.deepEqual(runActionHelpers.resolveRunArtifactFile(promptPath), { ok: true, filePath: promptPath });
   assert.deepEqual(runActionHelpers.resolveRunArtifactFile(path.join(runStore.RUNS_DIR, 'missing.log')), { ok: false, reason: 'missing' });
   assert.deepEqual(runActionHelpers.resolveRunArtifactFile(externalPath), { ok: false, reason: 'outside-runs-dir' });
+
+  const source = readSourceFixture('src', 'services', 'runActionHelpers.ts');
+  assert.ok(source.includes("import { formatDateTimeLabel } from './dateLabels'"));
+  assert.equal(source.includes('function formatRunDateTime'), false);
 
   assert.equal(runActionHelpers.isRetryableRun({ status: 'completed', promptPath }), true);
   assert.equal(runActionHelpers.isRetryableRun({ status: 'running', promptPath }), false);
@@ -6048,6 +6064,7 @@ test('dispatcher records branch and permission metadata for persisted runs', () 
     'const pollTimer = setInterval',
     'panel.onDidDispose(() => clearInterval(pollTimer))',
     "import { toValidDate } from '../services/dateValues'",
+    "import { formatDateTimeLabel, formatTimeLabel } from '../services/dateLabels'",
     'function progressDateOr',
     'function progressEventTimeLabel',
     'function progressDateTimeLabel',
