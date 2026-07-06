@@ -6002,6 +6002,13 @@ test('run store surfaces invalid records and blocks strict mutations', () => {
     "import { unknownErrorCode, unknownErrorMessage } from './errorUtils'",
     "import { toValidDate } from './dateValues'",
     '[key: string]: unknown',
+    "type RunRecoveryAction = NonNullable<RunRecord['recoveryActions']>[number]",
+    "type RunStoreEvent = NonNullable<RunRecord['events']>[number]",
+    'function appendRunRecoveryAction(run: RunRecord, action: RunRecoveryAction): void',
+    'function appendRunEvent(run: RunRecord, event: RunStoreEvent, options: { copyExisting?: boolean } = {}): void',
+    'appendRunRecoveryAction(run, { at, action: mutation.action, reason: detail })',
+    "appendRunEvent(run, { type: 'recovery', label: mutation.label, detail, timestamp: at })",
+    'copyExisting ? [...events] : events',
     'catch (e: unknown)',
     "unknownErrorMessage(e, 'Unable to parse JSON.')",
     "path.basename(filePath) !== expectedFileName",
@@ -6023,6 +6030,9 @@ test('run store surfaces invalid records and blocks strict mutations', () => {
     'catch (e: any)',
     'e?.message',
     '[key: string]: any',
+    'run.recoveryActions.push({ at, action: mutation.action, reason: detail })',
+    "run.events.push({ type: 'recovery', label: mutation.label, detail, timestamp: at })",
+    'normalized.events = Array.isArray(normalized.events) ? [...normalized.events] : []',
   ]) {
     assert.equal(source.includes(marker), false, marker);
   }

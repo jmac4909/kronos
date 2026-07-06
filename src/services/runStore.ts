@@ -31,6 +31,9 @@ export interface RunRecord {
   [key: string]: unknown;
 }
 
+type RunRecoveryAction = NonNullable<RunRecord['recoveryActions']>[number];
+type RunStoreEvent = NonNullable<RunRecord['events']>[number];
+
 interface ArchivedRun {
   run: RunRecord;
   runPath: string;
@@ -171,10 +174,8 @@ function markRunRecovery(runId: string, reason: string, now: Date, mutation: Run
   if (mutation.timestampField) {
     run[mutation.timestampField] = at;
   }
-  run.recoveryActions = Array.isArray(run.recoveryActions) ? run.recoveryActions : [];
-  run.recoveryActions.push({ at, action: mutation.action, reason: detail });
-  run.events = Array.isArray(run.events) ? run.events : [];
-  run.events.push({ type: 'recovery', label: mutation.label, detail, timestamp: at });
+  appendRunRecoveryAction(run, { at, action: mutation.action, reason: detail });
+  appendRunEvent(run, { type: 'recovery', label: mutation.label, detail, timestamp: at });
   writeRunRecord(run);
   return run;
 }
@@ -298,24 +299,33 @@ function normalizeTerminalActiveRun(run: RunRecord, filePath?: string): RunRecor
   }
   if (deadProcessStatus) {
     const timestamp = normalized.endedAt || new Date().toISOString();
-    normalized.events = Array.isArray(normalized.events) ? [...normalized.events] : [];
-    normalized.events.push({
+    appendRunEvent(normalized, {
       type: 'error',
       label: 'Run process no longer exists',
       detail: `PID ${run.processPid} disappeared before Kronos recorded a terminal event.`,
       timestamp,
-    });
+    }, { copyExisting: true });
   } else if (staleProcesslessStatus) {
     const timestamp = normalized.endedAt || new Date().toISOString();
-    normalized.events = Array.isArray(normalized.events) ? [...normalized.events] : [];
-    normalized.events.push({
+    appendRunEvent(normalized, {
       type: 'error',
       label: 'Stale active run needs human review',
       detail: 'No process metadata or terminal event was available before the stale active-run threshold.',
       timestamp,
-    });
+    }, { copyExisting: true });
   }
   return normalized;
+}
+
+function appendRunRecoveryAction(run: RunRecord, action: RunRecoveryAction): void {
+  run.recoveryActions = Array.isArray(run.recoveryActions) ? run.recoveryActions : [];
+  run.recoveryActions.push(action);
+}
+
+function appendRunEvent(run: RunRecord, event: RunStoreEvent, options: { copyExisting?: boolean } = {}): void {
+  const events = Array.isArray(run.events) ? run.events : [];
+  run.events = options.copyExisting ? [...events] : events;
+  run.events.push(event);
 }
 
 function terminalRunOutcomeFromDeadProcess(run: RunRecord, status: string): string | undefined {

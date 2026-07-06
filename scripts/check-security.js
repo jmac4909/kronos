@@ -1949,8 +1949,13 @@ for (const marker of [
   "fallbackFailureKind: 'unknown'",
   "failureKind: 'cancelled'",
   'run.failureKind = run.failureKind || mutation.fallbackFailureKind',
-  'run.recoveryActions.push({ at, action: mutation.action, reason: detail })',
-  "run.events.push({ type: 'recovery', label: mutation.label, detail, timestamp: at })",
+  "type RunRecoveryAction = NonNullable<RunRecord['recoveryActions']>[number]",
+  "type RunStoreEvent = NonNullable<RunRecord['events']>[number]",
+  'function appendRunRecoveryAction(run: RunRecord, action: RunRecoveryAction): void',
+  'function appendRunEvent(run: RunRecord, event: RunStoreEvent, options: { copyExisting?: boolean } = {}): void',
+  'appendRunRecoveryAction(run, { at, action: mutation.action, reason: detail })',
+  "appendRunEvent(run, { type: 'recovery', label: mutation.label, detail, timestamp: at })",
+  'copyExisting ? [...events] : events',
   "import { unknownErrorCode, unknownErrorMessage } from './errorUtils'",
   'catch (e: unknown)',
   "unknownErrorMessage(e, 'Unable to parse JSON.')",
@@ -1987,6 +1992,15 @@ for (const marker of [
 ]) {
   if (!runStore.includes(marker)) {
     fail(`Missing run store marker: ${marker}`);
+  }
+}
+for (const staleMarker of [
+  'run.recoveryActions.push({ at, action: mutation.action, reason: detail })',
+  "run.events.push({ type: 'recovery', label: mutation.label, detail, timestamp: at })",
+  'normalized.events = Array.isArray(normalized.events) ? [...normalized.events] : []',
+]) {
+  if (runStore.includes(staleMarker)) {
+    fail(`Run store must use shared append helpers instead of ${staleMarker}.`);
   }
 }
 for (const marker of [
