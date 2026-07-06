@@ -513,6 +513,8 @@ if (dispatcher.includes('if (opts.onComplete) { opts.onComplete')) {
 }
 for (const marker of [
   "import { readStateFile } from '../services/stateStore'",
+  'function configuredProjectJsonBaseBranch',
+  'const cfg = recordFromUnknown(readJsonFile(projConfig))',
   'function configuredProjectExtraDirs',
   'const state = readStateFile()',
   'dirs: arrayFromUnknown(dirs).map(dir => trimmedStringFromUnknown(dir)).filter(Boolean)',
@@ -2360,6 +2362,8 @@ for (const staleMarker of [
   'function recordField(record: Record<string, unknown>, key: string): Record<string, unknown>',
   'function arrayField(record: Record<string, unknown>, key: string): unknown[]',
   "arrayField(message, 'content')",
+  "if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) { return {}; }",
+  'const cfg = parsed as Record<string, unknown>',
   'const runEvents = Array.isArray(run.events) ? run.events : []',
   'dirs: Array.isArray(dirs)',
   'const missingVariables = arrayFromUnknown(rawMissingVariables).map(String)',
