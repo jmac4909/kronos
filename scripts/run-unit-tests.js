@@ -4293,6 +4293,8 @@ test('sonar command plan normalizes issue payloads and builds fix instructions',
   assert.match(instructions, /CUSTOM INSTRUCTIONS/);
   assert.match(instructions, /BRANCH STRATEGY/);
   assert.match(instructions, /KNOWN ISSUES/);
+  assert.match(instructions, /CONVERGENCE LOOP/);
+  assert.match(instructions, /fix -> build -> scan -> verify/);
 
   const source = readSourceFixture('src', 'services', 'sonarCommandPlan.ts');
   for (const marker of [
@@ -4302,6 +4304,8 @@ test('sonar command plan normalizes issue payloads and builds fix instructions',
     'export function buildSonarBranchPickItems',
     'export function formatSonarIssuePromptLine(issue: SonarIssue): string',
     'export function buildKnownSonarIssuesBlock(value: unknown): string',
+    'export function buildSonarConvergenceLoopBlock(): string',
+    'fix -> build -> scan -> verify',
     'export function buildSonarFixBranchStrategy(projectName: string, sourceBranch: string): string',
     'export function buildSonarFixInstructionBlock',
   ]) {

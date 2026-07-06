@@ -54,6 +54,17 @@ export function buildKnownSonarIssuesBlock(value: unknown): string {
   return `KNOWN ISSUES (already fetched — do NOT re-query SonarQube for the issue list):\n${lines.join('\n')}`;
 }
 
+export function buildSonarConvergenceLoopBlock(): string {
+  return [
+    'CONVERGENCE LOOP:',
+    '1. Apply the SonarQube fixes.',
+    '2. Run the project build and relevant tests before publishing changes.',
+    '3. Run or refresh the SonarQube scan and quality gate for the target branch.',
+    '4. Verify the gate passes and that the fix did not introduce new SonarQube issues.',
+    '5. Repeat fix -> build -> scan -> verify until the quality gate passes, or stop with a clear blocker and evidence.',
+  ].join('\n');
+}
+
 export function buildSonarFixBranchStrategy(projectName: string, sourceBranch: string): string {
   const baseBranch = sourceBranch || 'develop';
   const isProtected = !sourceBranch || sourceBranch === 'develop' || sourceBranch === 'main' || sourceBranch === 'master';
@@ -71,6 +82,7 @@ export function buildSonarFixInstructionBlock(input: {
     input.customInstructions ? `CUSTOM INSTRUCTIONS (follow these overrides):\n${input.customInstructions}` : '',
     `BRANCH STRATEGY:\n${input.branchStrategy}`,
     buildKnownSonarIssuesBlock(input.issuesData),
+    buildSonarConvergenceLoopBlock(),
   ].filter(Boolean).join('\n\n');
 }
 

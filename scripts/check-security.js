@@ -4135,6 +4135,8 @@ for (const marker of [
   'export function normalizeSonarIssueCommandList(value: unknown): SonarIssue[]',
   'export function formatSonarIssuePromptLine(issue: SonarIssue): string',
   'export function buildKnownSonarIssuesBlock(value: unknown): string',
+  'export function buildSonarConvergenceLoopBlock(): string',
+  'fix -> build -> scan -> verify',
   'export function buildSonarFixBranchStrategy(projectName: string, sourceBranch: string): string',
   'export function buildSonarFixInstructionBlock',
   'function normalizeSonarIssueCommandValue(value: unknown): SonarIssue | null',
