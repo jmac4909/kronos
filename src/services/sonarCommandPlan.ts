@@ -1,5 +1,5 @@
 import type { SonarIssue } from './sonarReportView';
-import { arrayFromUnknown, recordFromUnknown } from './records';
+import { arrayFromUnknown, optionalTrimmedStringFromUnknown, recordFromUnknown } from './records';
 
 interface SonarBranchSummary {
   name: string;
@@ -77,10 +77,14 @@ export function buildSonarFixInstructionBlock(input: {
 function normalizeSonarIssueCommandValue(value: unknown): SonarIssue | null {
   const record = recordFromUnknown(value);
   const issue: SonarIssue = {};
-  if (typeof record['severity'] === 'string') { issue.severity = record['severity']; }
-  if (typeof record['rule'] === 'string') { issue.rule = record['rule']; }
-  if (typeof record['component'] === 'string') { issue.component = record['component']; }
+  const severity = optionalTrimmedStringFromUnknown(record['severity']);
+  const rule = optionalTrimmedStringFromUnknown(record['rule']);
+  const component = optionalTrimmedStringFromUnknown(record['component']);
+  const message = optionalTrimmedStringFromUnknown(record['message']);
+  if (severity) { issue.severity = severity; }
+  if (rule) { issue.rule = rule; }
+  if (component) { issue.component = component; }
   if (record['line'] !== undefined) { issue.line = record['line']; }
-  if (typeof record['message'] === 'string') { issue.message = record['message']; }
+  if (message) { issue.message = message; }
   return issue.severity || issue.rule || issue.component || issue.message || issue.line !== undefined ? issue : null;
 }

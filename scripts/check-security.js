@@ -2999,7 +2999,7 @@ for (const [name, source, marker] of [
   ['src/services/runRecords.ts', runRecords, "import { isRecord, recordsFromUnknown, recordString } from './records'"],
   ['src/services/runStore.ts', runStore, "import { isRecord, recordString } from './records'"],
   ['src/services/sessionStore.ts', sessionStore, "import { finiteNumberFromUnknown, isRecord, optionalTrimmedStringFromUnknown, recordsFromUnknown } from './records'"],
-  ['src/services/sonarReportView.ts', sonarReportView, "import { isRecord, recordsFromUnknown } from './records'"],
+  ['src/services/sonarReportView.ts', sonarReportView, "import { isRecord, optionalTrimmedStringFromUnknown, recordsFromUnknown } from './records'"],
   ['src/services/trendMetrics.ts', trendMetrics, "import { definedValues, recordEntriesFromUnknown, recordString } from './records'"],
   ['src/services/stateStore.ts', stateStore, "import { finiteNumberFromUnknown, isRecord as isPlainObject } from './records'"],
   ['src/services/stateScriptAdapter.ts', stateScriptAdapter, "import { arrayFromUnknown, finiteNumberFromUnknown, isRecord as isPlainObject, optionalTrimmedStringFromUnknown } from './records'"],
@@ -3850,6 +3850,8 @@ for (const marker of [
   'data-action="fixSonar"',
   'data-action="openSonar"',
   "kronosActionPanelScript(input.nonce, 'Kronos Sonar Report', input.actionScriptUri)",
+  "optionalTrimmedStringFromUnknown(projectStatus['status'])",
+  "const severity = optionalTrimmedStringFromUnknown(issue['severity'])",
   'issueList.slice(0, 50)',
 ]) {
   if (!sonarReportView.includes(marker)) {
@@ -3866,7 +3868,7 @@ for (const forbidden of [
 }
 for (const marker of [
   "import type { SonarIssue } from './sonarReportView'",
-  "import { arrayFromUnknown, recordFromUnknown } from './records'",
+  "import { arrayFromUnknown, optionalTrimmedStringFromUnknown, recordFromUnknown } from './records'",
   'export interface SonarBranchPickItem',
   'export function buildSonarBranchPickItems',
   'export function normalizeSonarIssueCommandList(value: unknown): SonarIssue[]',
@@ -3875,6 +3877,7 @@ for (const marker of [
   'export function buildSonarFixBranchStrategy(projectName: string, sourceBranch: string): string',
   'export function buildSonarFixInstructionBlock',
   'function normalizeSonarIssueCommandValue(value: unknown): SonarIssue | null',
+  "const severity = optionalTrimmedStringFromUnknown(record['severity'])",
 ]) {
   if (!sonarCommandPlan.includes(marker)) {
     fail(`Missing Sonar command plan marker: ${marker}`);

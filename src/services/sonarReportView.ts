@@ -1,6 +1,6 @@
 import { escapeClass, escapeHtml, kronosWebviewBaseCss } from './webviewHtml';
 import { kronosActionPanelScript } from './operatorPanel';
-import { isRecord, recordsFromUnknown } from './records';
+import { isRecord, optionalTrimmedStringFromUnknown, recordsFromUnknown } from './records';
 
 interface SonarReportRenderInput {
   projectName: string;
@@ -76,13 +76,9 @@ function projectStatusRecord(gate: unknown): Record<string, unknown> {
 
 function sonarGateStatus(gate: unknown): string {
   const projectStatus = projectStatusRecord(gate);
-  if (typeof projectStatus['status'] === 'string' && projectStatus['status'].trim()) {
-    return projectStatus['status'];
-  }
-  if (isRecord(gate) && typeof gate['status'] === 'string' && gate['status'].trim()) {
-    return gate['status'];
-  }
-  return 'UNKNOWN';
+  return optionalTrimmedStringFromUnknown(projectStatus['status'])
+    || (isRecord(gate) ? optionalTrimmedStringFromUnknown(gate['status']) : undefined)
+    || 'UNKNOWN';
 }
 
 function sonarConditionList(gate: unknown): SonarCondition[] {
@@ -92,9 +88,12 @@ function sonarConditionList(gate: unknown): SonarCondition[] {
       errorThreshold: condition['errorThreshold'],
       actualValue: condition['actualValue'],
     };
-    if (typeof condition['status'] === 'string') { normalized.status = condition['status']; }
-    if (typeof condition['metricKey'] === 'string') { normalized.metricKey = condition['metricKey']; }
-    if (typeof condition['comparator'] === 'string') { normalized.comparator = condition['comparator']; }
+    const status = optionalTrimmedStringFromUnknown(condition['status']);
+    const metricKey = optionalTrimmedStringFromUnknown(condition['metricKey']);
+    const comparator = optionalTrimmedStringFromUnknown(condition['comparator']);
+    if (status) { normalized.status = status; }
+    if (metricKey) { normalized.metricKey = metricKey; }
+    if (comparator) { normalized.comparator = comparator; }
     return normalized;
   });
 }
@@ -108,7 +107,8 @@ function sonarMeasureList(measures: unknown): SonarMeasure[] {
   const list = componentMeasures || recordsFromUnknown(measures['measures']);
   return list.map(measure => {
     const normalized: SonarMeasure = { value: measure['value'] };
-    if (typeof measure['metric'] === 'string') { normalized.metric = measure['metric']; }
+    const metric = optionalTrimmedStringFromUnknown(measure['metric']);
+    if (metric) { normalized.metric = metric; }
     if (isRecord(measure['period'])) { normalized.period = { value: measure['period']['value'] }; }
     return normalized;
   });
@@ -118,10 +118,14 @@ function sonarIssueList(issues: unknown): SonarIssue[] {
   if (!isRecord(issues)) { return []; }
   return recordsFromUnknown(issues['issues']).map(issue => {
     const normalized: SonarIssue = { line: issue['line'] };
-    if (typeof issue['severity'] === 'string') { normalized.severity = issue['severity']; }
-    if (typeof issue['rule'] === 'string') { normalized.rule = issue['rule']; }
-    if (typeof issue['component'] === 'string') { normalized.component = issue['component']; }
-    if (typeof issue['message'] === 'string') { normalized.message = issue['message']; }
+    const severity = optionalTrimmedStringFromUnknown(issue['severity']);
+    const rule = optionalTrimmedStringFromUnknown(issue['rule']);
+    const component = optionalTrimmedStringFromUnknown(issue['component']);
+    const message = optionalTrimmedStringFromUnknown(issue['message']);
+    if (severity) { normalized.severity = severity; }
+    if (rule) { normalized.rule = rule; }
+    if (component) { normalized.component = component; }
+    if (message) { normalized.message = message; }
     return normalized;
   });
 }

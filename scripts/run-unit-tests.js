@@ -3710,17 +3710,17 @@ test('sonar report view renders escaped report data and command buttons', () => 
     nonce: `nonce'"123`,
     gate: {
       projectStatus: {
-        status: 'ERROR',
+        status: ' ERROR ',
         conditions: [
           { status: 'OK', metricKey: 'new_coverage', comparator: 'LT', errorThreshold: '80', actualValue: '90' },
-          { status: 'ERROR', metricKey: 'new_duplicated_lines_density', comparator: 'GT', errorThreshold: '3', actualValue: '9' },
+          { status: ' ERROR ', metricKey: ' new_duplicated_lines_density ', comparator: 'GT', errorThreshold: '3', actualValue: '9' },
         ],
       },
     },
-    measures: { component: { measures: [{ metric: 'coverage', value: '82.5' }] } },
+    measures: { component: { measures: [{ metric: ' coverage ', value: '82.5' }] } },
     issues: {
       issues: [
-        { severity: 'CRITICAL"><script>', rule: 'java:S123', component: 'app:src/App.java', line: 12, message: '<bad>' },
+        { severity: ' CRITICAL"><script> ', rule: ' java:S123 ', component: ' app:src/App.java ', line: 12, message: ' <bad> ' },
       ],
     },
     actionScriptUri: ACTION_SCRIPT_URI,
@@ -3815,7 +3815,7 @@ test('sonar command plan normalizes issue payloads and builds fix instructions',
   const issues = sonarCommandPlan.normalizeSonarIssueCommandList([
     null,
     'bad',
-    { severity: 'CRITICAL', rule: 'java:S123', component: 'app:src/App.java', line: 12, message: 'Fix it' },
+    { severity: ' CRITICAL ', rule: ' java:S123 ', component: ' app:src/App.java ', line: 12, message: ' Fix it ' },
     { line: 0 },
     { message: 42 },
   ]);
@@ -3865,7 +3865,7 @@ test('sonar command plan normalizes issue payloads and builds fix instructions',
   const source = readSourceFixture('src', 'services', 'sonarCommandPlan.ts');
   for (const marker of [
     "import type { SonarIssue } from './sonarReportView'",
-    "import { arrayFromUnknown, recordFromUnknown } from './records'",
+    "import { arrayFromUnknown, optionalTrimmedStringFromUnknown, recordFromUnknown } from './records'",
     'export function normalizeSonarIssueCommandList(value: unknown): SonarIssue[]',
     'export function buildSonarBranchPickItems',
     'export function formatSonarIssuePromptLine(issue: SonarIssue): string',
@@ -4148,7 +4148,7 @@ test('record guard helper centralizes unknown object narrowing', () => {
     ['runRecords.ts', "import { isRecord, recordsFromUnknown, recordString } from './records'"],
     ['runStore.ts', "import { isRecord, recordString } from './records'"],
     ['sessionStore.ts', "import { finiteNumberFromUnknown, isRecord, optionalTrimmedStringFromUnknown, recordsFromUnknown } from './records'"],
-    ['sonarReportView.ts', "import { isRecord, recordsFromUnknown } from './records'"],
+    ['sonarReportView.ts', "import { isRecord, optionalTrimmedStringFromUnknown, recordsFromUnknown } from './records'"],
     ['stateStore.ts', "import { finiteNumberFromUnknown, isRecord as isPlainObject } from './records'"],
     ['stateScriptAdapter.ts', "import { arrayFromUnknown, finiteNumberFromUnknown, isRecord as isPlainObject, optionalTrimmedStringFromUnknown } from './records'"],
   ]) {
@@ -11663,7 +11663,7 @@ test('extension Sonar commands normalize webview and issue payloads', () => {
   }
   for (const marker of [
     'function normalizeSonarIssueCommandValue(value: unknown): SonarIssue | null',
-    "import { arrayFromUnknown, recordFromUnknown } from './records'",
+    "import { arrayFromUnknown, optionalTrimmedStringFromUnknown, recordFromUnknown } from './records'",
     'export function normalizeSonarIssueCommandList(value: unknown): SonarIssue[]',
     'export function buildSonarBranchPickItems',
     'export function formatSonarIssuePromptLine(issue: SonarIssue): string',
