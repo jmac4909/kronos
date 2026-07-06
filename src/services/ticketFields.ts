@@ -10,5 +10,5 @@ export function ticketStringArray(value: unknown): string[] {
 }
 
 function ticketArrayString(value: unknown): string {
-  return typeof value === 'string' || typeof value === 'number' ? String(value).trim() : '';
+  return typeof value === 'string' ? value.trim() : '';
 }

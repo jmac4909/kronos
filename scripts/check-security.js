@@ -1534,17 +1534,18 @@ for (const marker of [
   }
 }
 for (const marker of [
-  "import { arrayFromUnknown, recordFromUnknown } from './records'",
+  "import { recordFromUnknown } from './records'",
+  "import { ticketStringArray } from './ticketFields'",
   'export interface QueueCommandPayload',
   'export function resolveProjectName',
   "const ticket = recordFromUnknown(record['ticket'])",
-  "const firstTicketProject = arrayFromUnknown(ticket['projects'])[0]",
+  "const firstTicketProject = ticketStringArray(ticket['projects'])[0]",
   'export function resolveTicketKey',
   "const nestedItem = recordFromUnknown(record['item'])",
   'export function resolveQueueCommandItem',
   'export function queueCommandPayloadFromRecord',
-  'function projectNames(value: unknown): string[]',
-  'return arrayFromUnknown(value)',
+  'return [...new Set(ticketStringArray(value))]',
+  "const projects = ticketStringArray(record['projects'])",
   'export function resolveQueueIndex',
   "typeof index === 'number' && Number.isInteger(index) && index >= 0",
   'export function stringFromUnknown',
@@ -1559,11 +1560,13 @@ for (const marker of [
   }
 }
 for (const forbidden of [
-  "import { recordFromUnknown } from './records'",
+  "import { arrayFromUnknown, recordFromUnknown } from './records'",
   "Array.isArray(record['projects'])",
   'if (!Array.isArray(value)) { return []; }',
   "recordFromUnknown(recordFromUnknown(item)['ticket'])",
   "recordFromUnknown(recordFromUnknown(item)['item'])",
+  'function projectNames(value: unknown): string[]',
+  'return arrayFromUnknown(value)',
 ]) {
   if (commandPayloads.includes(forbidden)) {
     fail(`Command payload helpers must use shared normalizers instead of ${forbidden}`);
@@ -2606,7 +2609,7 @@ for (const marker of [
   'export function ticketStringArray(value: unknown): string[]',
   'return arrayFromUnknown(value).map(ticketArrayString).filter(Boolean)',
   'function ticketArrayString(value: unknown): string',
-  "typeof value === 'string' || typeof value === 'number'",
+  "typeof value === 'string' ? value.trim() : ''",
 ]) {
   if (!ticketFields.includes(marker)) {
     fail(`Missing ticket field helper marker: ${marker}`);

@@ -4059,7 +4059,7 @@ test('record guard helper centralizes unknown object narrowing', () => {
   assert.equal(records.recordString({ ticket: 42 }, 'ticket'), '');
   assert.equal(ticketFields.ticketStringField({ ticket: 42 }, 'ticket'), '42');
   assert.equal(ticketFields.ticketStringField({}, 'missing', 'fallback'), 'fallback');
-  assert.deepEqual(ticketFields.ticketStringArray([' K-1 ', 42, '', null, { key: 'K-2' }, true]), ['K-1', '42']);
+  assert.deepEqual(ticketFields.ticketStringArray([' K-1 ', 42, '', null, { key: 'K-2' }, true]), ['K-1']);
   assert.deepEqual(mergeRequestComments.mergeRequestCommentsFromRecord({
     comments: [{ body: 'ok', author: 'Reviewer' }, { author: 'missing body' }, 'raw'],
   }), [{ body: 'ok', author: 'Reviewer' }]);
@@ -4127,7 +4127,7 @@ test('record guard helper centralizes unknown object narrowing', () => {
     'export function ticketStringArray(value: unknown): string[]',
     'return arrayFromUnknown(value).map(ticketArrayString).filter(Boolean)',
     'function ticketArrayString(value: unknown): string',
-    "typeof value === 'string' || typeof value === 'number'",
+    "typeof value === 'string' ? value.trim() : ''",
   ]) {
     assert.ok(ticketFieldsSource.includes(marker), marker);
   }
@@ -4266,27 +4266,30 @@ test('command payload helpers normalize tree, webview, queue, and run payloads',
 
   const source = readSourceFixture('src', 'services', 'commandPayloads.ts');
   for (const marker of [
-    "import { arrayFromUnknown, recordFromUnknown } from './records'",
+    "import { recordFromUnknown } from './records'",
+    "import { ticketStringArray } from './ticketFields'",
     'export interface QueueCommandPayload',
     'export function resolveProjectName',
     'export function ticketProjectNamesForCommand',
     'export function resolveRecoveryFocusId',
     'export function resolveQueueCommandItem',
     'export function queueCommandPayloadFromRecord',
-    "const firstTicketProject = arrayFromUnknown(ticket['projects'])[0]",
-    'function projectNames(value: unknown): string[]',
-    'return arrayFromUnknown(value)',
+    "const firstTicketProject = ticketStringArray(ticket['projects'])[0]",
+    'return [...new Set(ticketStringArray(value))]',
+    "const projects = ticketStringArray(record['projects'])",
     "stringFromUnknown(record['project_path']) || stringFromUnknown(record['projectPath'])",
     "typeof index === 'number' && Number.isInteger(index) && index >= 0",
   ]) {
     assert.ok(source.includes(marker), marker);
   }
   for (const forbidden of [
-    "import { recordFromUnknown } from './records'",
+    "import { arrayFromUnknown, recordFromUnknown } from './records'",
     "Array.isArray(record['projects'])",
     'if (!Array.isArray(value)) { return []; }',
     "recordFromUnknown(recordFromUnknown(item)['ticket'])",
     "recordFromUnknown(recordFromUnknown(item)['item'])",
+    'function projectNames(value: unknown): string[]',
+    'return arrayFromUnknown(value)',
   ]) {
     assert.equal(source.includes(forbidden), false, forbidden);
   }
