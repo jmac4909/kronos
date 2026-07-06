@@ -4166,7 +4166,7 @@ test('record guard helper centralizes unknown object narrowing', () => {
   }
 
   const dispatcherSource = readSourceFixture('src', 'runners', 'sessionDispatcher.ts');
-  assert.ok(dispatcherSource.includes("import { isRecord } from '../services/records'"));
+  assert.ok(dispatcherSource.includes("import { arrayFromUnknown, isRecord, recordFromUnknown } from '../services/records'"));
   assert.equal(dispatcherSource.includes('function isRecord'), false);
 
   for (const [file, marker] of [
@@ -6301,14 +6301,14 @@ test('dispatcher records branch and permission metadata for persisted runs', () 
     'function progressEventTimeLabel',
     'function progressDateTimeLabel',
     'function stringOrDefault',
-    "import { isRecord } from '../services/records'",
-    'function recordField(record: Record<string, unknown>, key: string): Record<string, unknown>',
-    'function arrayField(record: Record<string, unknown>, key: string): unknown[]',
+    "import { arrayFromUnknown, isRecord, recordFromUnknown } from '../services/records'",
     'function streamString(value: unknown): string',
     'export function parseStreamEvents(event: unknown): ProgressEvent[]',
     'function parseAssistantContentBlock(rawBlock: unknown, now: Date): ProgressEvent | null',
     'const payload = isRecord(event) ? event : {}',
-    "arrayField(message, 'content')",
+    "const message = recordFromUnknown(payload['message'])",
+    "return arrayFromUnknown(message['content'])",
+    "const input = recordFromUnknown(block['input'])",
     'for (const pe of parseStreamEvents(JSON.parse(trimmed)))',
     "export function progressStatusPresentation(events: ProgressEvent[], run?: Pick<KronosRun, 'status'>)",
     'const statusPresentation = progressStatusPresentation(events, run)',
@@ -6323,7 +6323,9 @@ test('dispatcher records branch and permission metadata for persisted runs', () 
     'Duration: ${progress.elapsedSeconds}s',
     'const statusClass = escapeClass(status)',
     'const started = progressDateTimeLabel(run.startedAt)',
-    'const runEvents = Array.isArray(run.events) ? run.events : []',
+    'const runEvents = arrayFromUnknown(run.events)',
+    'const lastEvent = runEvents.length ? recordFromUnknown(runEvents[runEvents.length - 1]) : undefined',
+    'const missingVariables = arrayFromUnknown(rawMissingVariables).map(String)',
     'const operatorSummary = buildRunOperatorSummary(run)',
     'buildRunCenterOperatorBoard',
     'class="progress-cell outcome-cell',
@@ -6392,6 +6394,15 @@ test('dispatcher records branch and permission metadata for persisted runs', () 
     'resolvePostRunTicket',
   ]) {
     assert.ok(source.includes(marker), marker);
+  }
+  for (const staleMarker of [
+    'function recordField(record: Record<string, unknown>, key: string): Record<string, unknown>',
+    'function arrayField(record: Record<string, unknown>, key: string): unknown[]',
+    "arrayField(message, 'content')",
+    'const runEvents = Array.isArray(run.events) ? run.events : []',
+    'const missingVariables = Array.isArray(rawMissingVariables) ? rawMissingVariables.map(String) : []',
+  ]) {
+    assert.equal(source.includes(staleMarker), false, staleMarker);
   }
   for (const marker of [
     'export interface RunBranchMetadata',

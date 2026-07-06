@@ -26,7 +26,7 @@ import { buildRunOperatorSummary, type RunOperatorSummary, type RunOperatorTone 
 import { isAttentionRunStatus, runAttentionDetail } from '../services/runAttention';
 import { sortedRunCenterRuns } from '../services/runCenterSort';
 import { readJsonFile } from '../services/jsonFiles';
-import { isRecord } from '../services/records';
+import { arrayFromUnknown, isRecord, recordFromUnknown } from '../services/records';
 import { toValidDate } from '../services/dateValues';
 import { formatDateTimeLabel, formatTimeLabel } from '../services/dateLabels';
 import type { KronosState as KronosStateFile } from '../state/types';
@@ -1227,16 +1227,6 @@ function stringOrDefault(value: unknown, fallback: string): string {
   return trimmed || fallback;
 }
 
-function recordField(record: Record<string, unknown>, key: string): Record<string, unknown> {
-  const value = record[key];
-  return isRecord(value) ? value : {};
-}
-
-function arrayField(record: Record<string, unknown>, key: string): unknown[] {
-  const value = record[key];
-  return Array.isArray(value) ? value : [];
-}
-
 function streamString(value: unknown): string {
   return typeof value === 'string' || typeof value === 'number' ? String(value) : '';
 }
@@ -1245,8 +1235,8 @@ export function parseStreamEvents(event: unknown): ProgressEvent[] {
   const now = new Date();
   const payload = isRecord(event) ? event : {};
   if (payload['type'] === 'assistant') {
-    const message = recordField(payload, 'message');
-    return arrayField(message, 'content')
+    const message = recordFromUnknown(payload['message']);
+    return arrayFromUnknown(message['content'])
       .map(rawBlock => parseAssistantContentBlock(rawBlock, now))
       .filter((progressEvent): progressEvent is ProgressEvent => Boolean(progressEvent));
   }
@@ -1264,7 +1254,7 @@ function parseAssistantContentBlock(rawBlock: unknown, now: Date): ProgressEvent
   const blockType = streamString(block['type']);
   if (blockType === 'tool_use') {
     const name = streamString(block['name']);
-    const input = recordField(block, 'input');
+    const input = recordFromUnknown(block['input']);
     let label = '';
     let detail = '';
     if (name === 'Read') {
@@ -1556,8 +1546,8 @@ function buildRunCenterHtml(runs: KronosRun[], nonce?: string, actionScriptUri?:
     const rowClass = `${statusClass}${focused ? ' focused-run' : ''}`;
     const ended = run.endedAt ? progressDateTimeLabel(run.endedAt) : '';
     const started = progressDateTimeLabel(run.startedAt);
-    const runEvents = Array.isArray(run.events) ? run.events : [];
-    const lastEvent = runEvents[runEvents.length - 1];
+    const runEvents = arrayFromUnknown(run.events);
+    const lastEvent = runEvents.length ? recordFromUnknown(runEvents[runEvents.length - 1]) : undefined;
     const promptMeta = isRecord(run.promptMetadata) ? run.promptMetadata : undefined;
     const promptName = stringOrDefault(promptMeta?.['name'], '');
     const promptLabel = promptName
@@ -1565,7 +1555,7 @@ function buildRunCenterHtml(runs: KronosRun[], nonce?: string, actionScriptUri?:
       : stringOrDefault(promptMeta?.['source'], 'prompt');
     const promptHash = stringOrDefault(promptMeta?.['templateHash'] || run.promptHash, '');
     const rawMissingVariables = promptMeta?.['missingVariables'];
-    const missingVariables = Array.isArray(rawMissingVariables) ? rawMissingVariables.map(String) : [];
+    const missingVariables = arrayFromUnknown(rawMissingVariables).map(String);
     const missing = missingVariables.length ? `<br><span class="failure">missing vars: ${escapeHtml(missingVariables.join(', '))}</span>` : '';
     const readiness = isRecord(run.readiness) ? run.readiness : undefined;
     const readinessStatus = stringOrDefault(readiness?.status, 'unknown');

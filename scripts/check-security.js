@@ -2189,14 +2189,14 @@ for (const marker of [
   'function progressEventTimeLabel',
   'function progressDateTimeLabel',
   'function stringOrDefault',
-  "import { isRecord } from '../services/records'",
-  'function recordField(record: Record<string, unknown>, key: string): Record<string, unknown>',
-  'function arrayField(record: Record<string, unknown>, key: string): unknown[]',
+  "import { arrayFromUnknown, isRecord, recordFromUnknown } from '../services/records'",
   'function streamString(value: unknown): string',
   'export function parseStreamEvents(event: unknown): ProgressEvent[]',
   'function parseAssistantContentBlock(rawBlock: unknown, now: Date): ProgressEvent | null',
   'const payload = isRecord(event) ? event : {}',
-  "arrayField(message, 'content')",
+  "const message = recordFromUnknown(payload['message'])",
+  "return arrayFromUnknown(message['content'])",
+  "const input = recordFromUnknown(block['input'])",
   'for (const pe of parseStreamEvents(JSON.parse(trimmed)))',
   'export function computeStats(events: ProgressEvent[]): SessionStats',
   'function lastProgressTerminalEvent(events: ProgressEvent[]): ProgressEvent | undefined',
@@ -2213,7 +2213,9 @@ for (const marker of [
   'Duration: ${progress.elapsedSeconds}s',
   'const statusClass = escapeClass(status)',
   'const started = progressDateTimeLabel(run.startedAt)',
-  'const runEvents = Array.isArray(run.events) ? run.events : []',
+  'const runEvents = arrayFromUnknown(run.events)',
+  'const lastEvent = runEvents.length ? recordFromUnknown(runEvents[runEvents.length - 1]) : undefined',
+  'const missingVariables = arrayFromUnknown(rawMissingVariables).map(String)',
   'const operatorSummary = buildRunOperatorSummary(run)',
   'buildRunCenterOperatorBoard',
   'class="progress-cell outcome-cell',
@@ -2227,6 +2229,17 @@ for (const marker of [
 ]) {
   if (!dispatcher.includes(marker)) {
     fail(`Missing run recovery marker: ${marker}`);
+  }
+}
+for (const staleMarker of [
+  'function recordField(record: Record<string, unknown>, key: string): Record<string, unknown>',
+  'function arrayField(record: Record<string, unknown>, key: string): unknown[]',
+  "arrayField(message, 'content')",
+  'const runEvents = Array.isArray(run.events) ? run.events : []',
+  'const missingVariables = Array.isArray(rawMissingVariables) ? rawMissingVariables.map(String) : []',
+]) {
+  if (dispatcher.includes(staleMarker)) {
+    fail(`Dispatcher must use shared record/array helpers instead of ${staleMarker}.`);
   }
 }
 for (const marker of [
@@ -2874,7 +2887,7 @@ for (const [name, source, marker] of [
   ['src/services/trendMetrics.ts', trendMetrics, "import { recordString } from './records'"],
   ['src/services/stateStore.ts', stateStore, "import { isRecord as isPlainObject } from './records'"],
   ['src/services/stateScriptAdapter.ts', stateScriptAdapter, "import { arrayFromUnknown, isRecord as isPlainObject } from './records'"],
-  ['src/runners/sessionDispatcher.ts', dispatcher, "import { isRecord } from '../services/records'"],
+  ['src/runners/sessionDispatcher.ts', dispatcher, "import { arrayFromUnknown, isRecord, recordFromUnknown } from '../services/records'"],
 ]) {
   if (!source.includes(marker)) {
     fail(`${name} must import the shared record guard.`);
