@@ -2782,6 +2782,15 @@ if (extension.includes('function getProjectPath(') || extension.includes('functi
 if (!runActionHelpers.includes('isExistingRealPathInside(filePath, RUNS_DIR)')) {
   fail('src/services/runActionHelpers.ts must use the shared realpath containment helper for run artifacts.');
 }
+if (!runActionHelpers.includes("import { recordsFromUnknown } from './records'")) {
+  fail('Run action helpers must import the shared record-list normalizer.');
+}
+if (!runActionHelpers.includes('const events = recordsFromUnknown(run.events)')) {
+  fail('Run action helpers must normalize run events through recordsFromUnknown.');
+}
+if (runActionHelpers.includes('const events = Array.isArray(run.events) ? run.events : []')) {
+  fail('Run action helpers must not open-code run event array checks.');
+}
 
 for (const [name, source, marker] of [
   ['src/services/agingAnalyzer.ts', agingAnalyzer, "import { toValidDate } from './dateValues'"],
@@ -2896,7 +2905,7 @@ if (dashboardPanelView.includes("['failed', 'cancelled'].includes(recordString(r
 for (const [name, source, marker] of [
   ['src/services/activeRunDisplay.ts', activeRunDisplay, "import { recordFromUnknown, recordString } from './records'"],
   ['src/services/webviewMessages.ts', webviewMessages, "import { recordFromUnknown, recordString } from './records'"],
-  ['src/services/runAttention.ts', runAttention, "import { recordFromUnknown } from './records'"],
+  ['src/services/runAttention.ts', runAttention, "import { recordsFromUnknown, recordFromUnknown } from './records'"],
   ['src/services/runCompletionNotification.ts', runCompletionNotification, "import { recordFromUnknown, recordString } from './records'"],
   ['src/services/runProgress.ts', runProgress, "import { recordsFromUnknown, recordFromUnknown, recordString } from './records'"],
   ['src/services/queueMutations.ts', queueMutations, "import { recordFromUnknown } from './records'"],
@@ -4305,6 +4314,12 @@ if (!runAttention.includes("import { isFailedTerminalRunStatus } from './runStat
 if (!runAttention.includes('return isFailedTerminalRunStatus(status)')) {
   fail('runAttention must use the shared failed terminal run predicate for attention status.');
 }
+if (!runAttention.includes('const eventRecords = recordsFromUnknown(events)')) {
+  fail('runAttention must normalize event lists through recordsFromUnknown.');
+}
+if (runAttention.includes('if (!Array.isArray(events)) { return undefined; }')) {
+  fail('runAttention must not open-code event array checks.');
+}
 if (runAttention.includes('ATTENTION_RUN_STATUSES')) {
   fail('runAttention must not carry a local attention status set.');
 }
@@ -4374,7 +4389,8 @@ for (const marker of [
   'const staleActiveRunHours = input.staleActiveRunHours ?? 12',
   'const isActive = isCollisionActiveRun(run, now, staleActiveRunHours)',
   'editedFilesForRun',
-  'const events = Array.isArray(run.events) ? run.events : []',
+  "import { recordsFromUnknown } from './records'",
+  'for (const event of recordsFromUnknown(run.events))',
   'changedFilesForTicket',
   'ticketAreaTokens',
   'isRecentRun',
@@ -4385,6 +4401,9 @@ for (const marker of [
   if (!collisionDetector.includes(marker)) {
     fail(`Missing collision detector marker: ${marker}`);
   }
+}
+if (collisionDetector.includes('const events = Array.isArray(run.events) ? run.events : []')) {
+  fail('Collision detector must normalize run events through recordsFromUnknown.');
 }
 for (const marker of [
   'export const LIVE_MR_DIFF_LIMIT = 4',

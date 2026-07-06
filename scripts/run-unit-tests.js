@@ -4165,7 +4165,7 @@ test('record guard helper centralizes unknown object narrowing', () => {
   for (const [file, marker] of [
     ['activeRunDisplay.ts', "import { recordFromUnknown, recordString } from './records'"],
     ['webviewMessages.ts', "import { recordFromUnknown, recordString } from './records'"],
-    ['runAttention.ts', "import { recordFromUnknown } from './records'"],
+    ['runAttention.ts', "import { recordsFromUnknown, recordFromUnknown } from './records'"],
     ['runCompletionNotification.ts', "import { recordFromUnknown, recordString } from './records'"],
     ['runProgress.ts', "import { recordsFromUnknown, recordFromUnknown, recordString } from './records'"],
   ]) {
@@ -4440,6 +4440,9 @@ test('run action helpers resolve safe artifacts and quick-pick labels', () => {
 
   const source = readSourceFixture('src', 'services', 'runActionHelpers.ts');
   assert.ok(source.includes("import { formatDateTimeLabel } from './dateLabels'"));
+  assert.ok(source.includes("import { recordsFromUnknown } from './records'"));
+  assert.ok(source.includes('const events = recordsFromUnknown(run.events)'));
+  assert.equal(source.includes('const events = Array.isArray(run.events) ? run.events : []'), false);
   assert.equal(source.includes('function formatRunDateTime'), false);
 
   assert.equal(runActionHelpers.isRetryableRun({ status: 'completed', promptPath }), true);
@@ -4459,6 +4462,12 @@ test('run action helpers resolve safe artifacts and quick-pick labels', () => {
     cwd: '/repo/app',
     events: [{ label: 'Session complete' }],
   }), /Session complete$/);
+  assert.match(runActionHelpers.runQuickPickDetail({
+    status: 'completed',
+    startedAt: '2026-07-01T12:00:00.000Z',
+    cwd: '/repo/app',
+    events: [{ label: 'Latest valid event' }, 'malformed trailing event'],
+  }), /Latest valid event$/);
   assert.deepEqual(
     runActionHelpers.RUN_ACTION_QUICK_PICK_ITEMS.map(item => item.runCommand),
     ['openRunLog', 'openRunPrompt', 'openRunRecord', 'openRunWorkspace', 'openRunDiff', 'markNeedsHuman', 'pauseRun', 'continueRun', 'cancelRun', 'resumeRun', 'retryRun', 'archiveRun'],
@@ -6751,9 +6760,12 @@ test('run attention summarizes actionable failure reasons', () => {
   const runAttentionSource = readSourceFixture('src', 'services', 'runAttention.ts');
   assert.ok(runAttentionSource.includes("import { compactSingleLineText } from './textFormat'"));
   assert.ok(runAttentionSource.includes("import { isFailedTerminalRunStatus } from './runStatus'"));
+  assert.ok(runAttentionSource.includes("import { recordsFromUnknown, recordFromUnknown } from './records'"));
   assert.ok(runAttentionSource.includes('return isFailedTerminalRunStatus(status)'));
+  assert.ok(runAttentionSource.includes('const eventRecords = recordsFromUnknown(events)'));
   assert.ok(runAttentionSource.includes('return compactSingleLineText(runAttentionDetail(run), maxLength)'));
   assert.equal(runAttentionSource.includes('ATTENTION_RUN_STATUSES'), false);
+  assert.equal(runAttentionSource.includes('if (!Array.isArray(events)) { return undefined; }'), false);
   assert.equal(runAttentionSource.includes("replace(/\\s+/g, ' ').trim()"), false, 'runAttention should use shared compact text helper');
 });
 
@@ -7728,14 +7740,17 @@ test('collision detector flags active runs, duplicate queue work, and open MRs',
 
   const source = readSourceFixture('src', 'services', 'collisionDetector.ts');
   for (const marker of [
+    "import { recordsFromUnknown } from './records'",
     'staleActiveRunHours?: number',
     'const staleActiveRunHours = input.staleActiveRunHours ?? 12',
     'const isActive = isCollisionActiveRun(run, now, staleActiveRunHours)',
+    'for (const event of recordsFromUnknown(run.events))',
     'function isCollisionActiveRun(run: CollisionRun, now: Date, staleActiveRunHours: number): boolean',
     'isStaleActiveRun(run, now, staleActiveRunHours * 60 * 60 * 1000)',
   ]) {
     assert.ok(source.includes(marker), marker);
   }
+  assert.equal(source.includes('const events = Array.isArray(run.events) ? run.events : []'), false);
 });
 
 test('collision detector selects MR file hint candidates for code work', () => {
@@ -11012,6 +11027,8 @@ test('extension run recovery helpers use typed run records', () => {
     'pickRun(listRuns().filter(isResumableRun)',
     'async function markSelectedRunNeedsHuman(run: KronosRun)',
     'function runLastEventLabel(run: RunActionRecord)',
+    "import { recordsFromUnknown } from './records'",
+    'const events = recordsFromUnknown(run.events)',
     "import { isAttentionRunStatus, runAttentionDetail, runAttentionLine } from './runAttention'",
     'function runQuickPickDetail(run: RunActionRecord)',
     'function runQuickPickDescription(run: RunActionRecord)',

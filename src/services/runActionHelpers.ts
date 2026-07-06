@@ -7,6 +7,7 @@ import { isFreshActiveRun } from './runStatus';
 import { isAttentionRunStatus, runAttentionDetail, runAttentionLine } from './runAttention';
 import { formatDateTimeLabel } from './dateLabels';
 import { countLabel } from './countLabels';
+import { recordsFromUnknown } from './records';
 
 export interface RunActionRecord {
   id?: string;
@@ -116,9 +117,9 @@ export function resolveRunWorkspace(run: RunActionRecord): string | null {
 }
 
 export function runLastEventLabel(run: RunActionRecord): string {
-  const events = Array.isArray(run.events) ? run.events : [];
+  const events = recordsFromUnknown(run.events);
   const last = events[events.length - 1];
-  return typeof last?.label === 'string' ? last.label : '';
+  return typeof last?.['label'] === 'string' ? last['label'] : '';
 }
 
 export function runQuickPickDetail(run: RunActionRecord): string {

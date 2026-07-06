@@ -5,6 +5,7 @@ import { mergeRequestReviewStatusLabel } from './mergeRequestLabels';
 import { isActiveRun, isStaleActiveRun } from './runStatus';
 import { severityRank } from './severityRank';
 import { toValidDate } from './dateValues';
+import { recordsFromUnknown } from './records';
 
 type CollisionSeverity = 'high' | 'medium' | 'low';
 type CollisionKind = 'active_run' | 'queued_ticket' | 'queued_project' | 'open_mr' | 'recent_file' | 'ticket_area' | 'mr_file';
@@ -221,9 +222,8 @@ export function detectDispatchCollisions(input: DispatchCollisionInput): Dispatc
 
 function editedFilesForRun(run: CollisionRun): string[] {
   const files = new Set<string>();
-  const events = Array.isArray(run.events) ? run.events : [];
-  for (const event of events) {
-    const label = String(event.label || '');
+  for (const event of recordsFromUnknown(run.events)) {
+    const label = String(event['label'] || '');
     const match = label.match(/^(?:Editing|Writing)\s+(.+)$/);
     if (match?.[1]) {
       files.add(match[1]);

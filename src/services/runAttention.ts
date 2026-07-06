@@ -1,5 +1,5 @@
 import { classifyRunFailure, type RunFailureKind } from './postRunReadiness';
-import { recordFromUnknown } from './records';
+import { recordsFromUnknown, recordFromUnknown } from './records';
 import { runStatusDisplayLabel } from './runLabels';
 import { isFailedTerminalRunStatus } from './runStatus';
 import { compactSingleLineText } from './textFormat';
@@ -125,9 +125,10 @@ function composeRunAttentionDetail(label: string, reason: string): string {
 }
 
 function latestEventField(events: unknown, field: 'detail' | 'label'): unknown {
-  if (!Array.isArray(events)) { return undefined; }
-  for (let i = events.length - 1; i >= 0; i -= 1) {
-    const event = recordFromUnknown(events[i]);
+  const eventRecords = recordsFromUnknown(events);
+  for (let i = eventRecords.length - 1; i >= 0; i -= 1) {
+    const event = eventRecords[i];
+    if (!event) { continue; }
     const value = runText(event[field]);
     if (value) { return value; }
   }
