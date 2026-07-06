@@ -4059,6 +4059,8 @@ test('record guard helper centralizes unknown object narrowing', () => {
   assert.equal(mergeRequestLabels.mergeRequestReviewStatusLabel('', 'merge request'), 'merge request');
   assert.equal(runRecords.isRunLikeRecord({ id: 'run-1' }), true);
   assert.equal(runRecords.isRunLikeRecord([]), false);
+  assert.deepEqual(runRecords.runLikeRecordsFromUnknown([{ id: 'run-1' }, null, [], 'raw']), [{ id: 'run-1' }]);
+  assert.deepEqual(runRecords.runLikeRecordsFromUnknown({ id: 'not-array' }), []);
   assert.equal(runRecords.hasRetryMetadata({ promptMetadata: { retryOfRunId: 'run-0' } }), true);
   assert.equal(runRecords.hasRetryMetadata({ promptMetadata: 'run-0' }), false);
 
@@ -4074,13 +4076,17 @@ test('record guard helper centralizes unknown object narrowing', () => {
     assert.ok(recordsSource.includes(marker), marker);
   }
 
+  const runRecordsSource = readSourceFixture('src', 'services', 'runRecords.ts');
+  assert.ok(runRecordsSource.includes('export function runLikeRecordsFromUnknown(value: unknown): RunLikeRecord[]'));
+  assert.ok(runRecordsSource.includes('return arrayFromUnknown(value).filter(isRunLikeRecord)'));
+
   for (const [file, marker] of [
     ['changedFiles.ts', "import { isRecord } from './records'"],
     ['evidenceData.ts', "import { isRecord } from './records'"],
     ['integrationAdapters.ts', "import { isRecord } from './records'"],
     ['queuePlanner.ts', "import { arrayFromUnknown, isRecord } from './records'"],
     ['runStatus.ts', "import { isRecord } from './records'"],
-    ['runRecords.ts', "import { isRecord, recordString } from './records'"],
+    ['runRecords.ts', "import { arrayFromUnknown, isRecord, recordString } from './records'"],
     ['runStore.ts', "import { isRecord, recordString } from './records'"],
     ['sessionStore.ts', "import { isRecord } from './records'"],
     ['sonarReportView.ts', "import { isRecord } from './records'"],
@@ -7117,13 +7123,14 @@ test('ticket timeline combines queue, runs, evidence, MR, build, and ticket even
   assert.equal(events.some(event => event.id.includes('other-run')), false);
 
   const source = readSourceFixture('src', 'services', 'ticketTimeline.ts');
-  assert.ok(source.includes("import { isRunLikeRecord, type RunLikeRecord } from './runRecords'"));
-  assert.ok(source.includes('const rawRuns: unknown[] = Array.isArray(input.runs) ? input.runs : []'));
-  assert.ok(source.includes('const runs = rawRuns.filter(isRunLikeRecord)'));
+  assert.ok(source.includes("import { runLikeRecordsFromUnknown, type RunLikeRecord } from './runRecords'"));
+  assert.ok(source.includes('const runs = runLikeRecordsFromUnknown(input.runs)'));
   assert.ok(source.includes("import { isAttentionRunStatus, runAttentionDetail } from './runAttention'"));
   assert.ok(source.includes("import { isSuccessfulRunStatus } from './runStatus'"));
   assert.ok(source.includes("if (isSuccessfulRunStatus(status)) { return 'success'; }"));
   assert.ok(source.includes('const attentionDetail = isAttentionRunStatus(status) ? runAttentionDetail(run) :'));
+  assert.equal(source.includes('const rawRuns'), false);
+  assert.equal(source.includes('filter(isRunLikeRecord)'), false);
   assert.equal(source.includes('type TimelineRunRecord = TimelineRun & Record<string, unknown>'), false);
   assert.equal(source.includes('type TimelineRunRecord = TimelineRun & Record<string, any>'), false);
   assert.equal(source.includes('function isRunRecord'), false);
@@ -9174,11 +9181,12 @@ test('human review inbox aggregates runs, tickets, evidence gaps, integrations, 
 
   const source = readSourceFixture('src', 'services', 'humanReviewInbox.ts');
   assert.ok(source.includes("import { doctorCheckAttentionId, doctorCheckAttentionSeverity, doctorCheckNeedsAttention } from './doctorAttention'"));
-  assert.ok(source.includes("import { isRunLikeRecord, type RunLikeRecord } from './runRecords'"));
-  assert.ok(source.includes('const rawRuns: unknown[] = Array.isArray(input.runs) ? input.runs : []'));
-  assert.ok(source.includes('const runs = rawRuns.filter(isRunLikeRecord)'));
+  assert.ok(source.includes("import { runLikeRecordsFromUnknown, type RunLikeRecord } from './runRecords'"));
+  assert.ok(source.includes('const runs = runLikeRecordsFromUnknown(input.runs)'));
   assert.ok(source.includes('summary: severitySummary(sorted)'));
   assert.equal(source.includes("check.status === 'fail' ? 'critical' : 'warning'"), false, 'human review inbox should use shared Doctor check severity helper');
+  assert.equal(source.includes('const rawRuns'), false);
+  assert.equal(source.includes('filter(isRunLikeRecord)'), false);
   assert.equal(source.includes('type HumanReviewRunRecord = HumanReviewRun & Record<string, unknown>'), false);
   assert.equal(source.includes('type HumanReviewRunRecord = HumanReviewRun & Record<string, any>'), false);
   assert.equal(source.includes('function isRunRecord'), false);
@@ -9994,9 +10002,12 @@ test('dashboard panel view renders escaped command center data', () => {
 
   const source = readSourceFixture('src', 'services', 'dashboardPanelView.ts');
   assert.ok(source.includes("import { arrayFromUnknown, recordString } from './records'"));
+  assert.ok(source.includes("import { runLikeRecordsFromUnknown } from './runRecords'"));
+  assert.ok(source.includes('const runs = runLikeRecordsFromUnknown(input.runs)'));
   assert.ok(source.includes("import { isFailedOrCancelledRunStatus, isFreshActiveRun } from './runStatus'"));
   assert.ok(source.includes("runs.filter(run => isFailedOrCancelledRunStatus(recordString(run, 'status'))).length"));
   assert.ok(source.includes('return arrayFromUnknown(brief[key])'));
+  assert.equal(source.includes('filter(isRunLikeRecord)'), false);
   assert.equal(source.includes("['failed', 'cancelled'].includes(recordString(run, 'status'))"), false);
   assert.equal(source.includes('return Array.isArray(value) ? value : []'), false, 'dashboard panel should use shared array fallback helper');
 });
@@ -11924,9 +11935,8 @@ test('trend metrics report rework, build pass, verification pass, and cycle time
     'runs: unknown[]',
     "import { recordString } from './records'",
     "import { isFailedTerminalRunStatus, isFinishedRunStatus, isSuccessfulRunStatus } from './runStatus'",
-    "import { hasRetryMetadata, isRunLikeRecord, type RunLikeRecord } from './runRecords'",
-    'const rawRuns = Array.isArray(input.runs) ? input.runs : []',
-    '.filter(isRunLikeRecord)',
+    "import { hasRetryMetadata, runLikeRecordsFromUnknown, type RunLikeRecord } from './runRecords'",
+    'const runs = runLikeRecordsFromUnknown(input.runs)',
     'const finishedRuns = runs.filter(run => isFinishedRunStatus(recordString(run, \'status\')))',
     "const completedRuns = finishedRuns.filter(run => isSuccessfulRunStatus(recordString(run, 'status'))).length",
     "const failedRuns = finishedRuns.filter(run => isFailedTerminalRunStatus(recordString(run, 'status'))).length",
@@ -11939,6 +11949,8 @@ test('trend metrics report rework, build pass, verification pass, and cycle time
     'Record<string, any>',
     'type RunMetricRecord',
     'function hasRetryMetadata',
+    'const rawRuns',
+    'filter(isRunLikeRecord)',
     'const SUCCESS_RUN_STATUSES',
     'const FINISHED_RUN_STATUSES',
     'function isFailedRunStatus',
@@ -11995,15 +12007,16 @@ test('dashboard worklist builds command-center lanes from review, run, gate, and
   const source = readSourceFixture('src', 'services', 'dashboardWorklist.ts');
   assert.ok(source.includes("import { formatRunProgress } from './runProgress'"));
   assert.ok(source.includes("import { isFreshActiveRun, isSuccessfulRunStatus } from './runStatus'"));
-  assert.ok(source.includes("import { isRunLikeRecord, type RunLikeRecord } from './runRecords'"));
-  assert.ok(source.includes('const rawRuns: unknown[] = Array.isArray(input.runs) ? input.runs : []'));
-  assert.ok(source.includes('const runs = rawRuns.filter(isRunLikeRecord)'));
+  assert.ok(source.includes("import { runLikeRecordsFromUnknown, type RunLikeRecord } from './runRecords'"));
+  assert.ok(source.includes('const runs = runLikeRecordsFromUnknown(input.runs)'));
   assert.ok(source.includes('function isDashboardActiveRun'));
   assert.ok(source.includes('return isFreshActiveRun(run);'));
   assert.ok(source.includes('function activeRunDetail(run: RunLikeRecord, status: string, ticketKey: string): string'));
   assert.ok(source.includes('formatRunProgress(run)'));
   assert.ok(source.includes("runs.filter(run => isSuccessfulRunStatus(recordString(run, 'status')))"));
   assert.equal(source.includes('const COMPLETED_RUN_STATUSES'), false);
+  assert.equal(source.includes('const rawRuns'), false);
+  assert.equal(source.includes('filter(isRunLikeRecord)'), false);
   assert.equal(source.includes('type DashboardRunRecord = RunRecord & Record<string, unknown>'), false);
   assert.equal(source.includes('type DashboardRunRecord = RunRecord & Record<string, any>'), false);
   assert.equal(source.includes('function isRunRecord'), false);
@@ -12048,12 +12061,13 @@ test('agent quality score combines run outcomes, evidence gates, builds, reviews
 
   const source = readSourceFixture('src', 'services', 'agentQualityScore.ts');
   assert.ok(source.includes("import { isActiveRun, isFailedOrCancelledRunStatus, isSuccessfulRunStatus } from './runStatus'"));
-  assert.ok(source.includes("import { hasRetryMetadata, isRunLikeRecord } from './runRecords'"));
+  assert.ok(source.includes("import { hasRetryMetadata, runLikeRecordsFromUnknown } from './runRecords'"));
   assert.ok(source.includes('runs: unknown[]'));
-  assert.ok(source.includes('.filter(isRunLikeRecord)'));
+  assert.ok(source.includes('const runs = runLikeRecordsFromUnknown(input.runs)'));
   assert.ok(source.includes("isSuccessfulRunStatus(recordString(run, 'status'))"));
   assert.ok(source.includes("isFailedOrCancelledRunStatus(recordString(run, 'status'))"));
   assert.equal(source.includes('const SUCCESS_RUN_STATUSES'), false);
+  assert.equal(source.includes('filter(isRunLikeRecord)'), false);
   assert.equal(source.includes('type RunQualityRecord'), false);
   assert.equal(source.includes('type RunQualityRecord = RunRecord & Record<string, any>'), false);
   assert.equal(source.includes('function hasRetryMetadata'), false);

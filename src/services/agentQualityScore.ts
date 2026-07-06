@@ -4,7 +4,7 @@ import { isFailingBuildStatus, isPassingBuildStatus } from './buildStatus';
 import { evaluateEvidenceGates } from './evidenceGate';
 import { isActiveRun, isFailedOrCancelledRunStatus, isSuccessfulRunStatus } from './runStatus';
 import { recordString } from './records';
-import { hasRetryMetadata, isRunLikeRecord } from './runRecords';
+import { hasRetryMetadata, runLikeRecordsFromUnknown } from './runRecords';
 
 interface QualityComponent {
   label: string;
@@ -30,7 +30,7 @@ export function computeAgentQualityScore(input: {
   runs: unknown[];
   tickets: Record<string, Ticket>;
 }): AgentQualityScore {
-  const runs = (Array.isArray(input.runs) ? input.runs : []).filter(isRunLikeRecord);
+  const runs = runLikeRecordsFromUnknown(input.runs);
   const tickets = input.tickets || {};
   const totalRuns = runs.length;
   const completedRuns = runs.filter(run => isSuccessfulRunStatus(recordString(run, 'status'))).length;

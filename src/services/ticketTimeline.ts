@@ -6,7 +6,7 @@ import { isAttentionRunStatus, runAttentionDetail } from './runAttention';
 import { recordString } from './records';
 import { toValidDate } from './dateValues';
 import { isSuccessfulRunStatus } from './runStatus';
-import { isRunLikeRecord, type RunLikeRecord } from './runRecords';
+import { runLikeRecordsFromUnknown, type RunLikeRecord } from './runRecords';
 
 type TimelineSource = 'jira' | 'queue' | 'run' | 'evidence' | 'mr' | 'build' | 'ticket';
 type TimelineSeverity = 'info' | 'success' | 'warning' | 'failure';
@@ -47,8 +47,7 @@ interface TicketTimelineInput {
 export function buildTicketTimeline(input: TicketTimelineInput): TimelineEvent[] {
   const { ticketKey, ticket } = input;
   const events: TimelineEvent[] = [];
-  const rawRuns: unknown[] = Array.isArray(input.runs) ? input.runs : [];
-  const runs = rawRuns.filter(isRunLikeRecord);
+  const runs = runLikeRecordsFromUnknown(input.runs);
 
   if (ticket.updated) {
     events.push(timelineEvent({

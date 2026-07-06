@@ -4,7 +4,7 @@ import { evidenceChecks, evidenceEnvironmentResults, evidenceString } from './ev
 import { recordString } from './records';
 import { toValidDate } from './dateValues';
 import { isFailedTerminalRunStatus, isFinishedRunStatus, isSuccessfulRunStatus } from './runStatus';
-import { hasRetryMetadata, isRunLikeRecord, type RunLikeRecord } from './runRecords';
+import { hasRetryMetadata, runLikeRecordsFromUnknown, type RunLikeRecord } from './runRecords';
 
 interface TrendMetricsInput {
   runs: unknown[];
@@ -33,9 +33,7 @@ export function computeTrendMetrics(input: TrendMetricsInput): TrendMetricsRepor
   const now = input.now || new Date();
   const windowDays = input.windowDays || 14;
   const windowStart = new Date(now.getTime() - windowDays * 24 * 60 * 60 * 1000);
-  const rawRuns = Array.isArray(input.runs) ? input.runs : [];
-  const runs = rawRuns
-    .filter(isRunLikeRecord)
+  const runs = runLikeRecordsFromUnknown(input.runs)
     .filter(run => isInWindow(recordString(run, 'endedAt') || recordString(run, 'startedAt'), windowStart, now));
   const tickets = Object.entries(input.tickets || {})
     .filter(([_, ticket]) => ticketInWindow(ticket, windowStart, now));

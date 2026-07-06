@@ -9,7 +9,7 @@ import { buildNextActionContext } from './nextActionContext';
 import { actionButton, actionRow, kronosActionPanelScript } from './operatorPanel';
 import type { PlannedAction } from './queuePlanner';
 import { arrayFromUnknown, recordString } from './records';
-import { isRunLikeRecord } from './runRecords';
+import { runLikeRecordsFromUnknown } from './runRecords';
 import { isFailedOrCancelledRunStatus, isFreshActiveRun } from './runStatus';
 import { computeTrendMetrics } from './trendMetrics';
 import { escapeClass, escapeHtml, kronosWebviewBaseCss } from './webviewHtml';
@@ -59,7 +59,7 @@ export function buildDashboardHtml(input: DashboardPanelInput): string {
   const safeBrief = dashboardBriefRecord(input.brief);
   const projects = input.state?.projects || {};
   const allTickets = input.state?.tickets || {};
-  const runs = (Array.isArray(input.runs) ? input.runs : []).filter(isRunLikeRecord);
+  const runs = runLikeRecordsFromUnknown(input.runs);
   const activeRuns = runs.filter(run => isFreshActiveRun(run)).length;
   const failedRuns = runs.filter(run => isFailedOrCancelledRunStatus(recordString(run, 'status'))).length;
   const needsHumanRuns = runs.filter(run => recordString(run, 'status') === 'needs_human').length;

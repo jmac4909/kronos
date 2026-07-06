@@ -2809,7 +2809,7 @@ for (const [name, source, marker] of [
   ['src/services/integrationAdapters.ts', integrationAdapters, "import { isRecord } from './records'"],
   ['src/services/queuePlanner.ts', queuePlanner, "import { arrayFromUnknown, isRecord } from './records'"],
   ['src/services/runStatus.ts', runStatus, "import { isRecord } from './records'"],
-  ['src/services/runRecords.ts', runRecords, "import { isRecord, recordString } from './records'"],
+  ['src/services/runRecords.ts', runRecords, "import { arrayFromUnknown, isRecord, recordString } from './records'"],
   ['src/services/runStore.ts', runStore, "import { isRecord, recordString } from './records'"],
   ['src/services/sessionStore.ts', sessionStore, "import { isRecord } from './records'"],
   ['src/services/sonarReportView.ts', sonarReportView, "import { isRecord } from './records'"],
@@ -2833,6 +2833,15 @@ for (const [name, source, marker] of [
 }
 if (!dashboardPanelView.includes("import { arrayFromUnknown, recordString } from './records'")) {
   fail('src/services/dashboardPanelView.ts must import the shared array fallback helper.');
+}
+if (!dashboardPanelView.includes("import { runLikeRecordsFromUnknown } from './runRecords'")) {
+  fail('Dashboard panel must import the shared run record list helper.');
+}
+if (!dashboardPanelView.includes('const runs = runLikeRecordsFromUnknown(input.runs)')) {
+  fail('Dashboard panel runs must use the shared run record list helper.');
+}
+if (dashboardPanelView.includes('filter(isRunLikeRecord)')) {
+  fail('Dashboard panel must not normalize run arrays locally.');
 }
 if (!dashboardPanelView.includes('return arrayFromUnknown(brief[key])')) {
   fail('Dashboard panel brief items must use the shared array fallback helper.');
@@ -4004,13 +4013,12 @@ for (const marker of [
   'isReviewReadyAction(ticket.next_action)',
   'needs_human',
   "status === 'cancelled'",
-  "import { isRunLikeRecord, type RunLikeRecord } from './runRecords'",
+  "import { runLikeRecordsFromUnknown, type RunLikeRecord } from './runRecords'",
   "import { doctorCheckAttentionId, doctorCheckAttentionSeverity, doctorCheckNeedsAttention } from './doctorAttention'",
   'doctorCheckNeedsAttention(check)',
   'doctorCheckAttentionId(check)',
   'doctorCheckAttentionSeverity(check)',
-  'const rawRuns: unknown[] = Array.isArray(input.runs) ? input.runs : []',
-  'const runs = rawRuns.filter(isRunLikeRecord)',
+  'const runs = runLikeRecordsFromUnknown(input.runs)',
   "import { recordString } from './records'",
 ]) {
   if (!humanReviewInbox.includes(marker)) {
@@ -4020,6 +4028,8 @@ for (const marker of [
 for (const forbidden of [
   'type HumanReviewRunRecord',
   'function isRunRecord',
+  'const rawRuns',
+  'filter(isRunLikeRecord)',
 ]) {
   if (humanReviewInbox.includes(forbidden)) {
     fail(`Human review inbox must use shared run record helpers: ${forbidden}`);
@@ -4502,6 +4512,8 @@ for (const marker of [
   'export type RunLikeRecord = Record<string, unknown>',
   'export function isRunLikeRecord',
   'return isRecord(value)',
+  'export function runLikeRecordsFromUnknown',
+  'arrayFromUnknown(value).filter(isRunLikeRecord)',
   'export function hasRetryMetadata',
   "const promptMetadata = run['promptMetadata']",
   "recordString(promptMetadata, 'retryOfRunId')",
@@ -4513,7 +4525,7 @@ for (const marker of [
 
 for (const marker of [
   'export function computeAgentQualityScore',
-  "import { hasRetryMetadata, isRunLikeRecord } from './runRecords'",
+  "import { hasRetryMetadata, runLikeRecordsFromUnknown } from './runRecords'",
   'runs: unknown[]',
   'Run completion',
   'Evidence readiness',
@@ -4523,7 +4535,7 @@ for (const marker of [
   "isSuccessfulRunStatus(recordString(run, 'status'))",
   "isFailedOrCancelledRunStatus(recordString(run, 'status'))",
   'gradeForScore',
-  'const runs = (Array.isArray(input.runs) ? input.runs : []).filter(isRunLikeRecord)',
+  'const runs = runLikeRecordsFromUnknown(input.runs)',
   "import { recordString } from './records'",
 ]) {
   if (!agentQualityScore.includes(marker)) {
@@ -4534,6 +4546,7 @@ for (const forbidden of [
   'type RunQualityRecord',
   'function hasRetryMetadata',
   'function isRunRecord',
+  'filter(isRunLikeRecord)',
   'const SUCCESS_RUN_STATUSES',
 ]) {
   if (agentQualityScore.includes(forbidden)) {
@@ -4695,9 +4708,8 @@ for (const marker of [
   'Review health',
   "import { recordString } from './records'",
   "import { isFailedTerminalRunStatus, isFinishedRunStatus, isSuccessfulRunStatus } from './runStatus'",
-  "import { hasRetryMetadata, isRunLikeRecord, type RunLikeRecord } from './runRecords'",
-  'const rawRuns = Array.isArray(input.runs) ? input.runs : []',
-  '.filter(isRunLikeRecord)',
+  "import { hasRetryMetadata, runLikeRecordsFromUnknown, type RunLikeRecord } from './runRecords'",
+  'const runs = runLikeRecordsFromUnknown(input.runs)',
   "const finishedRuns = runs.filter(run => isFinishedRunStatus(recordString(run, 'status')))",
   "const completedRuns = finishedRuns.filter(run => isSuccessfulRunStatus(recordString(run, 'status'))).length",
   "const failedRuns = finishedRuns.filter(run => isFailedTerminalRunStatus(recordString(run, 'status'))).length",
@@ -4716,6 +4728,8 @@ for (const forbidden of [
   'Record<string, any>',
   'type RunMetricRecord',
   'function hasRetryMetadata',
+  'const rawRuns',
+  'filter(isRunLikeRecord)',
   'const SUCCESS_RUN_STATUSES',
   'const FINISHED_RUN_STATUSES',
   'function isFailedRunStatus',
@@ -4735,9 +4749,8 @@ for (const marker of [
   'evidenceStatusForRun',
   "import { formatRunProgress } from './runProgress'",
   "import { isFreshActiveRun, isSuccessfulRunStatus } from './runStatus'",
-  "import { isRunLikeRecord, type RunLikeRecord } from './runRecords'",
-  'const rawRuns: unknown[] = Array.isArray(input.runs) ? input.runs : []',
-  'const runs = rawRuns.filter(isRunLikeRecord)',
+  "import { runLikeRecordsFromUnknown, type RunLikeRecord } from './runRecords'",
+  'const runs = runLikeRecordsFromUnknown(input.runs)',
   'function isDashboardActiveRun',
   'return isFreshActiveRun(run);',
   'function activeRunDetail(run: RunLikeRecord, status: string, ticketKey: string): string',
@@ -4753,6 +4766,8 @@ for (const marker of [
 for (const forbidden of [
   'type DashboardRunRecord',
   'function isRunRecord',
+  'const rawRuns',
+  'filter(isRunLikeRecord)',
   'const COMPLETED_RUN_STATUSES',
 ]) {
   if (dashboardWorklist.includes(forbidden)) {
@@ -4762,11 +4777,10 @@ for (const forbidden of [
 
 for (const marker of [
   'export function buildTicketTimeline',
-  "import { isRunLikeRecord, type RunLikeRecord } from './runRecords'",
+  "import { runLikeRecordsFromUnknown, type RunLikeRecord } from './runRecords'",
   "import { isAttentionRunStatus, runAttentionDetail } from './runAttention'",
   "import { isSuccessfulRunStatus } from './runStatus'",
-  'const rawRuns: unknown[] = Array.isArray(input.runs) ? input.runs : []',
-  'const runs = rawRuns.filter(isRunLikeRecord)',
+  'const runs = runLikeRecordsFromUnknown(input.runs)',
   'const notes = evidenceNotes(ticket)',
   'const checks = evidenceChecks(ticket)',
   'const environmentResults = evidenceEnvironmentResults(ticket)',
@@ -4782,6 +4796,8 @@ for (const marker of [
 for (const forbidden of [
   'type TimelineRunRecord',
   'function isRunRecord',
+  'const rawRuns',
+  'filter(isRunLikeRecord)',
 ]) {
   if (ticketTimeline.includes(forbidden)) {
     fail(`Ticket timeline must use shared run record helpers: ${forbidden}`);

@@ -6,7 +6,7 @@ import { evaluateEvidenceGate } from './evidenceGate';
 import { runAttentionDetail } from './runAttention';
 import { severityRank, severitySummary } from './severityRank';
 import { recordString } from './records';
-import { isRunLikeRecord, type RunLikeRecord } from './runRecords';
+import { runLikeRecordsFromUnknown, type RunLikeRecord } from './runRecords';
 
 type HumanReviewSeverity = 'critical' | 'warning' | 'info';
 type HumanReviewKind = 'run' | 'ticket' | 'evidence' | 'integration' | 'worktree' | 'queue';
@@ -38,8 +38,7 @@ export interface HumanReviewInbox {
 export function buildHumanReviewInbox(input: HumanReviewInboxInput): HumanReviewInbox {
   const items: HumanReviewItem[] = [];
   const tickets = input.state?.tickets || {};
-  const rawRuns: unknown[] = Array.isArray(input.runs) ? input.runs : [];
-  const runs = rawRuns.filter(isRunLikeRecord);
+  const runs = runLikeRecordsFromUnknown(input.runs);
 
   for (const run of runs) {
     const status = recordString(run, 'status');

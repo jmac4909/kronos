@@ -5,7 +5,7 @@ import { formatRunProgress } from './runProgress';
 import { isFreshActiveRun, isSuccessfulRunStatus } from './runStatus';
 import { recordString } from './records';
 import { toValidDate } from './dateValues';
-import { isRunLikeRecord, type RunLikeRecord } from './runRecords';
+import { runLikeRecordsFromUnknown, type RunLikeRecord } from './runRecords';
 
 type DashboardWorklistKind = 'needs_human' | 'active_runs' | 'failing_gates' | 'recent_completed' | 'stale_items';
 type DashboardWorklistSeverity = 'critical' | 'warning' | 'info' | 'ok';
@@ -35,8 +35,7 @@ interface DashboardWorklistInput {
 }
 
 export function buildDashboardWorklist(input: DashboardWorklistInput, limit = 5): DashboardWorklistLane[] {
-  const rawRuns: unknown[] = Array.isArray(input.runs) ? input.runs : [];
-  const runs = rawRuns.filter(isRunLikeRecord);
+  const runs = runLikeRecordsFromUnknown(input.runs);
   return [
     {
       kind: 'needs_human',
