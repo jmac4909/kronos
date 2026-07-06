@@ -2560,14 +2560,18 @@ for (const marker of [
 }
 
 for (const marker of [
+  "import { arrayFromUnknown } from './records'",
   'export function ticketStringField(record: object | null | undefined, key: string, fallback = \'\'): string',
   'Reflect.get(record, key)',
   'export function ticketStringArray(value: unknown): string[]',
-  "value.map(item => String(item ?? '').trim()).filter(Boolean)",
+  "return arrayFromUnknown(value).map(item => String(item ?? '').trim()).filter(Boolean)",
 ]) {
   if (!ticketFields.includes(marker)) {
     fail(`Missing ticket field helper marker: ${marker}`);
   }
+}
+if (ticketFields.includes('return Array.isArray(value)')) {
+  fail('Ticket field string-array normalization must use the shared array fallback helper.');
 }
 
 for (const marker of [

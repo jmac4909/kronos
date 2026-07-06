@@ -4115,13 +4115,15 @@ test('record guard helper centralizes unknown object narrowing', () => {
   const mergeRequestCommentsSource = readSourceFixture('src', 'services', 'mergeRequestComments.ts');
   const mergeRequestLabelsSource = readSourceFixture('src', 'services', 'mergeRequestLabels.ts');
   for (const marker of [
+    "import { arrayFromUnknown } from './records'",
     'export function ticketStringField(record: object | null | undefined, key: string, fallback = \'\'): string',
     'Reflect.get(record, key)',
     'export function ticketStringArray(value: unknown): string[]',
-    "value.map(item => String(item ?? '').trim()).filter(Boolean)",
+    "return arrayFromUnknown(value).map(item => String(item ?? '').trim()).filter(Boolean)",
   ]) {
     assert.ok(ticketFieldsSource.includes(marker), marker);
   }
+  assert.equal(ticketFieldsSource.includes('return Array.isArray(value)'), false);
   for (const marker of [
     'export function mergeRequestCommentsFromRecord(record: object | null | undefined): MergeRequestComment[]',
     'Reflect.get(record, \'comments\')',
