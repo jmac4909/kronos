@@ -2006,13 +2006,15 @@ for (const marker of [
   "fallbackFailureKind: 'unknown'",
   "failureKind: 'cancelled'",
   'run.failureKind = run.failureKind || mutation.fallbackFailureKind',
-  "type RunRecoveryAction = NonNullable<RunRecord['recoveryActions']>[number]",
-  "type RunStoreEvent = NonNullable<RunRecord['events']>[number]",
-  'function appendRunRecoveryAction(run: RunRecord, action: RunRecoveryAction): void',
-  'function appendRunEvent(run: RunRecord, event: RunStoreEvent, options: { copyExisting?: boolean } = {}): void',
+  "import { appendRunEvents, appendRunRecoveryActions, type RunEventMetadata, type RunRecoveryActionMetadata } from './runMetadata'",
+  'recoveryActions?: RunRecoveryActionMetadata[]',
+  'events?: RunEventMetadata[]',
+  'function appendRunRecoveryAction(run: RunRecord, action: RunRecoveryActionMetadata): void',
+  'function appendRunEvent(run: RunRecord, event: RunEventMetadata): void',
   'appendRunRecoveryAction(run, { at, action: mutation.action, reason: detail })',
   "appendRunEvent(run, { type: 'recovery', label: mutation.label, detail, timestamp: at })",
-  'copyExisting ? [...events] : events',
+  'run.recoveryActions = appendRunRecoveryActions(run.recoveryActions, [action])',
+  'run.events = appendRunEvents(run.events, [event])',
   "import { unknownErrorCode, unknownErrorMessage } from './errorUtils'",
   'catch (e: unknown)',
   "unknownErrorMessage(e, 'Unable to parse JSON.')",
@@ -2054,6 +2056,8 @@ for (const marker of [
 for (const staleMarker of [
   'run.recoveryActions.push({ at, action: mutation.action, reason: detail })',
   "run.events.push({ type: 'recovery', label: mutation.label, detail, timestamp: at })",
+  'run.recoveryActions = Array.isArray(run.recoveryActions) ? run.recoveryActions : []',
+  'const events = Array.isArray(run.events) ? run.events : []',
   'normalized.events = Array.isArray(normalized.events) ? [...normalized.events] : []',
 ]) {
   if (runStore.includes(staleMarker)) {
@@ -2081,14 +2085,21 @@ if (runStore.includes('function numericPid(value: unknown): number | undefined')
 
 for (const marker of [
   'export interface RunRecoveryActionMetadata',
+  'export interface RunEventMetadata',
   'export function runWarningStrings(value: unknown): string[]',
   'export function appendRunWarnings(current: unknown, warnings: unknown[]): string[]',
   'export function runRecoveryActions(value: unknown): RunRecoveryActionMetadata[]',
   'export function appendRunRecoveryActions(current: unknown, actions: RunRecoveryActionMetadata[]): RunRecoveryActionMetadata[]',
+  'export function runEventRecords(value: unknown): RunEventMetadata[]',
+  'export function appendRunEvents(current: unknown, events: RunEventMetadata[]): RunEventMetadata[]',
   'arrayFromUnknown(value).map(warningString).filter(Boolean)',
   'actions.flatMap(recoveryActionFromUnknown)',
+  'arrayFromUnknown(value).flatMap(runEventFromUnknown)',
+  'events.flatMap(runEventFromUnknown)',
   'const at = trimmedStringFromUnknown',
   'return at && action && reason ? [{ at, action, reason }] : []',
+  "for (const key of ['type', 'label', 'detail', 'timestamp'] as const)",
+  'return event.type || event.label || event.detail || event.timestamp ? [event] : []',
 ]) {
   if (!runMetadata.includes(marker)) {
     fail(`Missing run metadata marker: ${marker}`);

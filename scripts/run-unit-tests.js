@@ -6136,6 +6136,53 @@ test('run metadata helpers normalize warnings and recovery actions', () => {
     { at: 'old-at', action: 'pause-run', reason: 'operator pause' },
     { at: 'new-at', action: 'cleanup-worktree', reason: 'review generated worktree' },
   ]);
+  assert.deepEqual(runMetadata.runEventRecords([
+    42,
+    { label: ' Existing event ', detail: ' keep detail ', other: 'ignored' },
+    { type: '', label: '', detail: '', timestamp: '' },
+  ]), [
+    { label: 'Existing event', detail: 'keep detail' },
+  ]);
+  assert.deepEqual(runMetadata.appendRunEvents(
+    [{ label: 'old event' }, null],
+    [{ type: 'recovery', label: 'Run paused', detail: 'operator pause', timestamp: 'new-at' }],
+  ), [
+    { label: 'old event' },
+    { type: 'recovery', label: 'Run paused', detail: 'operator pause', timestamp: 'new-at' },
+  ]);
+});
+
+test('run store recovery mutations normalize malformed metadata arrays', () => {
+  const run = {
+    id: 'run-malformed-metadata',
+    project: 'app',
+    skill: 'verify',
+    ticket: 'K-14',
+    status: 'running',
+    recoveryActions: [
+      42,
+      { at: 'old-at', action: 'mark-needs-human', reason: 'old reason' },
+      { at: 'missing-action', action: '', reason: 'ignored' },
+    ],
+    events: [
+      null,
+      { label: ' Existing event ', detail: ' keep detail ' },
+      { type: '', label: '', detail: '', timestamp: '' },
+    ],
+  };
+  runStore.writeRunRecord(run);
+
+  const updated = runStore.markRunPaused('run-malformed-metadata', 'operator pause', new Date('2026-07-01T13:30:00.000Z'));
+  const persisted = JSON.parse(fs.readFileSync(runStore.runRecordPath('run-malformed-metadata'), 'utf8'));
+
+  assert.deepEqual(updated.recoveryActions, [
+    { at: 'old-at', action: 'mark-needs-human', reason: 'old reason' },
+    { at: '2026-07-01T13:30:00.000Z', action: 'pause-run', reason: 'operator pause' },
+  ]);
+  assert.deepEqual(persisted.events, [
+    { label: 'Existing event', detail: 'keep detail' },
+    { type: 'recovery', label: 'Run paused', detail: 'operator pause', timestamp: '2026-07-01T13:30:00.000Z' },
+  ]);
 });
 
 test('run store pauses and continues runs with recovery metadata', () => {
@@ -6199,14 +6246,16 @@ test('run store surfaces invalid records and blocks strict mutations', () => {
     "import { unknownErrorCode, unknownErrorMessage } from './errorUtils'",
     "import { effectiveRunStatus, isActiveRunStatus, isStaleActiveRun, numericPid } from './runStatus'",
     "import { toValidDate } from './dateValues'",
+    "import { appendRunEvents, appendRunRecoveryActions, type RunEventMetadata, type RunRecoveryActionMetadata } from './runMetadata'",
     '[key: string]: unknown',
-    "type RunRecoveryAction = NonNullable<RunRecord['recoveryActions']>[number]",
-    "type RunStoreEvent = NonNullable<RunRecord['events']>[number]",
-    'function appendRunRecoveryAction(run: RunRecord, action: RunRecoveryAction): void',
-    'function appendRunEvent(run: RunRecord, event: RunStoreEvent, options: { copyExisting?: boolean } = {}): void',
+    'recoveryActions?: RunRecoveryActionMetadata[]',
+    'events?: RunEventMetadata[]',
+    'function appendRunRecoveryAction(run: RunRecord, action: RunRecoveryActionMetadata): void',
+    'function appendRunEvent(run: RunRecord, event: RunEventMetadata): void',
     'appendRunRecoveryAction(run, { at, action: mutation.action, reason: detail })',
     "appendRunEvent(run, { type: 'recovery', label: mutation.label, detail, timestamp: at })",
-    'copyExisting ? [...events] : events',
+    'run.recoveryActions = appendRunRecoveryActions(run.recoveryActions, [action])',
+    'run.events = appendRunEvents(run.events, [event])',
     'catch (e: unknown)',
     "unknownErrorMessage(e, 'Unable to parse JSON.')",
     "path.basename(filePath) !== expectedFileName",
@@ -6230,6 +6279,8 @@ test('run store surfaces invalid records and blocks strict mutations', () => {
     '[key: string]: any',
     'run.recoveryActions.push({ at, action: mutation.action, reason: detail })',
     "run.events.push({ type: 'recovery', label: mutation.label, detail, timestamp: at })",
+    'run.recoveryActions = Array.isArray(run.recoveryActions) ? run.recoveryActions : []',
+    'const events = Array.isArray(run.events) ? run.events : []',
     'normalized.events = Array.isArray(normalized.events) ? [...normalized.events] : []',
     'function numericPid(value: unknown): number | undefined',
   ]) {

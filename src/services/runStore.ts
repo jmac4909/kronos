@@ -8,6 +8,7 @@ import { readJsonFile } from './jsonFiles';
 import { isRecord, recordString } from './records';
 import { isExistingRealPathInside, isPathInside } from './pathUtils';
 import { toValidDate } from './dateValues';
+import { appendRunEvents, appendRunRecoveryActions, type RunEventMetadata, type RunRecoveryActionMetadata } from './runMetadata';
 
 export const RUNS_DIR = path.join(KRONOS_DIR, 'runs');
 const ARCHIVED_RUNS_DIR = path.join(RUNS_DIR, 'archive');
@@ -25,14 +26,11 @@ export interface RunRecord {
   resumedAt?: string;
   failureReason?: string;
   failureKind?: string;
-  recoveryActions?: Array<{ at: string; action: string; reason: string }>;
-  events?: Array<{ type?: string; label?: string; detail?: string; timestamp?: string }>;
+  recoveryActions?: RunRecoveryActionMetadata[];
+  events?: RunEventMetadata[];
   archiveWarnings?: string[];
   [key: string]: unknown;
 }
-
-type RunRecoveryAction = NonNullable<RunRecord['recoveryActions']>[number];
-type RunStoreEvent = NonNullable<RunRecord['events']>[number];
 
 interface ArchivedRun {
   run: RunRecord;
@@ -304,7 +302,7 @@ function normalizeTerminalActiveRun(run: RunRecord, filePath?: string): RunRecor
       label: 'Run process no longer exists',
       detail: `PID ${run.processPid} disappeared before Kronos recorded a terminal event.`,
       timestamp,
-    }, { copyExisting: true });
+    });
   } else if (staleProcesslessStatus) {
     const timestamp = normalized.endedAt || new Date().toISOString();
     appendRunEvent(normalized, {
@@ -312,20 +310,17 @@ function normalizeTerminalActiveRun(run: RunRecord, filePath?: string): RunRecor
       label: 'Stale active run needs human review',
       detail: 'No process metadata or terminal event was available before the stale active-run threshold.',
       timestamp,
-    }, { copyExisting: true });
+    });
   }
   return normalized;
 }
 
-function appendRunRecoveryAction(run: RunRecord, action: RunRecoveryAction): void {
-  run.recoveryActions = Array.isArray(run.recoveryActions) ? run.recoveryActions : [];
-  run.recoveryActions.push(action);
+function appendRunRecoveryAction(run: RunRecord, action: RunRecoveryActionMetadata): void {
+  run.recoveryActions = appendRunRecoveryActions(run.recoveryActions, [action]);
 }
 
-function appendRunEvent(run: RunRecord, event: RunStoreEvent, options: { copyExisting?: boolean } = {}): void {
-  const events = Array.isArray(run.events) ? run.events : [];
-  run.events = options.copyExisting ? [...events] : events;
-  run.events.push(event);
+function appendRunEvent(run: RunRecord, event: RunEventMetadata): void {
+  run.events = appendRunEvents(run.events, [event]);
 }
 
 function terminalRunOutcomeFromDeadProcess(run: RunRecord, status: string): string | undefined {
