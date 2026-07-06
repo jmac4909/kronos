@@ -2662,8 +2662,10 @@ if (ticketFields.includes('return Array.isArray(value)')) {
 }
 
 for (const marker of [
+  "import { optionalFiniteNumberFromUnknown } from './records'",
   'export function countLabel(count: number, singular: string, plural = `${singular}s`): string',
   'export function nonZeroCountLabel(count: unknown, singular: string, plural = `${singular}s`): string',
+  'const parsed = optionalFiniteNumberFromUnknown(count)',
   "return safeCount === 0 ? '' : countLabel(safeCount, singular, plural)",
 ]) {
   if (!countLabels.includes(marker)) {
@@ -2751,8 +2753,10 @@ if (mergeRequestComments.includes('(item): item is MergeRequestComment')) {
 }
 
 for (const marker of [
+  "import { optionalTrimmedStringFromUnknown } from './records'",
   'export function mergeRequestReviewStatusLabel(status: unknown, fallback = \'\'): string',
-  "status.replace(/_/g, ' ')",
+  'const value = optionalTrimmedStringFromUnknown(status)',
+  "value.replace(/_/g, ' ')",
 ]) {
   if (!mergeRequestLabels.includes(marker)) {
     fail(`Missing merge request label helper marker: ${marker}`);
@@ -4458,7 +4462,9 @@ for (const marker of [
 }
 
 for (const marker of [
+  "import { optionalTrimmedStringFromUnknown } from './records'",
   'export function runStatusDisplayLabel(status: unknown, fallback = \'unknown\'): string',
+  'const value = optionalTrimmedStringFromUnknown(status)',
   "value.replace(/_/g, ' ')",
 ]) {
   if (!runLabels.includes(marker)) {

@@ -4097,6 +4097,7 @@ test('record guard helper centralizes unknown object narrowing', () => {
   }), [{ body: 'ok', author: 'Reviewer' }]);
   assert.deepEqual(mergeRequestComments.mergeRequestCommentsFromRecord(null), []);
   assert.equal(mergeRequestLabels.mergeRequestReviewStatusLabel('changes_requested'), 'changes requested');
+  assert.equal(mergeRequestLabels.mergeRequestReviewStatusLabel(' changes_requested '), 'changes requested');
   assert.equal(mergeRequestLabels.mergeRequestReviewStatusLabel(undefined, 'merge request'), 'merge request');
   assert.equal(mergeRequestLabels.mergeRequestReviewStatusLabel('', 'merge request'), 'merge request');
   assert.deepEqual(runRecords.runLikeRecordsFromUnknown([{ id: 'run-1' }, null, [], 'raw']), [{ id: 'run-1' }]);
@@ -4196,8 +4197,10 @@ test('record guard helper centralizes unknown object narrowing', () => {
   assert.equal(mergeRequestCommentsSource.includes('isRecord(item)'), false);
   assert.equal(mergeRequestCommentsSource.includes('(item): item is MergeRequestComment'), false);
   for (const marker of [
+    "import { optionalTrimmedStringFromUnknown } from './records'",
     'export function mergeRequestReviewStatusLabel(status: unknown, fallback = \'\'): string',
-    "status.replace(/_/g, ' ')",
+    'const value = optionalTrimmedStringFromUnknown(status)',
+    "value.replace(/_/g, ' ')",
   ]) {
     assert.ok(mergeRequestLabelsSource.includes(marker), marker);
   }
@@ -4566,6 +4569,7 @@ test('run action helpers resolve safe artifacts and quick-pick labels', () => {
   assert.equal(countLabels.countLabel(2, 'changed', 'changed'), '2 changed');
   assert.equal(countLabels.nonZeroCountLabel(0, 'item'), '');
   assert.equal(countLabels.nonZeroCountLabel(1.8, 'item'), '1 item');
+  assert.equal(countLabels.nonZeroCountLabel('2.8', 'item'), '2 items');
   assert.equal(countLabels.nonZeroCountLabel(Number.NaN, 'item'), '');
   assert.equal(runActionHelpers.runProcessPid({ processPid: '1234' }), 1234);
   assert.equal(runActionHelpers.runProcessPid({ pid: '5678' }), 5678);
@@ -4606,8 +4610,10 @@ test('run action helpers resolve safe artifacts and quick-pick labels', () => {
 
   const countLabelsSource = readSourceFixture('src', 'services', 'countLabels.ts');
   for (const marker of [
+    "import { optionalFiniteNumberFromUnknown } from './records'",
     'export function countLabel(count: number, singular: string, plural = `${singular}s`): string',
     'export function nonZeroCountLabel(count: unknown, singular: string, plural = `${singular}s`): string',
+    'const parsed = optionalFiniteNumberFromUnknown(count)',
     "return safeCount === 0 ? '' : countLabel(safeCount, singular, plural)",
   ]) {
     assert.ok(countLabelsSource.includes(marker), marker);
@@ -6965,7 +6971,9 @@ test('run completion notifications route review-ready and attention outcomes', (
 
   const labelSource = readSourceFixture('src', 'services', 'runLabels.ts');
   for (const marker of [
+    "import { optionalTrimmedStringFromUnknown } from './records'",
     'export function runStatusDisplayLabel(status: unknown, fallback = \'unknown\'): string',
+    'const value = optionalTrimmedStringFromUnknown(status)',
     "value.replace(/_/g, ' ')",
   ]) {
     assert.ok(labelSource.includes(marker), marker);
