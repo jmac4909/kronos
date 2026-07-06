@@ -3,7 +3,7 @@ import { MergeRequest, MergeRequestChangedFile, MergeRequestComment } from '../s
 import { normalizeChangedFiles } from './changedFiles';
 import { unknownErrorMessage } from './errorUtils';
 import { parseJsonWithLabel } from './jsonFiles';
-import { arrayFromUnknown, isRecord, optionalFiniteNumberFromUnknown, recordsFromUnknown } from './records';
+import { arrayFromUnknown, isRecord, optionalFiniteNumberFromUnknown, optionalTrimmedStringFromUnknown, recordsFromUnknown } from './records';
 import { sortMergeRequestCommentsByCreated } from './mergeRequestComments';
 import { toValidDate } from './dateValues';
 
@@ -193,13 +193,13 @@ export function normalizeMergeRequestStatus(value: unknown): MergeRequestStatusR
     mr['resolved_discussions_count'],
     data['resolved_discussions_count'],
   ));
-  const providedLastCommentAt = stringField(firstDefined(
+  const providedLastCommentAt = optionalTrimmedStringFromUnknown(firstDefined(
     mr['last_comment_at'],
     data['last_comment_at'],
     mr['last_note_at'],
     data['last_note_at'],
   ));
-  const providedLastDiscussionAt = stringField(firstDefined(
+  const providedLastDiscussionAt = optionalTrimmedStringFromUnknown(firstDefined(
     mr['last_discussion_at'],
     data['last_discussion_at'],
     mr['last_discussion_updated_at'],
@@ -316,11 +316,13 @@ function normalizeJiraComment(value: unknown): JiraComment {
   if (!isRecord(value)) {
     return { body: String(value ?? '') };
   }
-  const author = stringField(value['author'])
-    || (isRecord(value['author']) ? stringField(value['author']['displayName']) || stringField(value['author']['name']) : undefined);
-  const authorName = stringField(value['authorName']);
-  const created = stringField(value['created']);
-  const body = stringField(value['body']) || stringField(value['renderedBody']) || '';
+  const authorRecord = isRecord(value['author']) ? value['author'] : undefined;
+  const author = optionalTrimmedStringFromUnknown(value['author'])
+    || optionalTrimmedStringFromUnknown(authorRecord?.['displayName'])
+    || optionalTrimmedStringFromUnknown(authorRecord?.['name']);
+  const authorName = optionalTrimmedStringFromUnknown(value['authorName']);
+  const created = optionalTrimmedStringFromUnknown(value['created']);
+  const body = optionalTrimmedStringFromUnknown(value['body']) || optionalTrimmedStringFromUnknown(value['renderedBody']) || '';
   return {
     ...(author ? { author } : {}),
     ...(authorName ? { authorName } : {}),
@@ -333,12 +335,14 @@ function normalizeMergeRequestComment(value: unknown): MergeRequestComment {
   if (!isRecord(value)) {
     return { body: String(value ?? '') };
   }
-  const author = stringField(value['author'])
-    || (isRecord(value['author']) ? stringField(value['author']['name']) || stringField(value['author']['username']) : undefined);
+  const authorRecord = isRecord(value['author']) ? value['author'] : undefined;
+  const author = optionalTrimmedStringFromUnknown(value['author'])
+    || optionalTrimmedStringFromUnknown(authorRecord?.['name'])
+    || optionalTrimmedStringFromUnknown(authorRecord?.['username']);
   const idValue = value['id'];
   const id = typeof idValue === 'string' || typeof idValue === 'number' ? String(idValue).trim() : '';
-  const created = stringField(value['created_at']) || stringField(value['created']);
-  const body = stringField(value['body']) || stringField(value['note']) || '';
+  const created = optionalTrimmedStringFromUnknown(value['created_at']) || optionalTrimmedStringFromUnknown(value['created']);
+  const body = optionalTrimmedStringFromUnknown(value['body']) || optionalTrimmedStringFromUnknown(value['note']) || '';
   return {
     ...(id ? { id } : {}),
     ...(author ? { author } : {}),
@@ -374,12 +378,12 @@ function firstDefined(...values: unknown[]): unknown {
 }
 
 function copyString(target: Record<string, unknown>, key: string, value: unknown): void {
-  const str = stringField(value);
+  const str = optionalTrimmedStringFromUnknown(value);
   if (str) { target[key] = str; }
 }
 
 function normalizeMergeRequestState(value: unknown): MergeRequest['state'] | undefined {
-  const normalized = stringField(value)?.toLowerCase();
+  const normalized = optionalTrimmedStringFromUnknown(value)?.toLowerCase();
   if (normalized === 'open' || normalized === 'reopened' || normalized === 'locked') { return 'opened'; }
   if (normalized === 'opened' || normalized === 'merged' || normalized === 'closed') {
     return normalized;
@@ -390,7 +394,7 @@ function normalizeMergeRequestState(value: unknown): MergeRequest['state'] | und
 function normalizeReviewStatus(value: unknown): MergeRequest['review_status'] | undefined {
   if (value === true) { return 'approved'; }
   if (value === false) { return 'pending_review'; }
-  const normalized = stringField(value)?.toLowerCase().replace(/[\s-]+/g, '_');
+  const normalized = optionalTrimmedStringFromUnknown(value)?.toLowerCase().replace(/[\s-]+/g, '_');
   if (normalized === 'approved' || normalized === 'changes_requested' || normalized === 'pending_review') {
     return normalized;
   }
@@ -466,14 +470,8 @@ function normalizeMergeRequestDiscussionStats(value: unknown): MergeRequestDiscu
 }
 
 function addDiscussionTimestamp(target: string[], value: unknown): void {
-  const timestamp = stringField(value);
+  const timestamp = optionalTrimmedStringFromUnknown(value);
   if (timestamp) { target.push(timestamp); }
-}
-
-function stringField(value: unknown): string | undefined {
-  if (typeof value !== 'string') { return undefined; }
-  const trimmed = value.trim();
-  return trimmed ? trimmed : undefined;
 }
 
 function numberField(value: unknown): number | undefined {

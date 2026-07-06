@@ -2986,7 +2986,7 @@ for (const [name, source, marker] of [
   ['src/services/changedFiles.ts', changedFiles, "import { isRecord } from './records'"],
   ['src/services/agingAnalyzer.ts', agingAnalyzer, "import { recordEntriesFromUnknown } from './records'"],
   ['src/services/evidenceData.ts', evidenceData, "import { isRecord, recordsFromUnknown, recordValuesFromUnknown, trimmedStringFromUnknown } from './records'"],
-  ['src/services/integrationAdapters.ts', integrationAdapters, "import { arrayFromUnknown, isRecord, optionalFiniteNumberFromUnknown, recordsFromUnknown } from './records'"],
+  ['src/services/integrationAdapters.ts', integrationAdapters, "import { arrayFromUnknown, isRecord, optionalFiniteNumberFromUnknown, optionalTrimmedStringFromUnknown, recordsFromUnknown } from './records'"],
   ['src/services/queuePlanner.ts', queuePlanner, "import { arrayFromUnknown, isRecord } from './records'"],
   ['src/services/runStatus.ts', runStatus, "import { isRecord, recordsFromUnknown } from './records'"],
   ['src/services/runRecords.ts', runRecords, "import { isRecord, recordsFromUnknown, recordString } from './records'"],
@@ -5205,7 +5205,9 @@ for (const marker of [
   'latestIsoTimestamp(discussionStats.last_discussion_at, providedLastDiscussionAt)',
   'function normalizeSonarBranches',
   'function normalizeSonarBranch',
-  "import { arrayFromUnknown, isRecord, optionalFiniteNumberFromUnknown, recordsFromUnknown } from './records'",
+  "import { arrayFromUnknown, isRecord, optionalFiniteNumberFromUnknown, optionalTrimmedStringFromUnknown, recordsFromUnknown } from './records'",
+  "const authorRecord = isRecord(value['author']) ? value['author'] : undefined",
+  "const str = optionalTrimmedStringFromUnknown(value)",
   'const numeric = optionalFiniteNumberFromUnknown(value)',
   "normalizeSonarBranches(data['branches'])",
   'runPipelineJson<unknown>',
@@ -5219,6 +5221,9 @@ for (const marker of [
 }
 if (integrationAdapters.includes("Array.isArray(value) ? value : isRecord(value) ? arrayFromUnknown(value['comments']) : []")) {
   fail('Integration adapters must use the shared array fallback helper for Jira comment payloads.');
+}
+if (integrationAdapters.includes('function stringField(value: unknown): string | undefined')) {
+  fail('Integration adapters must use the shared optional trimmed string helper.');
 }
 
 if (process.exitCode) {
