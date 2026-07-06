@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { countLabel } from '../services/countLabels';
 import { formatRelativeTime } from '../services/relativeTime';
+import { ticketStringArray } from '../services/ticketFields';
 import { KronosState } from '../state/KronosState';
 import { Project, DiscoveredProject } from '../state/types';
 
@@ -33,7 +34,7 @@ export class ProjectTreeProvider implements vscode.TreeDataProvider<TreeElement>
         items.push(new WelcomeItem('No projects registered', 'Use Discover or Register', 'kronos.discover'));
       } else {
         for (const [name, proj] of Object.entries(projects)) {
-          const linkedCount = Object.values(tickets).filter(t => t.projects?.includes(name)).length;
+          const linkedCount = Object.values(tickets).filter(t => ticketStringArray(t.projects).includes(name)).length;
           items.push(new ProjectItem(name, proj, linkedCount));
         }
       }

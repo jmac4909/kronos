@@ -10300,7 +10300,7 @@ test('dashboard panel view renders escaped command center data', () => {
       tickets: {
         'K-DASH': ticket({
           summary: 'Dashboard ticket',
-          projects: ['web<script>'],
+          projects: [' web<script> ', '', 42],
           updated: '2026-07-01T12:00:00.000Z',
         }),
       },
@@ -10342,6 +10342,7 @@ test('dashboard panel view renders escaped command center data', () => {
   assert.match(html, /Command Center/);
   assert.match(html, /web&lt;script&gt;/);
   assert.match(html, /Project &lt;summary&gt; &amp; details/);
+  assert.match(html, /1 tickets \| 2 open MRs/);
   assert.match(html, /Needs &lt;work&gt; &amp; review/);
   assert.match(html, /Brief &lt;failed&gt; &amp; retry/);
   assert.match(html, /Done &lt;one&gt;/);
@@ -10355,8 +10356,10 @@ test('dashboard panel view renders escaped command center data', () => {
   const source = readSourceFixture('src', 'services', 'dashboardPanelView.ts');
   assert.ok(source.includes("import { arrayFromUnknown, finiteNumberFromUnknown, recordFromUnknown, recordString } from './records'"));
   assert.ok(source.includes("import { runLikeRecordsFromUnknown } from './runRecords'"));
+  assert.ok(source.includes("import { ticketStringArray } from './ticketFields'"));
   assert.ok(source.includes('const runs = runLikeRecordsFromUnknown(input.runs)'));
   assert.ok(source.includes('const safeBrief = recordFromUnknown(input.brief)'));
+  assert.ok(source.includes('ticketStringArray(t.projects).includes(name)'));
   assert.ok(source.includes('return finiteNumberFromUnknown(brief[key])'));
   assert.ok(source.includes("import { isFailedOrCancelledRunStatus, isFreshActiveRun } from './runStatus'"));
   assert.ok(source.includes("runs.filter(run => isFailedOrCancelledRunStatus(recordString(run, 'status'))).length"));
@@ -10364,6 +10367,7 @@ test('dashboard panel view renders escaped command center data', () => {
   assert.equal(source.includes('filter(isRunLikeRecord)'), false);
   assert.equal(source.includes("['failed', 'cancelled'].includes(recordString(run, 'status'))"), false);
   assert.equal(source.includes('return Array.isArray(value) ? value : []'), false, 'dashboard panel should use shared array fallback helper');
+  assert.equal(source.includes('t.projects?.includes(name)'), false, 'dashboard project cards should normalize linked projects through ticketStringArray');
   assert.equal(source.includes('function dashboardBriefRecord'), false, 'dashboard panel should use shared record fallback helper');
 });
 
@@ -12010,12 +12014,15 @@ test('tree providers share action labels and icons', () => {
   for (const marker of [
     "import { countLabel } from '../services/countLabels'",
     "import { formatRelativeTime } from '../services/relativeTime'",
+    "import { ticketStringArray } from '../services/ticketFields'",
+    'ticketStringArray(t.projects).includes(name)',
     "countLabel(proj.open_mr_count, 'open MR')",
     'formatRelativeTime(proj.last_polled)',
   ]) {
     assert.ok(projectTree.includes(marker), marker);
   }
   assert.equal(projectTree.includes('open MR(s)'), false, 'project tree should use shared count label helper');
+  assert.equal(projectTree.includes('t.projects?.includes(name)'), false, 'project tree should normalize linked ticket counts through ticketStringArray');
   for (const [name, source] of [
     ['ProjectTreeProvider', projectTree],
     ['TicketTreeProvider', ticketTree],
@@ -12163,6 +12170,7 @@ test('tree providers share action labels and icons', () => {
     "new vscode.ThemeIcon('git-pull-request', color)",
     "import { ticketStringArray } from '../services/ticketFields'",
     'projectNames: ticketStringArray(ticket.projects)',
+    "const projs = ticketStringArray(ticket.projects).join(', ') || 'unlinked'",
     "import { openReviewTicketEntries } from '../services/reviewWork'",
     'type TicketWithOpenMergeRequest = ReturnType<typeof openReviewTicketEntries>[number][1]',
     'return openReviewTicketEntries(state.tickets)',
@@ -12170,6 +12178,7 @@ test('tree providers share action labels and icons', () => {
     assert.ok(reviewTree.includes(marker), marker);
   }
   assert.equal(reviewTree.includes('projectNames: ticket.projects || []'), false, 'review new-item summaries should normalize project names through ticketStringArray');
+  assert.equal(reviewTree.includes('ticket.projects?.join'), false, 'review item descriptions should normalize project names through ticketStringArray');
   for (const marker of [
     'projectTree.dispose()',
     'ticketTree.dispose()',

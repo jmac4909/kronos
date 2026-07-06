@@ -11,6 +11,7 @@ import type { PlannedAction } from './queuePlanner';
 import { arrayFromUnknown, finiteNumberFromUnknown, recordFromUnknown, recordString } from './records';
 import { runLikeRecordsFromUnknown } from './runRecords';
 import { isFailedOrCancelledRunStatus, isFreshActiveRun } from './runStatus';
+import { ticketStringArray } from './ticketFields';
 import { computeTrendMetrics } from './trendMetrics';
 import { escapeClass, escapeHtml, kronosWebviewBaseCss } from './webviewHtml';
 
@@ -129,7 +130,7 @@ export function buildDashboardHtml(input: DashboardPanelInput): string {
   </div>`;
   const projectCards = Object.entries(projects).map(([name, proj]) => {
     const healthColor = proj.health === 'green' ? '#4caf50' : proj.health === 'yellow' ? '#ff9800' : proj.health === 'red' ? '#f44336' : '#666';
-    const linkedCount = Object.values(allTickets).filter(t => t.projects?.includes(name)).length;
+    const linkedCount = Object.values(allTickets).filter(t => ticketStringArray(t.projects).includes(name)).length;
     return `<div class="project-card kronos-panel pad">
       <div class="card-header"><span class="health-dot" style="background:${healthColor}"></span> ${escapeHtml(name)}</div>
       <div class="card-body">${escapeHtml(proj.summary)}<br><small>${linkedCount} tickets | ${proj.open_mr_count} open MRs</small></div>

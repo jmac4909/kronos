@@ -3049,6 +3049,9 @@ if (!dashboardPanelView.includes("import { arrayFromUnknown, finiteNumberFromUnk
 if (!dashboardPanelView.includes("import { runLikeRecordsFromUnknown } from './runRecords'")) {
   fail('Dashboard panel must import the shared run record list helper.');
 }
+if (!dashboardPanelView.includes("import { ticketStringArray } from './ticketFields'") || !dashboardPanelView.includes('ticketStringArray(t.projects).includes(name)')) {
+  fail('Dashboard panel project cards must normalize linked project counts through ticketStringArray.');
+}
 if (!dashboardPanelView.includes('const runs = runLikeRecordsFromUnknown(input.runs)')) {
   fail('Dashboard panel runs must use the shared run record list helper.');
 }
@@ -3072,6 +3075,9 @@ if (!dashboardPanelView.includes("runs.filter(run => isFailedOrCancelledRunStatu
 }
 if (dashboardPanelView.includes("['failed', 'cancelled'].includes(recordString(run, 'status'))")) {
   fail('Dashboard panel must not carry a local failed/cancelled status list.');
+}
+if (dashboardPanelView.includes('t.projects?.includes(name)')) {
+  fail('Dashboard panel must not count linked tickets from raw project arrays.');
 }
 
 for (const [name, source, marker] of [
@@ -3752,6 +3758,8 @@ for (const marker of [
 for (const marker of [
   "import { countLabel } from '../services/countLabels'",
   "import { formatRelativeTime } from '../services/relativeTime'",
+  "import { ticketStringArray } from '../services/ticketFields'",
+  'ticketStringArray(t.projects).includes(name)',
   "countLabel(proj.open_mr_count, 'open MR')",
   'formatRelativeTime(proj.last_polled)',
 ]) {
@@ -3761,6 +3769,9 @@ for (const marker of [
 }
 if (projectTreeProvider.includes('open MR(s)')) {
   fail('Project tree provider must use the shared count label helper for MR counts.');
+}
+if (projectTreeProvider.includes('t.projects?.includes(name)')) {
+  fail('Project tree provider must normalize linked ticket counts through ticketStringArray.');
 }
 
 for (const marker of [
@@ -4584,11 +4595,14 @@ if (runOperatorSummary.includes("['failed', 'cancelled', 'needs_human'].includes
 if (!reviewTreeProvider.includes('const summary = compactSingleLineText(latest.body, 180)')) {
   fail('ReviewTreeProvider should use shared compact text helper for MR comment summaries.');
 }
-if (!reviewTreeProvider.includes("import { ticketStringArray } from '../services/ticketFields'") || !reviewTreeProvider.includes('projectNames: ticketStringArray(ticket.projects)')) {
+if (!reviewTreeProvider.includes("import { ticketStringArray } from '../services/ticketFields'") || !reviewTreeProvider.includes('projectNames: ticketStringArray(ticket.projects)') || !reviewTreeProvider.includes("const projs = ticketStringArray(ticket.projects).join(', ') || 'unlinked'")) {
   fail('ReviewTreeProvider should normalize project names through ticketStringArray.');
 }
 if (reviewTreeProvider.includes('projectNames: ticket.projects || []')) {
   fail('ReviewTreeProvider must not expose raw ticket project arrays.');
+}
+if (reviewTreeProvider.includes('ticket.projects?.join')) {
+  fail('ReviewTreeProvider must not render raw ticket project arrays.');
 }
 for (const [name, source] of [
   ['src/services/runAttention.ts', runAttention],

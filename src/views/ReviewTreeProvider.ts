@@ -345,7 +345,7 @@ class ReviewItem extends vscode.TreeItem {
     this.contextValue = 'review_item';
     const mr = ticket.mr!;
     const reviewStatus = mergeRequestReviewStatusLabel(mr.review_status);
-    const projs = ticket.projects?.join(', ') || 'unlinked';
+    const projs = ticketStringArray(ticket.projects).join(', ') || 'unlinked';
     const latestComment = latestMergeRequestCommentSummary(ticket);
     const commentSuffix = mr.comment_count !== undefined ? ` · ${mr.comment_count} comment${mr.comment_count === 1 ? '' : 's'}` : '';
     const unresolvedSuffix = mr.unresolved_discussion_count !== undefined && mr.unresolved_discussion_count > 0
