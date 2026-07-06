@@ -2452,6 +2452,7 @@ for (const marker of [
   'function queueString(value: unknown): string',
   'function queueNullableString(value: unknown): string | null',
   'const current = ticketStringArray(ticket.projects)',
+  'const projects = ticketStringArray(ticket.projects)',
   "projects: ticketStringArray(record['projects'])",
   "priority_score: finiteNumberFromUnknown(record['priority_score'])",
 ]) {
@@ -2467,6 +2468,9 @@ if (queueMutations.includes('return Array.isArray(value) ? value.map(queueString
 }
 if (queueMutations.includes('const current = Array.isArray(ticket.projects) ? ticket.projects : []')) {
   fail('Queue ticket project mutations must use the shared ticket string-array helper.');
+}
+if (queueMutations.includes('const projects = ticket.projects || []')) {
+  fail('Queue fallback item creation must normalize ticket projects before resolving paths.');
 }
 if (queueMutations.includes('function queueStringArray')) {
   fail('Queue mutations must use the shared ticket string-array helper.');
@@ -4734,6 +4738,14 @@ for (const marker of [
   "import { evidenceRecordCount } from './evidenceData'",
   'evidenceRecordCount(ticket)',
   "countLabel(ageDays, 'day')",
+  "import { ticketStringArray } from './ticketFields'",
+  'const itemProjects = ticketStringArray(item.projects)',
+  'const ticketProjects = ticketStringArray(ticket.projects)',
+  'const normalizedProjects = ticketStringArray(plan.projects)',
+  'const projects = ticketStringArray(ticket.projects)',
+  'projects: ticketStringArray(ticket.projects)',
+  '...ticketStringArray(ticket?.labels)',
+  '.filter(plan => ticketStringArray(plan.projects).length > 0)',
 ]) {
   if (!queuePlanner.includes(marker)) {
     fail(`Missing queue planner marker: ${marker}`);
@@ -4747,6 +4759,9 @@ if (queuePlanner.includes('export interface PlannerInput')) {
 }
 if (queuePlanner.includes('function unknownArray')) {
   fail('Queue planner must use the shared array fallback helper.');
+}
+if (queuePlanner.includes('ticket.projects || []') || queuePlanner.includes('item.projects || []') || queuePlanner.includes('ticket?.labels || []')) {
+  fail('Queue planner must normalize project and label lists through ticketStringArray.');
 }
 if (/\bany\b/.test(queuePlanner)) {
   fail('Queue planner should not use any for planner payload normalization.');

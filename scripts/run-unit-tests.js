@@ -1665,6 +1665,11 @@ test('queue mutation helpers centralize queue membership and ticket project link
       next_action: 'implement',
       priority: 'Medium',
     }),
+    'K-3': ticket({
+      projects: [' ', ' api ', ''],
+      next_action: 'done',
+      priority: 'Low',
+    }),
   });
   initial.projects.api = {
     path: '/repo/api',
@@ -1755,6 +1760,10 @@ test('queue mutation helpers centralize queue membership and ticket project link
   assert.equal(reordered.changed, true);
   assert.equal(reordered.items[0].ticket, 'K-2');
   assert.equal(queueMutations.reorderQueueItem(0, 'up').changed, false);
+  const fallbackAdded = queueMutations.addTicketToQueue('K-3');
+  assert.equal(fallbackAdded.added, true);
+  assert.deepEqual(fallbackAdded.item.projects, ['api']);
+  assert.equal(fallbackAdded.item.project_path, '/repo/api');
   assert.throws(() => queueMutations.addTicketToQueue('MISSING'), /Ticket not found/);
   assert.throws(() => queueMutations.linkTicketToProject('K-1', 'missing-project'), /Project not found/);
 
@@ -1766,6 +1775,7 @@ test('queue mutation helpers centralize queue membership and ticket project link
     'function queueString(value: unknown): string',
     'function queueNullableString(value: unknown): string | null',
     'const current = ticketStringArray(ticket.projects)',
+    'const projects = ticketStringArray(ticket.projects)',
     "projects: ticketStringArray(record['projects'])",
     "priority_score: finiteNumberFromUnknown(record['priority_score'])",
   ]) {
@@ -1774,6 +1784,7 @@ test('queue mutation helpers centralize queue membership and ticket project link
   assert.equal(source.includes('function normalizeQueueItem(item: any): QueueItem'), false);
   assert.equal(source.includes('return Array.isArray(value) ? value.map(queueString).filter(Boolean) : []'), false);
   assert.equal(source.includes('const current = Array.isArray(ticket.projects) ? ticket.projects : []'), false);
+  assert.equal(source.includes('const projects = ticket.projects || []'), false);
   assert.equal(source.includes('function queueRecord(value: unknown): Record<string, unknown>'), false);
   assert.equal(source.includes('function queueStringArray'), false);
 });
@@ -1883,6 +1894,7 @@ test('queue planner ranks queued items first and avoids duplicate queued tickets
     'K-2': ticket({
       next_action: 'verify',
       priority: 'High',
+      projects: [' app ', '', 42],
       evidence: {
         notes: [null, 'bad note'],
         checks: [null],
@@ -1895,7 +1907,7 @@ test('queue planner ranks queued items first and avoids duplicate queued tickets
       id: 'queued',
       ticket: 'K-1',
       ticket_summary: 'Queued build fix',
-      projects: ['app'],
+      projects: [' app ', '', 42],
       project_path: '/repo/app',
       action: 'fix_build',
       priority_score: 50,
@@ -1908,10 +1920,13 @@ test('queue planner ranks queued items first and avoids duplicate queued tickets
 
   assert.equal(plans[0].source, 'queue');
   assert.equal(plans[0].ticketKey, 'K-1');
+  assert.deepEqual(plans[0].projects, ['app']);
   assert.ok(plans[0].scoreBreakdown.some(part => part.label === 'Queue position'));
   assert.equal(plans.filter(p => p.ticketKey === 'K-1').length, 1);
   const plannedTicket = plans.find(p => p.ticketKey === 'K-2');
   assert.ok(plannedTicket && plannedTicket.reason.includes('no evidence records yet'));
+  assert.deepEqual(plannedTicket.projects, ['app']);
+  assert.ok(plannedTicket.scoreBreakdown.some(part => part.label === 'Project link' && part.detail === 'app'));
   assert.ok(plannedTicket.scoreBreakdown.some(part => part.label === 'Evidence' && part.value === 5));
 });
 
@@ -1920,7 +1935,7 @@ test('queue planner converts a recommendation into a runnable queue item', () =>
     planId: 'K-3:verify',
     ticketKey: 'K-3',
     action: 'verify',
-    projects: ['app'],
+    projects: [' app ', '', 42],
     score: 105,
     scoreBreakdown: [{ label: 'Action', value: 85, detail: 'QA' }, { label: 'Priority', value: 20, detail: 'High' }],
     reason: 'high confidence',
@@ -1935,6 +1950,7 @@ test('queue planner converts a recommendation into a runnable queue item', () =>
   }, plan);
 
   assert.equal(item.id, 'planned-K-3');
+  assert.deepEqual(item.projects, ['app']);
   assert.equal(item.project_path, '/repo/app');
   assert.equal(item.priority_score, 105);
 });
@@ -4806,7 +4822,7 @@ test('review notification helpers normalize seen keys and plan new-item toasts',
 test('queue planner builds backlog triage report for grooming lanes', () => {
   const now = new Date('2026-07-01T12:00:00.000Z');
   const state = baseState({
-    'K-UNLINKED': ticket({ projects: [], next_action: 'implement', updated: '2026-06-30T12:00:00.000Z' }),
+    'K-UNLINKED': ticket({ projects: [' ', 42], next_action: 'implement', updated: '2026-06-30T12:00:00.000Z' }),
     'K-BLOCKED': ticket({ next_action: 'blocked', updated: '2026-06-30T12:00:00.000Z' }),
     'K-BUILD': ticket({
       next_action: 'fix_build',
@@ -4820,7 +4836,7 @@ test('queue planner builds backlog triage report for grooming lanes', () => {
       updated: '2026-06-30T12:00:00.000Z',
     }),
     'K-STALE': ticket({ next_action: 'implement', updated: '2026-06-01T12:00:00.000Z' }),
-    'K-READY': ticket({ next_action: 'verify', evidence: { notes: [null, 'bad note', { at: 'now', kind: 'test', text: 'manual smoke passed' }] }, updated: '2026-06-30T12:00:00.000Z' }),
+    'K-READY': ticket({ projects: [' app ', '', 42], next_action: 'verify', evidence: { notes: [null, 'bad note', { at: 'now', kind: 'test', text: 'manual smoke passed' }] }, updated: '2026-06-30T12:00:00.000Z' }),
     'K-DONE': ticket({ next_action: 'done', projects: [], updated: '2026-06-01T12:00:00.000Z' }),
   });
   const queue = {
@@ -4847,6 +4863,7 @@ test('queue planner builds backlog triage report for grooming lanes', () => {
   });
   assert.equal(report.items.some(item => item.ticketKey === 'K-DONE'), false);
   assert.equal(report.items.find(item => item.kind === 'unlinked').ticketKey, 'K-UNLINKED');
+  assert.deepEqual(report.items.find(item => item.kind === 'unlinked').projects, []);
   assert.equal(report.items.find(item => item.kind === 'blocked').ticketKey, 'K-BLOCKED');
   assert.equal(report.items.find(item => item.kind === 'build_failed').ticketKey, 'K-BUILD');
   assert.equal(report.items.find(item => item.kind === 'review_ready').severity, 'critical');
@@ -4854,6 +4871,7 @@ test('queue planner builds backlog triage report for grooming lanes', () => {
   assert.equal(report.items.find(item => item.kind === 'stale').ageDays, 30);
   assert.equal(report.items.find(item => item.kind === 'stale').detail, 'Ticket has not changed for 30 days.');
   assert.deepEqual(report.items.filter(item => item.kind === 'ready_to_plan').map(item => item.ticketKey), ['K-READY']);
+  assert.deepEqual(report.items.find(item => item.kind === 'ready_to_plan').projects, ['app']);
   assert.equal(report.items.some(item => item.ticketKey === 'K-BUILD' && item.kind === 'ready_to_plan'), false);
 });
 
@@ -4924,7 +4942,7 @@ test('queue planner groups recommendations into release batch plans', () => {
     }),
     'K-2': ticket({
       next_action: 'verify',
-      labels: ['checkout', 'release:2026.07'],
+      labels: ['checkout', ' release:2026.07 ', '', 42],
       evidence: { notes: ['smoke passed'] },
     }),
     'K-3': ticket({
@@ -4965,8 +4983,15 @@ test('queue planner groups recommendations into release batch plans', () => {
     "import { evidenceRecordCount } from './evidenceData'",
     "import { countLabel } from './countLabels'",
     "import { arrayFromUnknown, isRecord } from './records'",
+    "import { ticketStringArray } from './ticketFields'",
     'evidenceRecordCount(ticket)',
     "countLabel(ageDays, 'day')",
+    'const itemProjects = ticketStringArray(item.projects)',
+    'const ticketProjects = ticketStringArray(ticket.projects)',
+    'const projects = ticketStringArray(ticket.projects)',
+    'projects: ticketStringArray(ticket.projects)',
+    '...ticketStringArray(ticket?.labels)',
+    '.filter(plan => ticketStringArray(plan.projects).length > 0)',
     'function releaseKeysForPlan(ticket?: Ticket, queueItem?: unknown): string[]',
     'function releaseField(source: unknown, field: string): unknown',
     "arrayFromUnknown(releaseField(queueItem, 'labels'))",
@@ -4977,6 +5002,9 @@ test('queue planner groups recommendations into release batch plans', () => {
   }
   assert.equal(queuePlannerSource.includes('export interface PlannerInput'), false);
   assert.equal(queuePlannerSource.includes('function unknownArray'), false, 'queuePlanner should use shared array fallback helper');
+  assert.equal(queuePlannerSource.includes('ticket.projects || []'), false, 'queuePlanner should normalize ticket projects through ticketStringArray');
+  assert.equal(queuePlannerSource.includes('item.projects || []'), false, 'queuePlanner should normalize queue projects through ticketStringArray');
+  assert.equal(queuePlannerSource.includes('ticket?.labels || []'), false, 'queuePlanner should normalize release labels through ticketStringArray');
   assert.equal(queuePlannerSource.includes('day(s)'), false, 'queuePlanner should use shared count label helper');
   assert.equal(/\bany\b/.test(queuePlannerSource), false, 'queuePlanner should keep planner payloads typed without any');
 });

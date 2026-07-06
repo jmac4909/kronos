@@ -9,6 +9,7 @@ import { evidenceRecordCount } from './evidenceData';
 import { mergeRequestReviewStatusLabel } from './mergeRequestLabels';
 import { arrayFromUnknown, isRecord } from './records';
 import { severityRank } from './severityRank';
+import { ticketStringArray } from './ticketFields';
 
 interface PlannerInput {
   state: KronosStateType | null;
@@ -89,6 +90,7 @@ export function planNextActions(input: PlannerInput): PlannedAction[] {
   queueItems.forEach((item, idx) => {
     if (item.ticket) { queuedTickets.add(item.ticket); }
     const ticket = item.ticket ? input.state?.tickets?.[item.ticket] : undefined;
+    const itemProjects = ticketStringArray(item.projects);
     const positionScore = 1000 - idx;
     const priorityScore = Math.round(Number(item.priority_score || 0));
     const scoreBreakdown = [
@@ -100,7 +102,7 @@ export function planNextActions(input: PlannerInput): PlannedAction[] {
       planId: planIdFor(item.ticket, item.action || 'implement'),
       ticketKey: item.ticket,
       action: item.action || 'implement',
-      projects: item.projects || [],
+      projects: itemProjects,
       releaseKeys: releaseKeysForPlan(ticket, item),
       score,
       scoreBreakdown,
@@ -122,7 +124,8 @@ export function planNextActions(input: PlannerInput): PlannedAction[] {
     const priorityScore = scorePriority(ticket.priority);
     const buildScore = isFailingBuildStatus(ticket.build?.status) ? 25 : isPassingBuildStatus(ticket.build?.status) ? 5 : 0;
     const mrScore = ticket.mr?.review_status === 'changes_requested' ? 20 : ticket.mr?.review_status === 'approved' ? 10 : 0;
-    const linkScore = (ticket.projects || []).length > 0 ? 10 : -30;
+    const ticketProjects = ticketStringArray(ticket.projects);
+    const linkScore = ticketProjects.length > 0 ? 10 : -30;
     const evidenceCount = evidenceRecordCount(ticket);
     const evidenceScore = evidenceCount === 0 && ['verify', 'await_review', 'deploy_monitor'].includes(ticket.next_action) ? 5 : 0;
     const scoreBreakdown = [
@@ -130,7 +133,7 @@ export function planNextActions(input: PlannerInput): PlannedAction[] {
       { label: 'Priority', value: priorityScore, detail: ticket.priority || 'unknown' },
       { label: 'Build', value: buildScore, detail: ticket.build?.status || 'no build' },
       { label: 'MR', value: mrScore, detail: mergeRequestReviewStatusLabel(ticket.mr?.review_status, 'no MR') },
-      { label: 'Project link', value: linkScore, detail: (ticket.projects || []).length > 0 ? ticket.projects.join(', ') : 'not linked' },
+      { label: 'Project link', value: linkScore, detail: ticketProjects.length > 0 ? ticketProjects.join(', ') : 'not linked' },
       { label: 'Evidence', value: evidenceScore, detail: evidenceCount === 0 ? 'no evidence records yet' : `${evidenceCount} evidence record${evidenceCount === 1 ? '' : 's'}` },
     ];
     const score = sumBreakdown(scoreBreakdown);
@@ -142,14 +145,14 @@ export function planNextActions(input: PlannerInput): PlannedAction[] {
     ];
     if (ticket.build?.status) { reasons.push(`build ${ticket.build.status}`); }
     if (ticket.mr?.review_status) { reasons.push(`MR ${mergeRequestReviewStatusLabel(ticket.mr.review_status)}`); }
-    if ((ticket.projects || []).length === 0) { reasons.push('not linked to a project'); }
+    if (ticketProjects.length === 0) { reasons.push('not linked to a project'); }
     if (evidenceCount === 0) { reasons.push('no evidence records yet'); }
 
     plans.push({
       planId,
       ticketKey,
       action: ticket.next_action || 'implement',
-      projects: ticket.projects || [],
+      projects: ticketProjects,
       releaseKeys: releaseKeysForPlan(ticket),
       score,
       scoreBreakdown,
@@ -165,7 +168,8 @@ export function planNextActions(input: PlannerInput): PlannedAction[] {
 export function planByProject(plans: PlannedAction[], limitPerProject = 5): ProjectBatchPlan[] {
   const grouped = new Map<string, PlannedAction[]>();
   for (const plan of plans) {
-    const projects = plan.projects.length > 0 ? plan.projects : ['unlinked'];
+    const normalizedProjects = ticketStringArray(plan.projects);
+    const projects = normalizedProjects.length > 0 ? normalizedProjects : ['unlinked'];
     for (const project of projects) {
       if (!grouped.has(project)) {
         grouped.set(project, []);
@@ -222,7 +226,7 @@ export function buildBacklogTriageReport(input: PlannerInput): BacklogTriageRepo
 
   for (const [ticketKey, ticket] of Object.entries(tickets)) {
     if (ticket.next_action === 'done') { continue; }
-    const projects = ticket.projects || [];
+    const projects = ticketStringArray(ticket.projects);
     const evidenceCount = evidenceRecordCount(ticket);
     const ageDays = ticketAgeDays(ticket, now);
     const issueCountBeforeTicket = items.length;
@@ -264,11 +268,12 @@ function sumBreakdown(items: ScoreBreakdownItem[]): number {
 
 export function planToQueueItem(input: PlannerInput, plan: PlannedAction): QueueItem {
   if (plan.queueItem) { return plan.queueItem; }
-  const firstProject = plan.projects[0];
+  const projects = ticketStringArray(plan.projects);
+  const firstProject = projects[0];
   const item: QueueItem = {
     id: `planned-${plan.ticketKey || plan.action}`,
     ticket: plan.ticketKey,
-    projects: plan.projects,
+    projects,
     project_path: firstProject && input.resolveProjectPath ? input.resolveProjectPath(firstProject) || '' : '',
     action: plan.action,
     priority_score: plan.score,
@@ -304,7 +309,7 @@ function triageItem(
     kind,
     severity,
     action,
-    projects: ticket.projects || [],
+    projects: ticketStringArray(ticket.projects),
     detail,
   };
   if (ageDays !== undefined) { item.ageDays = ageDays; }
@@ -355,7 +360,7 @@ function releaseKeysForPlan(ticket?: Ticket, queueItem?: unknown): string[] {
   collectReleaseValues(values, ticket?.fixVersions);
   collectReleaseValues(values, ticket?.milestone);
   collectReleaseValues(values, ticket?.sprint);
-  for (const label of [...arrayFromUnknown(releaseField(queueItem, 'labels')), ...(ticket?.labels || [])]) {
+  for (const label of [...arrayFromUnknown(releaseField(queueItem, 'labels')), ...ticketStringArray(ticket?.labels)]) {
     const release = releaseFromLabel(label);
     if (release) { values.push(release); }
   }
@@ -459,7 +464,7 @@ export function overnightCandidatePlans(plans: PlannedAction[], limit = 10): Pla
   return plans
     .filter(plan => plan.source === 'ticket')
     .filter(plan => isCodeAction(plan.action))
-    .filter(plan => plan.projects.length > 0)
+    .filter(plan => ticketStringArray(plan.projects).length > 0)
     .slice(0, limit);
 }
 

@@ -258,7 +258,7 @@ function fallbackQueueItem(state: KronosState, ticketKey: string): QueueItem {
   if (!ticket) {
     throw new Error(`Ticket not found: ${ticketKey}`);
   }
-  const projects = ticket.projects || [];
+  const projects = ticketStringArray(ticket.projects);
   const firstProject = projects[0];
   const action = ticket.next_action || 'implement';
   return normalizeQueueItem({
