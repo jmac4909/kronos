@@ -255,6 +255,7 @@ const sonarReportView = require('../out/services/sonarReportView.js');
 const agingReportView = require('../out/services/agingReportView.js');
 const ticketPanelView = require('../out/services/ticketPanelView.js');
 const webviewHtml = require('../out/services/webviewHtml.js');
+const webviewFormat = require('../out/services/webviewFormat.js');
 const fileNames = require('../out/services/fileNames.js');
 const sessionStore = require('../out/services/sessionStore.js');
 const worktreeRegistry = require('../out/services/worktreeRegistry.js');
@@ -4141,10 +4142,21 @@ test('date value helper centralizes valid date coercion', () => {
 
   const extensionSource = readSourceFixture('src', 'extension.ts');
   assert.ok(extensionSource.includes("import { toValidDate } from './services/dateValues'"));
-  assert.ok(extensionSource.includes('return toValidDate(value)?.toLocaleString() || fallback'));
+  assert.ok(extensionSource.includes("import { formatWebviewDateTime } from './services/webviewFormat'"));
+  assert.equal(extensionSource.includes('function formatWebviewDateTime'), false);
   const ticketPanelViewSource = readSourceFixture('src', 'services', 'ticketPanelView.ts');
-  assert.ok(ticketPanelViewSource.includes("import { toValidDate } from './dateValues'"));
-  assert.ok(ticketPanelViewSource.includes('return toValidDate(value)?.toLocaleDateString() || fallback'));
+  assert.ok(ticketPanelViewSource.includes("import { formatWebviewDate, formatWebviewDateTime } from './webviewFormat'"));
+  assert.equal(ticketPanelViewSource.includes('function formatWebviewDateTime'), false);
+  assert.equal(ticketPanelViewSource.includes('function formatWebviewDate('), false);
+
+  const operationsReportPanelViewSource = readSourceFixture('src', 'services', 'operationsReportPanelView.ts');
+  assert.ok(operationsReportPanelViewSource.includes("import { formatWebviewDateTime } from './webviewFormat'"));
+  assert.equal(operationsReportPanelViewSource.includes('function formatWebviewDateTime'), false);
+
+  const webviewFormatSource = readSourceFixture('src', 'services', 'webviewFormat.ts');
+  assert.ok(webviewFormatSource.includes("import { toValidDate } from './dateValues'"));
+  assert.ok(webviewFormatSource.includes('export function formatWebviewDateTime(value: unknown'));
+  assert.ok(webviewFormatSource.includes('export function formatWebviewDate(value: unknown'));
 
   const sessionTreeSource = readSourceFixture('src', 'views', 'SessionTreeProvider.ts');
   assert.ok(sessionTreeSource.includes("import { toValidDate } from '../services/dateValues'"));
@@ -9614,6 +9626,10 @@ test('webview html helpers centralize escaping and safe HTTP links', () => {
   assert.match(baseCss, /\.kronos-script-required/);
   assert.match(baseCss, /html\[data-kronos-script-ready="true"\] \.kronos-script-required/);
   assert.match(baseCss, /@media \(max-width: 760px\)/);
+  assert.equal(webviewFormat.formatWebviewDateTime('not-a-date', 'fallback'), 'fallback');
+  assert.equal(webviewFormat.formatWebviewDate('not-a-date', 'fallback'), 'fallback');
+  assert.match(webviewFormat.formatWebviewDateTime('2026-07-01T12:00:00.000Z'), /2026|7\/1\/2026|01\/07\/2026/);
+  assert.match(webviewFormat.formatWebviewDate('2026-07-01T12:00:00.000Z'), /2026|7\/1\/2026|01\/07\/2026/);
 });
 
 test('dashboard panel view renders escaped command center data', () => {
@@ -9828,7 +9844,7 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     "document.documentElement.setAttribute('data-kronos-actions-ready', 'true')",
     'function applyBoardFilter',
     'data-search="${attr(searchText)}"',
-    'function formatWebviewDateTime',
+    'function formatStatus',
     'escapeClass',
     "'To Do': [], 'Queued': [], 'In Progress': [], 'Review': [], 'Blocked': [], 'Done': []",
     "done: 'Done'",

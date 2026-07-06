@@ -4,9 +4,9 @@ import { evidenceAcceptanceCriteria, evidenceChecked, evidenceChecks, evidenceEn
 import { EvidenceGateResult, evaluateEvidenceGate } from './evidenceGate';
 import { actionButton, kronosActionPanelScript } from './operatorPanel';
 import { isRecord } from './records';
-import { toValidDate } from './dateValues';
 import { TimelineEvent, buildTicketTimeline } from './ticketTimeline';
 import { escapeClass, escapeHtml, kronosWebviewBaseCss, safeHttpHref } from './webviewHtml';
+import { formatWebviewDate, formatWebviewDateTime } from './webviewFormat';
 
 type TicketTimelineRuns = Parameters<typeof buildTicketTimeline>[0]['runs'];
 
@@ -315,12 +315,4 @@ function mergeRequestComments(record: object | null | undefined): Array<Record<s
   return Array.isArray(value)
     ? value.filter((item): item is Record<string, unknown> => isRecord(item) && typeof item['body'] === 'string')
     : [];
-}
-
-function formatWebviewDateTime(value: unknown, fallback = 'N/A'): string {
-  return toValidDate(value)?.toLocaleString() || fallback;
-}
-
-function formatWebviewDate(value: unknown, fallback = 'N/A'): string {
-  return toValidDate(value)?.toLocaleDateString() || fallback;
 }

@@ -93,6 +93,7 @@ import { createWorkspaceDiffArtifact, firstRemoteBranchMatching, originProjectPa
 import { signalProcessTree, stopProcessTree, supportsProcessTreeSuspend } from './services/processTree';
 import { createWebviewReadyMonitor } from './services/webviewDiagnostics';
 import { WEBVIEW_ACTION_PANEL_SCRIPT, WEBVIEW_JIRA_BOARD_SCRIPT, createWebviewNonce, webviewScriptCspOptions, withWebviewCsp } from './services/webviewSecurity';
+import { formatWebviewDateTime } from './services/webviewFormat';
 import { normalizeBoardMessage, normalizeWebviewCommand } from './services/webviewMessages';
 import {
   AGENT_QUALITY_OPERATOR_COMMANDS,
@@ -207,10 +208,6 @@ async function runWebviewPanelAction(action: () => Promise<void> | void, fallbac
     const detail = warnUnexpectedPanelIntegrationError(e, fallback);
     vscode.window.showWarningMessage(detail);
   }
-}
-
-function formatWebviewDateTime(value: unknown, fallback = 'N/A'): string {
-  return toValidDate(value)?.toLocaleString() || fallback;
 }
 
 function openExternalHttpUrl(url: string): void {

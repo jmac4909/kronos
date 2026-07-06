@@ -39,6 +39,7 @@ const namedFiles = [
   'src/services/sonarCommandPlan.ts',
   'src/services/sonarReportView.ts',
   'src/services/agingReportView.ts',
+  'src/services/webviewFormat.ts',
   'src/services/webviewHtml.ts',
   'src/views/ProjectTreeProvider.ts',
   'src/views/TicketTreeProvider.ts',
@@ -108,6 +109,7 @@ const dateValues = readSource('src/services/dateValues.ts');
 const buildStatus = readSource('src/services/buildStatus.ts');
 const regexp = readSource('src/services/regexp.ts');
 const pathUtils = readSource('src/services/pathUtils.ts');
+const webviewFormat = sources['src/services/webviewFormat.ts'];
 const queuePlannerPanelView = sources['src/services/queuePlannerPanelView.ts'];
 const operationsReportPanelView = sources['src/services/operationsReportPanelView.ts'];
 const dashboardPanelView = sources['src/services/dashboardPanelView.ts'];
@@ -1807,7 +1809,7 @@ for (const marker of [
   'id="board-filter"',
   'id="board-filter-summary"',
   'function applyBoardFilter',
-  'function formatWebviewDateTime',
+  'function formatStatus',
   'escapeClass',
   'data-search="${attr(searchText)}"',
   "'To Do': [], 'Queued': [], 'In Progress': [], 'Review': [], 'Blocked': [], 'Done': []",
@@ -2488,6 +2490,18 @@ for (const marker of [
 }
 
 for (const marker of [
+  "import { toValidDate } from './dateValues'",
+  'export function formatWebviewDateTime(value: unknown',
+  'return toValidDate(value)?.toLocaleString() || fallback',
+  'export function formatWebviewDate(value: unknown',
+  'return toValidDate(value)?.toLocaleDateString() || fallback',
+]) {
+  if (!webviewFormat.includes(marker)) {
+    fail(`Missing webview date format helper marker: ${marker}`);
+  }
+}
+
+for (const marker of [
   'export function escapeRegExp(value: string): string',
   "value.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')",
 ]) {
@@ -2606,6 +2620,7 @@ for (const [name, source, marker] of [
   ['src/services/ticketFilters.ts', ticketFilters, "import { toValidDate } from './dateValues'"],
   ['src/services/ticketTimeline.ts', ticketTimeline, "import { toValidDate } from './dateValues'"],
   ['src/services/trendMetrics.ts', trendMetrics, "import { toValidDate } from './dateValues'"],
+  ['src/services/webviewFormat.ts', webviewFormat, "import { toValidDate } from './dateValues'"],
   ['src/runners/sessionDispatcher.ts', dispatcher, "import { toValidDate } from '../services/dateValues'"],
   ['src/views/SessionTreeProvider.ts', sessionTreeProvider, "import { toValidDate } from '../services/dateValues'"],
 ]) {
@@ -3871,6 +3886,22 @@ for (const staleMarker of [
   }
 }
 
+for (const [name, source, marker] of [
+  ['src/extension.ts', extension, "import { formatWebviewDateTime } from './services/webviewFormat'"],
+  ['src/services/operationsReportPanelView.ts', operationsReportPanelView, "import { formatWebviewDateTime } from './webviewFormat'"],
+  ['src/services/ticketPanelView.ts', ticketPanelView, "import { formatWebviewDate, formatWebviewDateTime } from './webviewFormat'"],
+]) {
+  if (!source.includes(marker)) {
+    fail(`${name} must import the shared webview date formatter.`);
+  }
+  if (source.includes('function formatWebviewDateTime')) {
+    fail(`${name} must not carry a local formatWebviewDateTime helper.`);
+  }
+  if (source.includes('function formatWebviewDate(')) {
+    fail(`${name} must not carry a local formatWebviewDate helper.`);
+  }
+}
+
 for (const marker of [
   "import { isActiveRunStatus } from './runStatus'",
   "import { toValidDate } from './dateValues'",
@@ -4065,6 +4096,7 @@ if (/\bany\b/.test(queuePlannerPanelView)) {
 }
 
 for (const marker of [
+  "import { formatWebviewDateTime } from './webviewFormat'",
   'export function buildAgentQualityScoreHtml',
   'export function buildSessionStatsHtml',
   'export function buildTrendMetricsHtml',

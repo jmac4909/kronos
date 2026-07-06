@@ -5,8 +5,8 @@ import { actionButton, kronosActionPanelScript, kronosOperatorPanelCss, operator
 import { listProfiles, type KronosProfile } from './profileManager';
 import { requiredScripts } from './scriptClient';
 import type { TrendMetricsReport } from './trendMetrics';
-import { toValidDate } from './dateValues';
 import { escapeClass, escapeHtml } from './webviewHtml';
+import { formatWebviewDateTime } from './webviewFormat';
 
 interface SessionStatsRow {
   project: string;
@@ -22,10 +22,6 @@ interface SessionStatsRow {
 
 interface SessionStatsReport {
   sessions: SessionStatsRow[];
-}
-
-function formatWebviewDateTime(value: unknown, fallback = 'N/A'): string {
-  return toValidDate(value)?.toLocaleString() || fallback;
 }
 
 export function buildSessionStatsHtml(stats: SessionStatsReport, nonce?: string, actionScriptUri?: string): string {
