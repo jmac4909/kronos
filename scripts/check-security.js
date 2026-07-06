@@ -4944,6 +4944,9 @@ for (const marker of [
   'projects: ticketStringArray(ticket.projects)',
   '...ticketStringArray(ticket?.labels)',
   '.filter(plan => ticketStringArray(plan.projects).length > 0)',
+  'const entries = arrayFromUnknown(value)',
+  'for (const entry of entries)',
+  'if (text) { target.push(text); }',
 ]) {
   if (!queuePlanner.includes(marker)) {
     fail(`Missing queue planner marker: ${marker}`);
@@ -4957,6 +4960,9 @@ if (queuePlanner.includes('export interface PlannerInput')) {
 }
 if (queuePlanner.includes('function unknownArray')) {
   fail('Queue planner must use the shared array fallback helper.');
+}
+if (queuePlanner.includes('if (Array.isArray(value))')) {
+  fail('Queue planner must use the shared array fallback helper for release values.');
 }
 if (queuePlanner.includes('ticket.projects || []') || queuePlanner.includes('item.projects || []') || queuePlanner.includes('ticket?.labels || []')) {
   fail('Queue planner must normalize project and label lists through ticketStringArray.');

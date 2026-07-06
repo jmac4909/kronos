@@ -374,8 +374,9 @@ function releaseField(source: unknown, field: string): unknown {
 
 function collectReleaseValues(target: string[], value: unknown): void {
   if (value === undefined || value === null) { return; }
-  if (Array.isArray(value)) {
-    for (const entry of value) {
+  const entries = arrayFromUnknown(value);
+  if (entries.length > 0) {
+    for (const entry of entries) {
       collectReleaseValues(target, entry);
     }
     return;
@@ -384,7 +385,8 @@ function collectReleaseValues(target: string[], value: unknown): void {
     collectReleaseValues(target, Reflect.get(value, 'name') || Reflect.get(value, 'value') || Reflect.get(value, 'title'));
     return;
   }
-  target.push(String(value));
+  const text = String(value);
+  if (text) { target.push(text); }
 }
 
 function releaseFromLabel(label: unknown): string | undefined {

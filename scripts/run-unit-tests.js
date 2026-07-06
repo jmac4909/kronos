@@ -5085,6 +5085,7 @@ test('queue planner groups recommendations into release batch plans', () => {
     'K-4': ticket({
       next_action: 'implement',
       labels: ['checkout'],
+      fixVersions: [],
     }),
   });
   const plans = queuePlanner.planNextActions({ state, queue: null });
@@ -5128,12 +5129,16 @@ test('queue planner groups recommendations into release batch plans', () => {
     'function releaseField(source: unknown, field: string): unknown',
     "arrayFromUnknown(releaseField(queueItem, 'labels'))",
     'function collectReleaseValues(target: string[], value: unknown): void',
+    'const entries = arrayFromUnknown(value)',
+    'for (const entry of entries)',
+    'if (text) { target.push(text); }',
     'function releaseFromLabel(label: unknown): string | undefined',
   ]) {
     assert.ok(queuePlannerSource.includes(marker), marker);
   }
   assert.equal(queuePlannerSource.includes('export interface PlannerInput'), false);
   assert.equal(queuePlannerSource.includes('function unknownArray'), false, 'queuePlanner should use shared array fallback helper');
+  assert.equal(queuePlannerSource.includes('if (Array.isArray(value))'), false, 'queuePlanner should use shared array fallback helper for release values');
   assert.equal(queuePlannerSource.includes('ticket.projects || []'), false, 'queuePlanner should normalize ticket projects through ticketStringArray');
   assert.equal(queuePlannerSource.includes('item.projects || []'), false, 'queuePlanner should normalize queue projects through ticketStringArray');
   assert.equal(queuePlannerSource.includes('ticket?.labels || []'), false, 'queuePlanner should normalize release labels through ticketStringArray');
