@@ -950,6 +950,7 @@ for (const marker of [
   'let resolvedTicketKey = resolveDispatchTicketKey(ticketKey, run)',
   'await reloadStateAfterDispatch(state, projectName)',
   'function resolveDispatchTicketKey(ticketKey: string | undefined, run: KronosRun): string | undefined',
+  'return [optionalTrimmedStringFromUnknown(ticketKey), optionalTrimmedStringFromUnknown(run.ticket)].find(Boolean)',
   "import { buildRunCompletionEvidenceCheck, buildRunCompletionEvidenceText, evaluatePostRunReadiness, postRunReadinessRunPatch, resolvePostRunTicket, shouldRecordRunCompletionEvidence } from './services/postRunReadiness'",
   'addTicketRunCompletionEvidence',
   'const ticketResolutionInput:',
@@ -1012,7 +1013,7 @@ for (const marker of [
   'unknownErrorMessage(e, `Could not find fallback remote branch for ${ticket.key}.`)',
   "import { buildSonarReport }",
   "import { buildSonarBranchPickItems, buildSonarFixBranchStrategy, buildSonarFixInstructionBlock } from './services/sonarCommandPlan'",
-  "import { isRecord, recordEntriesFromUnknown, recordFromUnknown, recordKeysFromUnknown, recordString } from './services/records'",
+  "import { isRecord, optionalTrimmedStringFromUnknown, recordEntriesFromUnknown, recordFromUnknown, recordKeysFromUnknown, recordString } from './services/records'",
   "from './services/commandPayloads'",
   'resolveProjectName,',
   'resolveQueueCommandItem,',
@@ -1044,6 +1045,9 @@ if (extension.includes('Number.isFinite' + '(intervalMs)')) {
 }
 if (extension.includes('if (val) {\n        const newDirs = val.split')) {
   fail('Scan directory settings must allow clearing all configured directories.');
+}
+if (extension.includes(".map(value => typeof value === 'string' ? value.trim() : '')")) {
+  fail('Extension must normalize dispatch ticket keys through optionalTrimmedStringFromUnknown.');
 }
 if (extension.indexOf('const startupSideEffectsTimer = setTimeout(runStartupSideEffects, 0)') < extension.indexOf("vscode.commands.registerCommand('kronos.cleanupWorktrees'")) {
   fail('Kronos startup side effects must be deferred until after command registration.');
@@ -3090,7 +3094,7 @@ for (const [name, source, marker] of [
 }
 
 for (const [name, source, marker] of [
-  ['src/extension.ts', extension, "import { isRecord, recordEntriesFromUnknown, recordFromUnknown, recordKeysFromUnknown, recordString } from './services/records'"],
+  ['src/extension.ts', extension, "import { isRecord, optionalTrimmedStringFromUnknown, recordEntriesFromUnknown, recordFromUnknown, recordKeysFromUnknown, recordString } from './services/records'"],
   ['src/services/changedFiles.ts', changedFiles, "import { isRecord } from './records'"],
   ['src/services/agingAnalyzer.ts', agingAnalyzer, "import { recordEntriesFromUnknown } from './records'"],
   ['src/services/evidenceData.ts', evidenceData, "import { isRecord, recordsFromUnknown, recordValuesFromUnknown, trimmedStringFromUnknown } from './records'"],

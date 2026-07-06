@@ -141,7 +141,7 @@ import {
   type RunActionQuickPickItem,
   type RunArtifactPathResult,
 } from './services/runActionHelpers';
-import { isRecord, recordEntriesFromUnknown, recordFromUnknown, recordKeysFromUnknown, recordString } from './services/records';
+import { isRecord, optionalTrimmedStringFromUnknown, recordEntriesFromUnknown, recordFromUnknown, recordKeysFromUnknown, recordString } from './services/records';
 import {
   explicitProjectName,
   resolveMergeRequestUrl,
@@ -4426,9 +4426,7 @@ async function reloadStateAfterDispatch(state: KronosState, projectName?: string
 }
 
 function resolveDispatchTicketKey(ticketKey: string | undefined, run: KronosRun): string | undefined {
-  return [ticketKey, run.ticket]
-    .map(value => typeof value === 'string' ? value.trim() : '')
-    .find(Boolean);
+  return [optionalTrimmedStringFromUnknown(ticketKey), optionalTrimmedStringFromUnknown(run.ticket)].find(Boolean);
 }
 
 async function showRunCompletionToast(ticketKey: string, ticket: Ticket | undefined, run: KronosRun): Promise<void> {

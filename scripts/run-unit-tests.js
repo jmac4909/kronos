@@ -4195,7 +4195,7 @@ test('record guard helper centralizes unknown object narrowing', () => {
   }
 
   const extensionSource = readSourceFixture('src', 'extension.ts');
-  assert.ok(extensionSource.includes("import { isRecord, recordEntriesFromUnknown, recordFromUnknown, recordKeysFromUnknown, recordString } from './services/records'"));
+  assert.ok(extensionSource.includes("import { isRecord, optionalTrimmedStringFromUnknown, recordEntriesFromUnknown, recordFromUnknown, recordKeysFromUnknown, recordString } from './services/records'"));
   assert.equal(extensionSource.includes('function ticketRecord'), false, 'extension should use shared record helper for ticket payload records');
 
   const ticketFieldsSource = readSourceFixture('src', 'services', 'ticketFields.ts');
@@ -10881,6 +10881,7 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'let resolvedTicketKey = resolveDispatchTicketKey(ticketKey, run)',
     'await reloadStateAfterDispatch(state, projectName)',
     'function resolveDispatchTicketKey(ticketKey: string | undefined, run: KronosRun): string | undefined',
+    'return [optionalTrimmedStringFromUnknown(ticketKey), optionalTrimmedStringFromUnknown(run.ticket)].find(Boolean)',
     "import { buildRunCompletionEvidenceCheck, buildRunCompletionEvidenceText, evaluatePostRunReadiness, postRunReadinessRunPatch, resolvePostRunTicket, shouldRecordRunCompletionEvidence } from './services/postRunReadiness'",
     "import { appendRunWarnings } from './services/runMetadata'",
     'addTicketRunCompletionEvidence',
@@ -11182,6 +11183,11 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     source.includes('run.warnings || []'),
     false,
     'extension should append run warning metadata through runMetadata',
+  );
+  assert.equal(
+    source.includes(".map(value => typeof value === 'string' ? value.trim() : '')"),
+    false,
+    'extension should normalize dispatch ticket keys through optionalTrimmedStringFromUnknown',
   );
   assert.ok(source.includes('function startActiveRunPanelRefresh('), 'webview panels should share active-run auto-refresh');
   assert.ok(source.includes("warnUnexpectedPanelIntegrationError(e, 'Kronos panel auto-refresh failed.')"), 'panel auto-refresh errors should be normalized');
@@ -11889,7 +11895,7 @@ test('extension Sonar commands normalize webview and issue payloads', () => {
   for (const marker of [
     "import { buildSonarReport }",
     "import { buildSonarBranchPickItems, buildSonarFixBranchStrategy, buildSonarFixInstructionBlock } from './services/sonarCommandPlan'",
-    "import { isRecord, recordEntriesFromUnknown, recordFromUnknown, recordKeysFromUnknown, recordString } from './services/records'",
+    "import { isRecord, optionalTrimmedStringFromUnknown, recordEntriesFromUnknown, recordFromUnknown, recordKeysFromUnknown, recordString } from './services/records'",
     'stringFromUnknown,',
     "vscode.commands.registerCommand('kronos.sonarScan', async (item: unknown)",
     "vscode.commands.registerCommand('kronos.sonarReport', async (item: unknown)",
