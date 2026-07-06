@@ -2306,7 +2306,7 @@ for (const marker of [
   'formatTimeLabel(e.timestamp)',
   "formatDateTimeLabel(run.startedAt, 'Unknown')",
   'function stringOrDefault',
-  "import { arrayFromUnknown, isRecord, recordEntriesFromUnknown, recordFromUnknown } from '../services/records'",
+  "import { arrayFromUnknown, isRecord, recordEntriesFromUnknown, recordFromUnknown, trimmedStringFromUnknown } from '../services/records'",
   'function streamString(value: unknown): string',
   'export function parseStreamEvents(event: unknown): ProgressEvent[]',
   'function parseAssistantContentBlock(rawBlock: unknown, now: Date): ProgressEvent | null',
@@ -2332,7 +2332,7 @@ for (const marker of [
   "const started = formatDateTimeLabel(run.startedAt, 'Unknown')",
   'const runEvents = arrayFromUnknown(run.events)',
   'const lastEvent = runEvents.length ? recordFromUnknown(runEvents[runEvents.length - 1]) : undefined',
-  'const missingVariables = arrayFromUnknown(rawMissingVariables).map(String)',
+  'const missingVariables = arrayFromUnknown(rawMissingVariables).map(item => trimmedStringFromUnknown(item)).filter(Boolean)',
   'const operatorSummary = buildRunOperatorSummary(run)',
   'buildRunCenterOperatorBoard',
   'class="progress-cell outcome-cell',
@@ -2353,6 +2353,7 @@ for (const staleMarker of [
   'function arrayField(record: Record<string, unknown>, key: string): unknown[]',
   "arrayField(message, 'content')",
   'const runEvents = Array.isArray(run.events) ? run.events : []',
+  'const missingVariables = arrayFromUnknown(rawMissingVariables).map(String)',
   'const missingVariables = Array.isArray(rawMissingVariables) ? rawMissingVariables.map(String) : []',
 ]) {
   if (dispatcher.includes(staleMarker)) {
@@ -3109,7 +3110,7 @@ for (const [name, source, marker] of [
   ['src/services/trendMetrics.ts', trendMetrics, "import { definedValues, recordEntriesFromUnknown, recordString } from './records'"],
   ['src/services/stateStore.ts', stateStore, "import { finiteNumberFromUnknown, isRecord as isPlainObject } from './records'"],
   ['src/services/stateScriptAdapter.ts', stateScriptAdapter, "import { arrayFromUnknown, finiteNumberFromUnknown, isRecord as isPlainObject, optionalTrimmedStringFromUnknown } from './records'"],
-  ['src/runners/sessionDispatcher.ts', dispatcher, "import { arrayFromUnknown, isRecord, recordEntriesFromUnknown, recordFromUnknown } from '../services/records'"],
+  ['src/runners/sessionDispatcher.ts', dispatcher, "import { arrayFromUnknown, isRecord, recordEntriesFromUnknown, recordFromUnknown, trimmedStringFromUnknown } from '../services/records'"],
 ]) {
   if (!source.includes(marker)) {
     fail(`${name} must import the shared record guard.`);

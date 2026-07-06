@@ -27,7 +27,7 @@ import { isAttentionRunStatus, runAttentionDetail } from '../services/runAttenti
 import { appendRunRecoveryActions, appendRunWarnings } from '../services/runMetadata';
 import { sortedRunCenterRuns } from '../services/runCenterSort';
 import { readJsonFile } from '../services/jsonFiles';
-import { arrayFromUnknown, isRecord, recordEntriesFromUnknown, recordFromUnknown } from '../services/records';
+import { arrayFromUnknown, isRecord, recordEntriesFromUnknown, recordFromUnknown, trimmedStringFromUnknown } from '../services/records';
 import { toValidDate } from '../services/dateValues';
 import { formatDateTimeLabel, formatTimeLabel } from '../services/dateLabels';
 import type { KronosState as KronosStateFile } from '../state/types';
@@ -1547,7 +1547,7 @@ function buildRunCenterHtml(runs: KronosRun[], nonce?: string, actionScriptUri?:
       : stringOrDefault(promptMeta?.['source'], 'prompt');
     const promptHash = stringOrDefault(promptMeta?.['templateHash'] || run.promptHash, '');
     const rawMissingVariables = promptMeta?.['missingVariables'];
-    const missingVariables = arrayFromUnknown(rawMissingVariables).map(String);
+    const missingVariables = arrayFromUnknown(rawMissingVariables).map(item => trimmedStringFromUnknown(item)).filter(Boolean);
     const missing = missingVariables.length ? `<br><span class="failure">missing vars: ${escapeHtml(missingVariables.join(', '))}</span>` : '';
     const readiness = isRecord(run.readiness) ? run.readiness : undefined;
     const readinessStatus = stringOrDefault(readiness?.status, 'unknown');

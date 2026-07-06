@@ -4260,7 +4260,7 @@ test('record guard helper centralizes unknown object narrowing', () => {
   }
 
   const dispatcherSource = readSourceFixture('src', 'runners', 'sessionDispatcher.ts');
-  assert.ok(dispatcherSource.includes("import { arrayFromUnknown, isRecord, recordEntriesFromUnknown, recordFromUnknown } from '../services/records'"));
+  assert.ok(dispatcherSource.includes("import { arrayFromUnknown, isRecord, recordEntriesFromUnknown, recordFromUnknown, trimmedStringFromUnknown } from '../services/records'"));
   assert.equal(dispatcherSource.includes('function isRecord'), false);
 
   for (const [file, marker] of [
@@ -6562,7 +6562,7 @@ test('dispatcher records branch and permission metadata for persisted runs', () 
     'formatTimeLabel(e.timestamp)',
     "formatDateTimeLabel(run.startedAt, 'Unknown')",
     'function stringOrDefault',
-    "import { arrayFromUnknown, isRecord, recordEntriesFromUnknown, recordFromUnknown } from '../services/records'",
+    "import { arrayFromUnknown, isRecord, recordEntriesFromUnknown, recordFromUnknown, trimmedStringFromUnknown } from '../services/records'",
     'function streamString(value: unknown): string',
     'export function parseStreamEvents(event: unknown): ProgressEvent[]',
     'function parseAssistantContentBlock(rawBlock: unknown, now: Date): ProgressEvent | null',
@@ -6586,7 +6586,7 @@ test('dispatcher records branch and permission metadata for persisted runs', () 
     "const started = formatDateTimeLabel(run.startedAt, 'Unknown')",
     'const runEvents = arrayFromUnknown(run.events)',
     'const lastEvent = runEvents.length ? recordFromUnknown(runEvents[runEvents.length - 1]) : undefined',
-    'const missingVariables = arrayFromUnknown(rawMissingVariables).map(String)',
+    'const missingVariables = arrayFromUnknown(rawMissingVariables).map(item => trimmedStringFromUnknown(item)).filter(Boolean)',
     'const operatorSummary = buildRunOperatorSummary(run)',
     'buildRunCenterOperatorBoard',
     'class="progress-cell outcome-cell',
@@ -6663,6 +6663,7 @@ test('dispatcher records branch and permission metadata for persisted runs', () 
     'function arrayField(record: Record<string, unknown>, key: string): unknown[]',
     "arrayField(message, 'content')",
     'const runEvents = Array.isArray(run.events) ? run.events : []',
+    'const missingVariables = arrayFromUnknown(rawMissingVariables).map(String)',
     'const missingVariables = Array.isArray(rawMissingVariables) ? rawMissingVariables.map(String) : []',
   ]) {
     assert.equal(source.includes(staleMarker), false, staleMarker);
