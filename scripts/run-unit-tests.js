@@ -10097,15 +10097,17 @@ test('dashboard panel view renders escaped command center data', () => {
   assert.doesNotMatch(html, /Brief <failed>/);
 
   const source = readSourceFixture('src', 'services', 'dashboardPanelView.ts');
-  assert.ok(source.includes("import { arrayFromUnknown, recordString } from './records'"));
+  assert.ok(source.includes("import { arrayFromUnknown, recordFromUnknown, recordString } from './records'"));
   assert.ok(source.includes("import { runLikeRecordsFromUnknown } from './runRecords'"));
   assert.ok(source.includes('const runs = runLikeRecordsFromUnknown(input.runs)'));
+  assert.ok(source.includes('const safeBrief = recordFromUnknown(input.brief)'));
   assert.ok(source.includes("import { isFailedOrCancelledRunStatus, isFreshActiveRun } from './runStatus'"));
   assert.ok(source.includes("runs.filter(run => isFailedOrCancelledRunStatus(recordString(run, 'status'))).length"));
   assert.ok(source.includes('return arrayFromUnknown(brief[key])'));
   assert.equal(source.includes('filter(isRunLikeRecord)'), false);
   assert.equal(source.includes("['failed', 'cancelled'].includes(recordString(run, 'status'))"), false);
   assert.equal(source.includes('return Array.isArray(value) ? value : []'), false, 'dashboard panel should use shared array fallback helper');
+  assert.equal(source.includes('function dashboardBriefRecord'), false, 'dashboard panel should use shared record fallback helper');
 });
 
 test('jira board panel view renders escaped ticket data and packaged script', () => {

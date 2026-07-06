@@ -8,7 +8,7 @@ import { buildHumanReviewInbox } from './humanReviewInbox';
 import { buildNextActionContext } from './nextActionContext';
 import { actionButton, actionRow, kronosActionPanelScript } from './operatorPanel';
 import type { PlannedAction } from './queuePlanner';
-import { arrayFromUnknown, recordString } from './records';
+import { arrayFromUnknown, recordFromUnknown, recordString } from './records';
 import { runLikeRecordsFromUnknown } from './runRecords';
 import { isFailedOrCancelledRunStatus, isFreshActiveRun } from './runStatus';
 import { computeTrendMetrics } from './trendMetrics';
@@ -37,10 +37,6 @@ interface DashboardOperatorBrief {
   evidence: string;
 }
 
-function dashboardBriefRecord(brief: unknown): Record<string, unknown> {
-  return Boolean(brief) && typeof brief === 'object' && !Array.isArray(brief) ? brief as Record<string, unknown> : {};
-}
-
 function dashboardBriefItems(brief: Record<string, unknown>, key: string): unknown[] {
   return arrayFromUnknown(brief[key]);
 }
@@ -56,7 +52,7 @@ function dashboardBriefCount(brief: Record<string, unknown>, key: string): numbe
 }
 
 export function buildDashboardHtml(input: DashboardPanelInput): string {
-  const safeBrief = dashboardBriefRecord(input.brief);
+  const safeBrief = recordFromUnknown(input.brief);
   const projects = input.state?.projects || {};
   const allTickets = input.state?.tickets || {};
   const runs = runLikeRecordsFromUnknown(input.runs);

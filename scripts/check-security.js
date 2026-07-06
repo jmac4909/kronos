@@ -1879,7 +1879,7 @@ for (const marker of [
   'dashboard-warning',
   'class="kronos-shell ticket-shell"',
   'class="kronos-shell diff-shell"',
-  'function dashboardBriefRecord',
+  'const safeBrief = recordFromUnknown(input.brief)',
   'function dashboardBriefItems',
   'function dashboardBriefCount',
   'class="kronos-shell operator-shell"',
@@ -2916,8 +2916,8 @@ for (const [name, source, marker] of [
     fail(`${name} must not carry a local isPlainObject helper.`);
   }
 }
-if (!dashboardPanelView.includes("import { arrayFromUnknown, recordString } from './records'")) {
-  fail('src/services/dashboardPanelView.ts must import the shared array fallback helper.');
+if (!dashboardPanelView.includes("import { arrayFromUnknown, recordFromUnknown, recordString } from './records'")) {
+  fail('src/services/dashboardPanelView.ts must import the shared array and record fallback helpers.');
 }
 if (!dashboardPanelView.includes("import { runLikeRecordsFromUnknown } from './runRecords'")) {
   fail('Dashboard panel must import the shared run record list helper.');
@@ -2933,6 +2933,9 @@ if (!dashboardPanelView.includes('return arrayFromUnknown(brief[key])')) {
 }
 if (dashboardPanelView.includes('return Array.isArray(value) ? value : []')) {
   fail('Dashboard panel must not carry a local unknown-array fallback.');
+}
+if (dashboardPanelView.includes('function dashboardBriefRecord')) {
+  fail('Dashboard panel must use the shared record fallback helper for morning brief payloads.');
 }
 if (!dashboardPanelView.includes("import { isFailedOrCancelledRunStatus, isFreshActiveRun } from './runStatus'")) {
   fail('Dashboard panel must import shared run status predicates.');
