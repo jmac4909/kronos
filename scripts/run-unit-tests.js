@@ -255,6 +255,7 @@ const sonarCommandPlan = require('../out/services/sonarCommandPlan.js');
 const sonarReportView = require('../out/services/sonarReportView.js');
 const agingReportView = require('../out/services/agingReportView.js');
 const ticketPanelView = require('../out/services/ticketPanelView.js');
+const ticketFields = require('../out/services/ticketFields.js');
 const webviewHtml = require('../out/services/webviewHtml.js');
 const webviewFormat = require('../out/services/webviewFormat.js');
 const fileNames = require('../out/services/fileNames.js');
@@ -3947,6 +3948,9 @@ test('record guard helper centralizes unknown object narrowing', () => {
   assert.deepEqual(records.recordFromUnknown(null), {});
   assert.equal(records.recordString({ ticket: ' K-1 ' }, 'ticket'), 'K-1');
   assert.equal(records.recordString({ ticket: 42 }, 'ticket'), '');
+  assert.equal(ticketFields.ticketStringField({ ticket: 42 }, 'ticket'), '42');
+  assert.equal(ticketFields.ticketStringField({}, 'missing', 'fallback'), 'fallback');
+  assert.deepEqual(ticketFields.ticketStringArray([' K-1 ', 42, '', null]), ['K-1', '42']);
   assert.equal(runRecords.isRunLikeRecord({ id: 'run-1' }), true);
   assert.equal(runRecords.isRunLikeRecord([]), false);
   assert.equal(runRecords.hasRetryMetadata({ promptMetadata: { retryOfRunId: 'run-0' } }), true);
@@ -3975,6 +3979,16 @@ test('record guard helper centralizes unknown object narrowing', () => {
   const extensionSource = readSourceFixture('src', 'extension.ts');
   assert.ok(extensionSource.includes("import { isRecord, recordFromUnknown, recordString } from './services/records'"));
   assert.equal(extensionSource.includes('function ticketRecord'), false, 'extension should use shared record helper for ticket payload records');
+
+  const ticketFieldsSource = readSourceFixture('src', 'services', 'ticketFields.ts');
+  for (const marker of [
+    'export function ticketStringField(record: object | null | undefined, key: string, fallback = \'\'): string',
+    'Reflect.get(record, key)',
+    'export function ticketStringArray(value: unknown): string[]',
+    "value.map(item => String(item ?? '').trim()).filter(Boolean)",
+  ]) {
+    assert.ok(ticketFieldsSource.includes(marker), marker);
+  }
 
   const dispatcherSource = readSourceFixture('src', 'runners', 'sessionDispatcher.ts');
   assert.ok(dispatcherSource.includes("import { isRecord } from '../services/records'"));
@@ -10167,7 +10181,7 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'const checks = evidenceChecks(ticket)',
     'const environmentResults = evidenceEnvironmentResults(ticket)',
     'evidenceCount: evidenceRecordCount(t)',
-    'function ticketStringArray',
+    "import { ticketStringArray, ticketStringField } from './ticketFields'",
     'function ticketAttachments',
     'interface TicketAttachmentSummary',
     'interface JiraBoardTicketPayload',
@@ -11164,6 +11178,7 @@ test('ticket detail rendering uses typed tickets and evidence records', () => {
     'interface TicketPanelRenderInput',
     'queue?: QueueState | null',
     'runs?: TicketTimelineRuns',
+    "import { ticketStringArray, ticketStringField } from './ticketFields'",
     'const mr = ticket.mr',
     'const build = ticket.build',
     'function mergeRequestComments(record: object | null | undefined)',
@@ -11177,6 +11192,8 @@ test('ticket detail rendering uses typed tickets and evidence records', () => {
   ]) {
     assert.ok(ticketPanelViewSource.includes(marker), marker);
   }
+  assert.equal(ticketPanelViewSource.includes('function ticketStringField'), false);
+  assert.equal(ticketPanelViewSource.includes('function ticketStringArray'), false);
   for (const marker of [
     "import { isRecord } from './records'",
     'type EvidenceRecord = object',

@@ -4,6 +4,7 @@ import { evidenceAcceptanceCriteria, evidenceChecked, evidenceChecks, evidenceEn
 import { EvidenceGateResult, evaluateEvidenceGate } from './evidenceGate';
 import { actionButton, kronosActionPanelScript } from './operatorPanel';
 import { isRecord } from './records';
+import { ticketStringArray, ticketStringField } from './ticketFields';
 import { TimelineEvent, buildTicketTimeline } from './ticketTimeline';
 import { escapeClass, escapeHtml, kronosWebviewBaseCss, safeHttpHref } from './webviewHtml';
 import { formatWebviewDate, formatWebviewDateTime } from './webviewFormat';
@@ -296,17 +297,6 @@ export function buildTicketTimelineHtml(events: TimelineEvent[]): string {
     </div>`;
   }).join('');
   return `<div class="section"><h3>Ticket Timeline</h3><div class="timeline">${rows}</div></div>`;
-}
-
-function ticketStringField(record: object | null | undefined, key: string, fallback = ''): string {
-  const value = record ? Reflect.get(record, key) : undefined;
-  return value === undefined || value === null ? fallback : String(value);
-}
-
-function ticketStringArray(value: unknown): string[] {
-  return Array.isArray(value)
-    ? value.map(item => String(item ?? '').trim()).filter(Boolean)
-    : [];
 }
 
 function mergeRequestComments(record: object | null | undefined): Array<Record<string, unknown>> {

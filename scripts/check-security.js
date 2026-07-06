@@ -40,6 +40,7 @@ const namedFiles = [
   'src/services/sonarReportView.ts',
   'src/services/agingReportView.ts',
   'src/services/dateLabels.ts',
+  'src/services/ticketFields.ts',
   'src/services/webviewFormat.ts',
   'src/services/webviewHtml.ts',
   'src/views/ProjectTreeProvider.ts',
@@ -108,6 +109,7 @@ const records = readSource('src/services/records.ts');
 const commandPayloads = readSource('src/services/commandPayloads.ts');
 const dateValues = readSource('src/services/dateValues.ts');
 const dateLabels = sources['src/services/dateLabels.ts'];
+const ticketFields = sources['src/services/ticketFields.ts'];
 const buildStatus = readSource('src/services/buildStatus.ts');
 const regexp = readSource('src/services/regexp.ts');
 const pathUtils = readSource('src/services/pathUtils.ts');
@@ -392,7 +394,7 @@ const dashboardRendererSafetyMarkers = new Set([
   'id="kronos-jira-ticket-data"',
   'class="kronos-data-payload"',
   'evidenceCount: evidenceRecordCount(t)',
-  'function ticketStringArray',
+  "import { ticketStringArray, ticketStringField } from './ticketFields'",
   'function ticketAttachments',
   'interface TicketAttachmentSummary',
   'interface JiraBoardTicketPayload',
@@ -640,7 +642,7 @@ for (const marker of [
   'const existingCriteria = evidenceAcceptanceCriteria(ticket)',
   'const criteria = evidenceAcceptanceCriteria(ticket)',
   'evidenceCount: evidenceRecordCount(t)',
-  'function ticketStringArray',
+  "import { ticketStringArray, ticketStringField } from './ticketFields'",
   'function ticketAttachments',
   'interface TicketAttachmentSummary',
   'interface JiraBoardTicketPayload',
@@ -1766,6 +1768,7 @@ for (const marker of [
   'interface TicketPanelRenderInput',
   'queue?: QueueState | null',
   'runs?: TicketTimelineRuns',
+  "import { ticketStringArray, ticketStringField } from './ticketFields'",
   'const timeline = buildTicketTimeline({',
   '...(input.runs !== undefined ? { runs: input.runs } : {})',
   'const projectList = ticketStringArray(ticket.projects)',
@@ -1783,6 +1786,17 @@ for (const marker of [
 ]) {
   if (!ticketPanelView.includes(marker)) {
     fail(`Missing ticket panel view marker: ${marker}`);
+  }
+}
+for (const [name, source] of [
+  ['src/services/jiraBoardPanelView.ts', jiraBoardPanelView],
+  ['src/services/ticketPanelView.ts', ticketPanelView],
+]) {
+  if (!source.includes("import { ticketStringArray, ticketStringField } from './ticketFields'")) {
+    fail(`${name} must import shared ticket field helpers.`);
+  }
+  if (source.includes('function ticketStringField') || source.includes('function ticketStringArray')) {
+    fail(`${name} must not carry local ticket field helpers.`);
   }
 }
 
@@ -2478,6 +2492,17 @@ for (const marker of [
 ]) {
   if (!records.includes(marker)) {
     fail(`Missing record helper marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  'export function ticketStringField(record: object | null | undefined, key: string, fallback = \'\'): string',
+  'Reflect.get(record, key)',
+  'export function ticketStringArray(value: unknown): string[]',
+  "value.map(item => String(item ?? '').trim()).filter(Boolean)",
+]) {
+  if (!ticketFields.includes(marker)) {
+    fail(`Missing ticket field helper marker: ${marker}`);
   }
 }
 

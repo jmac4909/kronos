@@ -1,6 +1,7 @@
 import type { KronosState as KronosStateSnapshot, QueueState } from '../state/types';
 import { evidenceRecordCount } from './evidenceData';
 import { isRecord } from './records';
+import { ticketStringArray, ticketStringField } from './ticketFields';
 import { WEBVIEW_READY_COMMAND, webviewRuntimeScriptTag, webviewRuntimeScriptUri } from './webviewSecurity';
 import { escapeAttr, escapeHtml, kronosWebviewBaseCss } from './webviewHtml';
 
@@ -9,17 +10,6 @@ export interface JiraBoardPanelInput {
   queue: QueueState | null;
   nonce: string;
   scriptUri: string;
-}
-
-function ticketStringField(record: object | null | undefined, key: string, fallback = ''): string {
-  const value = record ? Reflect.get(record, key) : undefined;
-  return value === undefined || value === null ? fallback : String(value);
-}
-
-function ticketStringArray(value: unknown): string[] {
-  return Array.isArray(value)
-    ? value.map(item => String(item ?? '').trim()).filter(Boolean)
-    : [];
 }
 
 function ticketAttachments(value: unknown): TicketAttachmentSummary[] {
