@@ -2,6 +2,7 @@ import { KronosState, QueueState, Ticket } from '../state/types';
 import { actionSkill } from './actionCatalog';
 import { actionDisplayLabel as actionToLabel } from './actionCatalog';
 import { isCodeAction, isProofSensitiveAction } from './actionSemantics';
+import { countLabel } from './countLabels';
 import { evidenceRecordCount } from './evidenceData';
 import { PlannedAction } from './queuePlanner';
 import { SafetyPlan, SafetyRisk } from './safetyGate';
@@ -135,7 +136,7 @@ function preflightForPlan(plan: PlannedAction, ticket: Ticket | undefined): stri
   if (isProofSensitiveAction(plan.action)) {
     const evidenceCount = evidenceRecordCount(ticket);
     checks.push(evidenceCount > 0
-      ? `Evidence ledger has ${evidenceCount} item(s).`
+      ? `Evidence ledger has ${countLabel(evidenceCount, 'item')}.`
       : 'Evidence ledger is empty; add proof before handoff.');
   }
   if (plan.source === 'queue') {

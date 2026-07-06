@@ -1,6 +1,7 @@
 import type { StateAuditEvent } from './stateStore';
 import type { RecoveryInventory, RecoveryItem } from './recoveryCenter';
 import { actionButton, actionRow, kronosActionPanelScript, kronosOperatorPanelCss, operatorCommandRow } from './operatorPanel';
+import { countLabel } from './countLabels';
 import { escapeAttr, escapeHtml } from './webviewHtml';
 
 export function buildStateAuditLogHtml(events: StateAuditEvent[], stateAuditFile: string, nonce?: string, actionScriptUri?: string): string {
@@ -38,7 +39,7 @@ export function buildStateAuditLogHtml(events: StateAuditEvent[], stateAuditFile
   <div class="kronos-header">
     <div>
       <h1 class="kronos-title">Kronos State Audit Log</h1>
-      <div class="kronos-subtitle">${escapeHtml(stateAuditFile)} - newest first - ${events.length} event(s)</div>
+      <div class="kronos-subtitle">${escapeHtml(stateAuditFile)} - newest first - ${escapeHtml(countLabel(events.length, 'event'))}</div>
     </div>
   </div>
   ${actions}

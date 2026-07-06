@@ -3,6 +3,7 @@ import { actionEstimateMinutes, actionPlanningScore } from './actionCatalog';
 import { actionDisplayLabel as actionToLabel } from './actionCatalog';
 import { isCodeAction } from './actionSemantics';
 import { isFailingBuildStatus, isPassingBuildStatus } from './buildStatus';
+import { countLabel } from './countLabels';
 import { toValidDate } from './dateValues';
 import { evidenceRecordCount } from './evidenceData';
 import { mergeRequestReviewStatusLabel } from './mergeRequestLabels';
@@ -242,7 +243,7 @@ export function buildBacklogTriageReport(input: PlannerInput): BacklogTriageRepo
       items.push(triageItem(ticketKey, ticket, 'evidence_gap', 'warning', 'Add Evidence', 'Ticket is in a proof-sensitive state with no evidence ledger entries.', ageDays));
     }
     if (ageDays !== undefined && ageDays >= 7) {
-      items.push(triageItem(ticketKey, ticket, 'stale', ageDays >= 14 ? 'critical' : 'warning', 'Re-triage', `Ticket has not changed for ${ageDays} day(s).`, ageDays));
+      items.push(triageItem(ticketKey, ticket, 'stale', ageDays >= 14 ? 'critical' : 'warning', 'Re-triage', `Ticket has not changed for ${countLabel(ageDays, 'day')}.`, ageDays));
     }
     if (items.length === issueCountBeforeTicket && !queuedTickets.has(ticketKey) && projects.length > 0 && ticket.next_action !== 'blocked' && actionPlanningScore(ticket.next_action) >= 60) {
       items.push(triageItem(ticketKey, ticket, 'ready_to_plan', 'info', actionToLabel(ticket.next_action), 'Linked ticket is ready for queue planning.', ageDays));

@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { countLabel } from '../services/countLabels';
 import { formatRelativeTime } from '../services/relativeTime';
 import { KronosState } from '../state/KronosState';
 import { Project, DiscoveredProject } from '../state/types';
@@ -64,7 +65,7 @@ export class ProjectTreeProvider implements vscode.TreeDataProvider<TreeElement>
       const items: TreeElement[] = [];
       const proj = element.project;
       if (proj.open_mr_count > 0) {
-        items.push(new DetailItem(`${proj.open_mr_count} open MR(s)`));
+        items.push(new DetailItem(countLabel(proj.open_mr_count, 'open MR')));
       }
       if (proj.last_polled) {
         items.push(new DetailItem(`Refreshed ${formatRelativeTime(proj.last_polled)}`));

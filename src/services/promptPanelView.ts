@@ -1,5 +1,6 @@
 import { PromptHistoryDiff, PromptHistorySnapshot, PromptSmokeResult, PromptTemplateInfo } from './promptManager';
 import { actionButton, kronosActionPanelScript, kronosOperatorPanelCss, operatorCommandRow } from './operatorPanel';
+import { countLabel } from './countLabels';
 import { escapeClass, escapeHtml } from './webviewHtml';
 
 interface ProjectPromptOverride {
@@ -21,7 +22,7 @@ export function buildPromptManagerHtml(
     const template = globalByName.get(name);
     const status = template ? 'pass' : 'fail';
     const detail = template
-      ? `${template.hash.substring(0, 12)} - ${template.variables.length} variable(s)`
+      ? `${template.hash.substring(0, 12)} - ${countLabel(template.variables.length, 'variable')}`
       : 'missing';
     return `<tr><td><span class="pill ${status}">${status}</span></td><td>${escapeHtml(name)}</td><td>${escapeHtml(detail)}</td></tr>`;
   }).join('');

@@ -1722,6 +1722,8 @@ for (const marker of [
   'recoveryActionOptions(item, action.action, false)',
   'focusedRecoveryItemSort',
   'focused-recovery-item',
+  "import { countLabel } from './countLabels'",
+  "countLabel(events.length, 'event')",
   'recoveryActionLabel',
   'kronosOperatorPanelCss',
   "kronosActionPanelScript(nonce, 'Kronos Recovery Center', actionScriptUri)",
@@ -1729,6 +1731,9 @@ for (const marker of [
   if (!recoveryPanelView.includes(marker)) {
     fail(`Missing recovery panel view marker: ${marker}`);
   }
+}
+if (recoveryPanelView.includes('event(s)')) {
+  fail('Recovery panel view must use the shared count label helper for event counts.');
 }
 
 for (const marker of [
@@ -1924,6 +1929,8 @@ for (const marker of [
   'Kronos Prompt Smoke Tests',
   'promptSmokeResultRow',
   'promptTemplateRow',
+  "import { countLabel } from './countLabels'",
+  "countLabel(template.variables.length, 'variable')",
   'kronosOperatorPanelCss',
   'actionScriptUri?: string',
   "kronosActionPanelScript(nonce, 'Kronos Prompt Manager', actionScriptUri)",
@@ -1933,6 +1940,9 @@ for (const marker of [
   if (!promptPanelView.includes(marker)) {
     fail(`Missing prompt panel view marker: ${marker}`);
   }
+}
+if (promptPanelView.includes('variable(s)')) {
+  fail('Prompt panel view must use the shared count label helper for variable counts.');
 }
 
 for (const marker of [
@@ -3153,12 +3163,17 @@ for (const marker of [
   'Cannot start',
   'Claude auth preflight must pass before dispatch.',
   'Collision detector checks active runs',
+  "import { countLabel } from './countLabels'",
   "import { evidenceRecordCount } from './evidenceData'",
   'evidenceRecordCount(ticket)',
+  "countLabel(evidenceCount, 'item')",
 ]) {
   if (!nextActionContext.includes(marker)) {
     fail(`Missing next action context marker: ${marker}`);
   }
+}
+if (nextActionContext.includes('item(s)')) {
+  fail('Next action context must use the shared count label helper for item counts.');
 }
 
 for (const marker of [
@@ -3614,12 +3629,17 @@ for (const marker of [
 }
 
 for (const marker of [
+  "import { countLabel } from '../services/countLabels'",
   "import { formatRelativeTime } from '../services/relativeTime'",
+  "countLabel(proj.open_mr_count, 'open MR')",
   'formatRelativeTime(proj.last_polled)',
 ]) {
   if (!projectTreeProvider.includes(marker)) {
     fail(`Missing project tree date marker: ${marker}`);
   }
+}
+if (projectTreeProvider.includes('open MR(s)')) {
+  fail('Project tree provider must use the shared count label helper for MR counts.');
 }
 
 for (const marker of [
@@ -4558,12 +4578,17 @@ for (const marker of [
   'isCodeAction(plan.action)',
   'actionEstimateMinutes(plan.action)',
   'actionPlanningScore(ticket.next_action)',
+  "import { countLabel } from './countLabels'",
   "import { evidenceRecordCount } from './evidenceData'",
   'evidenceRecordCount(ticket)',
+  "countLabel(ageDays, 'day')",
 ]) {
   if (!queuePlanner.includes(marker)) {
     fail(`Missing queue planner marker: ${marker}`);
   }
+}
+if (queuePlanner.includes('day(s)')) {
+  fail('Queue planner must use the shared count label helper for day counts.');
 }
 if (queuePlanner.includes('export interface PlannerInput')) {
   fail('PlannerInput should stay private to queuePlanner.');
@@ -4587,11 +4612,16 @@ for (const marker of [
   "actionButton('startPlan', 'Start'",
   "actionButton('snoozePlanToday', 'Tomorrow'",
   "actionButton('addEvidenceCheck', 'Add Check'",
+  "import { countLabel } from './countLabels'",
+  "countLabel(batch.plans.length, 'action')",
   "import { escapeClass, escapeHtml } from './webviewHtml'",
 ]) {
   if (!queuePlannerPanelView.includes(marker)) {
     fail(`Missing queue planner panel view marker: ${marker}`);
   }
+}
+if (queuePlannerPanelView.includes('action(s)')) {
+  fail('Queue planner panel view must use the shared count label helper for action counts.');
 }
 if (/\bany\b/.test(queuePlannerPanelView)) {
   fail('Queue planner panel view should keep renderer payloads typed without any.');

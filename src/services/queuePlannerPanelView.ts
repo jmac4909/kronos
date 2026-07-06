@@ -3,6 +3,7 @@ import { actionDisplayLabel as actionToLabel } from './actionCatalog';
 import type { BacklogTriageReport, PlannedAction, ProjectBatchPlan, ReleaseBatchPlan } from './queuePlanner';
 import { estimatePlanMinutes } from './queuePlanner';
 import { actionButton, actionRow, kronosActionPanelScript, kronosOperatorPanelCss } from './operatorPanel';
+import { countLabel } from './countLabels';
 import { escapeClass, escapeHtml } from './webviewHtml';
 
 interface QueuePlannerPanelShellOptions {
@@ -86,7 +87,7 @@ export function buildProjectBatchPlanHtml(batches: ProjectBatchPlan[], nonce?: s
       <td class="action-cell">${planActionRow(plan)}</td>
     </tr>`).join('');
     return `<section class="operator-card">
-      <div class="operator-card-header"><div class="operator-card-title">${escapeHtml(batch.project)}</div><div class="operator-card-meta">${escapeHtml(String(batch.plans.length))} action(s)</div></div>
+      <div class="operator-card-header"><div class="operator-card-title">${escapeHtml(batch.project)}</div><div class="operator-card-meta">${escapeHtml(countLabel(batch.plans.length, 'action'))}</div></div>
       <div class="subtitle">Score ${escapeHtml(String(batch.totalScore))} | estimated ${escapeHtml(String(batch.estimatedMinutes))}m | ${escapeHtml(actions || 'no actions')}</div>
       <div class="table-wrap"><table class="kronos-table"><tr><th>Ticket</th><th>Action</th><th>Score</th><th>Estimate</th><th>Reason</th><th class="action-cell">Actions</th></tr>${plans}</table></div>
     </section>`;
@@ -117,7 +118,7 @@ export function buildReleaseBatchPlanHtml(batches: ReleaseBatchPlan[], nonce?: s
       <td class="action-cell">${planActionRow(plan)}</td>
     </tr>`).join('');
     return `<section class="operator-card">
-      <div class="operator-card-header"><div class="operator-card-title">${escapeHtml(batch.release)}</div><div class="operator-card-meta">${escapeHtml(String(batch.plans.length))} action(s)</div></div>
+      <div class="operator-card-header"><div class="operator-card-title">${escapeHtml(batch.release)}</div><div class="operator-card-meta">${escapeHtml(countLabel(batch.plans.length, 'action'))}</div></div>
       <div class="subtitle">Score ${escapeHtml(String(batch.totalScore))} | estimated ${escapeHtml(String(batch.estimatedMinutes))}m | ${escapeHtml(actions || 'no actions')}</div>
       <div class="table-wrap"><table class="kronos-table"><tr><th>Ticket</th><th>Action</th><th>Projects</th><th>Score</th><th>Estimate</th><th>Reason</th><th class="action-cell">Actions</th></tr>${plans}</table></div>
     </section>`;

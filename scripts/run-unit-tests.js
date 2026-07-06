@@ -2077,6 +2077,7 @@ test('next action context explains command, risk, preflight, and blockers', () =
   const reviewContext = nextActionContext.buildNextActionContext(reviewPlan, { state, queue: null });
   assert.equal(reviewContext.skill, 'verify-fix');
   assert.deepEqual(reviewContext.risks, ['repo-write']);
+  assert.ok(reviewContext.preflight.some(item => item.includes('Evidence ledger has 1 item.')));
   const reviewStart = nextActionContext.buildNextActionStartDecision(reviewPlan, reviewContext);
   assert.equal(reviewStart.allowed, true);
   assert.ok(reviewStart.safetyPlan.changes.some(item => item.includes('Dispatch Claude /verify-fix')));
@@ -4761,6 +4762,7 @@ test('queue planner builds backlog triage report for grooming lanes', () => {
   assert.equal(report.items.find(item => item.kind === 'review_ready').severity, 'critical');
   assert.equal(report.items.find(item => item.kind === 'evidence_gap').ticketKey, 'K-REVIEW');
   assert.equal(report.items.find(item => item.kind === 'stale').ageDays, 30);
+  assert.equal(report.items.find(item => item.kind === 'stale').detail, 'Ticket has not changed for 30 days.');
   assert.deepEqual(report.items.filter(item => item.kind === 'ready_to_plan').map(item => item.ticketKey), ['K-READY']);
   assert.equal(report.items.some(item => item.ticketKey === 'K-BUILD' && item.kind === 'ready_to_plan'), false);
 });
@@ -4871,8 +4873,10 @@ test('queue planner groups recommendations into release batch plans', () => {
     'queueItem?: QueueItem',
     'export function planToQueueItem(input: PlannerInput, plan: PlannedAction): QueueItem',
     "import { evidenceRecordCount } from './evidenceData'",
+    "import { countLabel } from './countLabels'",
     "import { arrayFromUnknown, isRecord } from './records'",
     'evidenceRecordCount(ticket)',
+    "countLabel(ageDays, 'day')",
     'function releaseKeysForPlan(ticket?: Ticket, queueItem?: unknown): string[]',
     'function releaseField(source: unknown, field: string): unknown',
     "arrayFromUnknown(releaseField(queueItem, 'labels'))",
@@ -4883,6 +4887,7 @@ test('queue planner groups recommendations into release batch plans', () => {
   }
   assert.equal(queuePlannerSource.includes('export interface PlannerInput'), false);
   assert.equal(queuePlannerSource.includes('function unknownArray'), false, 'queuePlanner should use shared array fallback helper');
+  assert.equal(queuePlannerSource.includes('day(s)'), false, 'queuePlanner should use shared count label helper');
   assert.equal(/\bany\b/.test(queuePlannerSource), false, 'queuePlanner should keep planner payloads typed without any');
 });
 
@@ -4954,10 +4959,13 @@ test('queue planner panel view renders escaped actions for planning panels', () 
     'export function buildQueuePlanModeHtml',
     'function planActionRow',
     'function triageActionButtons',
+    "import { countLabel } from './countLabels'",
+    "countLabel(batch.plans.length, 'action')",
     "import { escapeClass, escapeHtml } from './webviewHtml'",
   ]) {
     assert.ok(source.includes(marker), marker);
   }
+  assert.equal(source.includes('action(s)'), false, 'queuePlannerPanelView should use shared count label helper');
   assert.equal(/\bany\b/.test(source), false, 'queuePlannerPanelView should keep renderer payloads typed without any');
 });
 
@@ -10699,6 +10707,8 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'Kronos Prompt Smoke Tests',
     'promptSmokeResultRow',
     'promptTemplateRow',
+    "import { countLabel } from './countLabels'",
+    "countLabel(template.variables.length, 'variable')",
     'kronosOperatorPanelCss',
     'actionScriptUri?: string',
     "kronosActionPanelScript(nonce, 'Kronos Prompt Manager', actionScriptUri)",
@@ -10707,6 +10717,7 @@ test('extension webviews use shared UI shell and board filtering affordances', (
   ]) {
     assert.ok(promptPanelViewSource.includes(marker), marker);
   }
+  assert.equal(promptPanelViewSource.includes('variable(s)'), false, 'prompt panel should use shared count label helper');
   for (const marker of [
     'export function buildRecoveryHtml',
     'export function buildStateAuditLogHtml',
@@ -10715,12 +10726,15 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'Kronos State Audit Log',
     "actionButton('refreshPanel', 'Refresh')",
     "actionButton('executeRecoveryItem'",
+    "import { countLabel } from './countLabels'",
+    "countLabel(events.length, 'event')",
     'recoveryActionLabel',
     'kronosOperatorPanelCss',
     "kronosActionPanelScript(nonce, 'Kronos Recovery Center', actionScriptUri)",
   ]) {
     assert.ok(recoveryPanelViewSource.includes(marker), marker);
   }
+  assert.equal(recoveryPanelViewSource.includes('event(s)'), false, 'recovery panel should use shared count label helper');
   for (const marker of [
     'export function buildHumanReviewInboxHtml',
     'interface HumanReviewInboxHtmlOptions',
@@ -11783,11 +11797,14 @@ test('tree providers share action labels and icons', () => {
     assert.ok(ticketTree.includes(marker), marker);
   }
   for (const marker of [
+    "import { countLabel } from '../services/countLabels'",
     "import { formatRelativeTime } from '../services/relativeTime'",
+    "countLabel(proj.open_mr_count, 'open MR')",
     'formatRelativeTime(proj.last_polled)',
   ]) {
     assert.ok(projectTree.includes(marker), marker);
   }
+  assert.equal(projectTree.includes('open MR(s)'), false, 'project tree should use shared count label helper');
   for (const [name, source] of [
     ['ProjectTreeProvider', projectTree],
     ['TicketTreeProvider', ticketTree],
@@ -11955,6 +11972,9 @@ test('tree providers share action labels and icons', () => {
     assert.equal(source.includes('actionLabels'), false, `${name} should not import the removed actionLabels wrapper`);
   }
   assert.ok(extensionSource.includes('const actionLabel = actionToLabel(queueData.action)'), 'queue dispatch prompt should use shared action label helper');
+  assert.ok(nextActionContext.includes("import { countLabel } from './countLabels'"), 'next action context should import shared count label helper');
+  assert.ok(nextActionContext.includes("countLabel(evidenceCount, 'item')"), 'next action context should use shared count label helper');
+  assert.equal(nextActionContext.includes('item(s)'), false, 'next action context should not format item counts locally');
   assert.equal(extensionSource.includes('queueData.action.replace('), false, 'queue dispatch prompt should not format action labels locally');
   assert.equal(ticketTree.includes('function actionToLabel'), false, 'ticket tree should not duplicate action labels');
   assert.equal(ticketTree.includes('function evidenceItemCount'), false, 'ticket tree should not duplicate evidence counting');
