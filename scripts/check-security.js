@@ -1106,6 +1106,8 @@ for (const marker of [
   "import { projectPathKey } from './pathUtils'",
   "import { isFailedTerminalRunStatus, isFreshActiveRun, isSuccessfulRunStatus } from './runStatus'",
   "import { optionalFiniteNumberFromUnknown } from './records'",
+  "import { ticketStringArray } from './ticketFields'",
+  'const linkedProjects = [...new Set(ticketStringArray(ticket.projects))]',
   'linkedProjects.length > 1',
   'export function hasHandledDeployMonitorRun',
   'isHandledDeployMonitorRun(run)',
@@ -1130,6 +1132,9 @@ if (deployMonitorHandoff.includes('function deployMonitorProjectPathKey')) {
 }
 if (deployMonitorHandoff.includes('HANDLED_DEPLOY_MONITOR_STATUSES') || deployMonitorHandoff.includes('ATTENTION_DEPLOY_MONITOR_STATUSES')) {
   fail('deployMonitorHandoff must use shared run status predicates instead of local deploy monitor status sets.');
+}
+if (deployMonitorHandoff.includes("(ticket.projects || []).filter(project => typeof project === 'string' && project.trim()).map(project => project.trim())")) {
+  fail('deployMonitorHandoff must use ticketStringArray for linked project normalization.');
 }
 for (const marker of [
   'function notifyMergeRequestStatusChange',

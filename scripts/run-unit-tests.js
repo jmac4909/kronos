@@ -1642,9 +1642,12 @@ test('deploy monitor handoff resolves projects and only suppresses handled runs'
   const source = readSourceFixture('src', 'services', 'deployMonitorHandoff.ts');
   assert.ok(source.includes("import { isFailedTerminalRunStatus, isFreshActiveRun, isSuccessfulRunStatus } from './runStatus'"));
   assert.ok(source.includes("import { optionalFiniteNumberFromUnknown } from './records'"));
+  assert.ok(source.includes("import { ticketStringArray } from './ticketFields'"));
+  assert.ok(source.includes('const linkedProjects = [...new Set(ticketStringArray(ticket.projects))]'));
   assert.ok(source.includes('const parsed = optionalFiniteNumberFromUnknown(raw)'));
   assert.ok(source.includes('isSuccessfulRunStatus(run.status)'));
   assert.ok(source.includes('isFailedTerminalRunStatus(run.status)'));
+  assert.equal(source.includes("(ticket.projects || []).filter(project => typeof project === 'string' && project.trim()).map(project => project.trim())"), false);
   assert.equal(source.includes('HANDLED_DEPLOY_MONITOR_STATUSES'), false);
   assert.equal(source.includes('ATTENTION_DEPLOY_MONITOR_STATUSES'), false);
 });

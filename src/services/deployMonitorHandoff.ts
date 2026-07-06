@@ -4,6 +4,7 @@ import { projectPathKey } from './pathUtils';
 import { runAttentionLine } from './runAttention';
 import { isFailedTerminalRunStatus, isFreshActiveRun, isSuccessfulRunStatus } from './runStatus';
 import { optionalFiniteNumberFromUnknown } from './records';
+import { ticketStringArray } from './ticketFields';
 
 const DEPLOY_MONITOR_HANDOFF_CHECK_PREFIX = 'Deploy monitor handoff';
 
@@ -38,7 +39,7 @@ export function resolveDeployMonitorProject(
   ticketKey: string,
   ticket: Ticket,
 ): DeployMonitorProjectResolution {
-  const linkedProjects = [...new Set((ticket.projects || []).filter(project => typeof project === 'string' && project.trim()).map(project => project.trim()))];
+  const linkedProjects = [...new Set(ticketStringArray(ticket.projects))];
   if (linkedProjects.length === 0) {
     return { kind: 'blocked', reason: `${ticketKey} MR merged, but no linked project was found for deploy monitoring.` };
   }
