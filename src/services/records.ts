@@ -14,6 +14,10 @@ export function definedValues<T>(values: Array<T | null | undefined>): T[] {
   return values.filter((value): value is T => value !== undefined && value !== null);
 }
 
+export function trimmedStringFromUnknown(value: unknown, fallback = ''): string {
+  return typeof value === 'string' ? value.trim() : fallback;
+}
+
 export function recordsFromUnknown(value: unknown): Record<string, unknown>[] {
   return arrayFromUnknown(value).filter(isRecord);
 }
@@ -33,6 +37,5 @@ export function recordValuesFromUnknown(value: unknown): Record<string, unknown>
 }
 
 export function recordString(record: Record<string, unknown>, key: string): string {
-  const value = record[key];
-  return typeof value === 'string' ? value.trim() : '';
+  return trimmedStringFromUnknown(record[key]);
 }

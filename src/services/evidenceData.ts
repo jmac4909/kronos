@@ -1,5 +1,5 @@
 import { Ticket } from '../state/types';
-import { isRecord, recordsFromUnknown, recordValuesFromUnknown } from './records';
+import { isRecord, recordsFromUnknown, recordValuesFromUnknown, trimmedStringFromUnknown } from './records';
 
 type EvidenceRecord = object;
 
@@ -30,8 +30,7 @@ export function evidenceRecordCount(ticket: Ticket | null | undefined): number {
 
 export function evidenceString(record: EvidenceRecord | null | undefined, key: string, fallback = ''): string {
   if (!isRecord(record)) { return fallback; }
-  const value = record[key];
-  return typeof value === 'string' ? value.trim() : fallback;
+  return trimmedStringFromUnknown(record[key], fallback);
 }
 
 export function evidenceChecked(record: EvidenceRecord): boolean {

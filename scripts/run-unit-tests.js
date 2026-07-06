@@ -4057,6 +4057,8 @@ test('record guard helper centralizes unknown object narrowing', () => {
   assert.deepEqual(records.arrayFromUnknown(['ok']), ['ok']);
   assert.deepEqual(records.arrayFromUnknown({ ok: true }), []);
   assert.deepEqual(records.definedValues(['ok', null, undefined, '', 'done']), ['ok', '', 'done']);
+  assert.equal(records.trimmedStringFromUnknown(' K-1 '), 'K-1');
+  assert.equal(records.trimmedStringFromUnknown(42, 'fallback'), 'fallback');
   assert.deepEqual(records.recordsFromUnknown([{ ok: true }, null, [], 'raw']), [{ ok: true }]);
   assert.deepEqual(records.recordEntriesFromUnknown({ a: { ok: true }, b: 42 }), [['a', { ok: true }], ['b', 42]]);
   assert.deepEqual(records.recordEntriesFromUnknown(null), []);
@@ -4086,6 +4088,7 @@ test('record guard helper centralizes unknown object narrowing', () => {
     'export function recordFromUnknown(value: unknown): Record<string, unknown>',
     'export function arrayFromUnknown(value: unknown): unknown[]',
     'export function definedValues<T>(values: Array<T | null | undefined>): T[]',
+    'export function trimmedStringFromUnknown(value: unknown, fallback = \'\'): string',
     'export function recordsFromUnknown(value: unknown): Record<string, unknown>[]',
     'export function recordEntriesFromUnknown<T>(value: Record<string, T> | null | undefined): Array<[string, T]>',
     'export function recordKeysFromUnknown(value: unknown): string[]',
@@ -4094,6 +4097,7 @@ test('record guard helper centralizes unknown object narrowing', () => {
     'return isRecord(value) ? value : {}',
     'return Array.isArray(value) ? value : []',
     'value !== undefined && value !== null',
+    "typeof value === 'string' ? value.trim() : fallback",
     'return arrayFromUnknown(value).filter(isRecord)',
     'return isRecord(value) ? Object.entries(value) : []',
     'return isRecord(value) ? Object.keys(value) : []',
@@ -4110,7 +4114,7 @@ test('record guard helper centralizes unknown object narrowing', () => {
   for (const [file, marker] of [
     ['changedFiles.ts', "import { isRecord } from './records'"],
     ['agingAnalyzer.ts', "import { recordEntriesFromUnknown } from './records'"],
-    ['evidenceData.ts', "import { isRecord, recordsFromUnknown, recordValuesFromUnknown } from './records'"],
+    ['evidenceData.ts', "import { isRecord, recordsFromUnknown, recordValuesFromUnknown, trimmedStringFromUnknown } from './records'"],
     ['integrationAdapters.ts', "import { arrayFromUnknown, isRecord, recordsFromUnknown } from './records'"],
     ['queuePlanner.ts', "import { arrayFromUnknown, isRecord } from './records'"],
     ['runStatus.ts', "import { isRecord, recordsFromUnknown } from './records'"],
@@ -4136,13 +4140,11 @@ test('record guard helper centralizes unknown object narrowing', () => {
   const mergeRequestCommentsSource = readSourceFixture('src', 'services', 'mergeRequestComments.ts');
   const mergeRequestLabelsSource = readSourceFixture('src', 'services', 'mergeRequestLabels.ts');
   for (const marker of [
-    "import { arrayFromUnknown } from './records'",
+    "import { arrayFromUnknown, trimmedStringFromUnknown } from './records'",
     'export function ticketStringField(record: object | null | undefined, key: string, fallback = \'\'): string',
     'Reflect.get(record, key)',
     'export function ticketStringArray(value: unknown): string[]',
-    'return arrayFromUnknown(value).map(ticketArrayString).filter(Boolean)',
-    'function ticketArrayString(value: unknown): string',
-    "typeof value === 'string' ? value.trim() : ''",
+    'return arrayFromUnknown(value).map(item => trimmedStringFromUnknown(item)).filter(Boolean)',
   ]) {
     assert.ok(ticketFieldsSource.includes(marker), marker);
   }
@@ -9955,6 +9957,7 @@ test('post-run readiness distinguishes process completion from handoff readiness
     "import { runProgressSummary } from './runProgress'",
     "import { isSuccessfulRunStatus, terminalRunOutcome } from './runStatus'",
     "import { evidenceChecks, evidenceNotes, evidenceString } from './evidenceData'",
+    "import { arrayFromUnknown, recordFromUnknown, trimmedStringFromUnknown } from './records'",
     'export function shouldRecordRunCompletionEvidence',
     'export function resolvePostRunTicket',
     'export function postRunReadinessRunPatch',
@@ -9987,7 +9990,7 @@ test('post-run readiness distinguishes process completion from handoff readiness
     "import { isPassingBuildStatus } from './buildStatus'",
     'function isPassingSonar',
     'export function classifyRunFailure(run: unknown): RunFailureKind',
-    "import { arrayFromUnknown, recordFromUnknown } from './records'",
+    "import { arrayFromUnknown, recordFromUnknown, trimmedStringFromUnknown } from './records'",
     'function runCompletedForEvidence(record: Record<string, unknown>): boolean',
     'function runString(value: unknown): string',
     'function runText(value: unknown): string | undefined',
@@ -11689,10 +11692,10 @@ test('ticket detail rendering uses typed tickets and evidence records', () => {
   assert.equal(ticketPanelViewSource.includes('function ticketStringArray'), false);
   assert.equal(ticketPanelViewSource.includes('function mergeRequestComments'), false);
   for (const marker of [
-    "import { isRecord, recordsFromUnknown, recordValuesFromUnknown } from './records'",
+    "import { isRecord, recordsFromUnknown, recordValuesFromUnknown, trimmedStringFromUnknown } from './records'",
     'type EvidenceRecord = object',
     'if (!isRecord(record)) { return fallback; }',
-    'const value = record[key]',
+    'return trimmedStringFromUnknown(record[key], fallback)',
     "return isRecord(record) && record['checked'] === true",
     'recordsFromUnknown(ticket.evidence?.notes)',
     'recordsFromUnknown(ticket.evidence?.acceptance_criteria)',

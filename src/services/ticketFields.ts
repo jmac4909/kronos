@@ -1,4 +1,4 @@
-import { arrayFromUnknown } from './records';
+import { arrayFromUnknown, trimmedStringFromUnknown } from './records';
 
 export function ticketStringField(record: object | null | undefined, key: string, fallback = ''): string {
   const value = record ? Reflect.get(record, key) : undefined;
@@ -6,9 +6,5 @@ export function ticketStringField(record: object | null | undefined, key: string
 }
 
 export function ticketStringArray(value: unknown): string[] {
-  return arrayFromUnknown(value).map(ticketArrayString).filter(Boolean);
-}
-
-function ticketArrayString(value: unknown): string {
-  return typeof value === 'string' ? value.trim() : '';
+  return arrayFromUnknown(value).map(item => trimmedStringFromUnknown(item)).filter(Boolean);
 }

@@ -6,7 +6,7 @@ import { evidenceChecks, evidenceNotes, evidenceString } from './evidenceData';
 import { runProgressSummary } from './runProgress';
 import { isSuccessfulRunStatus, terminalRunOutcome } from './runStatus';
 import { escapeRegExp } from './regexp';
-import { arrayFromUnknown, recordFromUnknown } from './records';
+import { arrayFromUnknown, recordFromUnknown, trimmedStringFromUnknown } from './records';
 
 type PostRunReadinessStatus = 'ready' | 'needs_human' | 'blocked' | 'not_ready' | 'unknown';
 export type RunFailureKind = 'none' | 'auth' | 'model' | 'script' | 'git' | 'build' | 'test' | 'sonar' | 'timeout' | 'cancelled' | 'unknown';
@@ -354,7 +354,7 @@ function runString(value: unknown): string {
 }
 
 function trimmedString(value: unknown): string | undefined {
-  const text = typeof value === 'string' ? value.trim() : '';
+  const text = trimmedStringFromUnknown(value);
   return text || undefined;
 }
 

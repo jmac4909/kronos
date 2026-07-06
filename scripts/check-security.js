@@ -2599,6 +2599,7 @@ for (const marker of [
   'export function recordFromUnknown(value: unknown): Record<string, unknown>',
   'export function arrayFromUnknown(value: unknown): unknown[]',
   'export function definedValues<T>(values: Array<T | null | undefined>): T[]',
+  'export function trimmedStringFromUnknown(value: unknown, fallback = \'\'): string',
   'export function recordsFromUnknown(value: unknown): Record<string, unknown>[]',
   'export function recordEntriesFromUnknown<T>(value: Record<string, T> | null | undefined): Array<[string, T]>',
   'export function recordKeysFromUnknown(value: unknown): string[]',
@@ -2613,7 +2614,7 @@ for (const marker of [
   'return isRecord(value) ? Object.values(value).filter(isRecord) : []',
   "typeof value === 'object'",
   '!Array.isArray(value)',
-  "typeof value === 'string' ? value.trim() : ''",
+  "typeof value === 'string' ? value.trim() : fallback",
 ]) {
   if (!records.includes(marker)) {
     fail(`Missing record helper marker: ${marker}`);
@@ -2621,13 +2622,11 @@ for (const marker of [
 }
 
 for (const marker of [
-  "import { arrayFromUnknown } from './records'",
+  "import { arrayFromUnknown, trimmedStringFromUnknown } from './records'",
   'export function ticketStringField(record: object | null | undefined, key: string, fallback = \'\'): string',
   'Reflect.get(record, key)',
   'export function ticketStringArray(value: unknown): string[]',
-  'return arrayFromUnknown(value).map(ticketArrayString).filter(Boolean)',
-  'function ticketArrayString(value: unknown): string',
-  "typeof value === 'string' ? value.trim() : ''",
+  'return arrayFromUnknown(value).map(item => trimmedStringFromUnknown(item)).filter(Boolean)',
 ]) {
   if (!ticketFields.includes(marker)) {
     fail(`Missing ticket field helper marker: ${marker}`);
@@ -2957,7 +2956,7 @@ for (const [name, source, marker] of [
   ['src/extension.ts', extension, "import { isRecord, recordEntriesFromUnknown, recordFromUnknown, recordKeysFromUnknown, recordString } from './services/records'"],
   ['src/services/changedFiles.ts', changedFiles, "import { isRecord } from './records'"],
   ['src/services/agingAnalyzer.ts', agingAnalyzer, "import { recordEntriesFromUnknown } from './records'"],
-  ['src/services/evidenceData.ts', evidenceData, "import { isRecord, recordsFromUnknown, recordValuesFromUnknown } from './records'"],
+  ['src/services/evidenceData.ts', evidenceData, "import { isRecord, recordsFromUnknown, recordValuesFromUnknown, trimmedStringFromUnknown } from './records'"],
   ['src/services/integrationAdapters.ts', integrationAdapters, "import { arrayFromUnknown, isRecord, recordsFromUnknown } from './records'"],
   ['src/services/queuePlanner.ts', queuePlanner, "import { arrayFromUnknown, isRecord } from './records'"],
   ['src/services/runStatus.ts', runStatus, "import { isRecord, recordsFromUnknown } from './records'"],
@@ -3021,7 +3020,7 @@ for (const [name, source, marker] of [
   ['src/services/runCompletionNotification.ts', runCompletionNotification, "import { recordFromUnknown, recordString } from './records'"],
   ['src/services/runProgress.ts', runProgress, "import { recordsFromUnknown, recordFromUnknown, recordString } from './records'"],
   ['src/services/queueMutations.ts', queueMutations, "import { recordFromUnknown } from './records'"],
-  ['src/services/postRunReadiness.ts', postRunReadiness, "import { arrayFromUnknown, recordFromUnknown } from './records'"],
+  ['src/services/postRunReadiness.ts', postRunReadiness, "import { arrayFromUnknown, recordFromUnknown, trimmedStringFromUnknown } from './records'"],
 ]) {
   if (!source.includes(marker)) {
     fail(`${name} must import the shared unknown-record helper.`);
@@ -4120,7 +4119,7 @@ for (const marker of [
 }
 
 for (const marker of [
-  "import { isRecord, recordsFromUnknown, recordValuesFromUnknown } from './records'",
+  "import { isRecord, recordsFromUnknown, recordValuesFromUnknown, trimmedStringFromUnknown } from './records'",
   'type EvidenceRecord = object',
   'export function evidenceNotes',
   'export function evidenceChecks',
@@ -4128,7 +4127,7 @@ for (const marker of [
   'export function evidenceEnvironmentResults',
   'export function evidenceString',
   'if (!isRecord(record)) { return fallback; }',
-  'const value = record[key]',
+  'return trimmedStringFromUnknown(record[key], fallback)',
   "return isRecord(record) && record['checked'] === true",
   'recordsFromUnknown(ticket.evidence?.notes)',
   'recordsFromUnknown(ticket.evidence?.acceptance_criteria)',
@@ -5074,6 +5073,7 @@ for (const marker of [
   'run: unknown',
   "import { runProgressSummary } from './runProgress'",
   "import { evidenceChecks, evidenceNotes, evidenceString } from './evidenceData'",
+  "import { arrayFromUnknown, recordFromUnknown, trimmedStringFromUnknown } from './records'",
   'export function shouldRecordRunCompletionEvidence',
   'export function resolvePostRunTicket',
   'interface PostRunTicketResolution',
@@ -5114,7 +5114,7 @@ for (const marker of [
   'exitCode === 124',
   "skill.includes('sonar')",
   "skill.includes('verify')",
-  "import { arrayFromUnknown, recordFromUnknown } from './records'",
+  "import { arrayFromUnknown, recordFromUnknown, trimmedStringFromUnknown } from './records'",
   'arrayFromUnknown(value).flatMap',
   'function runString(value: unknown): string',
   'function runText(value: unknown): string | undefined',
