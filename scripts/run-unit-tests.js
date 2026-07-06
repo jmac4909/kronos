@@ -2485,6 +2485,20 @@ test('worktree registry tracks, deduplicates, and untracks entries safely', () =
   const remaining = worktreeRegistry.untrackActiveWorktree('/repo/app/.claude/worktrees/K-1', registryPath);
   assert.deepEqual(remaining, []);
   assert.deepEqual(JSON.parse(fs.readFileSync(registryPath, 'utf8')), []);
+
+  fs.writeFileSync(registryPath, JSON.stringify([{
+    projectPath: ' /repo/app ',
+    worktreePath: ' /repo/app/.claude/worktrees/K-2 ',
+    ticket: ' K-2 ',
+    createdAt: ' 2026-07-01T12:00:00.000Z ',
+  }], null, 2));
+  const normalized = worktreeRegistry.loadActiveWorktreeRegistry(registryPath);
+  assert.deepEqual(normalized.entries[0], {
+    projectPath: '/repo/app',
+    worktreePath: '/repo/app/.claude/worktrees/K-2',
+    ticket: 'K-2',
+    createdAt: '2026-07-01T12:00:00.000Z',
+  });
 });
 
 test('worktree registry refuses to overwrite malformed registry files', () => {
@@ -2512,6 +2526,10 @@ test('worktree registry refuses to overwrite malformed registry files', () => {
   const source = readSourceFixture('src', 'services', 'worktreeRegistry.ts');
   for (const marker of [
     "import { unknownErrorMessage } from './errorUtils'",
+    "import { isRecord, trimmedStringFromUnknown } from './records'",
+    'if (!isRecord(entry))',
+    "const projectPath = trimmedStringFromUnknown(entry['projectPath'])",
+    "ticket: trimmedStringFromUnknown(entry['ticket'])",
     'catch (e: unknown)',
     "unknownErrorMessage(e, 'Could not parse active-worktrees.json.')",
   ]) {
@@ -2520,6 +2538,8 @@ test('worktree registry refuses to overwrite malformed registry files', () => {
   for (const marker of [
     'catch (e: any)',
     'e?.message',
+    "if (!entry || typeof entry !== 'object' || Array.isArray(entry))",
+    'const candidate = entry as Partial<ActiveWorktreeEntry>',
   ]) {
     assert.equal(source.includes(marker), false, marker);
   }

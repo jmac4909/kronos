@@ -4135,11 +4135,24 @@ for (const marker of [
   'export function trackActiveWorktree',
   'export function untrackActiveWorktree',
   'active-worktrees.json must be an array',
+  "import { isRecord, trimmedStringFromUnknown } from './records'",
+  'if (!isRecord(entry))',
+  "const projectPath = trimmedStringFromUnknown(entry['projectPath'])",
+  "ticket: trimmedStringFromUnknown(entry['ticket'])",
   'assertMutableRegistry',
   'needs manual review before it can be changed',
 ]) {
   if (!worktreeRegistry.includes(marker)) {
     fail(`Missing worktree registry marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  "if (!entry || typeof entry !== 'object' || Array.isArray(entry))",
+  'const candidate = entry as Partial<ActiveWorktreeEntry>',
+]) {
+  if (worktreeRegistry.includes(marker)) {
+    fail(`Worktree registry should use shared record/string helpers instead of ${marker}.`);
   }
 }
 

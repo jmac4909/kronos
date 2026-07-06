@@ -3,6 +3,7 @@ import * as path from 'path';
 import { KRONOS_DIR } from './stateStore';
 import { unknownErrorMessage } from './errorUtils';
 import { readJsonFile } from './jsonFiles';
+import { isRecord, trimmedStringFromUnknown } from './records';
 
 export const ACTIVE_WORKTREES_FILE = path.join(KRONOS_DIR, 'active-worktrees.json');
 
@@ -71,21 +72,22 @@ export function untrackActiveWorktree(worktreePath: string, filePath = ACTIVE_WO
 }
 
 function normalizeActiveWorktreeEntry(entry: unknown, index: number): ActiveWorktreeEntry | string {
-  if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+  if (!isRecord(entry)) {
     return `active-worktrees.json entry ${index} must be an object.`;
   }
-  const candidate = entry as Partial<ActiveWorktreeEntry>;
-  if (typeof candidate.projectPath !== 'string' || !candidate.projectPath.trim()) {
+  const projectPath = trimmedStringFromUnknown(entry['projectPath']);
+  const worktreePath = trimmedStringFromUnknown(entry['worktreePath']);
+  if (!projectPath) {
     return `active-worktrees.json entry ${index} is missing projectPath.`;
   }
-  if (typeof candidate.worktreePath !== 'string' || !candidate.worktreePath.trim()) {
+  if (!worktreePath) {
     return `active-worktrees.json entry ${index} is missing worktreePath.`;
   }
   return {
-    projectPath: candidate.projectPath,
-    worktreePath: candidate.worktreePath,
-    ticket: typeof candidate.ticket === 'string' ? candidate.ticket : '',
-    createdAt: typeof candidate.createdAt === 'string' ? candidate.createdAt : '',
+    projectPath,
+    worktreePath,
+    ticket: trimmedStringFromUnknown(entry['ticket']),
+    createdAt: trimmedStringFromUnknown(entry['createdAt']),
   };
 }
 
