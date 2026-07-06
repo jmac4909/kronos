@@ -3,7 +3,7 @@ import { evidenceChecks, evidenceString } from './evidenceData';
 import { projectPathKey } from './pathUtils';
 import { runAttentionLine } from './runAttention';
 import { isFailedTerminalRunStatus, isFreshActiveRun, isSuccessfulRunStatus } from './runStatus';
-import { optionalFiniteNumberFromUnknown } from './records';
+import { optionalFiniteNumberFromUnknown, recordFromUnknown } from './records';
 import { ticketStringArray } from './ticketFields';
 
 const DEPLOY_MONITOR_HANDOFF_CHECK_PREFIX = 'Deploy monitor handoff';
@@ -94,8 +94,7 @@ function runStatusLabel(status: unknown): string {
 }
 
 function promptMetadataMergeRequestIid(value: unknown): number | undefined {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) { return undefined; }
-  const raw = (value as Record<string, unknown>)['mergeRequestIid'];
+  const raw = recordFromUnknown(value)['mergeRequestIid'];
   const parsed = optionalFiniteNumberFromUnknown(raw);
   return parsed !== undefined && parsed > 0 ? Math.floor(parsed) : undefined;
 }

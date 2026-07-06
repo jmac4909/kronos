@@ -1118,7 +1118,7 @@ for (const marker of [
   'export function resolveDeployMonitorProject',
   "import { projectPathKey } from './pathUtils'",
   "import { isFailedTerminalRunStatus, isFreshActiveRun, isSuccessfulRunStatus } from './runStatus'",
-  "import { optionalFiniteNumberFromUnknown } from './records'",
+  "import { optionalFiniteNumberFromUnknown, recordFromUnknown } from './records'",
   "import { ticketStringArray } from './ticketFields'",
   'const linkedProjects = [...new Set(ticketStringArray(ticket.projects))]',
   'linkedProjects.length > 1',
@@ -1127,6 +1127,7 @@ for (const marker of [
   'isSuccessfulRunStatus(run.status)',
   'isFailedTerminalRunStatus(run.status)',
   'promptMetadataMergeRequestIid',
+  "const raw = recordFromUnknown(value)['mergeRequestIid']",
   'const parsed = optionalFiniteNumberFromUnknown(raw)',
   'if (match.mrIid === undefined) { return true; }',
   'if (runMrIid === undefined) { return false; }',
@@ -1148,6 +1149,12 @@ if (deployMonitorHandoff.includes('HANDLED_DEPLOY_MONITOR_STATUSES') || deployMo
 }
 if (deployMonitorHandoff.includes("(ticket.projects || []).filter(project => typeof project === 'string' && project.trim()).map(project => project.trim())")) {
   fail('deployMonitorHandoff must use ticketStringArray for linked project normalization.');
+}
+if (deployMonitorHandoff.includes("if (!value || typeof value !== 'object' || Array.isArray(value)) { return undefined; }")) {
+  fail('deployMonitorHandoff must normalize prompt metadata through recordFromUnknown.');
+}
+if (deployMonitorHandoff.includes("(value as Record<string, unknown>)['mergeRequestIid']")) {
+  fail('deployMonitorHandoff must avoid local prompt metadata record casts.');
 }
 for (const marker of [
   'function notifyMergeRequestStatusChange',
