@@ -2424,6 +2424,9 @@ if (queueMutations.includes('function normalizeQueueItem(item: any): QueueItem')
 if (queueMutations.includes('return Array.isArray(value) ? value.map(queueString).filter(Boolean) : []')) {
   fail('Queue mutation string-array normalization must use the shared array fallback helper.');
 }
+if (queueMutations.includes('const current = Array.isArray(ticket.projects) ? ticket.projects : []')) {
+  fail('Queue ticket project mutations must use the shared queue string-array helper.');
+}
 
 for (const marker of [
   'export function setProjectConfigValue',

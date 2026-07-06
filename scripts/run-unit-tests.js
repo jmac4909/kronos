@@ -1759,6 +1759,7 @@ test('queue mutation helpers centralize queue membership and ticket project link
   }
   assert.equal(source.includes('function normalizeQueueItem(item: any): QueueItem'), false);
   assert.equal(source.includes('return Array.isArray(value) ? value.map(queueString).filter(Boolean) : []'), false);
+  assert.equal(source.includes('const current = Array.isArray(ticket.projects) ? ticket.projects : []'), false);
   assert.equal(source.includes('function queueRecord(value: unknown): Record<string, unknown>'), false);
 });
 

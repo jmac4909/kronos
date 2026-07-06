@@ -220,7 +220,7 @@ function mutateTicketProjects(ticketKey: string, projectName: string, action: 'l
   if (!state.projects[projectName]) {
     throw new Error(`Project not found: ${projectName}`);
   }
-  const current = Array.isArray(ticket.projects) ? ticket.projects : [];
+  const current = queueStringArray(ticket.projects);
   const nextProjects = action === 'link'
     ? Array.from(new Set([...current, projectName])).sort()
     : current.filter(project => project !== projectName);
