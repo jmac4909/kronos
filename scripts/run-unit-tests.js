@@ -7518,7 +7518,7 @@ test('script client reports required scripts and wraps Python JSON contracts', a
   assert.equal(scriptClient.runKronosStateScript(['--next']).trim(), 'state:--next');
   const parsed = await scriptClient.runPipelineJson(['--sonar-gate', 'app']);
   assert.deepEqual(parsed.args, ['--sonar-gate', 'app']);
-  fs.writeFileSync(pipelinePath, 'import json, sys\nprint("\\ufeff" + json.dumps({"args": sys.argv[1:], "bom": True}))\n');
+  fs.writeFileSync(pipelinePath, 'import json, sys\nsys.stdout.buffer.write(("\\ufeff" + json.dumps({"args": sys.argv[1:], "bom": True}) + "\\n").encode("utf-8"))\n');
   const bomParsed = await scriptClient.runPipelineJson(['--sonar-gate', 'windows']);
   assert.deepEqual(bomParsed, { args: ['--sonar-gate', 'windows'], bom: true });
 
