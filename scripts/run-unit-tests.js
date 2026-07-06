@@ -1794,8 +1794,8 @@ test('project mutation helpers centralize project config, scan dirs, and removal
   fs.mkdirSync(path.join(projectRoot, '.claude'), { recursive: true });
   fs.writeFileSync(path.join(projectRoot, '.claude', 'project.json'), '{}\n');
   const initial = baseState({
-    'K-1': ticket({ projects: ['app'], summary: 'Linked ticket' }),
-    'K-2': ticket({ projects: ['app', 'other'], summary: 'Multi project' }),
+    'K-1': ticket({ projects: [' app ', ''], summary: 'Linked ticket' }),
+    'K-2': ticket({ projects: [' app ', '', 'other'], summary: 'Multi project' }),
   });
   initial.projects.app.path = projectRoot;
   initial.projects.app.config = { repo_name: 'app', jira_project_key: 'APP' };
@@ -1853,6 +1853,11 @@ test('project mutation helpers centralize project config, scan dirs, and removal
   assert.throws(() => projectMutations.setProjectConfigValue('missing', 'sonar_project_key', 'x'), /Project not found/);
   assert.throws(() => projectMutations.setProjectConfigValue('other', 'gitlab_project_id', 'not-number'), /positive number/);
   assert.throws(() => projectMutations.setProjectConfigValue('other', 'deploy_approvers', 'Ada'), /structured config editor/);
+
+  const source = readSourceFixture('src', 'services', 'projectMutations.ts');
+  assert.ok(source.includes("import { ticketStringArray } from './ticketFields'"));
+  assert.ok(source.includes('const projects = ticketStringArray(ticket.projects)'));
+  assert.equal(source.includes('ticket.projects?.includes(projectName)'), false);
 });
 
 test('project setup plan keeps setup prompts operational and documentation-free', () => {

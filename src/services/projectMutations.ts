@@ -3,6 +3,7 @@ import * as path from 'path';
 import { DiscoveredProject, KronosState, ProjectConfig } from '../state/types';
 import { recordEntriesFromUnknown } from './records';
 import { STATE_FILE, readStateFile, validateStateFileShape, writeJsonFileAtomic } from './stateStore';
+import { ticketStringArray } from './ticketFields';
 
 interface ProjectConfigUpdateResult {
   projectName: string;
@@ -120,8 +121,9 @@ export function removeProject(projectName: string): RemovedProjectResult {
   }
   const ticketsUnlinked: string[] = [];
   for (const [ticketKey, ticket] of recordEntriesFromUnknown(state.tickets)) {
-    if (!ticket.projects?.includes(projectName)) { continue; }
-    ticket.projects = ticket.projects.filter(project => project !== projectName);
+    const projects = ticketStringArray(ticket.projects);
+    if (!projects.includes(projectName)) { continue; }
+    ticket.projects = projects.filter(project => project !== projectName);
     ticketsUnlinked.push(ticketKey);
   }
   delete state.projects[projectName];

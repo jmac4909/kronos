@@ -2489,6 +2489,8 @@ for (const marker of [
   'export function writeProjectSetupConfig',
   'export function removeProject',
   'export function setScanDirs',
+  "import { ticketStringArray } from './ticketFields'",
+  'const projects = ticketStringArray(ticket.projects)',
   'writeJsonFileAtomic(STATE_FILE',
   'project-setup-config',
   'project-integration-config-update',
@@ -2501,6 +2503,9 @@ for (const marker of [
   if (!projectMutations.includes(marker)) {
     fail(`Missing project mutation marker: ${marker}`);
   }
+}
+if (projectMutations.includes('ticket.projects?.includes(projectName)')) {
+  fail('Project removal must normalize ticket project links through ticketStringArray.');
 }
 for (const marker of [
   'export function projectSetupConfirmation',
