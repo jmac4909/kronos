@@ -1624,11 +1624,19 @@ for (const marker of [
   'export function buildTicketGroupProjectItems',
   'export function getProjectPath',
   'export function getProjectNameForPath',
+  'function ticketBucket',
+  'return recordEntriesFromUnknown(byProject).map(([projectName, tickets])',
   "import { projectPathKey } from './pathUtils'",
 ]) {
   if (!projectSelection.includes(marker)) {
     fail(`Missing project selection helper marker: ${marker}`);
   }
+}
+if (projectSelection.includes('byProject[projectName] || []')) {
+  fail('Project selection grouping must use the shared bucket helper.');
+}
+if (projectSelection.includes('(byProject[projectName] || []).length')) {
+  fail('Project selection group labels must use typed record entries.');
 }
 for (const marker of [
   'export interface QueueDispatchTarget',

@@ -4532,6 +4532,11 @@ test('project selection helpers build project and ticket group picks', () => {
     { label: 'api', description: '2 tickets' },
     { label: 'web', description: '1 tickets' },
   ]);
+  const projectSelectionSource = readSourceFixture('src', 'services', 'projectSelection.ts');
+  assert.ok(projectSelectionSource.includes('function ticketBucket'));
+  assert.ok(projectSelectionSource.includes('return recordEntriesFromUnknown(byProject).map(([projectName, tickets])'));
+  assert.equal(projectSelectionSource.includes('byProject[projectName] || []'), false);
+  assert.equal(projectSelectionSource.includes('(byProject[projectName] || []).length'), false);
   assert.equal(projectSelection.getProjectPath({ api: { path: '/repo/api' } }, 'api'), '/repo/api');
   assert.equal(projectSelection.getProjectPath({ api: { path: '/repo/api' } }, 'missing'), undefined);
   assert.equal(projectSelection.getProjectPath(undefined, 'api'), undefined);

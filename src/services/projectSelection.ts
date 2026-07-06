@@ -35,9 +35,8 @@ export function groupTicketsByProject<T extends ProjectTicket>(tickets: T[]): Re
   const byProject: Record<string, T[]> = {};
   for (const ticket of tickets) {
     for (const projectName of ticket.projects) {
-      const bucket = byProject[projectName] || [];
+      const bucket = ticketBucket(byProject, projectName);
       if (!bucket.some(candidate => candidate.key === ticket.key)) { bucket.push(ticket); }
-      byProject[projectName] = bucket;
     }
   }
   return byProject;
@@ -47,10 +46,18 @@ export function buildTicketGroupProjectItems<T extends ProjectTicket>(
   byProject: Record<string, T[]>,
   countLabel: string,
 ): ProjectSelectionItem[] {
-  return Object.keys(byProject).map(projectName => ({
+  return recordEntriesFromUnknown(byProject).map(([projectName, tickets]) => ({
     label: projectName,
-    description: `${(byProject[projectName] || []).length} ${countLabel}`,
+    description: `${tickets.length} ${countLabel}`,
   }));
+}
+
+function ticketBucket<T extends ProjectTicket>(byProject: Record<string, T[]>, projectName: string): T[] {
+  const existing = byProject[projectName];
+  if (existing) { return existing; }
+  const created: T[] = [];
+  byProject[projectName] = created;
+  return created;
 }
 
 export function getProjectPath(
