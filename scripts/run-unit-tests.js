@@ -7872,7 +7872,14 @@ test('collision detector flags active runs, duplicate queue work, and open MRs',
       projects: ['app', '', 42],
       summary: 'Review checkout retry handler',
       labels: ['checkout', '', 42],
-      mr: { iid: 7, state: 'opened', review_status: 'pending_review', url: 'https://gitlab.example/7' },
+      mr: {
+        iid: 7,
+        state: 'opened',
+        review_status: 'pending_review',
+        url: 'https://gitlab.example/7',
+        files: 42,
+        changed_files: [null, { filename: './src\\orders\\create.ts' }],
+      },
     }),
     'K-3': ticket({ projects: ['app'], summary: 'Repair checkout retry tests', labels: ['checkout', '', 42] }),
   };
@@ -7980,6 +7987,7 @@ test('collision detector flags active runs, duplicate queue work, and open MRs',
   const source = readSourceFixture('src', 'services', 'collisionDetector.ts');
   for (const marker of [
     "import { recordEntriesFromUnknown, recordsFromUnknown } from './records'",
+    "import { changedFilePaths, normalizeChangedFiles } from './changedFiles'",
     "import { ticketStringArray } from './ticketFields'",
     'staleActiveRunHours?: number',
     'const targetProjects = new Set(ticketStringArray(input.projects))',
@@ -7989,6 +7997,9 @@ test('collision detector flags active runs, duplicate queue work, and open MRs',
     'const itemProjects = ticketStringArray(item.projects)',
     'const ticketProjects = ticketStringArray(ticket.projects)',
     'for (const label of ticketStringArray(ticket.labels))',
+    'for (const file of normalizeChangedFiles(mrFiles?.[ticketKey]))',
+    'for (const file of normalizeChangedFiles(ticket?.mr?.files))',
+    'for (const file of normalizeChangedFiles(ticket?.mr?.changed_files))',
     'function isCollisionActiveRun(run: CollisionRun, now: Date, staleActiveRunHours: number): boolean',
     'isStaleActiveRun(run, now, staleActiveRunHours * 60 * 60 * 1000)',
   ]) {
@@ -7997,6 +8008,8 @@ test('collision detector flags active runs, duplicate queue work, and open MRs',
   assert.equal(source.includes('const events = Array.isArray(run.events) ? run.events : []'), false);
   assert.equal(source.includes('input.projects || []'), false);
   assert.equal(source.includes('ticket.labels || []'), false);
+  assert.equal(source.includes('for (const file of ticket?.mr?.files || [])'), false);
+  assert.equal(source.includes('for (const file of ticket?.mr?.changed_files || [])'), false);
 });
 
 test('collision detector selects MR file hint candidates for code work', () => {

@@ -1,6 +1,6 @@
 import { MergeRequestChangedFile, QueueState, Ticket } from '../state/types';
 import { isCodeAction } from './actionSemantics';
-import { changedFilePaths } from './changedFiles';
+import { changedFilePaths, normalizeChangedFiles } from './changedFiles';
 import { mergeRequestReviewStatusLabel } from './mergeRequestLabels';
 import { isActiveRun, isStaleActiveRun } from './runStatus';
 import { severityRank } from './severityRank';
@@ -238,13 +238,13 @@ function editedFilesForRun(run: CollisionRun): string[] {
 
 function changedFilesForTicket(ticketKey: string, ticket: Ticket | undefined, mrFiles?: Record<string, MergeRequestChangedFile[]>): string[] {
   const files = new Set<string>();
-  for (const file of mrFiles?.[ticketKey] || []) {
+  for (const file of normalizeChangedFiles(mrFiles?.[ticketKey])) {
     addChangedFilePaths(files, file);
   }
-  for (const file of ticket?.mr?.files || []) {
+  for (const file of normalizeChangedFiles(ticket?.mr?.files)) {
     addChangedFilePaths(files, file);
   }
-  for (const file of ticket?.mr?.changed_files || []) {
+  for (const file of normalizeChangedFiles(ticket?.mr?.changed_files)) {
     addChangedFilePaths(files, file);
   }
   return Array.from(files).sort();

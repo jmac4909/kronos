@@ -4698,6 +4698,7 @@ for (const marker of [
   'function isCollisionActiveRun(run: CollisionRun, now: Date, staleActiveRunHours: number): boolean',
   'isStaleActiveRun(run, now, staleActiveRunHours * 60 * 60 * 1000)',
   'sharedFilePaths',
+  "import { changedFilePaths, normalizeChangedFiles } from './changedFiles'",
   "import { ticketStringArray } from './ticketFields'",
   'const targetProjects = new Set(ticketStringArray(input.projects))',
   'for (const project of ticketStringArray(target.projects))',
@@ -4705,6 +4706,9 @@ for (const marker of [
   'const itemProjects = ticketStringArray(item.projects)',
   'const ticketProjects = ticketStringArray(ticket.projects)',
   'for (const label of ticketStringArray(ticket.labels))',
+  'for (const file of normalizeChangedFiles(mrFiles?.[ticketKey]))',
+  'for (const file of normalizeChangedFiles(ticket?.mr?.files))',
+  'for (const file of normalizeChangedFiles(ticket?.mr?.changed_files))',
 ]) {
   if (!collisionDetector.includes(marker)) {
     fail(`Missing collision detector marker: ${marker}`);
@@ -4715,6 +4719,9 @@ if (collisionDetector.includes('const events = Array.isArray(run.events) ? run.e
 }
 if (collisionDetector.includes('target.projects || []') || collisionDetector.includes('input.projects || []') || collisionDetector.includes('ticket.labels || []')) {
   fail('Collision detector must normalize project and label lists through ticketStringArray.');
+}
+if (collisionDetector.includes('for (const file of ticket?.mr?.files || [])') || collisionDetector.includes('for (const file of ticket?.mr?.changed_files || [])')) {
+  fail('Collision detector must normalize merge request file arrays through normalizeChangedFiles.');
 }
 for (const marker of [
   'export const LIVE_MR_DIFF_LIMIT = 4',
