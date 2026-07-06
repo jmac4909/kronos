@@ -11,6 +11,7 @@ import { defaultCliProbeCommandRunner, readableGoogleApplicationCredentials, res
 import { unknownErrorMessage } from './errorUtils';
 import { normalizeMergeRequestStatus } from './integrationAdapters';
 import { parseJsonWithLabel } from './jsonFiles';
+import { countLabel } from './countLabels';
 
 export interface DoctorCheck {
   name: string;
@@ -92,7 +93,7 @@ export function runDoctorChecks(input: DoctorChecksInput): DoctorCheck[] {
     add(
       'Prompt templates',
       missing.length === 0 ? 'pass' : 'warn',
-      `${templates.length} template(s), ${missing.length} required missing${missing.length ? `: ${missing.join(', ')}. Run Kronos: Repair Prompt Pack to create starter templates.` : ''}`
+      `${countLabel(templates.length, 'template')}, ${countLabel(missing.length, 'missing required template')}${missing.length ? `: ${missing.join(', ')}. Run Kronos: Repair Prompt Pack to create starter templates.` : ''}`
     );
   } catch (e: unknown) {
     add('Prompt templates', 'fail', unknownErrorMessage(e, 'Could not read prompt directory'));
@@ -148,7 +149,7 @@ export function runDoctorChecks(input: DoctorChecksInput): DoctorCheck[] {
     add(
       'state.json parse',
       stateWarnings.length > 0 ? 'warn' : 'pass',
-      `${projectCount} project(s), ${ticketCount} ticket(s)${stateWarnings.length ? `; ${stateWarnings.slice(0, 3).map(error => error.detail).join('; ')}${stateWarnings.length > 3 ? `; and ${stateWarnings.length - 3} more` : ''}` : ''}`
+      `${countLabel(projectCount, 'project')}, ${countLabel(ticketCount, 'ticket')}${stateWarnings.length ? `; ${stateWarnings.slice(0, 3).map(error => error.detail).join('; ')}${stateWarnings.length > 3 ? `; and ${stateWarnings.length - 3} more` : ''}` : ''}`
     );
     const missingConfig = projectConfigGaps(input.state, input.profile);
     add(
@@ -165,7 +166,7 @@ export function runDoctorChecks(input: DoctorChecksInput): DoctorCheck[] {
   }
 
   if (input.queue) {
-    add('queue.json parse', 'pass', `${input.queue.items?.length || 0} queue item(s)`);
+    add('queue.json parse', 'pass', countLabel(input.queue.items?.length || 0, 'queue item'));
   } else if (queueLoadError) {
     add('queue.json parse', 'fail', `${queueLoadError.filePath || 'queue.json'} - ${queueLoadError.detail}`);
   } else {
@@ -175,7 +176,7 @@ export function runDoctorChecks(input: DoctorChecksInput): DoctorCheck[] {
   const sessionIssues = input.sessionStoreIssues || [];
   if (sessionIssues.length > 0) {
     const first = sessionIssues.slice(0, 3).map(issue => `${issue.kind}: ${issue.filePath} - ${issue.detail}`).join('; ');
-    add('Session store integrity', 'warn', `${sessionIssues.length} issue(s): ${first}${sessionIssues.length > 3 ? `; and ${sessionIssues.length - 3} more` : ''}`);
+    add('Session store integrity', 'warn', `${countLabel(sessionIssues.length, 'issue')}: ${first}${sessionIssues.length > 3 ? `; and ${sessionIssues.length - 3} more` : ''}`);
   } else {
     add('Session store integrity', 'pass', 'Saved session and stats files are readable.');
   }
@@ -381,8 +382,8 @@ function addReviewPollingPrerequisiteCheck(
     name: 'Review MR polling prerequisites',
     status: issues.length === 0 ? 'pass' : 'warn',
     detail: issues.length === 0
-      ? `${openReviewTickets.length} open review MR(s) ready for background polling; --mr-status contract OK for ${smokeTicketKey}.`
-      : `${openReviewTickets.length} open review MR(s); ${issues.slice(0, 6).join('; ')}${issues.length > 6 ? `; and ${issues.length - 6} more` : ''}`,
+      ? `${countLabel(openReviewTickets.length, 'open review MR')} ready for background polling; --mr-status contract OK for ${smokeTicketKey}.`
+      : `${countLabel(openReviewTickets.length, 'open review MR')}; ${issues.slice(0, 6).join('; ')}${issues.length > 6 ? `; and ${issues.length - 6} more` : ''}`,
   });
 }
 

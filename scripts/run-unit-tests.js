@@ -8815,7 +8815,7 @@ test('doctor checks centralize command, credential, project config, and reachabi
   assert.match(byName['GitHub Actions credentials'].detail, /Provider disabled/);
   assert.equal(byName['Project config completeness'].status, 'warn');
   assert.match(byName['Project config completeness'].detail, /app: missing jenkins_url/);
-  assert.equal(byName['queue.json parse'].detail, '1 queue item(s)');
+  assert.equal(byName['queue.json parse'].detail, '1 queue item');
   assert.equal(byName['Session store integrity'].status, 'pass');
   assert.equal(byName['Dispatch model setting'].status, 'fail');
   assert.equal(byName['Review MR polling prerequisites'].status, 'pass');
@@ -8844,7 +8844,7 @@ test('doctor checks centralize command, credential, project config, and reachabi
   });
   const reviewByName = Object.fromEntries(reviewChecks.map(check => [check.name, check]));
   assert.equal(reviewByName['Review MR polling prerequisites'].status, 'pass');
-  assert.match(reviewByName['Review MR polling prerequisites'].detail, /1 open review MR\(s\) ready/);
+  assert.match(reviewByName['Review MR polling prerequisites'].detail, /1 open review MR ready/);
   assert.match(reviewByName['Review MR polling prerequisites'].detail, /--mr-status contract OK for K-REVIEW/);
 
   const staleContractChecks = doctorChecks.runDoctorChecks({
@@ -9058,6 +9058,7 @@ test('doctor checks centralize command, credential, project config, and reachabi
   const source = readSourceFixture('src', 'services', 'doctorChecks.ts');
   for (const marker of [
     "import { unknownErrorMessage } from './errorUtils'",
+    "import { countLabel } from './countLabels'",
     "unknownErrorMessage(e, 'Could not read prompt directory')",
     "unknownErrorMessage(e, 'Auth check failed')",
     "unknownErrorMessage(e, 'Provider reachability checks failed.')",
@@ -9073,12 +9074,22 @@ test('doctor checks centralize command, credential, project config, and reachabi
     "'Review MR polling prerequisites'",
     "ticket.next_action === 'await_review' && ticket.mr?.state === 'opened'",
     "commandRunner('python', [scriptPath, '--mr-status', ticketKey]",
+    "countLabel(templates.length, 'template')",
+    "countLabel(projectCount, 'project')",
+    "countLabel(input.queue.items?.length || 0, 'queue item')",
+    "countLabel(openReviewTickets.length, 'open review MR')",
   ]) {
     assert.ok(source.includes(marker), marker);
   }
   for (const marker of [
     'catch (e: any)',
     'e?.message',
+    'template(s)',
+    'project(s)',
+    'ticket(s)',
+    'queue item(s)',
+    'issue(s)',
+    'open review MR(s)',
   ]) {
     assert.equal(source.includes(marker), false, marker);
   }

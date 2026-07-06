@@ -3810,6 +3810,7 @@ for (const marker of [
   'Skipped because GOOGLE_APPLICATION_CREDENTIALS',
   'probeProviderReachability',
   "import { unknownErrorMessage } from './errorUtils'",
+  "import { countLabel } from './countLabels'",
   "unknownErrorMessage(e, 'Could not read prompt directory')",
   "unknownErrorMessage(e, 'Auth check failed')",
   "unknownErrorMessage(e, 'Provider reachability checks failed.')",
@@ -3825,9 +3826,18 @@ for (const marker of [
   'function hasMergeRequestDiscussionSignal',
   'parseJsonWithLabel(raw, `MR status for ${ticketKey}`)',
   'REVIEW_STATUS_SMOKE_TIMEOUT_MS',
+  "countLabel(templates.length, 'template')",
+  "countLabel(projectCount, 'project')",
+  "countLabel(input.queue.items?.length || 0, 'queue item')",
+  "countLabel(openReviewTickets.length, 'open review MR')",
 ]) {
   if (!doctorChecks.includes(marker)) {
     fail(`Missing doctor checks marker: ${marker}`);
+  }
+}
+for (const forbidden of ['template(s)', 'project(s)', 'ticket(s)', 'queue item(s)', 'issue(s)', 'open review MR(s)']) {
+  if (doctorChecks.includes(forbidden)) {
+    fail(`Doctor checks must use the shared count label helper instead of ${forbidden}.`);
   }
 }
 
