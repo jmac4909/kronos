@@ -7,6 +7,7 @@ import { requiredScripts } from './scriptClient';
 import type { TrendMetricsReport } from './trendMetrics';
 import { escapeClass, escapeHtml } from './webviewHtml';
 import { formatWebviewDateTime } from './webviewFormat';
+import { countLabel } from './countLabels';
 
 interface SessionStatsRow {
   project: string;
@@ -152,7 +153,7 @@ export function buildTrendMetricsHtml(report: TrendMetricsReport, nonce?: string
   <div class="kronos-header">
     <div>
       <h1 class="kronos-title">Kronos Trend Metrics</h1>
-      <div class="kronos-subtitle">${escapeHtml(report.summary)} ${report.runsConsidered} run(s), ${report.ticketsConsidered} ticket(s), ${report.windowDays}-day window.</div>
+      <div class="kronos-subtitle">${escapeHtml(report.summary)} ${escapeHtml(countLabel(report.runsConsidered, 'run'))}, ${escapeHtml(countLabel(report.ticketsConsidered, 'ticket'))}, ${report.windowDays}-day window.</div>
     </div>
   </div>
   ${actions}

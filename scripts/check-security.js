@@ -4607,6 +4607,9 @@ for (const marker of [
   "actionButton('stateAuditLog', 'Audit Log')",
   'requiredScripts().map',
   'listProfiles().map',
+  "import { countLabel } from './countLabels'",
+  "countLabel(report.runsConsidered, 'run')",
+  "countLabel(report.ticketsConsidered, 'ticket')",
   'kronosOperatorPanelCss',
   'actionScriptUri?: string',
   "kronosActionPanelScript(nonce, 'Kronos Session Stats', actionScriptUri)",
@@ -4622,6 +4625,11 @@ for (const marker of [
 }
 if (/\bany\b/.test(operationsReportPanelView)) {
   fail('Operations report panel view should keep renderer payloads typed without any.');
+}
+for (const forbidden of ['run(s)', 'ticket(s)']) {
+  if (operationsReportPanelView.includes(forbidden)) {
+    fail(`Operations report panel view must use the shared count label helper instead of ${forbidden}.`);
+  }
 }
 
 for (const marker of [
@@ -4856,6 +4864,7 @@ for (const marker of [
   "import { recordString } from './records'",
   "import { isFailedTerminalRunStatus, isFinishedRunStatus, isSuccessfulRunStatus } from './runStatus'",
   "import { hasRetryMetadata, runLikeRecordsFromUnknown, type RunLikeRecord } from './runRecords'",
+  "import { countLabel } from './countLabels'",
   'const runs = runLikeRecordsFromUnknown(input.runs)',
   "const finishedRuns = runs.filter(run => isFinishedRunStatus(recordString(run, 'status')))",
   "const completedRuns = finishedRuns.filter(run => isSuccessfulRunStatus(recordString(run, 'status'))).length",
@@ -4865,6 +4874,9 @@ for (const marker of [
   'evidenceEnvironmentResults(ticket)',
   "evidenceString(check, 'result')",
   "recordString(run, 'status')",
+  "countLabel(finishedRuns.length, 'finished run')",
+  "countLabel(changesRequestedMrs, 'change-requested MR')",
+  "countLabel(tickets.length, 'active ticket')",
 ]) {
   if (!trendMetrics.includes(marker)) {
     fail(`Missing trend metrics marker: ${marker}`);
@@ -4883,6 +4895,11 @@ for (const forbidden of [
 ]) {
   if (trendMetrics.includes(forbidden)) {
     fail(`Trend metrics must normalize raw run payloads instead of using ${forbidden}.`);
+  }
+}
+for (const forbidden of ['run(s)', 'ticket(s)', 'MR(s)', 'build(s)', 'check(s)', 'environment result(s)']) {
+  if (trendMetrics.includes(forbidden)) {
+    fail(`Trend metrics must use the shared count label helper instead of ${forbidden}.`);
   }
 }
 

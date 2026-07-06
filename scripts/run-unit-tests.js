@@ -10770,6 +10770,9 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     "actionButton('stateAuditLog', 'Audit Log')",
     'requiredScripts().map',
     'listProfiles().map',
+    "import { countLabel } from './countLabels'",
+    "countLabel(report.runsConsidered, 'run')",
+    "countLabel(report.ticketsConsidered, 'ticket')",
     'kronosOperatorPanelCss',
     'actionScriptUri?: string',
     "kronosActionPanelScript(nonce, 'Kronos Session Stats', actionScriptUri)",
@@ -10780,6 +10783,9 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     "kronosActionPanelScript(nonce, 'Kronos Doctor', actionScriptUri)",
   ]) {
     assert.ok(operationsReportPanelViewSource.includes(marker), marker);
+  }
+  for (const forbidden of ['run(s)', 'ticket(s)']) {
+    assert.equal(operationsReportPanelViewSource.includes(forbidden), false, forbidden);
   }
   assert.equal(/^\s*vscode\.window\.withProgress\(/m.test(source), false, 'progress tasks should be awaited by their command handlers');
   assert.equal((source.match(/dispatchClaudeSession\(/g) || []).length, 1, 'command handlers should use startClaudeDispatch for Claude session startup');
@@ -12070,11 +12076,15 @@ test('trend metrics report rework, build pass, verification pass, and cycle time
     "import { recordString } from './records'",
     "import { isFailedTerminalRunStatus, isFinishedRunStatus, isSuccessfulRunStatus } from './runStatus'",
     "import { hasRetryMetadata, runLikeRecordsFromUnknown, type RunLikeRecord } from './runRecords'",
+    "import { countLabel } from './countLabels'",
     'const runs = runLikeRecordsFromUnknown(input.runs)',
     'const finishedRuns = runs.filter(run => isFinishedRunStatus(recordString(run, \'status\')))',
     "const completedRuns = finishedRuns.filter(run => isSuccessfulRunStatus(recordString(run, 'status'))).length",
     "const failedRuns = finishedRuns.filter(run => isFailedTerminalRunStatus(recordString(run, 'status'))).length",
     'function cycleTimesHours(tickets: Record<string, Ticket>, runs: RunLikeRecord[]): number[]',
+    "countLabel(finishedRuns.length, 'finished run')",
+    "countLabel(changesRequestedMrs, 'change-requested MR')",
+    "countLabel(tickets.length, 'active ticket')",
   ]) {
     assert.ok(source.includes(marker), marker);
   }
@@ -12088,6 +12098,12 @@ test('trend metrics report rework, build pass, verification pass, and cycle time
     'const SUCCESS_RUN_STATUSES',
     'const FINISHED_RUN_STATUSES',
     'function isFailedRunStatus',
+    'run(s)',
+    'ticket(s)',
+    'MR(s)',
+    'build(s)',
+    'check(s)',
+    'environment result(s)',
   ]) {
     assert.equal(source.includes(marker), false, marker);
   }

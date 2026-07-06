@@ -5,6 +5,7 @@ import { recordString } from './records';
 import { toValidDate } from './dateValues';
 import { isFailedTerminalRunStatus, isFinishedRunStatus, isSuccessfulRunStatus } from './runStatus';
 import { hasRetryMetadata, runLikeRecordsFromUnknown, type RunLikeRecord } from './runRecords';
+import { countLabel } from './countLabels';
 
 interface TrendMetricsInput {
   runs: unknown[];
@@ -74,37 +75,37 @@ export function computeTrendMetrics(input: TrendMetricsInput): TrendMetricsRepor
     {
       label: 'Run completion rate',
       value: formatPercent(runCompletionRate),
-      detail: `${completedRuns}/${finishedRuns.length} finished run(s) completed successfully.`,
+      detail: `${completedRuns}/${finishedRuns.length} completed successfully from ${countLabel(finishedRuns.length, 'finished run')}.`,
       status: statusForHighIsGood(runCompletionRate, finishedRuns.length),
     },
     {
       label: 'Rework rate',
       value: formatPercent(reworkRate),
-      detail: `${retryRuns} retry run(s), ${failedRuns} failed/cancelled/needs-human run(s), ${changesRequestedMrs} change-requested MR(s).`,
+      detail: `${countLabel(retryRuns, 'retry run')}, ${countLabel(failedRuns, 'failed/cancelled/needs-human run')}, ${countLabel(changesRequestedMrs, 'change-requested MR')}.`,
       status: statusForLowIsGood(reworkRate, runs.length + mrs.length),
     },
     {
       label: 'Build pass rate',
       value: formatPercent(buildPassRate),
-      detail: `${passedBuilds} passing build(s), ${failedBuilds} failing build(s).`,
+      detail: `${countLabel(passedBuilds, 'passing build')}, ${countLabel(failedBuilds, 'failing build')}.`,
       status: statusForHighIsGood(buildPassRate, passedBuilds + failedBuilds),
     },
     {
       label: 'Verification pass rate',
       value: formatPercent(verificationPassRate),
-      detail: `${passedVerificationRuns} completed verification run(s), ${passedEvidenceChecks} passing check(s), ${passedEnvironmentResults} passing environment result(s).`,
+      detail: `${countLabel(passedVerificationRuns, 'completed verification run')}, ${countLabel(passedEvidenceChecks, 'passing check')}, ${countLabel(passedEnvironmentResults, 'passing environment result')}.`,
       status: statusForHighIsGood(verificationPassRate, verificationRuns.length + structuredEvidenceChecks.length + environmentResults.length),
     },
     {
       label: 'Average cycle time',
       value: cycleHours.length > 0 ? `${formatHours(avgCycleHours)}` : 'n/a',
-      detail: cycleHours.length > 0 ? `${cycleHours.length} ticket(s) with enough timestamp history.` : 'No ticket/run pairs have enough timestamp history yet.',
+      detail: cycleHours.length > 0 ? `${countLabel(cycleHours.length, 'ticket')} with enough timestamp history.` : 'No ticket/run pairs have enough timestamp history yet.',
       status: cycleHours.length === 0 ? 'neutral' : avgCycleHours <= 48 ? 'good' : avgCycleHours <= 120 ? 'warn' : 'bad',
     },
     {
       label: 'Review health',
       value: `${approvedMrs}/${mrs.length}`,
-      detail: `${approvedMrs} approved MR(s), ${changesRequestedMrs} change-requested MR(s).`,
+      detail: `${countLabel(approvedMrs, 'approved MR')}, ${countLabel(changesRequestedMrs, 'change-requested MR')}.`,
       status: changesRequestedMrs > 0 ? 'warn' : mrs.length > 0 ? 'good' : 'neutral',
     },
   ];
@@ -114,7 +115,7 @@ export function computeTrendMetrics(input: TrendMetricsInput): TrendMetricsRepor
     windowDays,
     runsConsidered: runs.length,
     ticketsConsidered: tickets.length,
-    summary: `${runs.length} run(s), ${tickets.length} active ticket(s), ${formatPercent(reworkRate)} rework, ${formatPercent(buildPassRate)} build pass rate over ${windowDays} days.`,
+    summary: `${countLabel(runs.length, 'run')}, ${countLabel(tickets.length, 'active ticket')}, ${formatPercent(reworkRate)} rework, ${formatPercent(buildPassRate)} build pass rate over ${windowDays} days.`,
     metrics,
   };
 }
