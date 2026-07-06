@@ -67,9 +67,9 @@ export function buildBacklogTriageHtml(report: BacklogTriageReport, nonce?: stri
   ${empty || `<div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Severity</th><th>Ticket</th><th>Category</th><th>Action</th><th>Projects</th><th>Age</th><th>Detail</th><th class="action-cell">Actions</th></tr>${rows}</table></div>`}`,
     nonce,
     actionScriptUri,
-    extraCss: `tr.critical td { border-left: 3px solid #f44336; }
-  tr.warning td { border-left: 3px solid #ff9800; }
-  tr.info td { border-left: 3px solid #4caf50; }`,
+    extraCss: `tr.critical td { border-left: 3px solid var(--k-danger); }
+  tr.warning td { border-left: 3px solid var(--k-warn); }
+  tr.info td { border-left: 3px solid var(--k-ok); }`,
   });
 }
 
@@ -151,9 +151,9 @@ export function buildCollisionReportHtml(reports: Array<{ plan: PlannedAction; c
     nonce,
     actionScriptUri,
     extraCss: `.collision-plan-detail { color: var(--k-muted); }
-  .pill.high { color: #f44336; background: rgba(244,67,54,0.16); }
-  .pill.medium { color: #ff9800; background: rgba(255,152,0,0.16); }
-  .pill.low { color: #4caf50; background: rgba(76,175,80,0.16); }`,
+  .pill.high { color: var(--k-danger); background: var(--k-danger-bg); }
+  .pill.medium { color: var(--k-warn); background: var(--k-warn-bg); }
+  .pill.low { color: var(--k-ok); background: var(--k-ok-bg); }`,
   });
 }
 

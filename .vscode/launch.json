@@ -12,6 +12,21 @@
         "${workspaceFolder}/out/**/*.js"
       ],
       "preLaunchTask": "npm: compile"
+    },
+    {
+      "name": "Run Kronos Extension (Feedback State)",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": [
+        "--extensionDevelopmentPath=${workspaceFolder}"
+      ],
+      "env": {
+        "KRONOS_DIR": "${workspaceFolder}/.claude/kronos-feedback-state"
+      },
+      "outFiles": [
+        "${workspaceFolder}/out/**/*.js"
+      ],
+      "preLaunchTask": "Kronos: Prepare Feedback Dev Host"
     }
   ]
 }

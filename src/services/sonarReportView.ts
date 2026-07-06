@@ -185,7 +185,7 @@ export function buildSonarReport(input: SonarReportRenderInput): SonarReportRend
           .gate-banner.pass { border-left-color: var(--k-ok); }
           .gate-banner.warn { border-left-color: var(--k-warn); }
           .gate-banner.fail { border-left-color: var(--k-danger); }
-          tr.fail td { background: rgba(244,67,54,0.08); }
+          tr.fail td { background: color-mix(in srgb, var(--k-danger) 8%, transparent); }
           .actions { margin-top: 20px; display: flex; flex-wrap: wrap; gap: 10px; }
         </style></head><body><div class="kronos-shell sonar-shell">
           <div class="kronos-header">

@@ -75,9 +75,9 @@ export function buildRecoveryHtml(inventory: RecoveryInventory, nonce?: string, 
   <div class="kronos-header"><div><h1 class="kronos-title">Kronos Recovery Center</h1><div class="kronos-subtitle">Runs, worktrees, backups, integrations, and merge requests that need operator action${focusedItemId ? ` - focused on ${escapeHtml(focusedItemId)}` : ''}</div></div></div>
   ${actions}
   <div class="operator-summary">
-    <div class="summary-card"><div class="num">${inventory.summary.critical}</div><div class="lbl">Critical</div></div>
-    <div class="summary-card"><div class="num">${inventory.summary.warning}</div><div class="lbl">Warnings</div></div>
-    <div class="summary-card"><div class="num">${inventory.summary.info}</div><div class="lbl">Info</div></div>
+    <div class="summary-card critical"><div class="num">${inventory.summary.critical}</div><div class="lbl">Critical</div></div>
+    <div class="summary-card warning"><div class="num">${inventory.summary.warning}</div><div class="lbl">Warnings</div></div>
+    <div class="summary-card info"><div class="num">${inventory.summary.info}</div><div class="lbl">Info</div></div>
     <div class="summary-card"><div class="num">${inventory.summary.total}</div><div class="lbl">Total</div></div>
   </div>
   ${empty || `<div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Severity</th><th>Kind</th><th>Item</th><th>Detail</th><th class="action-cell">Action</th></tr>${rows}</table></div>`}

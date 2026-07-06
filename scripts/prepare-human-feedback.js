@@ -99,12 +99,54 @@ requireFile('README.md', [
   'Current Readiness',
   'Main Surfaces To Review',
   'HUMAN_FEEDBACK_CHECKLIST.md',
+  'Run Kronos Extension (Feedback State)',
+  'npm run webview:dom',
+  'npm run feedback:smoke',
+  'rendered fixture content',
+  'Spec Beanstalk',
+  'resources/spec-beanstalk/xlsx_to_markdown.py',
 ]);
 requireFile('HUMAN_FEEDBACK_CHECKLIST.md', [
   'Smoke Flow',
   'Feedback Questions',
   'Stop Conditions',
   'Signoff Bar',
+  'npm run feedback:state',
+  'npm run feedback:smoke',
+  'KRONOS-FB-1',
+  'Run Kronos Extension (Feedback State)',
+  'evidence handoff',
+  'Spec Beanstalk',
+]);
+requireFile('resources/spec-beanstalk/xlsx_to_markdown.py', [
+  'Python standard library',
+  'spec-beanstalk-trace.json',
+  'formatting',
+]);
+requireFile('scripts/create-feedback-state.js', [
+  'Kronos feedback state created.',
+  'refusing to write directly to ~/.claude/kronos',
+  'feedback-run-paused-stale',
+]);
+requireFile('scripts/run-feedback-smoke.js', [
+  '@vscode/test-electron',
+  'downloadAndUnzipVSCode',
+  'libgtk-3.so.0',
+  'extensionTestsEnv',
+  'KRONOS_FEEDBACK_SMOKE',
+]);
+requireFile('scripts/run-webview-dom-tests.js', [
+  'jsdom',
+  'kronos-jira-board.js',
+  'kronos-action-panel.js',
+  'Link to a project first to start or queue\\.',
+]);
+requireFile('test/feedback-smoke/index.js', [
+  'jmacke01.kronos',
+  'kronos.openDashboard',
+  'kronosRecoveryCenter',
+  'Review Paused Run',
+  'kronosSpecBeanstalk',
 ]);
 requireFile('WINDOWS_FEEDBACK_2026-07-02.md', [
   'VS Code 1.127.0',
@@ -115,7 +157,15 @@ requireFile('WINDOWS_FEEDBACK_2026-07-02.md', [
   'ready=true',
 ]);
 requireFile('LICENSE', ['All rights reserved']);
-requireFile('.vscode/launch.json', ['Run Kronos Extension']);
+requireFile('.vscode/launch.json', [
+  'Run Kronos Extension',
+  'Run Kronos Extension (Feedback State)',
+  '${workspaceFolder}/.claude/kronos-feedback-state',
+]);
+requireFile('.vscode/tasks.json', [
+  'Kronos: Prepare Feedback Dev Host',
+  'feedback:state',
+]);
 
 run('npm', ['test']);
 run('npm', ['run', 'package']);
@@ -134,6 +184,8 @@ for (const marker of [
   'package.json',
   'README.md',
   'media/',
+  'resources/',
+  'spec-beanstalk/',
   'out/',
   'extension.js',
   'services/',
@@ -143,11 +195,14 @@ for (const marker of [
 for (const marker of [
   'src/',
   'scripts/',
+  'test/',
   'node_modules/',
   '.git/',
+  '.vscode-test/',
   '.claude/',
   'HUMAN_FEEDBACK_CHECKLIST.md',
   'GOOD_TO_GREAT_REVIEW.md',
+  'INTENT_AND_ENHANCEMENT_PLAN.md',
   'WINDOWS_FEEDBACK_2026-07-02.md',
   'push-master.sh',
   'cache-github-token.sh',
@@ -168,4 +223,9 @@ if (codePath || codiumPath) {
   console.log('- VS Code CLI not found on this host; install/test the VSIX on a machine with VS Code.');
 }
 console.log('- Windows VS Code 1.127 webview smoke evidence is recorded in WINDOWS_FEEDBACK_2026-07-02.md.');
+console.log('- Webview DOM smoke: npm run webview:dom covers board filtering, modal actions, comments, and action-panel payloads.');
+console.log('- Spec Beanstalk: packaged Python analyzer converts .xlsx workbooks into Markdown and JSON trace artifacts under the Java repo.');
+console.log('- Safe dev-host path: run the VS Code launch configuration "Run Kronos Extension (Feedback State)".');
+console.log('- Automated host smoke: run npm run feedback:smoke in a graphical or xvfb-capable environment with VS Code native GUI libraries such as GTK 3 installed.');
+console.log('- Installed VSIX fixture path: run npm run feedback:state and launch VS Code with KRONOS_DIR=.claude/kronos-feedback-state.');
 console.log('- Remaining manual gate: run HUMAN_FEEDBACK_CHECKLIST.md with a human operator and capture UX feedback.');

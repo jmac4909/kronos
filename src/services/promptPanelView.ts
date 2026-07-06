@@ -107,9 +107,9 @@ export function buildPromptHistoryHtml(snapshots: PromptHistorySnapshot[], diff?
   return `<!DOCTYPE html>
 <html><head><style>
   ${kronosOperatorPanelCss()}
-  .pill.added { color: #4caf50; background: rgba(76,175,80,0.16); }
-  .pill.removed { color: #f44336; background: rgba(244,67,54,0.16); }
-  .pill.changed { color: #ff9800; background: rgba(255,152,0,0.16); }
+  .pill.added { color: var(--k-ok); background: var(--k-ok-bg); }
+  .pill.removed { color: var(--k-danger); background: var(--k-danger-bg); }
+  .pill.changed { color: var(--k-warn); background: var(--k-warn-bg); }
   .pill.unchanged { color: var(--k-muted); background: rgba(128,128,128,0.16); }
 </style></head><body><div class="kronos-shell operator-shell">
   <div class="kronos-header">

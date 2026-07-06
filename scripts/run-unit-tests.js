@@ -1,4 +1,5 @@
 const assert = require('node:assert/strict');
+const { spawnSync } = require('node:child_process');
 const { createHash } = require('node:crypto');
 const fs = require('node:fs');
 const http = require('node:http');
@@ -272,11 +273,113 @@ const fileNames = require('../out/services/fileNames.js');
 const sessionStore = require('../out/services/sessionStore.js');
 const worktreeRegistry = require('../out/services/worktreeRegistry.js');
 const terminalProfiles = require('../out/services/terminalProfiles.js');
+const specBeanstalk = require('../out/services/specBeanstalk.js');
 
 function makeTempProject() {
   const root = makeTempDir('kronos-test-');
   fs.mkdirSync(path.join(root, '.claude', 'prompts'), { recursive: true });
   return root;
+}
+
+function pythonForTests() {
+  for (const candidate of [
+    { command: 'python3', args: [] },
+    { command: 'python', args: [] },
+    { command: 'py', args: ['-3'] },
+  ]) {
+    const result = spawnSync(candidate.command, [...candidate.args, '--version'], { encoding: 'utf8', stdio: 'pipe' });
+    if (!result.error && result.status === 0) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+function createSpecBeanstalkWorkbook(filePath) {
+  const python = pythonForTests();
+  assert.ok(python, 'Python is required for Spec Beanstalk tests');
+  const code = String.raw`
+import sys
+import zipfile
+
+target = sys.argv[1]
+files = {
+  '[Content_Types].xml': '''<?xml version="1.0" encoding="UTF-8"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+  <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+  <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
+  <Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/>
+  <Override PartName="/xl/comments1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.comments+xml"/>
+</Types>''',
+  '_rels/.rels': '''<?xml version="1.0" encoding="UTF-8"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>''',
+  'xl/workbook.xml': '''<?xml version="1.0" encoding="UTF-8"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <sheets><sheet name="API" sheetId="1" r:id="rId1"/></sheets>
+</workbook>''',
+  'xl/_rels/workbook.xml.rels': '''<?xml version="1.0" encoding="UTF-8"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+  <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/>
+</Relationships>''',
+  'xl/sharedStrings.xml': '''<?xml version="1.0" encoding="UTF-8"?>
+<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="3" uniqueCount="3">
+  <si><t>Endpoint</t></si>
+  <si><t>GET /customers</t></si>
+  <si><t>Status</t></si>
+</sst>''',
+  'xl/styles.xml': '''<?xml version="1.0" encoding="UTF-8"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <fonts count="2">
+    <font><sz val="11"/><name val="Calibri"/></font>
+    <font><b/><i/><color rgb="FF9C0006"/><sz val="11"/><name val="Calibri"/></font>
+  </fonts>
+  <fills count="3">
+    <fill><patternFill patternType="none"/></fill>
+    <fill><patternFill patternType="gray125"/></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFFFF2CC"/><bgColor indexed="64"/></patternFill></fill>
+  </fills>
+  <borders count="1"><border/></borders>
+  <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+  <cellXfs count="2">
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="0"/>
+    <xf numFmtId="0" fontId="1" fillId="2" borderId="0" applyFont="1" applyFill="1"><alignment wrapText="1"/></xf>
+  </cellXfs>
+</styleSheet>''',
+  'xl/worksheets/sheet1.xml': '''<?xml version="1.0" encoding="UTF-8"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <dimension ref="A1:C4"/>
+  <cols><col min="3" max="3" hidden="1"/></cols>
+  <sheetData>
+    <row r="1"><c r="A1" t="s" s="1"><v>0</v></c><c r="B1" t="s" s="1"><v>1</v></c></row>
+    <row r="2"><c r="A2" t="inlineStr" s="1"><is><t>customerId</t></is></c><c r="B2" s="1"><f>CONCAT("GET"," /customers")</f><v>GET /customers</v></c></row>
+    <row r="3" hidden="1"><c r="A3" t="s"><v>2</v></c></row>
+  </sheetData>
+  <mergeCells count="1"><mergeCell ref="A1:B1"/></mergeCells>
+  <dataValidations count="1"><dataValidation type="list" allowBlank="1" sqref="C2"><formula1>"Y,N"</formula1></dataValidation></dataValidations>
+</worksheet>''',
+  'xl/worksheets/_rels/sheet1.xml.rels': '''<?xml version="1.0" encoding="UTF-8"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="comments" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments" Target="../comments1.xml"/>
+</Relationships>''',
+  'xl/comments1.xml': '''<?xml version="1.0" encoding="UTF-8"?>
+<comments xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <authors><author>Analyst</author></authors>
+  <commentList><comment ref="A2" authorId="0"><text><t>Required field from highlighted row.</t></text></comment></commentList>
+</comments>''',
+}
+with zipfile.ZipFile(target, 'w', zipfile.ZIP_DEFLATED) as zf:
+    for name, content in files.items():
+        zf.writestr(name, content)
+`;
+  const result = spawnSync(python.command, [...python.args, '-c', code, filePath], { encoding: 'utf8', stdio: 'pipe' });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
 }
 
 function baseState(tickets) {
@@ -339,6 +442,50 @@ test('file name sanitizer keeps long similar values bounded and distinct', () =>
   assert.equal(second.length <= 80, true);
   assert.match(first, /^[a-zA-Z0-9_.-]+$/);
   assert.equal(fileNames.safeFileStem('////', { fallback: 'ticket' }), 'ticket');
+});
+
+test('spec beanstalk generator preserves xlsx formatting and trace metadata', () => {
+  const project = makeTempProject();
+  const workbookPath = path.join(project, 'api-spec.xlsx');
+  createSpecBeanstalkWorkbook(workbookPath);
+  const scriptPath = path.join(__dirname, '..', 'resources', 'spec-beanstalk', 'xlsx_to_markdown.py');
+
+  const summary = specBeanstalk.runSpecBeanstalkGeneration(scriptPath, {
+    projectPath: project,
+    workbookPath,
+  });
+
+  assert.equal(summary.schema, 'kronos.spec-beanstalk.v1');
+  assert.equal(summary.sheetCount, 1);
+  assert.equal(summary.sourceWorkbook, 'api-spec.xlsx');
+  assert.equal(summary.cellCount >= 5, true);
+  assert.equal(summary.formattedCellCount >= 4, true);
+  assert.ok(summary.sheets[0].fillPalette.includes('#FFF2CC'));
+  assert.equal(fs.existsSync(summary.absoluteIndexPath), true);
+  assert.equal(fs.existsSync(summary.absoluteTracePath), true);
+
+  const index = fs.readFileSync(summary.absoluteIndexPath, 'utf8');
+  assert.ok(index.includes('Do not infer a color legend'));
+  assert.ok(index.includes('Spec Beanstalk API Workbook'));
+
+  const sheetMarkdown = fs.readFileSync(path.join(summary.absoluteOutputDir, summary.sheets[0].markdownPath), 'utf8');
+  assert.ok(sheetMarkdown.includes('fill=#FFF2CC'));
+  assert.ok(sheetMarkdown.includes('bold'));
+  assert.ok(sheetMarkdown.includes('comment by Analyst'));
+  assert.ok(sheetMarkdown.includes('CONCAT'));
+  assert.ok(sheetMarkdown.includes('Data Validations'));
+
+  const trace = JSON.parse(fs.readFileSync(summary.absoluteTracePath, 'utf8'));
+  const cellA2 = trace.sheets[0].cells.find(cell => cell.cell === 'A2');
+  assert.equal(cellA2.comment.text, 'Required field from highlighted row.');
+  assert.equal(trace.sheets[0].mergedRanges[0], 'A1:B1');
+  assert.equal(trace.sheets[0].hiddenRows[0], '3');
+  assert.equal(trace.sheets[0].hiddenColumns[0].min, '3');
+
+  const prompt = specBeanstalk.buildSpecBeanstalkPrompt(summary, '');
+  assert.ok(prompt.includes('use Python to read the .xlsx'));
+  assert.ok(prompt.includes('Do not invent a color legend'));
+  assert.ok(prompt.includes(summary.tracePath));
 });
 
 test('prompt manager renders project prompts with metadata and missing variables', () => {
@@ -3714,6 +3861,9 @@ test('feedback readiness script runs npm and npx through the Windows shell', () 
     "return IS_WINDOWS && (command === 'npm' || command === 'npx');",
     "run('npx', ['--yes', '@vscode/vsce', 'ls', '--tree', '--no-dependencies'], { capture: true })",
     "requireFile('HUMAN_FEEDBACK_CHECKLIST.md', [",
+    "requireFile('scripts/run-webview-dom-tests.js', [",
+    "'npm run webview:dom'",
+    'Webview DOM smoke',
     "'HUMAN_FEEDBACK_CHECKLIST.md',\n  'GOOD_TO_GREAT_REVIEW.md',",
     "spawnSync('where.exe', [command]",
     "spawnSync('sh', ['-lc', `command -v ${command}`]",
@@ -3721,6 +3871,140 @@ test('feedback readiness script runs npm and npx through the Windows shell', () 
   ]) {
     assert.ok(source.includes(marker), marker);
   }
+});
+
+test('feedback state script creates isolated fixture data and refuses home state by default', () => {
+  const targetDir = makeTempDir('kronos-feedback-state-');
+  const result = spawnSync(process.execPath, ['scripts/create-feedback-state.js', '--dir', targetDir], {
+    cwd: path.join(__dirname, '..'),
+    encoding: 'utf8',
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /Kronos feedback state created/);
+
+  const state = JSON.parse(fs.readFileSync(path.join(targetDir, 'state.json'), 'utf8'));
+  const queue = JSON.parse(fs.readFileSync(path.join(targetDir, 'queue.json'), 'utf8'));
+  const run = JSON.parse(fs.readFileSync(path.join(targetDir, 'runs', 'feedback-run-needs-human.json'), 'utf8'));
+  const pausedRun = JSON.parse(fs.readFileSync(path.join(targetDir, 'runs', 'feedback-run-paused-stale.json'), 'utf8'));
+  assert.deepEqual(Object.keys(state.tickets).sort(), ['KRONOS-FB-1', 'KRONOS-FB-2', 'KRONOS-FB-3']);
+  assert.equal(state.tickets['KRONOS-FB-1'].evidence.checks[0].result, 'pass');
+  assert.equal(state.tickets['KRONOS-FB-2'].build.status, 'FAILURE');
+  assert.equal(queue.items.length, 2);
+  assert.equal(run.status, 'needs_human');
+  assert.equal(pausedRun.status, 'paused');
+  assert.equal(pausedRun.ticket, 'KRONOS-FB-2');
+  assert.equal(typeof pausedRun.pausedAt, 'string');
+  assert.equal(fs.existsSync(path.join(targetDir, 'sandbox-project', 'README.md')), true);
+
+  const homeDir = makeTempDir('kronos-feedback-home-');
+  const refused = spawnSync(process.execPath, ['scripts/create-feedback-state.js', '--dir', path.join(homeDir, '.claude', 'kronos')], {
+    cwd: path.join(__dirname, '..'),
+    encoding: 'utf8',
+    env: { ...process.env, HOME: homeDir },
+  });
+  assert.notEqual(refused.status, 0);
+  assert.match(refused.stderr, /refusing to write directly to ~\/\.claude\/kronos/);
+});
+
+test('VS Code feedback launch config prepares isolated Kronos state before extension host launch', () => {
+  const manifest = JSON.parse(readSourceFixture('package.json'));
+  const launch = JSON.parse(readSourceFixture('.vscode', 'launch.json'));
+  const tasks = JSON.parse(readSourceFixture('.vscode', 'tasks.json'));
+  assert.equal(manifest.scripts['feedback:state'], 'node scripts/create-feedback-state.js');
+  assert.equal(manifest.scripts['feedback:state:force'], 'node scripts/create-feedback-state.js --force');
+  assert.equal(manifest.scripts['feedback:smoke'], 'node scripts/run-feedback-smoke.js');
+  assert.equal(manifest.scripts['webview:dom'], 'node scripts/run-webview-dom-tests.js');
+
+  const feedbackLaunch = launch.configurations.find(configuration => configuration.name === 'Run Kronos Extension (Feedback State)');
+  assert.ok(feedbackLaunch);
+  assert.equal(feedbackLaunch.type, 'extensionHost');
+  assert.equal(feedbackLaunch.env.KRONOS_DIR, '${workspaceFolder}/.claude/kronos-feedback-state');
+  assert.equal(feedbackLaunch.preLaunchTask, 'Kronos: Prepare Feedback Dev Host');
+
+  const feedbackTask = tasks.tasks.find(task => task.label === 'npm: feedback:state:force');
+  assert.ok(feedbackTask);
+  assert.equal(feedbackTask.type, 'npm');
+  assert.equal(feedbackTask.script, 'feedback:state:force');
+
+  const prepareTask = tasks.tasks.find(task => task.label === 'Kronos: Prepare Feedback Dev Host');
+  assert.ok(prepareTask);
+  assert.equal(prepareTask.dependsOrder, 'sequence');
+  assert.deepEqual(prepareTask.dependsOn, ['npm: feedback:state:force', 'npm: compile']);
+});
+
+test('feedback extension-host smoke uses isolated fixture state and main cockpit commands', () => {
+  const smokeRunner = readSourceFixture('scripts', 'run-feedback-smoke.js');
+  for (const marker of [
+    "require('@vscode/test-electron')",
+    'downloadAndUnzipVSCode',
+    'assertNativeDependencies',
+    'missingLinuxSharedLibraries',
+    'libgtk-3.so.0',
+    "path.join(ROOT, '.claude', 'kronos-feedback-state')",
+    'KRONOS_SMOKE_UNDER_XVFB',
+    "spawnSync('xvfb-run'",
+    'extensionTestsEnv',
+    'KRONOS_FEEDBACK_SMOKE',
+    "WORKSPACE_DIR",
+    "'--disable-workspace-trust'",
+    "'--user-data-dir'",
+    "'--extensions-dir'",
+  ]) {
+    assert.ok(smokeRunner.includes(marker), marker);
+  }
+
+  const smokeTest = readSourceFixture('test', 'feedback-smoke', 'index.js');
+  for (const marker of [
+    "vscode.extensions.getExtension('jmacke01.kronos')",
+    '__kronosSmoke',
+    'openedPanels',
+    "'KRONOS-FB-1'",
+    "'kronos.openDashboard'",
+    "'kronos.jiraBoard'",
+    "'kronos.viewTicket'",
+    "'kronos.evidenceGate'",
+    "'kronos.evidenceHandoff'",
+    "'kronos.runCenter'",
+    "'kronos.recoveryCenter'",
+    "'kronos.humanReviewInbox'",
+    "'kronos.doctor'",
+    "'kronos.promptManager'",
+    "'kronos.queuePlanner'",
+    "'kronos.backlogTriage'",
+    'assertPanelHtml',
+    'Synthetic local smoke',
+    'feedback-run-paused-stale',
+    'Review Paused Run',
+    'Kronos feedback smoke opened and checked',
+    'webviewTabs()',
+  ]) {
+    assert.ok(smokeTest.includes(marker), marker);
+  }
+
+  const extensionSource = readSourceFixture('src', 'extension.ts');
+  for (const marker of [
+    'KRONOS_FEEDBACK_SMOKE',
+    'feedbackSmokeApi',
+    'recordSmokePanel',
+    'html: record.panel.webview.html',
+    'onPanelOpened: (panel, viewType, title)',
+    "__kronosSmoke",
+    "recordSmokePanel('kronosJiraBoard'",
+  ]) {
+    assert.ok(extensionSource.includes(marker), marker);
+  }
+
+  const sessionDispatcherSource = readSourceFixture('src', 'runners', 'sessionDispatcher.ts');
+  for (const marker of [
+    'onPanelOpened?:',
+    "options.onPanelOpened?.(panel, 'kronosRunCenter', 'Kronos Run Center')",
+  ]) {
+    assert.ok(sessionDispatcherSource.includes(marker), marker);
+  }
+
+  const vscodeIgnore = readSourceFixture('.vscodeignore');
+  assert.ok(vscodeIgnore.includes('test/**'));
+  assert.ok(vscodeIgnore.includes('.vscode-test/**'));
 });
 
 test('terminal profiles prefer Windows Git Bash and avoid PowerShell gcloud shims', () => {
@@ -7344,6 +7628,25 @@ test('recovery center prioritizes failed runs, unsafe worktrees, doctor failures
         startedAt: '2026-07-01T09:00:00.000Z',
       },
       {
+        id: 'stale-paused-run',
+        project: 'web',
+        skill: 'implement',
+        ticket: 'K-PAUSE',
+        status: 'paused',
+        startedAt: '2026-07-01T08:00:00.000Z',
+        pausedAt: '2026-07-01T09:30:00.000Z',
+        logPath: '/tmp/paused-run.log',
+        promptPath: '/tmp/paused-prompt.txt',
+      },
+      {
+        id: 'fresh-paused-run',
+        project: 'web',
+        skill: 'verify',
+        status: 'paused',
+        startedAt: '2026-07-01T11:15:00.000Z',
+        pausedAt: '2026-07-01T11:30:00.000Z',
+      },
+      {
         id: 'ok-run',
         status: 'completed',
       },
@@ -7403,9 +7706,9 @@ test('recovery center prioritizes failed runs, unsafe worktrees, doctor failures
   });
 
   assert.equal(inventory.summary.critical, 2);
-  assert.equal(inventory.summary.warning, 4);
+  assert.equal(inventory.summary.warning, 5);
   assert.equal(inventory.summary.info, 2);
-  assert.equal(inventory.summary.total, 8);
+  assert.equal(inventory.summary.total, 9);
   assert.equal(inventory.items[0].severity, 'critical');
   const failedRunItem = inventory.items.find(item => item.id === 'run:failed-run');
   assert.ok(failedRunItem);
@@ -7417,12 +7720,21 @@ test('recovery center prioritizes failed runs, unsafe worktrees, doctor failures
   assert.ok(inventory.items.some(item => item.id === 'run:failed-run' && item.detail === 'Jenkins build failed'));
   assert.ok(inventory.items.some(item => item.id === 'mr:MR-7:7' && item.action === 'linkMrToTicket' && item.ticketKey === 'MR-7'));
   assert.ok(inventory.items.some(item => item.id === 'run:stale-run' && item.title.includes('may be abandoned')));
+  const pausedRunItem = inventory.items.find(item => item.id === 'run:stale-paused-run');
+  assert.ok(pausedRunItem);
+  assert.equal(pausedRunItem.action, 'openRunCenter');
+  assert.equal(pausedRunItem.actionLabel, 'Review Paused Run');
+  assert.match(pausedRunItem.detail, /Continue, cancel, or mark needs-human from Run Center/);
+  assert.deepEqual(pausedRunItem.secondaryActions.map(action => action.action), ['openRunLog', 'openRunPrompt']);
+  assert.equal(inventory.items.some(item => item.id === 'run:fresh-paused-run'), false);
   assert.ok(inventory.items.some(item => item.id === 'worktree:/repo/app/.claude/worktrees/dirty' && item.detail.includes('/repo/app/.claude/worktrees/dirty')));
   assert.ok(inventory.items.some(item => item.kind === 'backup' && item.action === 'restoreBackup'));
 
   const source = readSourceFixture('src', 'services', 'recoveryCenter.ts');
   assert.ok(source.includes("import { DoctorAttentionCheck, doctorCheckAttentionId, doctorCheckAttentionSeverity, doctorCheckNeedsAttention } from './doctorAttention'"));
   assert.ok(source.includes('export interface RecoveryCheck extends DoctorAttentionCheck'));
+  assert.ok(source.includes('function isStalePausedRun'));
+  assert.ok(source.includes("run.status === 'paused' && isStalePausedRun(run, now, staleRunMs)"));
   assert.ok(source.includes('summary: severitySummary(items)'));
   assert.equal(source.includes("check.status === 'fail' ? 'critical' : 'warning'"), false, 'recovery center should use shared Doctor check severity helper');
 });
@@ -7778,10 +8090,14 @@ test('run status helper centralizes active persisted run semantics', () => {
     "hasDateLikeValue(run['endedAt'])",
     'label.startsWith(\'Session exited with code\')',
     'export function activeRunSummary',
+    'incrementStatusCount(counts, status)',
+    'function incrementStatusCount',
+    'function statusCount',
     "['running', 'preflight', 'paused']",
   ]) {
     assert.ok(source.includes(marker), marker);
   }
+  assert.equal(source.includes('counts.set(status, (counts.get(status) || 0) + 1)'), false);
   assert.equal(source.includes('filter(isRecord)'), false);
   assert.equal(source.includes("if (!value || typeof value !== 'object' || Array.isArray(value)) { return ''; }"), false);
   assert.equal(source.includes("Reflect.get(value, 'status')"), false);
@@ -9848,6 +10164,10 @@ test('human review inbox aggregates runs, tickets, evidence gaps, integrations, 
   assert.ok(source.includes("import { runLikeRecordsFromUnknown, type RunLikeRecord } from './runRecords'"));
   assert.ok(source.includes('const runs = runLikeRecordsFromUnknown(input.runs)'));
   assert.ok(source.includes('summary: severitySummary(sorted)'));
+  assert.ok(source.includes('incrementTicketCount(counts, item.ticket)'));
+  assert.ok(source.includes('function incrementTicketCount'));
+  assert.ok(source.includes('function ticketCount'));
+  assert.equal(source.includes('counts.set(item.ticket, (counts.get(item.ticket) || 0) + 1)'), false);
   assert.equal(source.includes("check.status === 'fail' ? 'critical' : 'warning'"), false, 'human review inbox should use shared Doctor check severity helper');
   assert.equal(source.includes('const rawRuns'), false);
   assert.equal(source.includes('filter(isRunLikeRecord)'), false);

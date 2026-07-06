@@ -100,18 +100,18 @@ export function buildTicketHtml(key: string, ticket: Ticket, input: TicketPanelR
     }).join('')}</div></div>`
     : '';
 
-  const statusColor = nextAction === 'blocked' ? '#f44336'
-    : nextAction === 'await_review' ? '#ff9800'
-    : nextAction === 'in_progress' ? '#2196f3'
-    : nextAction === 'implement' ? '#666'
-    : '#4caf50';
+  const statusColor = nextAction === 'blocked' ? 'var(--k-danger)'
+    : nextAction === 'await_review' ? 'var(--k-warn)'
+    : nextAction === 'in_progress' ? 'var(--k-info)'
+    : nextAction === 'implement' ? 'var(--k-muted)'
+    : 'var(--k-ok)';
 
   const typeIcon = ticketType.toLowerCase().includes('bug') || ticketType.toLowerCase().includes('defect') ? 'Bug' : 'Story';
 
   let mrHtml = '';
   if (mr) {
     const reviewStatus = ticketStringField(mr, 'review_status', 'pending_review');
-    const reviewColor = reviewStatus === 'approved' ? '#4caf50' : reviewStatus === 'changes_requested' ? '#f44336' : '#ff9800';
+    const reviewColor = reviewStatus === 'approved' ? 'var(--k-ok)' : reviewStatus === 'changes_requested' ? 'var(--k-danger)' : 'var(--k-warn)';
     const mrUrl = safeHttpHref(ticketStringField(mr, 'url'));
     const commentCount = ticketStringField(mr, 'comment_count');
     const lastCommentAt = ticketStringField(mr, 'last_comment_at');
@@ -148,7 +148,7 @@ export function buildTicketHtml(key: string, ticket: Ticket, input: TicketPanelR
   if (build) {
     const buildStatus = ticketStringField(build, 'status', 'unknown');
     const buildKind = buildStatusKind(buildStatus);
-    const buildColor = buildKind === 'pass' ? '#4caf50' : buildKind === 'fail' ? '#f44336' : '#ff9800';
+    const buildColor = buildKind === 'pass' ? 'var(--k-ok)' : buildKind === 'fail' ? 'var(--k-danger)' : 'var(--k-warn)';
     const buildUrl = safeHttpHref(ticketStringField(build, 'url'));
     buildHtml = `<div class="section">
       <h3>Build</h3>
@@ -185,39 +185,39 @@ export function buildTicketHtml(key: string, ticket: Ticket, input: TicketPanelR
   return `<!DOCTYPE html>
 <html><head><style>
   ${kronosWebviewBaseCss()}
-  .ticket-shell { max-width: 980px; }
+  .ticket-shell { max-width: 1040px; }
   .ticket-header { margin-bottom: 18px; }
   .ticket-header h1 { margin-top: 4px; font-size: 22px; line-height: 1.25; }
   .ticket-header .key { color: var(--k-muted); font-size: 12px; font-weight: 650; text-transform: uppercase; }
   .meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin: 16px 0; padding: 12px; background: var(--k-surface-soft); border: 1px solid var(--k-border); border-radius: var(--k-radius); }
   .meta-item { min-width: 0; font-size: 13px; word-break: break-word; }
   .meta-item .label { color: var(--k-muted); font-size: 11px; font-weight: 650; text-transform: uppercase; display: block; margin-bottom: 2px; }
-  .status-badge { display: inline-flex; align-items: center; min-height: 22px; padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 650; color: white; }
+  .status-badge { display: inline-flex; align-items: center; min-height: 22px; padding: 3px 9px; border: 1px solid var(--k-border); border-radius: 999px; font-size: 11px; font-weight: 650; color: var(--k-fg); background: var(--k-surface); }
   .section { margin: 20px 0; }
   .section h3 { margin: 0 0 8px 0; color: var(--k-muted); font-size: 11px; font-weight: 650; letter-spacing: 0; text-transform: uppercase; }
   .description { white-space: pre-wrap; word-break: break-word; font-size: 13px; line-height: 1.6; padding: 12px; background: var(--k-surface-soft); border: 1px solid var(--k-border); border-radius: var(--k-radius); }
   .tag { display: inline-flex; align-items: center; min-height: 22px; padding: 2px 8px; border: 1px solid transparent; border-radius: 999px; font-size: 11px; margin: 0 4px 4px 0; line-height: 1.2; }
-  .tag.project { background: rgba(33, 150, 243, 0.2); color: var(--vscode-textLink-foreground); }
+  .tag.project { background: var(--k-info-bg); color: var(--vscode-textLink-foreground); }
   .tag.label { border-color: var(--k-border); background: var(--k-surface-soft); color: var(--k-muted); }
   .mr-card, .build-card { padding: 12px; border: 1px solid var(--k-border); border-left: 3px solid var(--k-border); border-radius: var(--k-radius); margin: 4px 0; font-size: 13px; background: var(--k-surface-soft); }
   .mr-comments { display: grid; gap: 7px; margin-top: 9px; }
   .mr-comment { padding: 8px 10px; border: 1px solid var(--k-border); border-radius: var(--k-radius-sm); background: var(--k-bg); white-space: pre-wrap; word-break: break-word; }
   .mr-comment-meta { color: var(--k-muted); font-size: 10px; font-weight: 650; margin-bottom: 4px; text-transform: uppercase; }
   .gate { padding: 12px; border: 1px solid var(--k-border); border-left: 3px solid var(--k-border); border-radius: var(--k-radius); background: var(--k-surface-soft); font-size: 12px; }
-  .gate.pass { border-left-color: #4caf50; }
-  .gate.warn { border-left-color: #ff9800; }
-  .gate.fail { border-left-color: #f44336; }
+  .gate.pass { border-left-color: var(--k-ok); }
+  .gate.warn { border-left-color: var(--k-warn); }
+  .gate.fail { border-left-color: var(--k-danger); }
   .gate-row { display: flex; gap: 8px; margin: 7px 0 0; align-items: flex-start; }
   .gate-status { display: inline-flex; align-items: center; flex: 0 0 auto; min-height: 20px; border: 1px solid var(--k-border); border-radius: 999px; padding: 2px 8px; font-weight: 650; font-size: 10px; line-height: 1.2; text-transform: uppercase; }
-  .gate-status.pass { color: #4caf50; }
-  .gate-status.warn { color: #ff9800; }
-  .gate-status.fail { color: #f44336; }
+  .gate-status.pass { color: var(--k-ok); }
+  .gate-status.warn { color: var(--k-warn); }
+  .gate-status.fail { color: var(--k-danger); }
   .timeline { border-left: 1px solid var(--k-border); margin-left: 8px; padding-top: 2px; }
   .timeline-event { position: relative; padding: 0 0 14px 18px; font-size: 12px; }
   .timeline-event::before { content: ""; position: absolute; left: -4px; top: 3px; width: 7px; height: 7px; border-radius: 50%; background: var(--vscode-descriptionForeground); }
-  .timeline-event.success::before { background: #4caf50; }
-  .timeline-event.warning::before { background: #ff9800; }
-  .timeline-event.failure::before { background: #f44336; }
+  .timeline-event.success::before { background: var(--k-ok); }
+  .timeline-event.warning::before { background: var(--k-warn); }
+  .timeline-event.failure::before { background: var(--k-danger); }
   .timeline-title { font-weight: 650; }
   .timeline-meta { color: var(--k-muted); font-size: 10px; text-transform: uppercase; margin-bottom: 2px; }
   .timeline-detail { color: var(--k-muted); white-space: normal; overflow-wrap: anywhere; line-height: 1.45; }
@@ -227,15 +227,15 @@ export function buildTicketHtml(key: string, ticket: Ticket, input: TicketPanelR
   .criterion-box { flex: 0 0 auto; color: var(--vscode-textLink-foreground); }
   .evidence-note { border: 1px solid var(--k-border); border-left: 3px solid var(--k-accent); border-radius: var(--k-radius-sm); padding: 9px 10px; background: var(--k-surface-soft); font-size: 12px; }
   .evidence-check, .environment-result { border: 1px solid var(--k-border); border-left: 3px solid var(--k-border); border-radius: var(--k-radius-sm); padding: 9px 10px; background: var(--k-surface-soft); font-size: 12px; }
-  .evidence-check.pass, .environment-result.pass { border-left-color: #4caf50; }
-  .evidence-check.warn, .environment-result.warn, .evidence-check.unknown, .environment-result.unknown { border-left-color: #ff9800; }
-  .evidence-check.fail, .environment-result.fail { border-left-color: #f44336; }
+  .evidence-check.pass, .environment-result.pass { border-left-color: var(--k-ok); }
+  .evidence-check.warn, .environment-result.warn, .evidence-check.unknown, .environment-result.unknown { border-left-color: var(--k-warn); }
+  .evidence-check.fail, .environment-result.fail { border-left-color: var(--k-danger); }
   .evidence-kind { display: inline-flex; align-items: center; min-height: 20px; margin-right: 8px; font-weight: 650; text-transform: uppercase; font-size: 10px; color: var(--k-muted); }
   .evidence-time { color: var(--k-muted); font-size: 10px; }
   .evidence-command { margin-top: 5px; font-family: var(--vscode-editor-font-family, monospace); font-size: 11px; color: var(--k-muted); white-space: pre-wrap; word-break: break-word; }
   .link { color: var(--k-accent); text-decoration: none; font-size: 12px; }
   .link:hover { text-decoration: underline; }
-  .actions { display: flex; gap: 8px; margin: 20px 0; flex-wrap: wrap; }
+  .actions { display: flex; gap: 8px; margin: 14px 0 18px; flex-wrap: wrap; }
   .actions .kronos-button { min-height: 30px; }
 </style></head><body><div class="kronos-shell ticket-shell">
   <div class="kronos-header ticket-header">
@@ -246,11 +246,13 @@ export function buildTicketHtml(key: string, ticket: Ticket, input: TicketPanelR
   </div>
 
   <div class="meta">
-    <div class="meta-item"><span class="label">Status</span><span class="status-badge" style="background:${statusColor}">${esc(jiraStatus)}</span></div>
+    <div class="meta-item"><span class="label">Status</span><span class="status-badge" style="border-color:${statusColor};color:${statusColor};background:color-mix(in srgb, ${statusColor} 16%, transparent)">${esc(jiraStatus)}</span></div>
     <div class="meta-item"><span class="label">Type</span>${esc(ticketType)}</div>
     <div class="meta-item"><span class="label">Priority</span>${esc(priority)}</div>
     <div class="meta-item"><span class="label">Updated</span>${escapeHtml(formatWebviewDate(ticket.updated))}</div>
   </div>
+
+  <div class="actions">${actionButtons}</div>
 
   ${projs ? `<div class="section"><h3>Linked Projects</h3>${projs}</div>` : ''}
   ${labels ? `<div class="section"><h3>Labels</h3>${labels}</div>` : ''}
@@ -265,8 +267,6 @@ export function buildTicketHtml(key: string, ticket: Ticket, input: TicketPanelR
   ${evidenceHtml}
   ${mrHtml}
   ${buildHtml}
-
-  <div class="actions">${actionButtons}</div>
 </div>${input.nonce ? kronosActionPanelScript(input.nonce, 'Kronos Ticket Detail', input.actionScriptUri) : ''}</body></html>`;
 }
 

@@ -99,9 +99,9 @@ export function buildEvidenceGateHtml(gates: EvidenceGateResult[], title: string
   ${actions}
   ${operatorDecisionBrief({ tone: brief.status, headline: brief.headline, detail: brief.detail, nextStep: brief.nextStep })}
   <div class="operator-summary">
-    <div class="summary-card"><div class="num">${summary.fail}</div><div class="lbl">Failing</div></div>
-    <div class="summary-card"><div class="num">${summary.warn}</div><div class="lbl">Warnings</div></div>
-    <div class="summary-card"><div class="num">${summary.pass}</div><div class="lbl">Passing</div></div>
+    <div class="summary-card fail"><div class="num">${summary.fail}</div><div class="lbl">Failing</div></div>
+    <div class="summary-card warn"><div class="num">${summary.warn}</div><div class="lbl">Warnings</div></div>
+    <div class="summary-card pass"><div class="num">${summary.pass}</div><div class="lbl">Passing</div></div>
   </div>
   ${empty || `<div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Status</th><th>Ticket</th><th>Check</th><th>Item</th><th>Detail</th><th class="action-cell">Actions</th></tr>${rows}</table></div>`}
 </div>${kronosActionPanelScript(nonce, 'Kronos Evidence Gate', actionScriptUri)}</body></html>`;

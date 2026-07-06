@@ -3,9 +3,13 @@
 .gitignore
 src/**
 scripts/**
+test/**
 node_modules/**
 vscode-user-*/**
+.vscode-test/**
 .claude/**
+**/__pycache__/**
+**/*.pyc
 CLAUDE.md
 *.vsix
 *.zip
@@ -14,6 +18,7 @@ CLAUDE.md
 .env*
 out/**/*.map
 GOOD_TO_GREAT_REVIEW.md
+INTENT_AND_ENHANCEMENT_PLAN.md
 HUMAN_FEEDBACK_CHECKLIST.md
 WINDOWS_FEEDBACK_*.md
 push-master.sh

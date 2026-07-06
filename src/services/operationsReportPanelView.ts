@@ -149,12 +149,12 @@ export function buildTrendMetricsHtml(report: TrendMetricsReport, nonce?: string
   return `<!DOCTYPE html>
 <html><head><style>
   ${kronosOperatorPanelCss()}
-  .summary-card.good .num { color: #4caf50; }
-  .summary-card.warn .num { color: #ff9800; }
-  .summary-card.bad .num { color: #f44336; }
-  .pill.good { color: #4caf50; background: rgba(76,175,80,0.16); }
-  .pill.warn { color: #ff9800; background: rgba(255,152,0,0.16); }
-  .pill.bad { color: #f44336; background: rgba(244,67,54,0.16); }
+  .summary-card.good .num { color: var(--k-ok); }
+  .summary-card.warn .num { color: var(--k-warn); }
+  .summary-card.bad .num { color: var(--k-danger); }
+  .pill.good { color: var(--k-ok); background: var(--k-ok-bg); }
+  .pill.warn { color: var(--k-warn); background: var(--k-warn-bg); }
+  .pill.bad { color: var(--k-danger); background: var(--k-danger-bg); }
   .pill.neutral { color: var(--vscode-foreground); background: rgba(128,128,128,0.16); }
 </style></head><body><div class="kronos-shell operator-shell">
   <div class="kronos-header">
@@ -311,9 +311,9 @@ export function buildDoctorHtml(checks: DoctorCheck[], nonce?: string, actionScr
   </div>
   ${actions}
   <div class="operator-summary">
-    <div class="summary-card"><div class="num">${summary.pass}</div><div class="lbl">Passing</div></div>
-    <div class="summary-card"><div class="num">${summary.warn}</div><div class="lbl">Warnings</div></div>
-    <div class="summary-card"><div class="num">${summary.fail}</div><div class="lbl">Failing</div></div>
+    <div class="summary-card pass"><div class="num">${summary.pass}</div><div class="lbl">Passing</div></div>
+    <div class="summary-card warn"><div class="num">${summary.warn}</div><div class="lbl">Warnings</div></div>
+    <div class="summary-card fail"><div class="num">${summary.fail}</div><div class="lbl">Failing</div></div>
   </div>
   <div class="table-wrap kronos-panel"><table class="kronos-table">
     <tr><th>Status</th><th>Check</th><th>Detail</th></tr>

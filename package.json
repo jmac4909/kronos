@@ -193,6 +193,21 @@
         "icon": "$(dashboard)"
       },
       {
+        "command": "kronos.specBeanstalk",
+        "title": "Kronos: Spec Beanstalk",
+        "icon": "$(notebook)"
+      },
+      {
+        "command": "kronos.specBeanstalkGenerate",
+        "title": "Kronos: Generate Spec from Excel",
+        "icon": "$(export)"
+      },
+      {
+        "command": "kronos.specBeanstalkStart",
+        "title": "Kronos: Start Spec Beanstalk",
+        "icon": "$(play)"
+      },
+      {
         "command": "kronos.openProject",
         "title": "Kronos: Open in Terminal",
         "icon": "$(terminal)"
@@ -680,6 +695,11 @@
           "group": "navigation"
         },
         {
+          "command": "kronos.specBeanstalk",
+          "when": "view == kronosProjects",
+          "group": "navigation"
+        },
+        {
           "command": "kronos.setup",
           "when": "view == kronosProjects"
         },
@@ -1115,6 +1135,11 @@
           "default": "claude-opus-4-6",
           "description": "Claude model ID for dispatched sessions (e.g. claude-opus-4-6, claude-opus-4-6[1m])"
         },
+        "kronos.pythonPath": {
+          "type": "string",
+          "default": "",
+          "description": "Optional Python executable path for Spec Beanstalk .xlsx analysis. Leave blank to try python3, python, then py -3."
+        },
         "kronos.defaultBaseBranch": {
           "type": "string",
           "default": "develop",
@@ -1158,12 +1183,18 @@
     "compile": "node node_modules/typescript/bin/tsc -p ./",
     "watch": "node node_modules/typescript/bin/tsc -watch -p ./",
     "package": "npx @vscode/vsce package --no-dependencies --allow-missing-repository",
-    "test": "node scripts/check-manifest.js && node scripts/check-security.js && node scripts/check-prompt-governance.js && npm run compile && node scripts/run-unit-tests.js",
+    "test": "node scripts/check-manifest.js && node scripts/check-security.js && node scripts/check-prompt-governance.js && npm run compile && node scripts/run-unit-tests.js && npm run webview:dom",
+    "webview:dom": "node scripts/run-webview-dom-tests.js",
+    "feedback:state": "node scripts/create-feedback-state.js",
+    "feedback:state:force": "node scripts/create-feedback-state.js --force",
+    "feedback:smoke": "node scripts/run-feedback-smoke.js",
     "feedback:ready": "node scripts/prepare-human-feedback.js"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
     "@types/vscode": "^1.85.0",
+    "@vscode/test-electron": "^3.0.0",
+    "jsdom": "^29.1.1",
     "typescript": "^5.4.0"
   }
 }

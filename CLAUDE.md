@@ -2,6 +2,12 @@
 
 VS Code extension for multi-project SDLC orchestration with Claude Code. Manages Jira tickets, GitLab MRs, Jenkins builds, SonarQube quality gates, and automated implementation/verification across Spring Boot microservices.
 
+## Current Host Notes
+
+Current repo root: `/home/ec2-user/kronos`. This workspace intentionally lives outside `/home/ec2-user/projects`; do not move, delete, extract, or reclassify it during project-organization cleanup without explicit approval.
+
+For Codex-wide navigation on this host, start with `/home/ec2-user/AGENTS.md` and `/home/ec2-user/.codex/memories/extensions/ad_hoc/notes/20260701T145649Z-current-navigation-index.md`.
+
 ## Development Notes
 
 Read `GOOD_TO_GREAT_REVIEW.md`, `README.md`, `HUMAN_FEEDBACK_CHECKLIST.md`, and this `CLAUDE.md` before significant design or implementation work. Keep enterprise credentials, Jira/GitLab/Jenkins/Sonar details, Claude/GCP auth data, and generated session state out of git.

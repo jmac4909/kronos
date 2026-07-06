@@ -51,10 +51,18 @@ export const DASHBOARD_MESSAGE_COMMANDS = new Set([
   'humanReviewInbox',
   'evidenceGate',
   'recoveryCenter',
+  'specBeanstalk',
   'addEvidence',
   'addEvidenceCheck',
   'startTicket',
   'viewTicket',
+]);
+
+export const SPEC_BEANSTALK_MESSAGE_COMMANDS = new Set([
+  'refreshPanel',
+  'generateSpec',
+  'startBeanstalk',
+  'openGeneratedSpec',
 ]);
 
 export const PLAN_MESSAGE_COMMANDS = new Set([
@@ -133,6 +141,7 @@ export const OPERATOR_COMMAND_TO_VSCODE_COMMAND = new Map<string, string>([
   ['agingReport', 'kronos.agingReport'],
   ['recoveryCenter', 'kronos.recoveryCenter'],
   ['stateAuditLog', 'kronos.stateAuditLog'],
+  ['specBeanstalk', 'kronos.specBeanstalk'],
 ]);
 
 export const OPERATOR_COMMAND_MESSAGE_COMMANDS = new Set(OPERATOR_COMMAND_TO_VSCODE_COMMAND.keys());

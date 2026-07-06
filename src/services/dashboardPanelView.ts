@@ -91,6 +91,7 @@ export function buildDashboardHtml(input: DashboardPanelInput): string {
     actionButton('humanReviewInbox', 'Human Review'),
     actionButton('evidenceGate', 'Evidence Gate'),
     actionButton('recoveryCenter', 'Recovery'),
+    actionButton('specBeanstalk', 'Spec Beanstalk'),
   ]);
   const cockpitHtml = `<div class="cockpit">
     <div class="metric"><div class="num">${qualityScore.score}</div><div class="lbl">Agent Quality</div></div>
@@ -129,7 +130,7 @@ export function buildDashboardHtml(input: DashboardPanelInput): string {
     </div>
   </div>`;
   const projectCards = Object.entries(projects).map(([name, proj]) => {
-    const healthColor = proj.health === 'green' ? '#4caf50' : proj.health === 'yellow' ? '#ff9800' : proj.health === 'red' ? '#f44336' : '#666';
+    const healthColor = proj.health === 'green' ? 'var(--k-ok)' : proj.health === 'yellow' ? 'var(--k-warn)' : proj.health === 'red' ? 'var(--k-danger)' : 'var(--k-muted)';
     const linkedCount = Object.values(allTickets).filter(t => ticketStringArray(t.projects).includes(name)).length;
     return `<div class="project-card kronos-panel pad">
       <div class="card-header"><span class="health-dot" style="background:${healthColor}"></span> ${escapeHtml(name)}</div>
@@ -158,34 +159,34 @@ export function buildDashboardHtml(input: DashboardPanelInput): string {
 <head>
 <style>
   ${kronosWebviewBaseCss()}
-  .dashboard-shell { max-width: 1320px; }
-  .dashboard-operator-brief { display: grid; grid-template-columns: minmax(280px, 0.9fr) minmax(0, 1.1fr); gap: 16px; padding: 16px; margin: 12px 0 16px; border-left: 4px solid var(--k-accent); }
+  .dashboard-shell { max-width: 1280px; }
+  .dashboard-operator-brief { display: grid; grid-template-columns: minmax(280px, 0.9fr) minmax(0, 1.1fr); gap: 16px; padding: 16px; margin: 12px 0 16px; border-left: 3px solid var(--k-accent); }
   .dashboard-operator-brief.good { border-left-color: var(--k-ok); }
   .dashboard-operator-brief.warn { border-left-color: var(--k-warn); }
   .dashboard-operator-brief.bad { border-left-color: var(--k-danger); }
-  .dashboard-operator-brief.info { border-left-color: #2196f3; }
+  .dashboard-operator-brief.info { border-left-color: var(--k-info); }
   .dashboard-operator-copy h2 { margin: 4px 0 6px; font-size: 19px; line-height: 1.25; }
   .dashboard-operator-copy p { margin: 0; color: var(--k-muted); line-height: 1.45; }
   .dashboard-brief-grid { display: grid; grid-template-columns: repeat(2, minmax(160px, 1fr)); gap: 8px; }
   .dashboard-brief-fact { min-height: 74px; border: 1px solid var(--k-border); border-radius: var(--k-radius-sm); padding: 9px 10px; background: var(--k-surface); }
   .dashboard-brief-fact .fact-label { color: var(--k-muted); font-size: 10px; font-weight: 650; text-transform: uppercase; }
   .dashboard-brief-fact .fact-value { margin-top: 4px; font-size: 12px; line-height: 1.35; overflow-wrap: anywhere; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; margin: 12px 0; }
-  .cockpit { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 10px; margin: 12px 0 18px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; margin: 12px 0; }
+  .cockpit { display: grid; grid-template-columns: repeat(auto-fit, minmax(136px, 1fr)); gap: 10px; margin: 12px 0 18px; }
   .metric, .next-action { border: 1px solid var(--k-border); border-radius: var(--k-radius); padding: 12px; background: var(--k-surface-soft); }
   .metric { min-height: 72px; }
-  .metric .num { font-size: 24px; line-height: 1.1; font-weight: 700; }
-  .metric.good .num { color: #4caf50; }
-  .metric.warn .num { color: #ff9800; }
-  .metric.fail .num, .metric.bad .num { color: #f44336; }
+  .metric .num { font-size: 23px; line-height: 1.1; font-weight: 700; }
+  .metric.good .num, .metric.ok .num { color: var(--k-ok); }
+  .metric.warn .num { color: var(--k-warn); }
+  .metric.fail .num, .metric.bad .num { color: var(--k-danger); }
   .lbl { color: var(--k-muted); font-size: 11px; font-weight: 650; text-transform: uppercase; }
-  .next-action { grid-column: span 2; min-height: 0; font-size: 12px; border-color: color-mix(in srgb, var(--k-accent) 42%, var(--k-border)); }
+  .next-action { order: -1; grid-column: 1 / -1; min-height: 0; font-size: 12px; background: var(--k-surface); border-left: 3px solid var(--k-accent); }
   .next-action strong { display: block; margin: 4px 0; font-size: 14px; line-height: 1.35; }
   .next-meta { margin-top: 6px; color: var(--k-muted); line-height: 1.4; }
   .next-meta strong { display: inline; color: var(--k-fg); font-size: 12px; margin: 0; }
   .next-action-controls { margin-top: 10px; }
   .project-card { transition: border-color 0.15s, background-color 0.15s; }
-  .project-card:hover { border-color: var(--k-accent); background: var(--k-surface-soft); }
+  .project-card:hover { border-color: var(--k-border-strong); background: var(--k-surface-soft); }
   .card-header { font-weight: 650; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
   .card-body { color: var(--k-muted); font-size: 13px; }
   .health-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
@@ -194,7 +195,7 @@ export function buildDashboardHtml(input: DashboardPanelInput): string {
   .section h3 { margin: 0 0 8px; color: var(--k-muted); font-size: 11px; font-weight: 650; letter-spacing: 0; text-transform: uppercase; }
   .brief p { margin: 6px 0 0; }
   .section { margin: 20px 0; }
-  .worklists { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin: 12px 0; }
+  .worklists { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 10px; margin: 12px 0; }
   .lane { border: 1px solid var(--k-border); border-radius: var(--k-radius); padding: 10px 12px; background: var(--k-surface); }
   .lane h3 { margin: 0 0 8px 0; font-size: 13px; font-weight: 650; }
   .lane ul { list-style: none; padding: 0; margin: 0; }
@@ -203,17 +204,17 @@ export function buildDashboardHtml(input: DashboardPanelInput): string {
   .work-item strong { display: block; font-size: 12px; }
   .work-item div { color: var(--k-muted); font-size: 11px; margin-top: 2px; }
   .work-item .inline-actions { margin-top: 7px; }
-  .work-item.critical strong { color: #f44336; }
-  .work-item.warning strong { color: #ff9800; }
-  .work-item.ok strong { color: #4caf50; }
+  .work-item.critical strong { color: var(--k-danger); }
+  .work-item.warning strong { color: var(--k-warn); }
+  .work-item.ok strong { color: var(--k-ok); }
   .lane-empty { color: var(--k-muted); font-size: 12px; }
-  .dashboard-warning { margin: 12px 0; border-color: color-mix(in srgb, #ff9800 42%, var(--k-border)); color: var(--k-fg); }
-  .dashboard-warning strong { display: block; margin-bottom: 4px; color: #ff9800; }
+  .dashboard-warning { margin: 12px 0; border-color: color-mix(in srgb, var(--k-warn) 42%, var(--k-border)); color: var(--k-fg); }
+  .dashboard-warning strong { display: block; margin-bottom: 4px; color: var(--k-warn); }
   .dashboard-warning div { color: var(--k-muted); font-size: 12px; line-height: 1.45; }
   @media (max-width: 820px) {
     .dashboard-operator-brief { grid-template-columns: 1fr; }
     .dashboard-brief-grid { grid-template-columns: 1fr; }
-    .next-action { grid-column: 1; }
+    .next-action { grid-column: 1 / -1; }
   }
 </style>
 </head>

@@ -41,6 +41,8 @@ const CLAUDE_ALLOWED_TOOL_PATTERNS = [
   'Bash(git *)',
   'Bash(mvn *)',
   'Bash(python *)',
+  'Bash(python3 *)',
+  'Bash(py *)',
   'Bash(curl *)',
   'Bash(kill *)',
   'Bash(pkill *)',
@@ -85,6 +87,7 @@ const RUN_CENTER_RUNLESS_MESSAGE_COMMANDS = new Set([
 
 interface RunCenterOptions {
   onAction?: (request: RunCenterActionRequest) => Promise<void> | void;
+  onPanelOpened?: (panel: vscode.WebviewPanel, viewType: string, title: string) => void;
   pollIntervalMs?: number;
   extensionUri?: vscode.Uri | undefined;
   focusRunId?: string | undefined;
@@ -655,6 +658,7 @@ export function openRunCenter(options: RunCenterOptions = {}): void {
     vscode.ViewColumn.One,
     webviewOptions
   );
+  options.onPanelOpened?.(panel, 'kronosRunCenter', 'Kronos Run Center');
   const actionScriptUri = interactive && options.extensionUri
     ? panel.webview.asWebviewUri(vscode.Uri.joinPath(options.extensionUri, 'media', WEBVIEW_ACTION_PANEL_SCRIPT)).toString()
     : undefined;

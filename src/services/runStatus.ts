@@ -75,12 +75,20 @@ export function activeRunSummary(runs: Array<RunStatusLike | unknown>, now = new
   for (const run of runs) {
     const status = runStatus(run);
     if (!isFreshActiveRun(run, now)) { continue; }
-    counts.set(status, (counts.get(status) || 0) + 1);
+    incrementStatusCount(counts, status);
   }
   return ['running', 'preflight', 'paused']
     .filter(status => counts.has(status))
-    .map(status => `${counts.get(status)} ${status}`)
+    .map(status => `${statusCount(counts, status)} ${status}`)
     .join(', ');
+}
+
+function incrementStatusCount(counts: Map<string, number>, status: string): void {
+  counts.set(status, statusCount(counts, status) + 1);
+}
+
+function statusCount(counts: Map<string, number>, status: string): number {
+  return counts.get(status) ?? 0;
 }
 
 function hasTerminalRunSignal(run: RunStatusLike | unknown): boolean {

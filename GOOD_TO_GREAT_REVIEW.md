@@ -14,6 +14,7 @@ Keep this review for the design rationale: Kronos should be a safe, explainable 
 - Safety and recovery: commands are routed through safety gates where risk is known, restricted workspace behavior is explicit, state backups/audit entries exist, worktree cleanup is reviewed through recovery paths, and risky items surface in Recovery Center or Human Review Inbox.
 - Planning: Queue Planner, Backlog Triage, Next Best Action, project/release batch plans, Collision Report, Plan Next 2 Hours, Overnight Candidates, Aging Report, Trend Metrics, and Agent Quality views are present.
 - Evidence: ticket detail includes timeline and evidence sections; evidence notes/checks, gate evaluation, export, handoff, and safety-gated publish surfaces exist.
+- Spec-driven Java work: Spec Beanstalk converts `.xlsx` API workbooks into Markdown plus JSON trace artifacts inside the Java repo, preserving formatting, formulas, comments, merges, hidden rows/columns, and validations for Claude implementation runs.
 - Integrations and health: Kronos Doctor, Integration Manifest, and Profile Manager expose provider/script/auth/config state instead of letting missing dependencies break operator panels silently.
 - Prompt governance: Prompt Manager, Prompt Smoke Tests, Prompt History, manifest checks, template validation, and prompt repair flows exist.
 - State and tests: state/queue parsing has runtime validation, writes use state-store helpers, `npm test` covers the core regression harness, and `npm run feedback:ready` packages and checks the human-feedback build.
@@ -25,7 +26,7 @@ Keep this review for the design rationale: Kronos should be a safe, explainable 
 
 Historical concern: session state was too shallow to distinguish "agent process ended" from "work is ready."
 
-Current status: Run Center and persisted run/session records now provide the main lifecycle surface. Operators can inspect run state, logs/prompts, completion notifications, recovery guidance, and retry/resume/archive/cancel actions.
+Current status: Run Center and persisted run/session records now provide the main lifecycle surface. Operators can inspect run state, logs/prompts, completion notifications, recovery guidance, and retry/resume/archive/cancel actions. Recovery Center surfaces failed, needs-human, cancelled, stale active, and stale paused runs so long-lived automation states stay reviewable.
 
 Remaining gap: validate stale-run recovery after crashes and real Windows extension-host interruptions. A run can still need operator cleanup if the extension exits before final status reconciliation.
 
@@ -67,7 +68,7 @@ Historical concern: Kronos had lists, but not a cockpit.
 
 Current status: Dashboard, Jira Board, Ticket Detail, Run Center, Recovery Center, Human Review Inbox, planning panels, quality reports, prompt panels, and integration health panels now form the operator cockpit.
 
-Remaining gap: the first real human-feedback pass is still required. The main question is not whether panels open, but whether an operator can quickly tell what is next, what is blocked, what is unsafe, and what evidence exists.
+Remaining gap: the first real human-feedback pass is still required. The main question is not whether panels open, but whether an operator can quickly tell what is next, what is blocked, what is unsafe, what evidence exists, and whether a spec-to-code loop is traceable enough to trust.
 
 ### 7. Prompt Governance
 
@@ -89,9 +90,9 @@ Remaining gap: concurrent writes between the extension host and external scripts
 
 Historical concern: there was no clear test strategy.
 
-Current status: `npm test` now runs manifest, security, prompt, compile, and unit/regression checks. `npm run feedback:ready` wraps validation and packaging for human review.
+Current status: `npm test` now runs manifest, security, prompt, compile, unit/regression checks, and DOM-level packaged webview checks. `npm run feedback:ready` wraps validation and packaging for human review, and `npm run feedback:smoke` opens the main cockpit panels in a VS Code Extension Development Host against safe fixture state.
 
-Remaining gap: true end-to-end VS Code extension-host coverage and real-provider smoke tests remain separate from the Node-level harness.
+Remaining gap: real-provider smoke tests remain separate from the Node-level harness and safe fixture smoke path.
 
 ### 10. Configuration And Onboarding
 

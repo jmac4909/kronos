@@ -114,6 +114,7 @@ import {
   PROMPT_SMOKE_OPERATOR_COMMANDS,
   RECOVERY_MESSAGE_COMMANDS,
   SESSION_STATS_OPERATOR_COMMANDS,
+  SPEC_BEANSTALK_MESSAGE_COMMANDS,
   STATE_AUDIT_OPERATOR_COMMANDS,
   TICKET_DETAIL_MESSAGE_COMMANDS,
   TREND_METRICS_OPERATOR_COMMANDS,
@@ -167,6 +168,8 @@ import { buildHumanReviewInboxHtml } from './services/humanReviewPanelView';
 import { buildEvidenceGateHtml, buildEvidenceHandoffHtml, buildEvidencePublishHtml } from './services/evidencePanelView';
 import { buildBacklogTriageHtml, buildCollisionReportHtml, buildProjectBatchPlanHtml, buildQueuePlanModeHtml, buildQueuePlannerHtml, buildReleaseBatchPlanHtml } from './services/queuePlannerPanelView';
 import { buildAgentQualityScoreHtml, buildDoctorHtml, buildIntegrationManifestHtml, buildProfilesHtml, buildSessionStatsHtml, buildTrendMetricsHtml } from './services/operationsReportPanelView';
+import { buildSpecBeanstalkHtml } from './services/specBeanstalkPanelView';
+import { DEFAULT_SPEC_BEANSTALK_OUTPUT_DIR, buildSpecBeanstalkPrompt, inspectSpecBeanstalkProject, runSpecBeanstalkGeneration, type SpecBeanstalkProjectStatus, type SpecBeanstalkSummary } from './services/specBeanstalk';
 
 let statusBarItem: vscode.StatusBarItem;
 interface BadgeTarget {
@@ -190,6 +193,7 @@ const reviewPollFailureNotifications = new Map<string, number>();
 const reviewMergeRequestNotifications = new Set<string>();
 const reviewTerminalMergeRequestActions = new Set<string>();
 const OPTIONAL_SCRIPT_PANEL_WARNING = 'Kronos integration scripts are not installed. Run Kronos: Doctor for setup details.';
+let lastSpecBeanstalkResult: SpecBeanstalkSummary | undefined;
 
 function panelIntegrationErrorMessage(error: unknown, fallback: string): string {
   return isKronosScriptMissingError(error) ? OPTIONAL_SCRIPT_PANEL_WARNING : unknownErrorMessage(error, fallback);
@@ -447,6 +451,209 @@ async function openRunArtifactFileIfExists(filePath: string | undefined, missing
     return;
   }
   await openTextFileIfExists(resolved.filePath, missingMessage);
+}
+
+function specBeanstalkAnalyzerPath(extensionUri: vscode.Uri): string {
+  return vscode.Uri.joinPath(extensionUri, 'resources', 'spec-beanstalk', 'xlsx_to_markdown.py').fsPath;
+}
+
+function specBeanstalkProjectStatuses(state: KronosState): SpecBeanstalkProjectStatus[] {
+  return Object.entries(state.state?.projects || {})
+    .flatMap(([projectName, project]) => {
+      const projectPath = project.path;
+      return projectPath ? [inspectSpecBeanstalkProject(projectName, projectPath)] : [];
+    })
+    .sort((a, b) => a.projectName.localeCompare(b.projectName));
+}
+
+async function pickSpecBeanstalkProject(state: KronosState, placeHolder: string): Promise<{ projectName: string; projectPath: string } | undefined> {
+  const projectName = await pickProjectName(state, placeHolder);
+  if (!projectName) { return undefined; }
+  const projectPath = getProjectPath(state.state?.projects, projectName);
+  if (!projectPath) {
+    vscode.window.showWarningMessage(`${projectName} has no project path recorded.`);
+    return undefined;
+  }
+  return { projectName, projectPath };
+}
+
+async function generateSpecBeanstalkArtifacts(
+  state: KronosState,
+  extensionUri: vscode.Uri,
+  selectedProject?: { projectName: string; projectPath: string },
+): Promise<SpecBeanstalkSummary | undefined> {
+  const target = selectedProject || await pickSpecBeanstalkProject(state, 'Generate Excel API spec into which Java repo?');
+  if (!target) { return undefined; }
+  const workbook = await vscode.window.showOpenDialog({
+    canSelectFiles: true,
+    canSelectFolders: false,
+    canSelectMany: false,
+    filters: { 'Excel workbooks': ['xlsx'] },
+    openLabel: 'Use Workbook',
+    title: 'Select .xlsx API spec workbook',
+  });
+  const workbookPath = workbook?.[0]?.fsPath;
+  if (!workbookPath) { return undefined; }
+  const outputDir = await vscode.window.showInputBox({
+    prompt: 'Output folder inside the Java repo',
+    value: DEFAULT_SPEC_BEANSTALK_OUTPUT_DIR.replace(/\\/g, '/'),
+    placeHolder: 'docs/api-spec',
+  });
+  if (outputDir === undefined) { return undefined; }
+  const canGenerate = await confirmSafetyGate({
+    operationId: 'kronos.specBeanstalkGenerate',
+    title: 'Generate Spec Beanstalk artifacts',
+    target: `${target.projectName} / ${outputDir || DEFAULT_SPEC_BEANSTALK_OUTPUT_DIR}`,
+    risks: ['repo-write'],
+    changes: [
+      `Read .xlsx workbook: ${path.basename(workbookPath)}`,
+      `Write generated Markdown, sheet files, and JSON trace under ${outputDir || DEFAULT_SPEC_BEANSTALK_OUTPUT_DIR}.`,
+      'Preserve workbook formatting metadata as source evidence; do not modify Java code.',
+    ],
+    confirmationLabel: 'Generate',
+  });
+  if (!canGenerate) { return undefined; }
+
+  let generated: SpecBeanstalkSummary | undefined;
+  await runCommandProgress(
+    { location: vscode.ProgressLocation.Notification, title: 'Kronos: Generating Spec Beanstalk artifacts...' },
+    async progress => {
+      progress.report({ message: 'Parsing workbook with Python analyzer' });
+      const generationOptions = {
+        projectPath: target.projectPath,
+        workbookPath,
+        outputDir: outputDir || DEFAULT_SPEC_BEANSTALK_OUTPUT_DIR,
+      };
+      const configuredPython = vscode.workspace.getConfiguration('kronos').get<string>('pythonPath')?.trim();
+      generated = runSpecBeanstalkGeneration(
+        specBeanstalkAnalyzerPath(extensionUri),
+        configuredPython ? { ...generationOptions, pythonPath: configuredPython } : generationOptions,
+      );
+    },
+    'Failed to generate Spec Beanstalk artifacts.'
+  );
+  if (!generated) { return undefined; }
+  lastSpecBeanstalkResult = generated;
+  const action = await vscode.window.showInformationMessage(
+    `Generated Spec Beanstalk artifacts: ${generated.sheetCount} sheets, ${generated.cellCount} cells, ${generated.formattedCellCount} formatted cells.`,
+    'Open Spec',
+    'Start Beanstalk'
+  );
+  if (action === 'Open Spec') {
+    await openTextFileIfExists(generated.absoluteIndexPath, 'Generated Spec Beanstalk index not found.');
+  } else if (action === 'Start Beanstalk') {
+    await startSpecBeanstalkRun(state, extensionUri, { projectName: target.projectName, projectPath: target.projectPath, summary: generated });
+  }
+  return generated;
+}
+
+async function startSpecBeanstalkRun(
+  state: KronosState,
+  extensionUri: vscode.Uri,
+  selected?: { projectName: string; projectPath: string; summary?: SpecBeanstalkSummary },
+): Promise<void> {
+  const target = selected || await pickSpecBeanstalkProject(state, 'Start / continue Spec Beanstalk in which Java repo?');
+  if (!target) { return; }
+  let summary = selected?.summary || inspectSpecBeanstalkProject(target.projectName, target.projectPath).summary;
+  if (!summary) {
+    const action = await vscode.window.showWarningMessage(
+      `${target.projectName} does not have generated Spec Beanstalk artifacts under ${DEFAULT_SPEC_BEANSTALK_OUTPUT_DIR}.`,
+      'Generate Spec',
+      'Cancel'
+    );
+    if (action !== 'Generate Spec') { return; }
+    summary = await generateSpecBeanstalkArtifacts(state, extensionUri, target);
+    if (!summary) { return; }
+  }
+
+  const scope = await vscode.window.showInputBox({
+    prompt: 'What should Claude implement or continue from the generated spec?',
+    placeHolder: 'Leave blank for the next coherent API implementation slice',
+  });
+  if (scope === undefined) { return; }
+  const prompt = buildSpecBeanstalkPrompt(summary, scope);
+  const launched = await startClaudeDispatch(target.projectPath, 'spec-beanstalk', undefined, {
+    customPrompt: prompt,
+    promptMetadata: {
+      name: 'spec-beanstalk',
+      source: 'custom',
+      path: summary.indexPath,
+      variables: ['SPEC_INDEX', 'SPEC_TRACE', 'SOURCE_WORKBOOK'],
+      providedVariables: [summary.indexPath, summary.tracePath, summary.sourceWorkbook],
+    },
+    projectNameOverride: target.projectName,
+    workspaceCwd: target.projectPath,
+    onComplete: refreshAfterDispatch(state, target.projectName),
+  });
+  if (launched) {
+    vscode.window.showInformationMessage(`Started Spec Beanstalk for ${target.projectName}.`);
+  }
+}
+
+async function openLastOrSelectedSpecBeanstalkIndex(state: KronosState): Promise<void> {
+  if (lastSpecBeanstalkResult?.absoluteIndexPath && fs.existsSync(lastSpecBeanstalkResult.absoluteIndexPath)) {
+    await openTextFileIfExists(lastSpecBeanstalkResult.absoluteIndexPath, 'Generated Spec Beanstalk index not found.');
+    return;
+  }
+  const candidates = specBeanstalkProjectStatuses(state).filter(project => project.summary?.absoluteIndexPath);
+  if (candidates.length === 0) {
+    vscode.window.showWarningMessage('No generated Spec Beanstalk index found.');
+    return;
+  }
+  const picks: Array<vscode.QuickPickItem & { project: SpecBeanstalkProjectStatus }> = candidates.map(project => {
+    const item: vscode.QuickPickItem & { project: SpecBeanstalkProjectStatus } = { label: project.projectName, project };
+    if (project.summary?.sourceWorkbook) { item.description = project.summary.sourceWorkbook; }
+    if (project.summary?.indexPath) { item.detail = project.summary.indexPath; }
+    return item;
+  });
+  const picked = candidates.length === 1
+    ? candidates[0]
+    : await vscode.window.showQuickPick(picks, { placeHolder: 'Open which Spec Beanstalk index?' }).then(item => item?.project);
+  if (picked?.summary?.absoluteIndexPath) {
+    await openTextFileIfExists(picked.summary.absoluteIndexPath, 'Generated Spec Beanstalk index not found.');
+  }
+}
+
+function openSpecBeanstalkPanel(state: KronosState, extensionUri: vscode.Uri): void {
+  const { panel, nonce, actionScriptUri } = createKronosActionWebviewPanel('kronosSpecBeanstalk', 'Kronos Spec Beanstalk', extensionUri);
+  const logReady = createWebviewReadyMonitor(panel, 'Kronos Spec Beanstalk');
+  const render = () => {
+    logReady.arm();
+    panel.webview.html = withWebviewCsp(buildSpecBeanstalkHtml({
+      projects: specBeanstalkProjectStatuses(state),
+      lastResult: lastSpecBeanstalkResult,
+      nonce,
+      actionScriptUri,
+    }), webviewScriptCspOptions(panel.webview.cspSource, nonce));
+  };
+  panel.webview.onDidReceiveMessage(async msg => {
+    if (logReady(msg)) { return; }
+    const request = normalizeActionPanelMessage(msg, SPEC_BEANSTALK_MESSAGE_COMMANDS);
+    if (!request) {
+      vscode.window.showWarningMessage('Ignored invalid Spec Beanstalk action.');
+      return;
+    }
+    await runWebviewPanelAction(async () => {
+      if (request.command === 'refreshPanel') {
+        render();
+        return;
+      }
+      if (request.command === 'generateSpec') {
+        await generateSpecBeanstalkArtifacts(state, extensionUri);
+        render();
+        return;
+      }
+      if (request.command === 'startBeanstalk') {
+        await startSpecBeanstalkRun(state, extensionUri);
+        render();
+        return;
+      }
+      if (request.command === 'openGeneratedSpec') {
+        await openLastOrSelectedSpecBeanstalkIndex(state);
+      }
+    }, 'Spec Beanstalk action failed.');
+  });
+  render();
 }
 
 function warnIfRunStillActive(run: KronosRun, action: 'retry' | 'resume'): boolean {
@@ -744,6 +951,53 @@ interface KronosActionWebviewPanel {
   actionScriptUri: string;
 }
 
+interface SmokeOpenedPanel {
+  viewType: string;
+  title: string;
+  html: string;
+}
+
+interface SmokePanelRecord {
+  viewType: string;
+  title: string;
+  panel: vscode.WebviewPanel;
+}
+
+interface KronosFeedbackSmokeApi {
+  openedPanels: () => SmokeOpenedPanel[];
+}
+
+const smokeOpenedPanels: SmokePanelRecord[] = [];
+
+function isFeedbackSmokeRun(): boolean {
+  return process.env['KRONOS_FEEDBACK_SMOKE'] === '1';
+}
+
+function recordSmokePanel(viewType: string, title: string, panel: vscode.WebviewPanel): void {
+  if (!isFeedbackSmokeRun()) { return; }
+  const record = { viewType, title, panel };
+  smokeOpenedPanels.push(record);
+  panel.onDidDispose(() => {
+    const index = smokeOpenedPanels.indexOf(record);
+    if (index >= 0) {
+      smokeOpenedPanels.splice(index, 1);
+    }
+  });
+}
+
+function feedbackSmokeApi(): { __kronosSmoke?: KronosFeedbackSmokeApi } {
+  if (!isFeedbackSmokeRun()) { return {}; }
+  return {
+    __kronosSmoke: {
+      openedPanels: () => smokeOpenedPanels.map(record => ({
+        viewType: record.viewType,
+        title: record.title,
+        html: record.panel.webview.html,
+      })),
+    },
+  };
+}
+
 function createKronosActionWebviewPanel(viewType: string, title: string, extensionUri?: vscode.Uri): KronosActionWebviewPanel {
   const panel = vscode.window.createWebviewPanel(
     viewType,
@@ -751,6 +1005,7 @@ function createKronosActionWebviewPanel(viewType: string, title: string, extensi
     vscode.ViewColumn.One,
     kronosScriptableWebviewOptions(extensionUri)
   );
+  recordSmokePanel(viewType, title, panel);
   const nonce = createWebviewNonce();
   const actionScriptUri = kronosActionPanelScriptUri(panel, extensionUri);
   return { panel, nonce, actionScriptUri };
@@ -774,6 +1029,7 @@ function openInteractiveRunCenter(state: KronosState, extensionUri?: vscode.Uri,
   openRunCenter({
     extensionUri,
     focusRunId,
+    onPanelOpened: (panel, viewType, title) => recordSmokePanel(viewType, title, panel),
     onAction: request => executeRunCenterAction(state, request),
   });
 }
@@ -991,6 +1247,7 @@ function loadEnvFile(): void {
 }
 
 export function activate(context: vscode.ExtensionContext) {
+  smokeOpenedPanels.splice(0, smokeOpenedPanels.length);
   loadEnvFile();
   const state = new KronosState();
 
@@ -1566,6 +1823,7 @@ export function activate(context: vscode.ExtensionContext) {
         'kronosJiraBoard', 'Kronos: Jira Board',
         vscode.ViewColumn.One, kronosScriptableWebviewOptions(context.extensionUri)
       );
+      recordSmokePanel('kronosJiraBoard', 'Kronos: Jira Board', panel);
       const nonce = createWebviewNonce();
       const logReady = createWebviewReadyMonitor(panel, 'Kronos Jira Board');
       const renderBoard = () => {
@@ -2268,6 +2526,18 @@ export function activate(context: vscode.ExtensionContext) {
       } catch (e: unknown) {
         vscode.window.showErrorMessage(unknownErrorMessage(e, 'Failed to generate dashboard.'));
       }
+    }),
+
+    vscode.commands.registerCommand('kronos.specBeanstalk', async () => {
+      openSpecBeanstalkPanel(state, context.extensionUri);
+    }),
+
+    vscode.commands.registerCommand('kronos.specBeanstalkGenerate', async () => {
+      await generateSpecBeanstalkArtifacts(state, context.extensionUri);
+    }),
+
+    vscode.commands.registerCommand('kronos.specBeanstalkStart', async () => {
+      await startSpecBeanstalkRun(state, context.extensionUri);
     }),
 
     vscode.commands.registerCommand('kronos.queueMoveUp', async (treeItem: unknown) => {
@@ -3232,6 +3502,8 @@ export function activate(context: vscode.ExtensionContext) {
       state.dispose();
     },
   });
+
+  return feedbackSmokeApi();
 }
 
 async function runSetupWizard(): Promise<void> {
@@ -4893,6 +5165,8 @@ async function executeDashboardAction(state: KronosState, request: ActionPanelMe
     }
   } else if (command === 'recoveryCenter') {
     await openRecoveryCenter(state, extensionUri, runId || undefined);
+  } else if (command === 'specBeanstalk') {
+    await vscode.commands.executeCommand('kronos.specBeanstalk');
   } else if (command === 'startTicket' && ticketKey) {
     await startTicketFromActionPanel(state, ticketKey);
   } else if ((command === 'viewTicket' || command === 'addEvidence' || command === 'addEvidenceCheck') && ticketKey) {

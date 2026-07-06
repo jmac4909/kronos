@@ -4531,6 +4531,9 @@ for (const marker of [
   'doctorCheckNeedsAttention(check)',
   'doctorCheckAttentionId(check)',
   'doctorCheckAttentionSeverity(check)',
+  'incrementTicketCount(counts, item.ticket)',
+  'function incrementTicketCount',
+  'function ticketCount',
   'const runs = runLikeRecordsFromUnknown(input.runs)',
   "import { recordString } from './records'",
 ]) {
@@ -4550,6 +4553,9 @@ for (const forbidden of [
 }
 if (humanReviewInbox.includes("check.status === 'fail' ? 'critical' : 'warning'")) {
   fail('Human review inbox must use shared Doctor check severity helper.');
+}
+if (humanReviewInbox.includes('counts.set(item.ticket, (counts.get(item.ticket) || 0) + 1)')) {
+  fail('Human review inbox should count duplicate queue tickets through incrementTicketCount.');
 }
 
 for (const marker of [
@@ -4644,6 +4650,9 @@ for (const marker of [
   "hasDateLikeValue(run['endedAt'])",
   "label.startsWith('Session exited with code')",
   'export function activeRunSummary',
+  'incrementStatusCount(counts, status)',
+  'function incrementStatusCount',
+  'function statusCount',
   "['running', 'preflight', 'paused']",
 ]) {
   if (!runStatus.includes(marker)) {
@@ -4664,6 +4673,9 @@ for (const staleMarker of [
   if (runStatus.includes(staleMarker)) {
     fail(`Run status internals should not be exported: ${staleMarker}`);
   }
+}
+if (runStatus.includes('counts.set(status, (counts.get(status) || 0) + 1)')) {
+  fail('Run status active summary should count statuses through incrementStatusCount.');
 }
 
 for (const [name, source, marker] of [

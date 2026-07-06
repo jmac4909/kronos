@@ -34,16 +34,24 @@ export function kronosWebviewBaseCss(): string {
     --k-fg: var(--vscode-foreground);
     --k-muted: var(--vscode-descriptionForeground);
     --k-border: var(--vscode-panel-border);
+    --k-border-strong: color-mix(in srgb, var(--k-border) 78%, var(--k-fg));
     --k-surface: var(--vscode-sideBar-background, var(--vscode-editorWidget-background, var(--vscode-editor-background)));
     --k-surface-soft: var(--vscode-textBlockQuote-background, var(--vscode-editorWidget-background, rgba(127,127,127,0.08)));
+    --k-surface-raised: var(--vscode-editorWidget-background, var(--k-surface));
     --k-hover: var(--vscode-list-hoverBackground, rgba(127,127,127,0.12));
     --k-accent: var(--vscode-textLink-foreground);
     --k-accent-bg: color-mix(in srgb, var(--k-accent) 14%, transparent);
     --k-ok: #4caf50;
+    --k-ok-bg: rgba(76,175,80,0.16);
     --k-warn: #ff9800;
+    --k-warn-bg: rgba(255,152,0,0.16);
     --k-danger: #f44336;
+    --k-danger-bg: rgba(244,67,54,0.16);
+    --k-info: #2196f3;
+    --k-info-bg: rgba(33,150,243,0.16);
     --k-radius: 8px;
     --k-radius-sm: 5px;
+    --k-shadow: 0 8px 28px rgba(0,0,0,0.14);
   }
   * { box-sizing: border-box; }
   html, body { min-height: 100%; }
@@ -53,44 +61,58 @@ export function kronosWebviewBaseCss(): string {
   }
   body {
     margin: 0;
-    padding: 20px;
+    padding: 22px;
     color: var(--k-fg);
     background: var(--k-bg);
     font-family: var(--vscode-font-family);
     font-size: 13px;
-    line-height: 1.45;
+    line-height: 1.5;
   }
   .kronos-shell {
     width: 100%;
     max-width: 1440px;
     margin: 0 auto;
   }
+  .operator-shell {
+    max-width: 1280px;
+  }
   .kronos-header {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
     gap: 16px;
-    padding-bottom: 14px;
+    padding-bottom: 16px;
     margin-bottom: 18px;
     border-bottom: 1px solid var(--k-border);
   }
   .kronos-title {
     margin: 0;
-    font-size: 20px;
+    font-size: 21px;
     font-weight: 650;
     line-height: 1.2;
     letter-spacing: 0;
   }
   .kronos-subtitle {
-    margin-top: 5px;
+    margin-top: 6px;
     color: var(--k-muted);
     font-size: 12px;
+    line-height: 1.45;
   }
-  .kronos-section {
+  .kronos-section,
+  .section {
     margin: 20px 0;
   }
   .kronos-section-title {
     margin: 0 0 10px 0;
+    color: var(--k-muted);
+    font-size: 11px;
+    font-weight: 650;
+    letter-spacing: 0;
+    text-transform: uppercase;
+  }
+  .section h2,
+  .section h3 {
+    margin: 0 0 10px;
     color: var(--k-muted);
     font-size: 11px;
     font-weight: 650;
@@ -111,6 +133,10 @@ export function kronosWebviewBaseCss(): string {
     background: var(--k-surface);
     padding: 12px;
   }
+  .kronos-panel:hover,
+  .kronos-card:hover {
+    border-color: var(--k-border-strong);
+  }
   .kronos-soft {
     background: var(--k-surface-soft);
   }
@@ -123,8 +149,12 @@ export function kronosWebviewBaseCss(): string {
     display: grid;
     gap: 12px;
   }
-  .kronos-table-wrap {
+  .kronos-table-wrap,
+  .table-wrap {
     overflow: auto;
+    position: relative;
+    border-radius: var(--k-radius);
+    scrollbar-gutter: stable;
   }
   .kronos-stat-grid {
     display: grid;
@@ -139,7 +169,19 @@ export function kronosWebviewBaseCss(): string {
     border-radius: var(--k-radius);
     background: var(--k-surface-soft);
   }
+  .summary-card {
+    min-height: 72px;
+    padding: 12px;
+    border: 1px solid var(--k-border);
+    border-radius: var(--k-radius);
+    background: var(--k-surface-soft);
+  }
   .kronos-stat-value {
+    font-size: 24px;
+    line-height: 1.1;
+    font-weight: 700;
+  }
+  .summary-card .num {
     font-size: 24px;
     line-height: 1.1;
     font-weight: 700;
@@ -151,17 +193,43 @@ export function kronosWebviewBaseCss(): string {
     font-weight: 650;
     text-transform: uppercase;
   }
+  .summary-card .lbl {
+    margin-top: 4px;
+    color: var(--k-muted);
+    font-size: 11px;
+    font-weight: 650;
+    text-transform: uppercase;
+  }
+  .summary-card.good .num,
+  .summary-card.pass .num,
+  .summary-card.ok .num { color: var(--k-ok); }
+  .summary-card.info .num { color: var(--k-info); }
+  .summary-card.warn .num,
+  .summary-card.warning .num,
+  .summary-card.medium .num { color: var(--k-warn); }
+  .summary-card.bad .num,
+  .summary-card.fail .num,
+  .summary-card.error .num,
+  .summary-card.critical .num { color: var(--k-danger); }
   .kronos-detail {
     color: var(--k-muted);
     white-space: pre-wrap;
     word-break: break-word;
   }
-  .kronos-empty {
+  .detail {
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .kronos-empty,
+  div.empty {
     border: 1px dashed var(--k-border);
     border-radius: var(--k-radius);
     padding: 18px;
     color: var(--k-muted);
     background: var(--k-surface-soft);
+  }
+  .empty {
+    color: var(--k-muted);
   }
   .kronos-empty.compact {
     padding: 10px 12px;
@@ -182,7 +250,8 @@ export function kronosWebviewBaseCss(): string {
   }
   .kronos-table {
     width: 100%;
-    border-collapse: collapse;
+    border-collapse: separate;
+    border-spacing: 0;
     font-size: 12px;
   }
   .kronos-table th,
@@ -190,7 +259,7 @@ export function kronosWebviewBaseCss(): string {
     padding: 10px 12px;
     text-align: left;
     vertical-align: top;
-    border-bottom: 1px solid var(--k-border);
+    border-bottom: 1px solid color-mix(in srgb, var(--k-border) 82%, transparent);
     word-break: break-word;
   }
   .kronos-table th {
@@ -198,7 +267,7 @@ export function kronosWebviewBaseCss(): string {
     top: 0;
     z-index: 1;
     color: var(--k-muted);
-    background: var(--k-surface);
+    background: var(--k-surface-raised);
     font-size: 10px;
     font-weight: 650;
     letter-spacing: 0;
@@ -208,7 +277,8 @@ export function kronosWebviewBaseCss(): string {
     border-bottom: none;
   }
   .kronos-table tr:hover td { background: var(--k-hover); }
-  .kronos-pill {
+  .kronos-pill,
+  .pill {
     display: inline-flex;
     align-items: center;
     min-height: 20px;
@@ -224,25 +294,50 @@ export function kronosWebviewBaseCss(): string {
   .kronos-pill.good,
   .kronos-pill.ok,
   .kronos-pill.info,
-  .kronos-pill.low {
+  .kronos-pill.low,
+  .pill.pass,
+  .pill.good,
+  .pill.ok,
+  .pill.info,
+  .pill.low {
     color: var(--k-ok);
-    background: rgba(76,175,80,0.16);
+    background: var(--k-ok-bg);
   }
   .kronos-pill.warn,
   .kronos-pill.warning,
   .kronos-pill.medium,
-  .kronos-pill.neutral {
+  .kronos-pill.neutral,
+  .pill.warn,
+  .pill.warning,
+  .pill.medium,
+  .pill.neutral,
+  .pill.changed {
     color: var(--k-warn);
-    background: rgba(255,152,0,0.16);
+    background: var(--k-warn-bg);
   }
   .kronos-pill.fail,
   .kronos-pill.bad,
   .kronos-pill.error,
   .kronos-pill.critical,
   .kronos-pill.high,
-  .kronos-pill.blocker {
+  .kronos-pill.blocker,
+  .pill.fail,
+  .pill.bad,
+  .pill.error,
+  .pill.critical,
+  .pill.high,
+  .pill.blocker,
+  .pill.removed {
     color: var(--k-danger);
-    background: rgba(244,67,54,0.16);
+    background: var(--k-danger-bg);
+  }
+  .pill.added {
+    color: var(--k-ok);
+    background: var(--k-ok-bg);
+  }
+  .pill.unchanged {
+    color: var(--k-muted);
+    background: rgba(128,128,128,0.16);
   }
   .kronos-button,
   button.kronos-button {
@@ -250,8 +345,8 @@ export function kronosWebviewBaseCss(): string {
     align-items: center;
     justify-content: center;
     gap: 6px;
-    min-height: 26px;
-    padding: 4px 10px;
+    min-height: 28px;
+    padding: 5px 10px;
     border: 1px solid var(--k-border);
     border-radius: var(--k-radius-sm);
     color: var(--k-fg);
@@ -273,6 +368,7 @@ export function kronosWebviewBaseCss(): string {
   .kronos-button:hover,
   button.kronos-button:hover {
     background: var(--k-hover);
+    border-color: var(--k-border-strong);
     text-decoration: none;
   }
   .kronos-button.primary,
@@ -316,6 +412,147 @@ export function kronosWebviewBaseCss(): string {
   .kronos-muted {
     color: var(--k-muted);
   }
+  .muted,
+  .subtitle {
+    color: var(--k-muted);
+  }
+  .subtitle {
+    margin-bottom: 16px;
+    line-height: 1.45;
+  }
+  .operator-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+    gap: 10px;
+    margin: 12px 0 18px;
+  }
+  .operator-section {
+    margin: 20px 0;
+  }
+  .operator-section h2,
+  .operator-section h3 {
+    margin: 0 0 10px;
+    color: var(--k-muted);
+    font-size: 11px;
+    font-weight: 650;
+    letter-spacing: 0;
+    text-transform: uppercase;
+  }
+  .operator-card {
+    border: 1px solid var(--k-border);
+    border-radius: var(--k-radius);
+    padding: 12px;
+    background: var(--k-surface);
+  }
+  .operator-card-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 8px;
+  }
+  .operator-card-title {
+    font-size: 14px;
+    font-weight: 650;
+    line-height: 1.3;
+  }
+  .operator-card-meta {
+    color: var(--k-muted);
+    font-size: 11px;
+  }
+  .operator-note {
+    border: 1px solid var(--k-border);
+    border-left: 3px solid var(--k-accent);
+    padding: 10px 12px;
+    border-radius: var(--k-radius);
+    background: var(--k-surface-soft);
+  }
+  .decision-brief {
+    margin: 12px 0 16px;
+  }
+  .decision-brief strong {
+    display: block;
+    font-size: 15px;
+    margin-bottom: 4px;
+  }
+  .decision-brief.critical,
+  .decision-brief.fail,
+  .decision-brief.bad { border-left-color: var(--k-danger); }
+  .decision-brief.warning,
+  .decision-brief.warn { border-left-color: var(--k-warn); }
+  .decision-brief.info { border-left-color: var(--k-info); }
+  .decision-brief.pass,
+  .decision-brief.good { border-left-color: var(--k-ok); }
+  .operator-hero {
+    border: 1px solid var(--k-border);
+    border-left: 3px solid var(--k-accent);
+    border-radius: var(--k-radius);
+    padding: 14px 16px;
+    background: var(--k-surface-soft);
+  }
+  .operator-hero .score {
+    font-size: 34px;
+    line-height: 1;
+    font-weight: 750;
+  }
+  .operator-hero .grade {
+    color: var(--k-muted);
+    font-size: 18px;
+    margin-left: 8px;
+  }
+  .action-cell {
+    min-width: 150px;
+    position: sticky;
+    right: 0;
+    z-index: 1;
+    background: var(--k-surface);
+    box-shadow: -1px 0 0 var(--k-border);
+  }
+  th.action-cell {
+    z-index: 2;
+    background: var(--k-surface-raised);
+  }
+  .inline-actions {
+    gap: 6px;
+    align-items: flex-start;
+  }
+  .inline-actions .kronos-button {
+    min-height: 24px;
+    padding: 3px 8px;
+    font-size: 10px;
+  }
+  .operator-command-row {
+    margin: 12px 0 18px;
+    gap: 8px;
+    align-items: flex-start;
+  }
+  .operator-command-row .kronos-button {
+    min-height: 28px;
+  }
+  .path {
+    color: var(--k-muted);
+    font-size: 12px;
+    margin-bottom: 12px;
+    word-break: break-all;
+  }
+  .message {
+    padding: 9px 10px;
+    margin: 6px 0;
+    border: 1px solid var(--k-border);
+    border-left: 3px solid var(--k-border);
+    border-radius: var(--k-radius-sm);
+    background: var(--k-surface-soft);
+    font-size: 12px;
+  }
+  .message.pass { border-left-color: var(--k-ok); }
+  .message.warn { border-left-color: var(--k-warn); }
+  .message.fail { border-left-color: var(--k-danger); }
+  .hash-detail {
+    display: inline-block;
+    margin-top: 3px;
+    color: var(--k-muted);
+    word-break: break-word;
+  }
   code {
     padding: 1px 4px;
     border-radius: 4px;
@@ -323,6 +560,21 @@ export function kronosWebviewBaseCss(): string {
     font-family: var(--vscode-editor-font-family, monospace);
     font-size: 12px;
   }
+  pre {
+    white-space: pre-wrap;
+    word-break: break-word;
+    background: var(--k-surface-soft);
+    border: 1px solid var(--k-border);
+    padding: 12px;
+    border-radius: var(--k-radius);
+    font-size: 12px;
+  }
+  a {
+    color: var(--k-accent);
+    text-decoration: none;
+  }
+  a:hover { text-decoration: underline; }
+  li { margin: 4px 0; }
   @media (max-width: 760px) {
     body { padding: 14px; }
     .kronos-header {
@@ -334,6 +586,9 @@ export function kronosWebviewBaseCss(): string {
     }
     .kronos-grid {
       grid-template-columns: 1fr;
+    }
+    .operator-summary {
+      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
     }
     .kronos-table {
       min-width: 760px;

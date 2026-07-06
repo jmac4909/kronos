@@ -33,9 +33,9 @@ export function buildHumanReviewInboxHtml(inbox: HumanReviewInbox, options: Huma
   ${actions}
   ${operatorDecisionBrief({ tone: brief.severity, headline: brief.headline, detail: brief.detail, nextStep: brief.nextStep })}
   <div class="operator-summary">
-    <div class="summary-card"><div class="num">${inbox.summary.critical}</div><div class="lbl">Critical</div></div>
-    <div class="summary-card"><div class="num">${inbox.summary.warning}</div><div class="lbl">Warnings</div></div>
-    <div class="summary-card"><div class="num">${inbox.summary.info}</div><div class="lbl">Info</div></div>
+    <div class="summary-card critical"><div class="num">${inbox.summary.critical}</div><div class="lbl">Critical</div></div>
+    <div class="summary-card warning"><div class="num">${inbox.summary.warning}</div><div class="lbl">Warnings</div></div>
+    <div class="summary-card info"><div class="num">${inbox.summary.info}</div><div class="lbl">Info</div></div>
     <div class="summary-card"><div class="num">${inbox.summary.total}</div><div class="lbl">Total</div></div>
   </div>
   ${empty || `<div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Severity</th><th>Kind</th><th>Item</th><th>Detail</th><th>Ref</th><th class="action-cell">Actions</th></tr>${rows}</table></div>`}

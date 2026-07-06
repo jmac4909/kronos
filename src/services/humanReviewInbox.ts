@@ -134,12 +134,20 @@ function duplicateQueuedTickets(queue?: QueueState | null): Map<string, number> 
   const counts = new Map<string, number>();
   for (const item of queue?.items || []) {
     if (!item.ticket) { continue; }
-    counts.set(item.ticket, (counts.get(item.ticket) || 0) + 1);
+    incrementTicketCount(counts, item.ticket);
   }
   for (const [ticketKey, count] of [...counts.entries()]) {
     if (count < 2) { counts.delete(ticketKey); }
   }
   return counts;
+}
+
+function incrementTicketCount(counts: Map<string, number>, ticketKey: string): void {
+  counts.set(ticketKey, ticketCount(counts, ticketKey) + 1);
+}
+
+function ticketCount(counts: Map<string, number>, ticketKey: string): number {
+  return counts.get(ticketKey) ?? 0;
 }
 
 function dedupeItems(items: HumanReviewItem[]): HumanReviewItem[] {

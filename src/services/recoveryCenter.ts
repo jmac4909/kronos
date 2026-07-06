@@ -28,6 +28,7 @@ interface RecoveryRun {
   status?: string;
   startedAt?: string;
   endedAt?: string;
+  pausedAt?: string;
   failureReason?: string;
   promptPath?: string;
   logPath?: string;
@@ -241,6 +242,20 @@ function recoveryItemForRun(run: RecoveryRun, now: Date, staleRunMs: number): Re
     };
   }
 
+  if (run.status === 'paused' && isStalePausedRun(run, now, staleRunMs)) {
+    return {
+      id: `run:${run.id}`,
+      kind: 'run',
+      severity: 'warning',
+      title: `${label} has been paused too long`,
+      detail: `Paused at ${run.pausedAt || run.startedAt || 'unknown time'} and still needs an operator decision. Continue, cancel, or mark needs-human from Run Center.`,
+      action: 'openRunCenter',
+      actionLabel: 'Review Paused Run',
+      ...(activeSecondaryActions ? { secondaryActions: activeSecondaryActions } : {}),
+      runId: run.id,
+    };
+  }
+
   if ((run.status === 'running' || run.status === 'preflight') && isStaleRun(run.startedAt, now, staleRunMs)) {
     return {
       id: `run:${run.id}`,
@@ -256,6 +271,10 @@ function recoveryItemForRun(run: RecoveryRun, now: Date, staleRunMs: number): Re
   }
 
   return null;
+}
+
+function isStalePausedRun(run: RecoveryRun, now: Date, staleRunMs: number): boolean {
+  return isStaleRun(run.pausedAt || run.startedAt, now, staleRunMs);
 }
 
 function terminalRunSecondaryActions(run: RecoveryRun): Array<{ action: RecoveryAction; label?: string }> | undefined {
