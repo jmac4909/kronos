@@ -23,15 +23,19 @@ export function optionalTrimmedStringFromUnknown(value: unknown): string | undef
   return trimmed || undefined;
 }
 
-export function finiteNumberFromUnknown(value: unknown, fallback = 0): number {
+export function optionalFiniteNumberFromUnknown(value: unknown): number | undefined {
   if (typeof value === 'number') {
-    return Number.isFinite(value) ? value : fallback;
+    return Number.isFinite(value) ? value : undefined;
   }
   if (typeof value !== 'string' || !value.trim()) {
-    return fallback;
+    return undefined;
   }
   const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : fallback;
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+export function finiteNumberFromUnknown(value: unknown, fallback = 0): number {
+  return optionalFiniteNumberFromUnknown(value) ?? fallback;
 }
 
 export function recordsFromUnknown(value: unknown): Record<string, unknown>[] {

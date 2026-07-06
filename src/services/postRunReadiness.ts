@@ -6,7 +6,7 @@ import { evidenceChecks, evidenceNotes, evidenceString } from './evidenceData';
 import { runProgressSummary } from './runProgress';
 import { isSuccessfulRunStatus, terminalRunOutcome } from './runStatus';
 import { escapeRegExp } from './regexp';
-import { arrayFromUnknown, optionalTrimmedStringFromUnknown, recordFromUnknown } from './records';
+import { arrayFromUnknown, optionalFiniteNumberFromUnknown, optionalTrimmedStringFromUnknown, recordFromUnknown } from './records';
 
 type PostRunReadinessStatus = 'ready' | 'needs_human' | 'blocked' | 'not_ready' | 'unknown';
 export type RunFailureKind = 'none' | 'auth' | 'model' | 'script' | 'git' | 'build' | 'test' | 'sonar' | 'timeout' | 'cancelled' | 'unknown';
@@ -458,15 +458,9 @@ function firstStringField(record: Record<string, unknown>, keys: string[]): stri
 
 function firstNumberField(record: Record<string, unknown>, keys: string[]): number | undefined {
   for (const key of keys) {
-    const raw = record[key];
-    if (typeof raw === 'number' && Number.isFinite(raw)) {
-      return raw;
-    }
-    if (typeof raw === 'string' && raw.trim()) {
-      const parsed = Number(raw);
-      if (Number.isFinite(parsed)) {
-        return parsed;
-      }
+    const parsed = optionalFiniteNumberFromUnknown(record[key]);
+    if (parsed !== undefined) {
+      return parsed;
     }
   }
   return undefined;

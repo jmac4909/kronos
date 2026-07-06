@@ -3,7 +3,7 @@ import { MergeRequest, MergeRequestChangedFile, MergeRequestComment } from '../s
 import { normalizeChangedFiles } from './changedFiles';
 import { unknownErrorMessage } from './errorUtils';
 import { parseJsonWithLabel } from './jsonFiles';
-import { arrayFromUnknown, isRecord, recordsFromUnknown } from './records';
+import { arrayFromUnknown, isRecord, optionalFiniteNumberFromUnknown, recordsFromUnknown } from './records';
 import { sortMergeRequestCommentsByCreated } from './mergeRequestComments';
 import { toValidDate } from './dateValues';
 
@@ -477,12 +477,8 @@ function stringField(value: unknown): string | undefined {
 }
 
 function numberField(value: unknown): number | undefined {
-  const numeric = typeof value === 'number'
-    ? value
-    : typeof value === 'string' && value.trim()
-      ? Number(value.trim())
-      : NaN;
-  return Number.isFinite(numeric) && numeric >= 0 ? Math.floor(numeric) : undefined;
+  const numeric = optionalFiniteNumberFromUnknown(value);
+  return numeric !== undefined && numeric >= 0 ? Math.floor(numeric) : undefined;
 }
 
 function booleanField(value: unknown): boolean | undefined {

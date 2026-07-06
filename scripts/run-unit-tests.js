@@ -1636,6 +1636,8 @@ test('deploy monitor handoff resolves projects and only suppresses handled runs'
 
   const source = readSourceFixture('src', 'services', 'deployMonitorHandoff.ts');
   assert.ok(source.includes("import { isFailedTerminalRunStatus, isFreshActiveRun, isSuccessfulRunStatus } from './runStatus'"));
+  assert.ok(source.includes("import { optionalFiniteNumberFromUnknown } from './records'"));
+  assert.ok(source.includes('const parsed = optionalFiniteNumberFromUnknown(raw)'));
   assert.ok(source.includes('isSuccessfulRunStatus(run.status)'));
   assert.ok(source.includes('isFailedTerminalRunStatus(run.status)'));
   assert.equal(source.includes('HANDLED_DEPLOY_MONITOR_STATUSES'), false);
@@ -4063,6 +4065,11 @@ test('record guard helper centralizes unknown object narrowing', () => {
   assert.equal(records.optionalTrimmedStringFromUnknown(' K-1 '), 'K-1');
   assert.equal(records.optionalTrimmedStringFromUnknown('   '), undefined);
   assert.equal(records.optionalTrimmedStringFromUnknown(42), undefined);
+  assert.equal(records.optionalFiniteNumberFromUnknown('42'), 42);
+  assert.equal(records.optionalFiniteNumberFromUnknown(3.5), 3.5);
+  assert.equal(records.optionalFiniteNumberFromUnknown('bad'), undefined);
+  assert.equal(records.optionalFiniteNumberFromUnknown(true), undefined);
+  assert.equal(records.optionalFiniteNumberFromUnknown(''), undefined);
   assert.equal(records.finiteNumberFromUnknown('42'), 42);
   assert.equal(records.finiteNumberFromUnknown('bad', 7), 7);
   assert.equal(records.finiteNumberFromUnknown(3.5), 3.5);
@@ -4100,6 +4107,7 @@ test('record guard helper centralizes unknown object narrowing', () => {
     'export function definedValues<T>(values: Array<T | null | undefined>): T[]',
     'export function trimmedStringFromUnknown(value: unknown, fallback = \'\'): string',
     'export function optionalTrimmedStringFromUnknown(value: unknown): string | undefined',
+    'export function optionalFiniteNumberFromUnknown(value: unknown): number | undefined',
     'export function finiteNumberFromUnknown(value: unknown, fallback = 0): number',
     'export function recordsFromUnknown(value: unknown): Record<string, unknown>[]',
     'export function recordEntriesFromUnknown<T>(value: Record<string, T> | null | undefined): Array<[string, T]>',
@@ -4113,7 +4121,8 @@ test('record guard helper centralizes unknown object narrowing', () => {
     "if (typeof value === 'number')",
     "if (typeof value !== 'string' || !value.trim())",
     'const parsed = Number(value)',
-    'return Number.isFinite(parsed) ? parsed : fallback',
+    'return Number.isFinite(parsed) ? parsed : undefined',
+    'return optionalFiniteNumberFromUnknown(value) ?? fallback',
     "typeof value === 'string' ? value.trim() : fallback",
     'return arrayFromUnknown(value).filter(isRecord)',
     'return isRecord(value) ? Object.entries(value) : []',
@@ -4132,7 +4141,7 @@ test('record guard helper centralizes unknown object narrowing', () => {
     ['changedFiles.ts', "import { isRecord } from './records'"],
     ['agingAnalyzer.ts', "import { recordEntriesFromUnknown } from './records'"],
     ['evidenceData.ts', "import { isRecord, recordsFromUnknown, recordValuesFromUnknown, trimmedStringFromUnknown } from './records'"],
-    ['integrationAdapters.ts', "import { arrayFromUnknown, isRecord, recordsFromUnknown } from './records'"],
+    ['integrationAdapters.ts', "import { arrayFromUnknown, isRecord, optionalFiniteNumberFromUnknown, recordsFromUnknown } from './records'"],
     ['queuePlanner.ts', "import { arrayFromUnknown, isRecord } from './records'"],
     ['runStatus.ts', "import { isRecord, recordsFromUnknown } from './records'"],
     ['runRecords.ts', "import { isRecord, recordsFromUnknown, recordString } from './records'"],
@@ -8602,7 +8611,7 @@ test('integration adapters keep raw provider payloads unknown until normalized',
     "import { parseJsonWithLabel } from './jsonFiles'",
     'parseJsonWithLabel(await runner.runScript',
     'catch (e: unknown)',
-    "import { arrayFromUnknown, isRecord, recordsFromUnknown } from './records'",
+    "import { arrayFromUnknown, isRecord, optionalFiniteNumberFromUnknown, recordsFromUnknown } from './records'",
     "import { unknownErrorMessage } from './errorUtils'",
     'async function runMergeRequestStatusJson',
     "runner.runScript(['--mr-status', ticketKey], options)",
@@ -8612,6 +8621,7 @@ test('integration adapters keep raw provider payloads unknown until normalized',
     'function mergeRequestCommentInputs',
     "const rawComments = isRecord(value) ? arrayFromUnknown(value['comments']) : arrayFromUnknown(value)",
     "const notes = arrayFromUnknown(item['notes'])",
+    'const numeric = optionalFiniteNumberFromUnknown(value)',
   ]) {
     assert.ok(source.includes(marker), marker);
   }
@@ -9989,7 +9999,7 @@ test('post-run readiness distinguishes process completion from handoff readiness
     "import { runProgressSummary } from './runProgress'",
     "import { isSuccessfulRunStatus, terminalRunOutcome } from './runStatus'",
     "import { evidenceChecks, evidenceNotes, evidenceString } from './evidenceData'",
-    "import { arrayFromUnknown, optionalTrimmedStringFromUnknown, recordFromUnknown } from './records'",
+    "import { arrayFromUnknown, optionalFiniteNumberFromUnknown, optionalTrimmedStringFromUnknown, recordFromUnknown } from './records'",
     'export function shouldRecordRunCompletionEvidence',
     'export function resolvePostRunTicket',
     'export function postRunReadinessRunPatch',
@@ -10022,7 +10032,7 @@ test('post-run readiness distinguishes process completion from handoff readiness
     "import { isPassingBuildStatus } from './buildStatus'",
     'function isPassingSonar',
     'export function classifyRunFailure(run: unknown): RunFailureKind',
-    "import { arrayFromUnknown, optionalTrimmedStringFromUnknown, recordFromUnknown } from './records'",
+    "import { arrayFromUnknown, optionalFiniteNumberFromUnknown, optionalTrimmedStringFromUnknown, recordFromUnknown } from './records'",
     'function runCompletedForEvidence(record: Record<string, unknown>): boolean',
     'function runString(value: unknown): string',
     'function runText(value: unknown): string | undefined',
@@ -10033,6 +10043,7 @@ test('post-run readiness distinguishes process completion from handoff readiness
     'function mergeRequestChangedFileCount(ticket?: Ticket): number | undefined',
     'function firstStringField(record: Record<string, unknown>, keys: string[]): string | undefined',
     'function firstNumberField(record: Record<string, unknown>, keys: string[]): number | undefined',
+    'const parsed = optionalFiniteNumberFromUnknown(record[key])',
   ]) {
     assert.ok(source.includes(marker), marker);
   }
