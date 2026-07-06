@@ -1,4 +1,4 @@
-import { isRecord } from './records';
+import { isRecord, recordsFromUnknown } from './records';
 import { toValidDate } from './dateValues';
 
 const ACTIVE_RUN_STATUSES = new Set(['preflight', 'running', 'paused']);
@@ -90,9 +90,7 @@ function hasTerminalRunSignal(run: RunStatusLike | unknown): boolean {
 export function terminalRunOutcome(run: RunStatusLike | unknown): string | undefined {
   if (!isRecord(run)) { return undefined; }
 
-  const events = Array.isArray(run['events'])
-    ? run['events'].filter(isRecord)
-    : [];
+  const events = recordsFromUnknown(run['events']);
   const lastEvent = events[events.length - 1];
   if (isCancellationEvent(lastEvent)) { return 'cancelled'; }
 

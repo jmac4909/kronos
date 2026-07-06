@@ -1,5 +1,5 @@
 import { toValidDate } from './dateValues';
-import { isRecord, recordFromUnknown, recordString } from './records';
+import { recordsFromUnknown, recordFromUnknown, recordString } from './records';
 import { runAttentionDetail } from './runAttention';
 import { runStatusDisplayLabel } from './runLabels';
 import { runProgressSummary } from './runProgress';
@@ -129,9 +129,7 @@ function attentionSummary(record: Record<string, unknown>, status: string): stri
 }
 
 function runEvents(record: Record<string, unknown>): Array<Record<string, unknown>> {
-  return Array.isArray(record['events'])
-    ? record['events'].filter(isRecord)
-    : [];
+  return recordsFromUnknown(record['events']);
 }
 
 function eventFiles(events: Array<Record<string, unknown>>, pattern: RegExp): string[] {

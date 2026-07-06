@@ -375,6 +375,8 @@ const dashboardRendererSafetyMarkers = new Set([
   'evidenceCount: evidenceRecordCount(t)',
   "import { ticketStringArray, ticketStringField } from './ticketFields'",
   'function ticketAttachments',
+  "import { isRecord, recordsFromUnknown } from './records'",
+  'return recordsFromUnknown(value)',
   'interface TicketAttachmentSummary',
   'interface JiraBoardTicketPayload',
   'const ticketData: Record<string, JiraBoardTicketPayload>',
@@ -625,6 +627,8 @@ for (const marker of [
   'evidenceCount: evidenceRecordCount(t)',
   "import { ticketStringArray, ticketStringField } from './ticketFields'",
   'function ticketAttachments',
+  "import { isRecord, recordsFromUnknown } from './records'",
+  'return recordsFromUnknown(value)',
   'interface TicketAttachmentSummary',
   'interface JiraBoardTicketPayload',
   'const ticketData: Record<string, JiraBoardTicketPayload>',
@@ -2581,11 +2585,20 @@ for (const marker of [
 for (const marker of [
   'export function mergeRequestCommentsFromRecord(record: object | null | undefined): MergeRequestComment[]',
   'Reflect.get(record, \'comments\')',
-  "value.filter((item): item is MergeRequestComment => isRecord(item) && typeof item['body'] === 'string')",
+  "import { recordsFromUnknown } from './records'",
+  'recordsFromUnknown(value)',
+  "if (typeof item['body'] !== 'string') { return []; }",
+  "return [{ ...item, body: item['body'] } as MergeRequestComment]",
 ]) {
   if (!mergeRequestComments.includes(marker)) {
     fail(`Missing merge request comment helper marker: ${marker}`);
   }
+}
+if (mergeRequestComments.includes('isRecord(item)')) {
+  fail('Merge request comments must use shared record-list normalization.');
+}
+if (mergeRequestComments.includes('(item): item is MergeRequestComment')) {
+  fail('Merge request comments must not use a local record type predicate.');
 }
 
 for (const marker of [
@@ -2812,7 +2825,7 @@ for (const [name, source, marker] of [
   ['src/services/evidenceData.ts', evidenceData, "import { isRecord, recordsFromUnknown, recordValuesFromUnknown } from './records'"],
   ['src/services/integrationAdapters.ts', integrationAdapters, "import { isRecord, recordsFromUnknown } from './records'"],
   ['src/services/queuePlanner.ts', queuePlanner, "import { arrayFromUnknown, isRecord } from './records'"],
-  ['src/services/runStatus.ts', runStatus, "import { isRecord } from './records'"],
+  ['src/services/runStatus.ts', runStatus, "import { isRecord, recordsFromUnknown } from './records'"],
   ['src/services/runRecords.ts', runRecords, "import { isRecord, recordsFromUnknown, recordString } from './records'"],
   ['src/services/runStore.ts', runStore, "import { isRecord, recordString } from './records'"],
   ['src/services/sessionStore.ts', sessionStore, "import { isRecord } from './records'"],
@@ -2868,7 +2881,7 @@ for (const [name, source, marker] of [
   ['src/services/webviewMessages.ts', webviewMessages, "import { recordFromUnknown, recordString } from './records'"],
   ['src/services/runAttention.ts', runAttention, "import { recordFromUnknown } from './records'"],
   ['src/services/runCompletionNotification.ts', runCompletionNotification, "import { recordFromUnknown, recordString } from './records'"],
-  ['src/services/runProgress.ts', runProgress, "import { isRecord, recordFromUnknown, recordString } from './records'"],
+  ['src/services/runProgress.ts', runProgress, "import { recordsFromUnknown, recordFromUnknown, recordString } from './records'"],
   ['src/services/queueMutations.ts', queueMutations, "import { recordFromUnknown } from './records'"],
   ['src/services/postRunReadiness.ts', postRunReadiness, "import { recordFromUnknown } from './records'"],
 ]) {
@@ -2897,7 +2910,7 @@ for (const [name, source, marker] of [
   ['src/services/dashboardWorklist.ts', dashboardWorklist, "import { recordString } from './records'"],
   ['src/services/humanReviewInbox.ts', humanReviewInbox, "import { recordString } from './records'"],
   ['src/services/queueActiveRun.ts', queueActiveRun, "import { recordString } from './records'"],
-  ['src/services/runProgress.ts', runProgress, "import { isRecord, recordFromUnknown, recordString } from './records'"],
+  ['src/services/runProgress.ts', runProgress, "import { recordsFromUnknown, recordFromUnknown, recordString } from './records'"],
   ['src/services/ticketTimeline.ts', ticketTimeline, "import { recordString } from './records'"],
   ['src/services/trendMetrics.ts', trendMetrics, "import { recordString } from './records'"],
 ]) {
@@ -4128,6 +4141,7 @@ for (const marker of [
   'export function terminalRunOutcome',
   'function isCancellationEvent',
   'function terminalEventOutcome',
+  "recordsFromUnknown(run['events'])",
   'function numericExitCode',
   'processPid?: unknown',
   "if (hasLiveProcess(run['processPid'])) { return false; }",
@@ -4178,11 +4192,12 @@ for (const marker of [
   "import { toValidDate } from './dateValues'",
   'export function runProgressSummary',
   'export function formatRunProgress',
-  "import { isRecord, recordFromUnknown, recordString } from './records'",
+  "import { recordsFromUnknown, recordFromUnknown, recordString } from './records'",
   "import { countLabel } from './countLabels'",
   'function elapsedRunSeconds',
   'function fileCount',
   'function formatElapsed',
+  "return recordsFromUnknown(record['events'])",
   "countLabel(toolCalls, 'tool')",
   "countLabel(filesChanged, 'changed', 'changed')",
 ]) {
@@ -4192,6 +4207,9 @@ for (const marker of [
 }
 if (runProgress.includes('function countLabel')) {
   fail('runProgress must use the shared count label helper.');
+}
+if (runProgress.includes('filter(isRecord)')) {
+  fail('runProgress must use shared record-list normalization.');
 }
 
 for (const marker of [
@@ -4274,6 +4292,15 @@ if (runAttention.includes('ATTENTION_RUN_STATUSES')) {
 }
 if (!runOperatorSummary.includes("import { effectiveRunStatus, isActiveRunStatus, isFailedTerminalRunStatus, isSuccessfulRunStatus } from './runStatus'")) {
   fail('runOperatorSummary must import shared success and failed terminal run predicates.');
+}
+if (!runOperatorSummary.includes("import { recordsFromUnknown, recordFromUnknown, recordString } from './records'")) {
+  fail('runOperatorSummary must import shared record-list normalization.');
+}
+if (!runOperatorSummary.includes("return recordsFromUnknown(record['events'])")) {
+  fail('runOperatorSummary run events must use shared record-list normalization.');
+}
+if (runOperatorSummary.includes('filter(isRecord)')) {
+  fail('runOperatorSummary must not normalize event records locally.');
 }
 if (!runOperatorSummary.includes("if (isFailedTerminalRunStatus(status) || readinessStatus === 'blocked')")) {
   fail('runOperatorSummary bad tone must use the shared failed terminal run predicate.');

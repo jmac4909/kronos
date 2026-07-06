@@ -1,5 +1,5 @@
 import { isActiveRunStatus } from './runStatus';
-import { isRecord, recordFromUnknown, recordString } from './records';
+import { recordsFromUnknown, recordFromUnknown, recordString } from './records';
 import { toValidDate } from './dateValues';
 import { countLabel } from './countLabels';
 
@@ -58,9 +58,7 @@ function elapsedRunSeconds(record: Record<string, unknown>, events: Array<Record
 }
 
 function runEvents(record: Record<string, unknown>): Array<Record<string, unknown>> {
-  return Array.isArray(record['events'])
-    ? record['events'].filter(isRecord)
-    : [];
+  return recordsFromUnknown(record['events']);
 }
 
 function fileCount(events: Array<Record<string, unknown>>, pattern: RegExp): number {

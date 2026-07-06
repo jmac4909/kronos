@@ -1,6 +1,6 @@
 import type { MergeRequestComment } from '../state/types';
 import { toValidDate } from './dateValues';
-import { isRecord } from './records';
+import { recordsFromUnknown } from './records';
 
 export function sortMergeRequestCommentsByCreated(comments: MergeRequestComment[]): MergeRequestComment[] {
   return comments
@@ -24,7 +24,8 @@ export function sortMergeRequestCommentsByCreated(comments: MergeRequestComment[
 export function mergeRequestCommentsFromRecord(record: object | null | undefined): MergeRequestComment[] {
   if (!record) { return []; }
   const value = Reflect.get(record, 'comments');
-  return Array.isArray(value)
-    ? value.filter((item): item is MergeRequestComment => isRecord(item) && typeof item['body'] === 'string')
-    : [];
+  return recordsFromUnknown(value).flatMap(item => {
+    if (typeof item['body'] !== 'string') { return []; }
+    return [{ ...item, body: item['body'] } as MergeRequestComment];
+  });
 }

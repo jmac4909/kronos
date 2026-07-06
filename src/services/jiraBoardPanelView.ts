@@ -1,7 +1,7 @@
 import type { KronosState as KronosStateSnapshot, QueueState } from '../state/types';
 import { evidenceRecordCount } from './evidenceData';
 import { mergeRequestReviewStatusLabel } from './mergeRequestLabels';
-import { isRecord } from './records';
+import { isRecord, recordsFromUnknown } from './records';
 import { ticketStringArray, ticketStringField } from './ticketFields';
 import { WEBVIEW_READY_COMMAND, webviewRuntimeScriptTag, webviewRuntimeScriptUri } from './webviewSecurity';
 import { escapeAttr, escapeHtml, kronosWebviewBaseCss } from './webviewHtml';
@@ -14,9 +14,7 @@ export interface JiraBoardPanelInput {
 }
 
 function ticketAttachments(value: unknown): TicketAttachmentSummary[] {
-  if (!Array.isArray(value)) { return []; }
-  return value
-    .filter(isRecord)
+  return recordsFromUnknown(value)
     .map(item => ({
       filename: ticketStringField(item, 'filename', 'attachment'),
       size: Number.isFinite(Number(item['size'])) ? Number(item['size']) : 0,

@@ -4090,7 +4090,7 @@ test('record guard helper centralizes unknown object narrowing', () => {
     ['evidenceData.ts', "import { isRecord, recordsFromUnknown, recordValuesFromUnknown } from './records'"],
     ['integrationAdapters.ts', "import { isRecord, recordsFromUnknown } from './records'"],
     ['queuePlanner.ts', "import { arrayFromUnknown, isRecord } from './records'"],
-    ['runStatus.ts', "import { isRecord } from './records'"],
+    ['runStatus.ts', "import { isRecord, recordsFromUnknown } from './records'"],
     ['runRecords.ts', "import { isRecord, recordsFromUnknown, recordString } from './records'"],
     ['runStore.ts', "import { isRecord, recordString } from './records'"],
     ['sessionStore.ts', "import { isRecord } from './records'"],
@@ -4123,10 +4123,15 @@ test('record guard helper centralizes unknown object narrowing', () => {
   for (const marker of [
     'export function mergeRequestCommentsFromRecord(record: object | null | undefined): MergeRequestComment[]',
     'Reflect.get(record, \'comments\')',
-    "value.filter((item): item is MergeRequestComment => isRecord(item) && typeof item['body'] === 'string')",
+    "import { recordsFromUnknown } from './records'",
+    'recordsFromUnknown(value)',
+    "if (typeof item['body'] !== 'string') { return []; }",
+    "return [{ ...item, body: item['body'] } as MergeRequestComment]",
   ]) {
     assert.ok(mergeRequestCommentsSource.includes(marker), marker);
   }
+  assert.equal(mergeRequestCommentsSource.includes('isRecord(item)'), false);
+  assert.equal(mergeRequestCommentsSource.includes('(item): item is MergeRequestComment'), false);
   for (const marker of [
     'export function mergeRequestReviewStatusLabel(status: unknown, fallback = \'\'): string',
     "status.replace(/_/g, ' ')",
@@ -4162,7 +4167,7 @@ test('record guard helper centralizes unknown object narrowing', () => {
     ['webviewMessages.ts', "import { recordFromUnknown, recordString } from './records'"],
     ['runAttention.ts', "import { recordFromUnknown } from './records'"],
     ['runCompletionNotification.ts', "import { recordFromUnknown, recordString } from './records'"],
-    ['runProgress.ts', "import { isRecord, recordFromUnknown, recordString } from './records'"],
+    ['runProgress.ts', "import { recordsFromUnknown, recordFromUnknown, recordString } from './records'"],
   ]) {
     const source = readSourceFixture('src', 'services', file);
     assert.ok(source.includes(marker), `${file} should import shared unknown-record helper`);
@@ -4189,7 +4194,7 @@ test('record guard helper centralizes unknown object narrowing', () => {
     const marker = file === 'activeRunDisplay.ts'
       ? "import { recordFromUnknown, recordString } from './records'"
       : file === 'runProgress.ts'
-        ? "import { isRecord, recordFromUnknown, recordString } from './records'"
+        ? "import { recordsFromUnknown, recordFromUnknown, recordString } from './records'"
         : "import { recordString } from './records'";
     assert.ok(source.includes(marker), `${file} should import shared record string helper`);
     assert.equal(source.includes('function runString'), false, `${file} should not carry a local runString helper`);
@@ -7198,6 +7203,7 @@ test('run status helper centralizes active persisted run semantics', () => {
 
   const source = readSourceFixture('src', 'services', 'runStatus.ts');
   for (const marker of [
+    "import { isRecord, recordsFromUnknown } from './records'",
     "import { toValidDate } from './dateValues'",
     "const ACTIVE_RUN_STATUSES = new Set(['preflight', 'running', 'paused'])",
     "const STALEABLE_ACTIVE_RUN_STATUSES = new Set(['preflight', 'running'])",
@@ -7220,6 +7226,7 @@ test('run status helper centralizes active persisted run semantics', () => {
     'export function terminalRunOutcome',
     'function isCancellationEvent',
     'function terminalEventOutcome',
+    "recordsFromUnknown(run['events'])",
     'function numericExitCode',
     'processPid?: unknown',
     "if (hasLiveProcess(run['processPid'])) { return false; }",
@@ -7233,6 +7240,7 @@ test('run status helper centralizes active persisted run semantics', () => {
   ]) {
     assert.ok(source.includes(marker), marker);
   }
+  assert.equal(source.includes('filter(isRecord)'), false);
   for (const marker of [
     'export const ACTIVE_RUN_STATUSES',
     'export const STALEABLE_ACTIVE_RUN_STATUSES',
@@ -7270,19 +7278,21 @@ test('run progress helper summarizes active run activity', () => {
   for (const marker of [
     "import { isActiveRunStatus } from './runStatus'",
     "import { toValidDate } from './dateValues'",
-    "import { isRecord, recordFromUnknown, recordString } from './records'",
+    "import { recordsFromUnknown, recordFromUnknown, recordString } from './records'",
     "import { countLabel } from './countLabels'",
     'export function runProgressSummary',
     'export function formatRunProgress',
     'function elapsedRunSeconds',
     'function fileCount',
     'function formatElapsed',
+    "return recordsFromUnknown(record['events'])",
     "countLabel(toolCalls, 'tool')",
     "countLabel(filesChanged, 'changed', 'changed')",
   ]) {
     assert.ok(source.includes(marker), marker);
   }
   assert.equal(source.includes('function countLabel'), false, 'runProgress should use shared count label helper');
+  assert.equal(source.includes('filter(isRecord)'), false, 'runProgress should use shared record-list normalization');
 });
 
 test('run operator summary highlights progress, files, readiness, and blockers', () => {
@@ -7331,6 +7341,7 @@ test('run operator summary highlights progress, files, readiness, and blockers',
   for (const marker of [
     "import { runProgressSummary } from './runProgress'",
     "import { effectiveRunStatus, isActiveRunStatus, isFailedTerminalRunStatus, isSuccessfulRunStatus } from './runStatus'",
+    "import { recordsFromUnknown, recordFromUnknown, recordString } from './records'",
     "import { runAttentionDetail } from './runAttention'",
     "import { compactSingleLineText } from './textFormat'",
     'export function buildRunOperatorSummary',
@@ -7339,6 +7350,7 @@ test('run operator summary highlights progress, files, readiness, and blockers',
     "if (!isFailedTerminalRunStatus(status)) { return ''; }",
     'function latestMeaningfulSignal',
     'function eventFiles',
+    "return recordsFromUnknown(record['events'])",
     'function runNextStep',
     'return compactSingleLineText(value, 160)',
   ]) {
@@ -7346,6 +7358,7 @@ test('run operator summary highlights progress, files, readiness, and blockers',
   }
   assert.equal(source.includes('function compactText'), false, 'runOperatorSummary should use shared compact text helper');
   assert.equal(source.includes("['failed', 'cancelled', 'needs_human'].includes(status)"), false);
+  assert.equal(source.includes('filter(isRecord)'), false);
 });
 
 test('active run display summarizes status bar text and tooltip progress', () => {
@@ -10466,6 +10479,8 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'evidenceCount: evidenceRecordCount(t)',
     "import { ticketStringArray, ticketStringField } from './ticketFields'",
     'function ticketAttachments',
+    "import { isRecord, recordsFromUnknown } from './records'",
+    'return recordsFromUnknown(value)',
     'interface TicketAttachmentSummary',
     'interface JiraBoardTicketPayload',
     'const ticketData: Record<string, JiraBoardTicketPayload>',
