@@ -375,7 +375,7 @@ const dashboardRendererSafetyMarkers = new Set([
   'evidenceCount: evidenceRecordCount(t)',
   "import { ticketStringArray, ticketStringField } from './ticketFields'",
   'function ticketAttachments',
-  "import { isRecord, recordsFromUnknown } from './records'",
+  "import { isRecord, recordEntriesFromUnknown, recordKeysFromUnknown, recordsFromUnknown } from './records'",
   'return recordsFromUnknown(value)',
   'interface TicketAttachmentSummary',
   'interface JiraBoardTicketPayload',
@@ -624,7 +624,7 @@ for (const marker of [
   'evidenceCount: evidenceRecordCount(t)',
   "import { ticketStringArray, ticketStringField } from './ticketFields'",
   'function ticketAttachments',
-  "import { isRecord, recordsFromUnknown } from './records'",
+  "import { isRecord, recordEntriesFromUnknown, recordKeysFromUnknown, recordsFromUnknown } from './records'",
   'return recordsFromUnknown(value)',
   'interface TicketAttachmentSummary',
   'interface JiraBoardTicketPayload',
@@ -1007,7 +1007,7 @@ for (const marker of [
   'unknownErrorMessage(e, `Could not find fallback remote branch for ${ticket.key}.`)',
   "import { buildSonarReport }",
   "import { buildSonarBranchPickItems, buildSonarFixBranchStrategy, buildSonarFixInstructionBlock } from './services/sonarCommandPlan'",
-  "import { isRecord, recordEntriesFromUnknown, recordFromUnknown, recordString } from './services/records'",
+  "import { isRecord, recordEntriesFromUnknown, recordFromUnknown, recordKeysFromUnknown, recordString } from './services/records'",
   "from './services/commandPayloads'",
   'resolveProjectName,',
   'resolveQueueCommandItem,',
@@ -2219,7 +2219,7 @@ for (const marker of [
   'formatTimeLabel(e.timestamp)',
   "formatDateTimeLabel(run.startedAt, 'Unknown')",
   'function stringOrDefault',
-  "import { arrayFromUnknown, isRecord, recordFromUnknown } from '../services/records'",
+  "import { arrayFromUnknown, isRecord, recordEntriesFromUnknown, recordFromUnknown } from '../services/records'",
   'function streamString(value: unknown): string',
   'export function parseStreamEvents(event: unknown): ProgressEvent[]',
   'function parseAssistantContentBlock(rawBlock: unknown, now: Date): ProgressEvent | null',
@@ -2598,12 +2598,14 @@ for (const marker of [
   'export function arrayFromUnknown(value: unknown): unknown[]',
   'export function recordsFromUnknown(value: unknown): Record<string, unknown>[]',
   'export function recordEntriesFromUnknown<T>(value: Record<string, T> | null | undefined): Array<[string, T]>',
+  'export function recordKeysFromUnknown(value: unknown): string[]',
   'export function recordValuesFromUnknown(value: unknown): Record<string, unknown>[]',
   'export function recordString(record: Record<string, unknown>, key: string): string',
   'return isRecord(value) ? value : {}',
   'return Array.isArray(value) ? value : []',
   'return arrayFromUnknown(value).filter(isRecord)',
   'return isRecord(value) ? Object.entries(value) : []',
+  'return isRecord(value) ? Object.keys(value) : []',
   'return isRecord(value) ? Object.values(value).filter(isRecord) : []',
   "typeof value === 'object'",
   '!Array.isArray(value)',
@@ -2948,7 +2950,7 @@ if (runActionHelpers.includes('function formatRunDateTime')) {
 }
 
 for (const [name, source, marker] of [
-  ['src/extension.ts', extension, "import { isRecord, recordEntriesFromUnknown, recordFromUnknown, recordString } from './services/records'"],
+  ['src/extension.ts', extension, "import { isRecord, recordEntriesFromUnknown, recordFromUnknown, recordKeysFromUnknown, recordString } from './services/records'"],
   ['src/services/changedFiles.ts', changedFiles, "import { isRecord } from './records'"],
   ['src/services/agingAnalyzer.ts', agingAnalyzer, "import { recordEntriesFromUnknown } from './records'"],
   ['src/services/evidenceData.ts', evidenceData, "import { isRecord, recordsFromUnknown, recordValuesFromUnknown } from './records'"],
@@ -2962,7 +2964,7 @@ for (const [name, source, marker] of [
   ['src/services/trendMetrics.ts', trendMetrics, "import { recordEntriesFromUnknown } from './records'"],
   ['src/services/stateStore.ts', stateStore, "import { isRecord as isPlainObject } from './records'"],
   ['src/services/stateScriptAdapter.ts', stateScriptAdapter, "import { arrayFromUnknown, isRecord as isPlainObject } from './records'"],
-  ['src/runners/sessionDispatcher.ts', dispatcher, "import { arrayFromUnknown, isRecord, recordFromUnknown } from '../services/records'"],
+  ['src/runners/sessionDispatcher.ts', dispatcher, "import { arrayFromUnknown, isRecord, recordEntriesFromUnknown, recordFromUnknown } from '../services/records'"],
 ]) {
   if (!source.includes(marker)) {
     fail(`${name} must import the shared record guard.`);

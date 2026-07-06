@@ -12,7 +12,7 @@ import { unknownErrorMessage } from './errorUtils';
 import { normalizeMergeRequestStatus } from './integrationAdapters';
 import { parseJsonWithLabel } from './jsonFiles';
 import { countLabel } from './countLabels';
-import { recordEntriesFromUnknown } from './records';
+import { recordEntriesFromUnknown, recordKeysFromUnknown } from './records';
 
 export interface DoctorCheck {
   name: string;
@@ -144,8 +144,8 @@ export function runDoctorChecks(input: DoctorChecksInput): DoctorCheck[] {
   const queueLoadError = input.stateLoadErrors?.find(error => error.target === 'queue.json');
 
   if (input.state) {
-    const projectCount = Object.keys(input.state.projects || {}).length;
-    const ticketCount = Object.keys(input.state.tickets || {}).length;
+    const projectCount = recordKeysFromUnknown(input.state.projects).length;
+    const ticketCount = recordKeysFromUnknown(input.state.tickets).length;
     const stateWarnings = input.stateLoadErrors?.filter(error => error.target === 'state.json') || [];
     add(
       'state.json parse',
@@ -424,7 +424,7 @@ function firstConfiguredUrl(...values: Array<string | undefined>): string | unde
 }
 
 function firstProjectConfigValue(state: KronosState | null, keys: string[]): string | undefined {
-  for (const project of Object.values(state?.projects || {})) {
+  for (const [, project] of recordEntriesFromUnknown(state?.projects)) {
     const config = (project.config || {}) as Record<string, unknown>;
     for (const key of keys) {
       const value = config[key];

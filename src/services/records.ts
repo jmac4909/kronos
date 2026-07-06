@@ -20,6 +20,10 @@ export function recordEntriesFromUnknown(value: unknown): Array<[string, unknown
   return isRecord(value) ? Object.entries(value) : [];
 }
 
+export function recordKeysFromUnknown(value: unknown): string[] {
+  return isRecord(value) ? Object.keys(value) : [];
+}
+
 export function recordValuesFromUnknown(value: unknown): Record<string, unknown>[] {
   return isRecord(value) ? Object.values(value).filter(isRecord) : [];
 }

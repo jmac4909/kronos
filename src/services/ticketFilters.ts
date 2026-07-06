@@ -1,5 +1,6 @@
 import type { Ticket } from '../state/types';
 import { toValidDate } from './dateValues';
+import { recordKeysFromUnknown } from './records';
 
 export type TicketGroupBy = 'none' | 'action' | 'project' | 'priority';
 export type TicketFilterPromptFieldId =
@@ -163,7 +164,7 @@ export function ticketFilterFacetValues(
 ): string[] {
   if (facet === 'project') {
     return uniqueTicketFilterValues([
-      ...Object.keys(projects || {}),
+      ...recordKeysFromUnknown(projects),
       ...tickets.flatMap(ticket => ticket.projects || []),
     ]);
   }

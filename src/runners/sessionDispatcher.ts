@@ -26,7 +26,7 @@ import { buildRunOperatorSummary, type RunOperatorSummary, type RunOperatorTone 
 import { isAttentionRunStatus, runAttentionDetail } from '../services/runAttention';
 import { sortedRunCenterRuns } from '../services/runCenterSort';
 import { readJsonFile } from '../services/jsonFiles';
-import { arrayFromUnknown, isRecord, recordFromUnknown } from '../services/records';
+import { arrayFromUnknown, isRecord, recordEntriesFromUnknown, recordFromUnknown } from '../services/records';
 import { toValidDate } from '../services/dateValues';
 import { formatDateTimeLabel, formatTimeLabel } from '../services/dateLabels';
 import type { KronosState as KronosStateFile } from '../state/types';
@@ -145,7 +145,7 @@ function resolveBaseRef(projectPath: string): BaseRefResolution {
 function configuredStateBaseBranch(projectPath: string): { branch?: string; warning?: string } {
   try {
     const state = readStateFile();
-    const project = Object.values(state?.projects || {}).find(p => p.path === projectPath);
+    const project = recordEntriesFromUnknown(state?.projects).find(([, candidate]) => candidate.path === projectPath)?.[1];
     const configured = project?.config?.base_branch || project?.config?.default_branch;
     if (typeof configured !== 'string' || !configured.trim()) { return {}; }
     const branch = sanitizeBranch(configured);
@@ -177,7 +177,7 @@ function configuredProjectJsonBaseBranch(projConfig: string): { branch?: string;
 function configuredProjectExtraDirs(projectPath: string): { dirs: string[]; warning?: string } {
   try {
     const state = readStateFile();
-    const project = Object.values(state?.projects || {}).find(p => p.path === projectPath);
+    const project = recordEntriesFromUnknown(state?.projects).find(([, candidate]) => candidate.path === projectPath)?.[1];
     const dirs = project?.config?.extra_dirs;
     return {
       dirs: Array.isArray(dirs)

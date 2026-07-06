@@ -1,7 +1,7 @@
 import type { KronosState as KronosStateSnapshot, QueueState } from '../state/types';
 import { evidenceRecordCount } from './evidenceData';
 import { mergeRequestReviewStatusLabel } from './mergeRequestLabels';
-import { isRecord, recordsFromUnknown } from './records';
+import { isRecord, recordEntriesFromUnknown, recordKeysFromUnknown, recordsFromUnknown } from './records';
 import { ticketStringArray, ticketStringField } from './ticketFields';
 import { WEBVIEW_READY_COMMAND, webviewRuntimeScriptTag, webviewRuntimeScriptUri } from './webviewSecurity';
 import { escapeAttr, escapeHtml, kronosWebviewBaseCss } from './webviewHtml';
@@ -48,8 +48,9 @@ interface JiraBoardTicketPayload {
 export function buildJiraBoardHtml(input: JiraBoardPanelInput): string {
   const esc = escapeHtml;
   const attr = escapeAttr;
-  const tickets = input.state?.tickets || {};
-  const projects = Object.keys(input.state?.projects || {});
+  const ticketEntries = recordEntriesFromUnknown(input.state?.tickets);
+  const ticketCount = ticketEntries.length;
+  const projects = recordKeysFromUnknown(input.state?.projects);
   const queuedKeys = new Set((input.queue?.items || []).map(i => i.ticket));
 
   const columns: Record<string, string[]> = {
@@ -63,7 +64,7 @@ export function buildJiraBoardHtml(input: JiraBoardPanelInput): string {
 
   const ticketData: Record<string, JiraBoardTicketPayload> = {};
 
-  for (const [key, t] of Object.entries(tickets)) {
+  for (const [key, t] of ticketEntries) {
     const isQueued = queuedKeys.has(key);
     const labels = ticketStringArray(t.labels);
     const linkedProjects = ticketStringArray(t.projects);
@@ -249,12 +250,12 @@ ${webviewRuntimeScriptTag(input.nonce, webviewRuntimeScriptUri(input.scriptUri))
   <div class="kronos-header">
     <div>
       <h1 class="kronos-title">Jira Board</h1>
-      <div class="kronos-subtitle">${Object.keys(tickets).length} ticket${Object.keys(tickets).length === 1 ? '' : 's'} across ${projects.length} project${projects.length === 1 ? '' : 's'}</div>
+      <div class="kronos-subtitle">${ticketCount} ticket${ticketCount === 1 ? '' : 's'} across ${projects.length} project${projects.length === 1 ? '' : 's'}</div>
     </div>
   </div>
   <div class="kronos-toolbar board-toolbar">
     <input id="board-filter" class="board-filter kronos-input" type="search" placeholder="Filter tickets" aria-label="Filter tickets">
-    <span id="board-filter-summary" class="board-filter-summary" aria-live="polite">${Object.keys(tickets).length} total</span>
+    <span id="board-filter-summary" class="board-filter-summary" aria-live="polite">${ticketCount} total</span>
   </div>
   <div class="board">${colHtml}</div>
 

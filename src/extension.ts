@@ -139,7 +139,7 @@ import {
   type RunActionQuickPickItem,
   type RunArtifactPathResult,
 } from './services/runActionHelpers';
-import { isRecord, recordEntriesFromUnknown, recordFromUnknown, recordString } from './services/records';
+import { isRecord, recordEntriesFromUnknown, recordFromUnknown, recordKeysFromUnknown, recordString } from './services/records';
 import {
   explicitProjectName,
   resolveMergeRequestUrl,
@@ -884,7 +884,7 @@ async function promptTicketView(
 
   const filter: TicketFilter = { ...currentFilter };
   let groupBy = currentGroupBy;
-  const tickets = Object.values(state.state?.tickets || {});
+  const tickets = recordEntriesFromUnknown(state.state?.tickets).map(([, ticket]) => ticket);
 
   if (picked.id === 'query') {
     setTicketFilterString(filter, 'query', await promptOptionalText('Ticket search text', filter.query));
@@ -2635,7 +2635,7 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('kronos.verifyDevelop', async (item: unknown) => {
       let projectName = resolveProjectName(state, item);
       if (!projectName || !state.state) {
-        const projects = Object.keys(state.state?.projects || {});
+        const projects = recordKeysFromUnknown(state.state?.projects);
         if (projects.length === 1) {
           projectName = projects[0];
           if (!projectName) { return; }

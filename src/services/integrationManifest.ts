@@ -7,7 +7,7 @@ import { safePromptFileName } from './fileNames';
 import { unknownErrorMessage } from './errorUtils';
 import { readJsonFile } from './jsonFiles';
 import { countLabel } from './countLabels';
-import { recordEntriesFromUnknown } from './records';
+import { recordEntriesFromUnknown, recordKeysFromUnknown } from './records';
 
 export const INTEGRATION_MANIFEST_FILE = path.join(KRONOS_DIR, 'manifest.json');
 
@@ -107,7 +107,7 @@ function validateIntegrationManifest(manifest: IntegrationManifest): { errors: s
   }
 
   const scriptNames = new Set(requiredScripts().map(script => script.name));
-  for (const scriptName of Object.keys(manifest.scripts || {})) {
+  for (const scriptName of recordKeysFromUnknown(manifest.scripts)) {
     if (!scriptNames.has(scriptName as RequiredScriptName)) {
       warnings.push(`Unknown script in manifest: ${scriptName}`);
     }

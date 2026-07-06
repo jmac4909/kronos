@@ -4059,6 +4059,8 @@ test('record guard helper centralizes unknown object narrowing', () => {
   assert.deepEqual(records.recordsFromUnknown([{ ok: true }, null, [], 'raw']), [{ ok: true }]);
   assert.deepEqual(records.recordEntriesFromUnknown({ a: { ok: true }, b: 42 }), [['a', { ok: true }], ['b', 42]]);
   assert.deepEqual(records.recordEntriesFromUnknown(null), []);
+  assert.deepEqual(records.recordKeysFromUnknown({ a: { ok: true }, b: 42 }), ['a', 'b']);
+  assert.deepEqual(records.recordKeysFromUnknown(null), []);
   assert.deepEqual(records.recordValuesFromUnknown({ a: { ok: true }, b: null, c: [] }), [{ ok: true }]);
   assert.equal(records.recordString({ ticket: ' K-1 ' }, 'ticket'), 'K-1');
   assert.equal(records.recordString({ ticket: 42 }, 'ticket'), '');
@@ -4084,12 +4086,14 @@ test('record guard helper centralizes unknown object narrowing', () => {
     'export function arrayFromUnknown(value: unknown): unknown[]',
     'export function recordsFromUnknown(value: unknown): Record<string, unknown>[]',
     'export function recordEntriesFromUnknown<T>(value: Record<string, T> | null | undefined): Array<[string, T]>',
+    'export function recordKeysFromUnknown(value: unknown): string[]',
     'export function recordValuesFromUnknown(value: unknown): Record<string, unknown>[]',
     'export function recordString(record: Record<string, unknown>, key: string): string',
     'return isRecord(value) ? value : {}',
     'return Array.isArray(value) ? value : []',
     'return arrayFromUnknown(value).filter(isRecord)',
     'return isRecord(value) ? Object.entries(value) : []',
+    'return isRecord(value) ? Object.keys(value) : []',
     'return isRecord(value) ? Object.values(value).filter(isRecord) : []',
   ]) {
     assert.ok(recordsSource.includes(marker), marker);
@@ -4122,7 +4126,7 @@ test('record guard helper centralizes unknown object narrowing', () => {
   }
 
   const extensionSource = readSourceFixture('src', 'extension.ts');
-  assert.ok(extensionSource.includes("import { isRecord, recordEntriesFromUnknown, recordFromUnknown, recordString } from './services/records'"));
+  assert.ok(extensionSource.includes("import { isRecord, recordEntriesFromUnknown, recordFromUnknown, recordKeysFromUnknown, recordString } from './services/records'"));
   assert.equal(extensionSource.includes('function ticketRecord'), false, 'extension should use shared record helper for ticket payload records');
 
   const ticketFieldsSource = readSourceFixture('src', 'services', 'ticketFields.ts');
@@ -4179,7 +4183,7 @@ test('record guard helper centralizes unknown object narrowing', () => {
   }
 
   const dispatcherSource = readSourceFixture('src', 'runners', 'sessionDispatcher.ts');
-  assert.ok(dispatcherSource.includes("import { arrayFromUnknown, isRecord, recordFromUnknown } from '../services/records'"));
+  assert.ok(dispatcherSource.includes("import { arrayFromUnknown, isRecord, recordEntriesFromUnknown, recordFromUnknown } from '../services/records'"));
   assert.equal(dispatcherSource.includes('function isRecord'), false);
 
   for (const [file, marker] of [
@@ -6365,7 +6369,7 @@ test('dispatcher records branch and permission metadata for persisted runs', () 
     'formatTimeLabel(e.timestamp)',
     "formatDateTimeLabel(run.startedAt, 'Unknown')",
     'function stringOrDefault',
-    "import { arrayFromUnknown, isRecord, recordFromUnknown } from '../services/records'",
+    "import { arrayFromUnknown, isRecord, recordEntriesFromUnknown, recordFromUnknown } from '../services/records'",
     'function streamString(value: unknown): string',
     'export function parseStreamEvents(event: unknown): ProgressEvent[]',
     'function parseAssistantContentBlock(rawBlock: unknown, now: Date): ProgressEvent | null',
@@ -10647,7 +10651,7 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'evidenceCount: evidenceRecordCount(t)',
     "import { ticketStringArray, ticketStringField } from './ticketFields'",
     'function ticketAttachments',
-    "import { isRecord, recordsFromUnknown } from './records'",
+    "import { isRecord, recordEntriesFromUnknown, recordKeysFromUnknown, recordsFromUnknown } from './records'",
     'return recordsFromUnknown(value)',
     'interface TicketAttachmentSummary',
     'interface JiraBoardTicketPayload',
@@ -11573,7 +11577,7 @@ test('extension Sonar commands normalize webview and issue payloads', () => {
   for (const marker of [
     "import { buildSonarReport }",
     "import { buildSonarBranchPickItems, buildSonarFixBranchStrategy, buildSonarFixInstructionBlock } from './services/sonarCommandPlan'",
-    "import { isRecord, recordEntriesFromUnknown, recordFromUnknown, recordString } from './services/records'",
+    "import { isRecord, recordEntriesFromUnknown, recordFromUnknown, recordKeysFromUnknown, recordString } from './services/records'",
     'stringFromUnknown,',
     "vscode.commands.registerCommand('kronos.sonarScan', async (item: unknown)",
     "vscode.commands.registerCommand('kronos.sonarReport', async (item: unknown)",
