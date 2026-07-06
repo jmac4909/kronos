@@ -93,10 +93,12 @@ const mergeRequestFileHints = readSource('src/services/mergeRequestFileHints.ts'
 const runStatus = readSource('src/services/runStatus.ts');
 const runRecords = readSource('src/services/runRecords.ts');
 const runProgress = readSource('src/services/runProgress.ts');
+const runOperatorSummary = readSource('src/services/runOperatorSummary.ts');
 const runActionHelpers = readSource('src/services/runActionHelpers.ts');
 const activeRunDisplay = readSource('src/services/activeRunDisplay.ts');
 const runCompletionNotification = readSource('src/services/runCompletionNotification.ts');
 const runAttention = readSource('src/services/runAttention.ts');
+const runLabels = readSource('src/services/runLabels.ts');
 const runCenterSort = readSource('src/services/runCenterSort.ts');
 const attentionBadge = readSource('src/services/attentionBadge.ts');
 const queuePlanner = readSource('src/services/queuePlanner.ts');
@@ -4055,6 +4057,27 @@ for (const marker of [
 ]) {
   if (!runCompletionNotification.includes(marker)) {
     fail(`Missing run completion notification marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  'export function runStatusDisplayLabel(status: unknown, fallback = \'unknown\'): string',
+  "value.replace(/_/g, ' ')",
+]) {
+  if (!runLabels.includes(marker)) {
+    fail(`Missing run label helper marker: ${marker}`);
+  }
+}
+for (const [name, source, marker] of [
+  ['src/services/runAttention.ts', runAttention, "import { runStatusDisplayLabel } from './runLabels'"],
+  ['src/services/runCompletionNotification.ts', runCompletionNotification, "import { runStatusDisplayLabel } from './runLabels'"],
+  ['src/services/runOperatorSummary.ts', runOperatorSummary, "import { runStatusDisplayLabel } from './runLabels'"],
+]) {
+  if (!source.includes(marker)) {
+    fail(`${name} must import the shared run status label helper.`);
+  }
+  if (/status\.replace\(/.test(source)) {
+    fail(`${name} must not format run status labels locally.`);
   }
 }
 

@@ -1,5 +1,6 @@
 import type { Ticket } from '../state/types';
 import { isAttentionRunStatus, runAttentionLine } from './runAttention';
+import { runStatusDisplayLabel } from './runLabels';
 import { recordFromUnknown, recordString } from './records';
 
 type RunCompletionNotificationKind = 'review_ready' | 'attention';
@@ -40,7 +41,7 @@ export function buildRunCompletionNotification(
   }
 
   const detail = runAttentionLine(run, 180);
-  const statusLabel = status.replace(/_/g, ' ');
+  const statusLabel = runStatusDisplayLabel(status);
   return {
     kind: 'attention',
     severity: 'warning',

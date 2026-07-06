@@ -238,6 +238,7 @@ const activeRunDisplay = require('../out/services/activeRunDisplay.js');
 const queueActiveRun = require('../out/services/queueActiveRun.js');
 const relativeTime = require('../out/services/relativeTime.js');
 const runAttention = require('../out/services/runAttention.js');
+const runLabels = require('../out/services/runLabels.js');
 const runCompletionNotification = require('../out/services/runCompletionNotification.js');
 const runCenterSort = require('../out/services/runCenterSort.js');
 const runActionHelpers = require('../out/services/runActionHelpers.js');
@@ -6537,6 +6538,10 @@ test('run recovery builds resume prompts from saved prompt and log tail', () => 
 });
 
 test('run attention summarizes actionable failure reasons', () => {
+  assert.equal(runLabels.runStatusDisplayLabel('needs_human'), 'needs human');
+  assert.equal(runLabels.runStatusDisplayLabel(' waiting_for_review '), 'waiting for review');
+  assert.equal(runLabels.runStatusDisplayLabel(undefined, 'not started'), 'not started');
+
   const buildFailure = runAttention.runAttentionDetail({
     id: 'run-9',
     status: 'needs_human',
@@ -6618,6 +6623,23 @@ test('run completion notifications route review-ready and attention outcomes', (
     ticket({}),
     { status: 'completed', skill: 'verify-local' },
   ), null);
+
+  const labelSource = readSourceFixture('src', 'services', 'runLabels.ts');
+  for (const marker of [
+    'export function runStatusDisplayLabel(status: unknown, fallback = \'unknown\'): string',
+    "value.replace(/_/g, ' ')",
+  ]) {
+    assert.ok(labelSource.includes(marker), marker);
+  }
+  for (const [file, marker] of [
+    ['runAttention.ts', "import { runStatusDisplayLabel } from './runLabels'"],
+    ['runCompletionNotification.ts', "import { runStatusDisplayLabel } from './runLabels'"],
+    ['runOperatorSummary.ts', "import { runStatusDisplayLabel } from './runLabels'"],
+  ]) {
+    const source = readSourceFixture('src', 'services', file);
+    assert.ok(source.includes(marker), `${file} should import shared run status label helper`);
+    assert.equal(/status\.replace\(/.test(source), false, `${file} should not format run status labels locally`);
+  }
 });
 
 test('recovery center prioritizes failed runs, unsafe worktrees, doctor failures, and backups', () => {

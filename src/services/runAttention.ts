@@ -1,5 +1,6 @@
 import { classifyRunFailure, type RunFailureKind } from './postRunReadiness';
 import { recordFromUnknown } from './records';
+import { runStatusDisplayLabel } from './runLabels';
 
 type RunAttentionSource =
   | 'failureReason'
@@ -67,7 +68,7 @@ function summarizeRunAttention(run: unknown): RunAttentionSummary {
     };
   }
 
-  const detail = status === 'unknown' ? 'Run needs review' : `Run status is ${status.replace(/_/g, ' ')}`;
+  const detail = status === 'unknown' ? 'Run needs review' : `Run status is ${runStatusDisplayLabel(status)}`;
   return {
     status,
     failureKind,
@@ -93,7 +94,7 @@ function runFailureKindLabel(kind: RunFailureKind, status = ''): string {
   if (status === 'needs_human') { return 'Needs human review'; }
   if (status === 'failed') { return 'Run failed'; }
   if (status === 'cancelled') { return 'Cancelled'; }
-  if (status && status !== 'unknown') { return `Run ${status.replace(/_/g, ' ')}`; }
+  if (status && status !== 'unknown') { return `Run ${runStatusDisplayLabel(status)}`; }
   return 'Run needs review';
 }
 

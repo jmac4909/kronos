@@ -1,6 +1,7 @@
 import { toValidDate } from './dateValues';
 import { isRecord, recordFromUnknown, recordString } from './records';
 import { runAttentionDetail } from './runAttention';
+import { runStatusDisplayLabel } from './runLabels';
 import { runProgressSummary } from './runProgress';
 import { effectiveRunStatus, isActiveRunStatus } from './runStatus';
 
@@ -69,7 +70,7 @@ function runHeadline(
   if (isActiveRunStatus(status)) {
     return latestSignal ? `${target} is running: ${latestSignal}` : `${target} is running`;
   }
-  return latestSignal ? `${target}: ${latestSignal}` : `${target} status is ${status.replace(/_/g, ' ')}`;
+  return latestSignal ? `${target}: ${latestSignal}` : `${target} status is ${runStatusDisplayLabel(status)}`;
 }
 
 function runDetail(status: string, progressLabel: string, latestSignal: string, changedCount: number, readCount: number): string {
@@ -96,7 +97,7 @@ function runFacts(
   readinessSummary: string,
 ): Array<{ label: string; value: string; tone?: RunOperatorTone }> {
   const facts: Array<{ label: string; value: string; tone?: RunOperatorTone }> = [
-    { label: 'Status', value: status.replace(/_/g, ' '), tone: runTone(status, readinessStatus) },
+    { label: 'Status', value: runStatusDisplayLabel(status), tone: runTone(status, readinessStatus) },
     { label: 'Progress', value: progressLabel },
   ];
   const startedAt = shortDateTime(record['startedAt']);
