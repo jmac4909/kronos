@@ -1,6 +1,6 @@
 import { ScriptRunOptions, runKronosStateScript } from './scriptClient';
 import { parseJsonWithLabel } from './jsonFiles';
-import { arrayFromUnknown, isRecord as isPlainObject } from './records';
+import { arrayFromUnknown, finiteNumberFromUnknown, isRecord as isPlainObject } from './records';
 import { DiscoveredProject } from '../state/types';
 
 type StateScriptRunner = (args: string[], options?: ScriptRunOptions) => string;
@@ -100,8 +100,8 @@ export function readMorningBriefJson(options: StateScriptAdapterOptions = {}): M
     completed: arrayFromUnknown(parsed['completed']),
     needs_attention: arrayFromUnknown(parsed['needs_attention']),
     ready_to_go: arrayFromUnknown(parsed['ready_to_go']),
-    overnight_actions: finiteNumberOrZero(parsed['overnight_actions']),
-    vpn_drops: finiteNumberOrZero(parsed['vpn_drops']),
+    overnight_actions: finiteNumberFromUnknown(parsed['overnight_actions']),
+    vpn_drops: finiteNumberFromUnknown(parsed['vpn_drops']),
   };
 }
 
@@ -109,13 +109,4 @@ function stringOrNull(value: unknown): string | null {
   if (typeof value !== 'string') { return null; }
   const trimmed = value.trim();
   return trimmed ? trimmed : null;
-}
-
-function finiteNumberOrZero(value: unknown): number {
-  if (typeof value === 'number' && Number.isFinite(value)) { return value; }
-  if (typeof value === 'string' && value.trim()) {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : 0;
-  }
-  return 0;
 }

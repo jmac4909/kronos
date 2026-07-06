@@ -8,7 +8,7 @@ import { buildHumanReviewInbox } from './humanReviewInbox';
 import { buildNextActionContext } from './nextActionContext';
 import { actionButton, actionRow, kronosActionPanelScript } from './operatorPanel';
 import type { PlannedAction } from './queuePlanner';
-import { arrayFromUnknown, recordFromUnknown, recordString } from './records';
+import { arrayFromUnknown, finiteNumberFromUnknown, recordFromUnknown, recordString } from './records';
 import { runLikeRecordsFromUnknown } from './runRecords';
 import { isFailedOrCancelledRunStatus, isFreshActiveRun } from './runStatus';
 import { computeTrendMetrics } from './trendMetrics';
@@ -42,13 +42,7 @@ function dashboardBriefItems(brief: Record<string, unknown>, key: string): unkno
 }
 
 function dashboardBriefCount(brief: Record<string, unknown>, key: string): number {
-  const value = brief[key];
-  if (typeof value === 'number' && Number.isFinite(value)) { return value; }
-  if (typeof value === 'string' && value.trim()) {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : 0;
-  }
-  return 0;
+  return finiteNumberFromUnknown(brief[key]);
 }
 
 export function buildDashboardHtml(input: DashboardPanelInput): string {

@@ -4062,6 +4062,10 @@ test('record guard helper centralizes unknown object narrowing', () => {
   assert.equal(records.trimmedStringFromUnknown(42, 'fallback'), 'fallback');
   assert.equal(records.finiteNumberFromUnknown('42'), 42);
   assert.equal(records.finiteNumberFromUnknown('bad', 7), 7);
+  assert.equal(records.finiteNumberFromUnknown(3.5), 3.5);
+  assert.equal(records.finiteNumberFromUnknown(true, 7), 7);
+  assert.equal(records.finiteNumberFromUnknown(null, 7), 7);
+  assert.equal(records.finiteNumberFromUnknown('', 7), 7);
   assert.deepEqual(records.recordsFromUnknown([{ ok: true }, null, [], 'raw']), [{ ok: true }]);
   assert.deepEqual(records.recordEntriesFromUnknown({ a: { ok: true }, b: 42 }), [['a', { ok: true }], ['b', 42]]);
   assert.deepEqual(records.recordEntriesFromUnknown(null), []);
@@ -4101,6 +4105,8 @@ test('record guard helper centralizes unknown object narrowing', () => {
     'return isRecord(value) ? value : {}',
     'return Array.isArray(value) ? value : []',
     'value !== undefined && value !== null',
+    "if (typeof value === 'number')",
+    "if (typeof value !== 'string' || !value.trim())",
     'const parsed = Number(value)',
     'return Number.isFinite(parsed) ? parsed : fallback',
     "typeof value === 'string' ? value.trim() : fallback",
@@ -4126,10 +4132,10 @@ test('record guard helper centralizes unknown object narrowing', () => {
     ['runStatus.ts', "import { isRecord, recordsFromUnknown } from './records'"],
     ['runRecords.ts', "import { isRecord, recordsFromUnknown, recordString } from './records'"],
     ['runStore.ts', "import { isRecord, recordString } from './records'"],
-    ['sessionStore.ts', "import { isRecord, recordsFromUnknown } from './records'"],
+    ['sessionStore.ts', "import { finiteNumberFromUnknown, isRecord, recordsFromUnknown } from './records'"],
     ['sonarReportView.ts', "import { isRecord, recordsFromUnknown } from './records'"],
     ['stateStore.ts', "import { finiteNumberFromUnknown, isRecord as isPlainObject } from './records'"],
-    ['stateScriptAdapter.ts', "import { arrayFromUnknown, isRecord as isPlainObject } from './records'"],
+    ['stateScriptAdapter.ts', "import { arrayFromUnknown, finiteNumberFromUnknown, isRecord as isPlainObject } from './records'"],
   ]) {
     const source = readSourceFixture('src', 'services', file);
     assert.ok(source.includes(marker), `${file} should import shared record guard`);
@@ -6721,7 +6727,7 @@ test('session store normalizes aggregate stats rows for rendering', () => {
   const source = readSourceFixture('src', 'services', 'sessionStore.ts');
   for (const marker of [
     "import { unknownErrorMessage } from './errorUtils'",
-    "import { isRecord, recordsFromUnknown } from './records'",
+    "import { finiteNumberFromUnknown, isRecord, recordsFromUnknown } from './records'",
     'catch (e: unknown)',
     "unknownErrorMessage(e, 'Unable to parse saved session JSON.')",
     "unknownErrorMessage(e, 'Unable to parse stats.json.')",
@@ -6729,6 +6735,7 @@ test('session store normalizes aggregate stats rows for rendering', () => {
     'function normalizeSavedSessionEvents',
     'function normalizeAggregateSessions',
     'recordsFromUnknown(value)',
+    "toolCalls: finiteNumberFromUnknown(value['toolCalls'])",
   ]) {
     assert.ok(source.includes(marker), marker);
   }
@@ -6736,6 +6743,7 @@ test('session store normalizes aggregate stats rows for rendering', () => {
     'catch (e: any)',
     'e?.message',
     'if (!Array.isArray(value)) { return []; }',
+    'function finiteNumber(value: unknown)',
   ]) {
     assert.equal(source.includes(marker), false, marker);
   }
@@ -8236,11 +8244,13 @@ test('state script adapter keeps raw JSON payloads unknown until normalized', ()
   for (const marker of [
     '[key: string]: unknown',
     "parseJsonWithLabel(discoverProjects(options), 'kronos_state.py --discover', { includePreview: true })",
-    "import { arrayFromUnknown, isRecord as isPlainObject } from './records'",
+    "import { arrayFromUnknown, finiteNumberFromUnknown, isRecord as isPlainObject } from './records'",
     "import { parseJsonWithLabel } from './jsonFiles'",
     'for (const item of arrayFromUnknown(value))',
     "completed: arrayFromUnknown(parsed['completed'])",
     "ready_to_go: arrayFromUnknown(parsed['ready_to_go'])",
+    "overnight_actions: finiteNumberFromUnknown(parsed['overnight_actions'])",
+    "vpn_drops: finiteNumberFromUnknown(parsed['vpn_drops'])",
   ]) {
     assert.ok(source.includes(marker), marker);
   }
@@ -8248,6 +8258,7 @@ test('state script adapter keeps raw JSON payloads unknown until normalized', ()
     '[key: string]: any',
     'function parseStateScriptJson',
     'function arrayOrEmpty',
+    'function finiteNumberOrZero',
     'catch (e: any)',
     'e?.message',
     'value is Record<string, any>',
@@ -10211,10 +10222,11 @@ test('dashboard panel view renders escaped command center data', () => {
   assert.doesNotMatch(html, /Brief <failed>/);
 
   const source = readSourceFixture('src', 'services', 'dashboardPanelView.ts');
-  assert.ok(source.includes("import { arrayFromUnknown, recordFromUnknown, recordString } from './records'"));
+  assert.ok(source.includes("import { arrayFromUnknown, finiteNumberFromUnknown, recordFromUnknown, recordString } from './records'"));
   assert.ok(source.includes("import { runLikeRecordsFromUnknown } from './runRecords'"));
   assert.ok(source.includes('const runs = runLikeRecordsFromUnknown(input.runs)'));
   assert.ok(source.includes('const safeBrief = recordFromUnknown(input.brief)'));
+  assert.ok(source.includes('return finiteNumberFromUnknown(brief[key])'));
   assert.ok(source.includes("import { isFailedOrCancelledRunStatus, isFreshActiveRun } from './runStatus'"));
   assert.ok(source.includes("runs.filter(run => isFailedOrCancelledRunStatus(recordString(run, 'status'))).length"));
   assert.ok(source.includes('return arrayFromUnknown(brief[key])'));

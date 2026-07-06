@@ -4,7 +4,7 @@ import { safeFileStem } from './fileNames';
 import { KRONOS_DIR } from './stateStore';
 import { unknownErrorMessage } from './errorUtils';
 import { readJsonFile } from './jsonFiles';
-import { isRecord, recordsFromUnknown } from './records';
+import { finiteNumberFromUnknown, isRecord, recordsFromUnknown } from './records';
 import { toValidDate } from './dateValues';
 
 const SESSIONS_DIR = path.join(KRONOS_DIR, 'sessions');
@@ -219,12 +219,12 @@ function normalizeAggregateSession(value: unknown): AggregateSessionStats | null
     skill: stringOrDefault(value['skill'], 'unknown'),
     ticket: stringOrDefault(value['ticket'], ''),
     startedAt: stringOrDefault(value['startedAt'], ''),
-    toolCalls: finiteNumber(value['toolCalls']),
-    toolErrors: finiteNumber(value['toolErrors']),
-    thinkingCount: finiteNumber(value['thinkingCount']),
-    filesRead: finiteNumber(value['filesRead']),
-    filesEdited: finiteNumber(value['filesEdited']),
-    durationSec: finiteNumber(value['durationSec']),
+    toolCalls: finiteNumberFromUnknown(value['toolCalls']),
+    toolErrors: finiteNumberFromUnknown(value['toolErrors']),
+    thinkingCount: finiteNumberFromUnknown(value['thinkingCount']),
+    filesRead: finiteNumberFromUnknown(value['filesRead']),
+    filesEdited: finiteNumberFromUnknown(value['filesEdited']),
+    durationSec: finiteNumberFromUnknown(value['durationSec']),
     verdict: stringOrDefault(value['verdict'], 'unknown'),
   };
 }
@@ -233,15 +233,6 @@ function stringOrDefault(value: unknown, fallback: string): string {
   if (typeof value !== 'string') { return fallback; }
   const trimmed = value.trim();
   return trimmed || fallback;
-}
-
-function finiteNumber(value: unknown): number {
-  if (typeof value === 'number' && Number.isFinite(value)) { return value; }
-  if (typeof value === 'string' && value.trim()) {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : 0;
-  }
-  return 0;
 }
 
 function invalidSessionIssue(kind: SessionStoreIssue['kind'], filePath: string, detail: string): SessionStoreIssue {

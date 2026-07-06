@@ -1893,6 +1893,7 @@ for (const marker of [
   'const safeBrief = recordFromUnknown(input.brief)',
   'function dashboardBriefItems',
   'function dashboardBriefCount',
+  'return finiteNumberFromUnknown(brief[key])',
   'class="kronos-shell operator-shell"',
   'operator-summary',
   'summary-card',
@@ -2322,7 +2323,7 @@ for (const marker of [
   'function normalizeSavedSessionEvent',
   'function normalizeAggregateSessions',
   'function normalizeAggregateSession',
-  'function finiteNumber',
+  "toolCalls: finiteNumberFromUnknown(value['toolCalls'])",
   'function readSavedSessionFileResult',
   'function readAggregateStatsResult',
   "import { unknownErrorMessage } from './errorUtils'",
@@ -2339,7 +2340,7 @@ for (const marker of [
     fail(`Missing session store marker: ${marker}`);
   }
 }
-if (!sessionStore.includes("import { isRecord, recordsFromUnknown } from './records'")) {
+if (!sessionStore.includes("import { finiteNumberFromUnknown, isRecord, recordsFromUnknown } from './records'")) {
   fail('Session store must import the shared record-list normalizer.');
 }
 if (sessionStore.includes('if (!Array.isArray(value)) { return []; }')) {
@@ -2613,6 +2614,8 @@ for (const marker of [
   'return isRecord(value) ? value : {}',
   'return Array.isArray(value) ? value : []',
   'value !== undefined && value !== null',
+  "if (typeof value === 'number')",
+  "if (typeof value !== 'string' || !value.trim())",
   'const parsed = Number(value)',
   'return Number.isFinite(parsed) ? parsed : fallback',
   'return arrayFromUnknown(value).filter(isRecord)',
@@ -2982,11 +2985,11 @@ for (const [name, source, marker] of [
   ['src/services/runStatus.ts', runStatus, "import { isRecord, recordsFromUnknown } from './records'"],
   ['src/services/runRecords.ts', runRecords, "import { isRecord, recordsFromUnknown, recordString } from './records'"],
   ['src/services/runStore.ts', runStore, "import { isRecord, recordString } from './records'"],
-  ['src/services/sessionStore.ts', sessionStore, "import { isRecord, recordsFromUnknown } from './records'"],
+  ['src/services/sessionStore.ts', sessionStore, "import { finiteNumberFromUnknown, isRecord, recordsFromUnknown } from './records'"],
   ['src/services/sonarReportView.ts', sonarReportView, "import { isRecord, recordsFromUnknown } from './records'"],
   ['src/services/trendMetrics.ts', trendMetrics, "import { definedValues, recordEntriesFromUnknown, recordString } from './records'"],
   ['src/services/stateStore.ts', stateStore, "import { finiteNumberFromUnknown, isRecord as isPlainObject } from './records'"],
-  ['src/services/stateScriptAdapter.ts', stateScriptAdapter, "import { arrayFromUnknown, isRecord as isPlainObject } from './records'"],
+  ['src/services/stateScriptAdapter.ts', stateScriptAdapter, "import { arrayFromUnknown, finiteNumberFromUnknown, isRecord as isPlainObject } from './records'"],
   ['src/runners/sessionDispatcher.ts', dispatcher, "import { arrayFromUnknown, isRecord, recordEntriesFromUnknown, recordFromUnknown } from '../services/records'"],
 ]) {
   if (!source.includes(marker)) {
@@ -3002,7 +3005,7 @@ for (const [name, source, marker] of [
     fail(`${name} must not carry a local isPlainObject helper.`);
   }
 }
-if (!dashboardPanelView.includes("import { arrayFromUnknown, recordFromUnknown, recordString } from './records'")) {
+if (!dashboardPanelView.includes("import { arrayFromUnknown, finiteNumberFromUnknown, recordFromUnknown, recordString } from './records'")) {
   fail('src/services/dashboardPanelView.ts must import the shared array and record fallback helpers.');
 }
 if (!dashboardPanelView.includes("import { runLikeRecordsFromUnknown } from './runRecords'")) {
@@ -3181,8 +3184,9 @@ for (const marker of [
   'export function completeAdhocTask',
   'function readMorningBrief(',
   'export function readMorningBriefJson',
-  "import { arrayFromUnknown, isRecord as isPlainObject } from './records'",
-  'function finiteNumberOrZero',
+  "import { arrayFromUnknown, finiteNumberFromUnknown, isRecord as isPlainObject } from './records'",
+  "overnight_actions: finiteNumberFromUnknown(parsed['overnight_actions'])",
+  "vpn_drops: finiteNumberFromUnknown(parsed['vpn_drops'])",
   'function stringOrNull',
   "completed: arrayFromUnknown(parsed['completed'])",
   "ready_to_go: arrayFromUnknown(parsed['ready_to_go'])",
