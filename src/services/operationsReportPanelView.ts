@@ -37,9 +37,7 @@ export function buildSessionStatsHtml(stats: SessionStatsReport, nonce?: string,
 
   const bySkill: Record<string, SessionStatsRow[]> = {};
   for (const session of sessions) {
-    const bucket = bySkill[session.skill] || [];
-    bucket.push(session);
-    bySkill[session.skill] = bucket;
+    sessionSkillBucket(bySkill, session.skill).push(session);
   }
 
   const skillRows = Object.entries(bySkill).map(([skill, items]) => {
@@ -85,6 +83,14 @@ export function buildSessionStatsHtml(stats: SessionStatsReport, nonce?: string,
   <div class="operator-section"><h2>Recent Sessions</h2>
   <div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Date</th><th>Project</th><th>Action</th><th>Ticket</th><th>Result</th><th>Time</th><th>Tools</th><th>Errors</th><th>Files</th></tr>${recentRows}</table></div></div>
 </div>${nonce ? kronosActionPanelScript(nonce, 'Kronos Session Stats', actionScriptUri) : ''}</body></html>`;
+}
+
+function sessionSkillBucket(bySkill: Record<string, SessionStatsRow[]>, skill: string): SessionStatsRow[] {
+  const existing = bySkill[skill];
+  if (existing) { return existing; }
+  const created: SessionStatsRow[] = [];
+  bySkill[skill] = created;
+  return created;
 }
 
 export function buildAgentQualityScoreHtml(score: AgentQualityScore, nonce?: string, actionScriptUri?: string): string {

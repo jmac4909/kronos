@@ -11365,6 +11365,9 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'Kronos Integration Manifest',
     'Kronos Profiles',
     'Kronos Doctor',
+    'function sessionSkillBucket',
+    'sessionSkillBucket(bySkill, session.skill).push(session)',
+    'const existing = bySkill[skill]',
     'Hash Status',
     'manifestPillClass',
     "actionButton('snapshotIntegrationManifest', 'Snapshot')",
@@ -11385,6 +11388,7 @@ test('extension webviews use shared UI shell and board filtering affordances', (
   ]) {
     assert.ok(operationsReportPanelViewSource.includes(marker), marker);
   }
+  assert.equal(operationsReportPanelViewSource.includes('bySkill[session.skill] || []'), false);
   for (const forbidden of ['run(s)', 'ticket(s)']) {
     assert.equal(operationsReportPanelViewSource.includes(forbidden), false, forbidden);
   }

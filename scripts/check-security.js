@@ -5091,6 +5091,9 @@ for (const marker of [
   'Kronos Integration Manifest',
   'Kronos Profiles',
   'Kronos Doctor',
+  'function sessionSkillBucket',
+  'sessionSkillBucket(bySkill, session.skill).push(session)',
+  'const existing = bySkill[skill]',
   'Hash Status',
   'manifestPillClass',
   "actionButton('snapshotIntegrationManifest', 'Snapshot')",
@@ -5115,6 +5118,9 @@ for (const marker of [
 }
 if (/\bany\b/.test(operationsReportPanelView)) {
   fail('Operations report panel view should keep renderer payloads typed without any.');
+}
+if (operationsReportPanelView.includes('bySkill[session.skill] || []')) {
+  fail('Operations report panel view should group session stats through sessionSkillBucket.');
 }
 for (const forbidden of ['run(s)', 'ticket(s)']) {
   if (operationsReportPanelView.includes(forbidden)) {
