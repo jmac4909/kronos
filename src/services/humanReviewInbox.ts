@@ -1,9 +1,10 @@
 import { KronosState, QueueState } from '../state/types';
 import { isReviewReadyAction } from './actionSemantics';
 import { RecoveryCheck, RecoveryWorktreeReport } from './recoveryCenter';
+import { doctorCheckAttentionId, doctorCheckAttentionSeverity, doctorCheckNeedsAttention } from './doctorAttention';
 import { evaluateEvidenceGate } from './evidenceGate';
 import { runAttentionDetail } from './runAttention';
-import { severityRank } from './severityRank';
+import { severityRank, severitySummary } from './severityRank';
 import { recordString } from './records';
 import { isRunLikeRecord, type RunLikeRecord } from './runRecords';
 
@@ -87,11 +88,11 @@ export function buildHumanReviewInbox(input: HumanReviewInboxInput): HumanReview
   }
 
   for (const check of input.doctorChecks || []) {
-    if (check.status === 'pass') { continue; }
+    if (!doctorCheckNeedsAttention(check)) { continue; }
     items.push({
-      id: `integration:${check.name}`,
+      id: doctorCheckAttentionId(check),
       kind: 'integration',
-      severity: check.status === 'fail' ? 'critical' : 'warning',
+      severity: doctorCheckAttentionSeverity(check),
       title: `${check.name} is ${check.status}`,
       detail: check.detail,
     });
@@ -110,12 +111,7 @@ export function buildHumanReviewInbox(input: HumanReviewInboxInput): HumanReview
 
   const sorted = dedupeItems(items).sort(compareItems);
   return {
-    summary: {
-      critical: sorted.filter(i => i.severity === 'critical').length,
-      warning: sorted.filter(i => i.severity === 'warning').length,
-      info: sorted.filter(i => i.severity === 'info').length,
-      total: sorted.length,
-    },
+    summary: severitySummary(sorted),
     items: sorted,
   };
 }

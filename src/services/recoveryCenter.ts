@@ -1,8 +1,9 @@
 import type { RunStoreIssue } from './runStore';
 import { toValidDate } from './dateValues';
+import { DoctorAttentionCheck, doctorCheckAttentionId, doctorCheckAttentionSeverity, doctorCheckNeedsAttention } from './doctorAttention';
 import { mergeRequestReviewStatusLabel } from './mergeRequestLabels';
 import { runAttentionDetail } from './runAttention';
-import { severityRank } from './severityRank';
+import { severityRank, severitySummary } from './severityRank';
 
 type RecoverySeverity = 'critical' | 'warning' | 'info';
 type RecoveryKind = 'run' | 'worktree' | 'backup' | 'integration' | 'merge_request';
@@ -59,11 +60,7 @@ export interface RecoveryWorktreeReport {
   registryIssue?: string;
 }
 
-export interface RecoveryCheck {
-  name: string;
-  status: 'pass' | 'warn' | 'fail';
-  detail: string;
-}
+export interface RecoveryCheck extends DoctorAttentionCheck {}
 
 interface RecoveryTicket {
   summary?: string;
@@ -153,11 +150,11 @@ export function buildRecoveryInventory(input: RecoveryInventoryInput): RecoveryI
   }
 
   for (const check of input.doctorChecks || []) {
-    if (check.status === 'pass') { continue; }
+    if (!doctorCheckNeedsAttention(check)) { continue; }
     items.push({
-      id: `integration:${check.name}`,
+      id: doctorCheckAttentionId(check),
       kind: 'integration',
-      severity: check.status === 'fail' ? 'critical' : 'warning',
+      severity: doctorCheckAttentionSeverity(check),
       title: `${check.name} needs attention`,
       detail: check.detail,
       action: 'openDoctor',
@@ -184,12 +181,7 @@ export function buildRecoveryInventory(input: RecoveryInventoryInput): RecoveryI
 
   return {
     generatedAt: now.toISOString(),
-    summary: {
-      critical: items.filter(i => i.severity === 'critical').length,
-      warning: items.filter(i => i.severity === 'warning').length,
-      info: items.filter(i => i.severity === 'info').length,
-      total: items.length,
-    },
+    summary: severitySummary(items),
     items,
   };
 }

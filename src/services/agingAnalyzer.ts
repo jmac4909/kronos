@@ -3,7 +3,7 @@ import { isFailingBuildStatus } from './buildStatus';
 import { toValidDate } from './dateValues';
 import { mergeRequestReviewStatusLabel } from './mergeRequestLabels';
 import { isOpenReviewTicket } from './reviewWork';
-import { severityRank } from './severityRank';
+import { severityRank, severitySummary } from './severityRank';
 
 type AgingSeverity = 'critical' | 'warning' | 'info';
 type AgingKind = 'review' | 'build' | 'blocked' | 'verification' | 'ticket';
@@ -127,12 +127,7 @@ export function analyzeAging(input: {
   const sorted = items.sort((a, b) => severityRank(b.severity) - severityRank(a.severity) || b.ageDays - a.ageDays || a.ticketKey.localeCompare(b.ticketKey));
   return {
     generatedAt: now.toISOString(),
-    summary: {
-      critical: sorted.filter(item => item.severity === 'critical').length,
-      warning: sorted.filter(item => item.severity === 'warning').length,
-      info: sorted.filter(item => item.severity === 'info').length,
-      total: sorted.length,
-    },
+    summary: severitySummary(sorted),
     items: sorted,
   };
 }

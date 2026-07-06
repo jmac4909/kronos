@@ -170,6 +170,7 @@ const actionCatalog = require('../out/services/actionCatalog.js');
 const actionSemantics = require('../out/services/actionSemantics.js');
 const buildStatus = require('../out/services/buildStatus.js');
 const severityRank = require('../out/services/severityRank.js');
+const doctorAttention = require('../out/services/doctorAttention.js');
 const records = require('../out/services/records.js');
 const dateValues = require('../out/services/dateValues.js');
 const dateLabels = require('../out/services/dateLabels.js');
@@ -3936,6 +3937,40 @@ test('severity rank helper centralizes attention ordering vocabularies', () => {
   assert.equal(severityRank.severityRank('medium'), 2);
   assert.equal(severityRank.severityRank('info'), 1);
   assert.equal(severityRank.severityRank('low'), 1);
+  assert.deepEqual(severityRank.severitySummary([
+    { severity: 'critical' },
+    { severity: 'high' },
+    { severity: 'warning' },
+    { severity: 'medium' },
+    { severity: 'info' },
+    { severity: 'low' },
+  ]), { critical: 2, warning: 2, info: 2, total: 6 });
+  assert.equal(doctorAttention.doctorCheckNeedsAttention({ name: 'Git', status: 'pass', detail: 'ok' }), false);
+  assert.equal(doctorAttention.doctorCheckNeedsAttention({ name: 'GitLab', status: 'warn', detail: 'missing' }), true);
+  assert.equal(doctorAttention.doctorCheckAttentionId({ name: 'GitLab API', status: 'fail', detail: 'missing' }), 'integration:GitLab API');
+  assert.equal(doctorAttention.doctorCheckAttentionSeverity({ name: 'GitLab API', status: 'fail', detail: 'missing' }), 'critical');
+  assert.equal(doctorAttention.doctorCheckAttentionSeverity({ name: 'Prompt templates', status: 'warn', detail: 'missing' }), 'warning');
+
+  const severitySource = readSourceFixture('src', 'services', 'severityRank.ts');
+  for (const marker of [
+    "export type RankedSeverity = 'critical' | 'high' | 'warning' | 'medium' | 'info' | 'low'",
+    "export type SeveritySummary = Record<'critical' | 'warning' | 'info', number> & { total: number }",
+    'export function severityRank(severity: RankedSeverity): number',
+    'export function severitySummary(items: Array<{ severity: RankedSeverity }>): SeveritySummary',
+  ]) {
+    assert.ok(severitySource.includes(marker), marker);
+  }
+  const doctorAttentionSource = readSourceFixture('src', 'services', 'doctorAttention.ts');
+  for (const marker of [
+    'export interface DoctorAttentionCheck',
+    'export function doctorCheckNeedsAttention(check: DoctorAttentionCheck): boolean',
+    'export function doctorCheckAttentionId(check: DoctorAttentionCheck): string',
+    "return `integration:${check.name}`",
+    "export function doctorCheckAttentionSeverity(check: DoctorAttentionCheck): 'critical' | 'warning'",
+  ]) {
+    assert.ok(doctorAttentionSource.includes(marker), marker);
+  }
+
   for (const file of [
     'humanReviewInbox.ts',
     'collisionDetector.ts',
@@ -3944,8 +3979,14 @@ test('severity rank helper centralizes attention ordering vocabularies', () => {
     'queuePlanner.ts',
   ]) {
     const source = readSourceFixture('src', 'services', file);
-    assert.ok(source.includes("import { severityRank } from './severityRank'"), `${file} should use shared severity ranking`);
+    assert.ok(source.includes("from './severityRank'"), `${file} should use shared severity helpers`);
     assert.equal(source.includes('function severityWeight'), false, `${file} should not carry a local severityWeight helper`);
+  }
+  for (const file of ['humanReviewInbox.ts', 'agingAnalyzer.ts', 'recoveryCenter.ts']) {
+    const source = readSourceFixture('src', 'services', file);
+    assert.ok(source.includes('severitySummary('), `${file} should use shared severity summary helper`);
+    assert.equal(source.includes(".filter(i => i.severity === 'critical')"), false, `${file} should not count severity summary locally`);
+    assert.equal(source.includes(".filter(item => item.severity === 'critical')"), false, `${file} should not count severity summary locally`);
   }
 });
 
@@ -6833,6 +6874,12 @@ test('recovery center prioritizes failed runs, unsafe worktrees, doctor failures
   assert.ok(inventory.items.some(item => item.id === 'run:stale-run' && item.title.includes('may be abandoned')));
   assert.ok(inventory.items.some(item => item.id === 'worktree:/repo/app/.claude/worktrees/dirty' && item.detail.includes('/repo/app/.claude/worktrees/dirty')));
   assert.ok(inventory.items.some(item => item.kind === 'backup' && item.action === 'restoreBackup'));
+
+  const source = readSourceFixture('src', 'services', 'recoveryCenter.ts');
+  assert.ok(source.includes("import { DoctorAttentionCheck, doctorCheckAttentionId, doctorCheckAttentionSeverity, doctorCheckNeedsAttention } from './doctorAttention'"));
+  assert.ok(source.includes('export interface RecoveryCheck extends DoctorAttentionCheck'));
+  assert.ok(source.includes('summary: severitySummary(items)'));
+  assert.equal(source.includes("check.status === 'fail' ? 'critical' : 'warning'"), false, 'recovery center should use shared Doctor check severity helper');
 });
 
 test('recovery panel view renders escaped recovery and state audit rows', () => {
@@ -9090,9 +9137,12 @@ test('human review inbox aggregates runs, tickets, evidence gaps, integrations, 
   assert.ok(inbox.items.some(item => item.id === 'worktree:/repo/app/.claude/worktrees/K-2' && item.worktreePath === '/repo/app/.claude/worktrees/K-2'));
 
   const source = readSourceFixture('src', 'services', 'humanReviewInbox.ts');
+  assert.ok(source.includes("import { doctorCheckAttentionId, doctorCheckAttentionSeverity, doctorCheckNeedsAttention } from './doctorAttention'"));
   assert.ok(source.includes("import { isRunLikeRecord, type RunLikeRecord } from './runRecords'"));
   assert.ok(source.includes('const rawRuns: unknown[] = Array.isArray(input.runs) ? input.runs : []'));
   assert.ok(source.includes('const runs = rawRuns.filter(isRunLikeRecord)'));
+  assert.ok(source.includes('summary: severitySummary(sorted)'));
+  assert.equal(source.includes("check.status === 'fail' ? 'critical' : 'warning'"), false, 'human review inbox should use shared Doctor check severity helper');
   assert.equal(source.includes('type HumanReviewRunRecord = HumanReviewRun & Record<string, unknown>'), false);
   assert.equal(source.includes('type HumanReviewRunRecord = HumanReviewRun & Record<string, any>'), false);
   assert.equal(source.includes('function isRunRecord'), false);
@@ -9766,6 +9816,11 @@ test('aging analyzer flags stale reviews, builds, blockers, verification, and ti
   assert.ok(report.items.some(item => item.ticketKey === 'K-VERIFY' && item.kind === 'verification' && item.severity === 'warning'));
   assert.ok(report.items.some(item => item.ticketKey === 'K-TICKET' && item.kind === 'ticket' && item.severity === 'info'));
   assert.equal(report.items.some(item => item.ticketKey === 'K-FRESH'), false);
+
+  const source = readSourceFixture('src', 'services', 'agingAnalyzer.ts');
+  assert.ok(source.includes("import { severityRank, severitySummary } from './severityRank'"));
+  assert.ok(source.includes('summary: severitySummary(sorted)'));
+  assert.equal(source.includes(".filter(item => item.severity === 'critical')"), false, 'aging analyzer should use shared severity summary helper');
 });
 
 test('aging report view escapes data and only links HTTP URLs', () => {

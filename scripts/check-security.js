@@ -77,6 +77,7 @@ const actionSemantics = readSource('src/services/actionSemantics.ts');
 const projectSelection = readSource('src/services/projectSelection.ts');
 const projectSetupPlan = readSource('src/services/projectSetupPlan.ts');
 const severityRank = readSource('src/services/severityRank.ts');
+const doctorAttention = readSource('src/services/doctorAttention.ts');
 const records = readSource('src/services/records.ts');
 const commandPayloads = readSource('src/services/commandPayloads.ts');
 const countLabels = readSource('src/services/countLabels.ts');
@@ -1649,6 +1650,11 @@ for (const marker of [
   'merge_request',
   'linkMrToTicket',
   'interface RecoveryTicket',
+  "import { DoctorAttentionCheck, doctorCheckAttentionId, doctorCheckAttentionSeverity, doctorCheckNeedsAttention } from './doctorAttention'",
+  'export interface RecoveryCheck extends DoctorAttentionCheck',
+  'doctorCheckNeedsAttention(check)',
+  'doctorCheckAttentionId(check)',
+  'doctorCheckAttentionSeverity(check)',
   'runStoreIssues',
   'recoveryItemForRunStoreIssue',
   'Invalid ${scopeLabel} run record',
@@ -1668,6 +1674,9 @@ for (const marker of [
   if (!recoveryCenter.includes(marker)) {
     fail(`Missing recovery center marker: ${marker}`);
   }
+}
+if (recoveryCenter.includes("check.status === 'fail' ? 'critical' : 'warning'")) {
+  fail('Recovery center must use shared Doctor check severity helper.');
 }
 
 for (const marker of [
@@ -2446,12 +2455,25 @@ if (actionSemantics.includes('export function')) {
 
 for (const marker of [
   "export type RankedSeverity = 'critical' | 'high' | 'warning' | 'medium' | 'info' | 'low'",
+  "export type SeveritySummary = Record<'critical' | 'warning' | 'info', number> & { total: number }",
   'export function severityRank(severity: RankedSeverity): number',
+  'export function severitySummary(items: Array<{ severity: RankedSeverity }>): SeveritySummary',
   "severity === 'critical' || severity === 'high'",
   "severity === 'warning' || severity === 'medium'",
 ]) {
   if (!severityRank.includes(marker)) {
     fail(`Missing severity rank marker: ${marker}`);
+  }
+}
+for (const marker of [
+  'export interface DoctorAttentionCheck',
+  'export function doctorCheckNeedsAttention(check: DoctorAttentionCheck): boolean',
+  'export function doctorCheckAttentionId(check: DoctorAttentionCheck): string',
+  "return `integration:${check.name}`",
+  "export function doctorCheckAttentionSeverity(check: DoctorAttentionCheck): 'critical' | 'warning'",
+]) {
+  if (!doctorAttention.includes(marker)) {
+    fail(`Missing Doctor attention marker: ${marker}`);
   }
 }
 for (const [name, source] of [
@@ -2461,11 +2483,23 @@ for (const [name, source] of [
   ['src/services/recoveryCenter.ts', recoveryCenter],
   ['src/services/queuePlanner.ts', queuePlanner],
 ]) {
-  if (!source.includes("import { severityRank } from './severityRank'")) {
-    fail(`${name} must use shared severityRank helper.`);
+  if (!source.includes("from './severityRank'")) {
+    fail(`${name} must use shared severity helpers.`);
   }
   if (source.includes('function severityWeight')) {
     fail(`${name} must not carry local severityWeight helper.`);
+  }
+}
+for (const [name, source, marker] of [
+  ['src/services/humanReviewInbox.ts', humanReviewInbox, 'summary: severitySummary(sorted)'],
+  ['src/services/agingAnalyzer.ts', agingAnalyzer, 'summary: severitySummary(sorted)'],
+  ['src/services/recoveryCenter.ts', recoveryCenter, 'summary: severitySummary(items)'],
+]) {
+  if (!source.includes(marker)) {
+    fail(`${name} must use shared severity summary helper.`);
+  }
+  if (source.includes(".filter(i => i.severity === 'critical')") || source.includes(".filter(item => item.severity === 'critical')")) {
+    fail(`${name} must not count severity summaries with repeated local filters.`);
   }
 }
 
@@ -3958,6 +3992,10 @@ for (const marker of [
   'needs_human',
   "status === 'cancelled'",
   "import { isRunLikeRecord, type RunLikeRecord } from './runRecords'",
+  "import { doctorCheckAttentionId, doctorCheckAttentionSeverity, doctorCheckNeedsAttention } from './doctorAttention'",
+  'doctorCheckNeedsAttention(check)',
+  'doctorCheckAttentionId(check)',
+  'doctorCheckAttentionSeverity(check)',
   'const rawRuns: unknown[] = Array.isArray(input.runs) ? input.runs : []',
   'const runs = rawRuns.filter(isRunLikeRecord)',
   "import { recordString } from './records'",
@@ -3973,6 +4011,9 @@ for (const forbidden of [
   if (humanReviewInbox.includes(forbidden)) {
     fail(`Human review inbox must use shared run record helpers: ${forbidden}`);
   }
+}
+if (humanReviewInbox.includes("check.status === 'fail' ? 'critical' : 'warning'")) {
+  fail('Human review inbox must use shared Doctor check severity helper.');
 }
 
 for (const marker of [
