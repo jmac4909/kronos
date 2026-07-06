@@ -140,14 +140,12 @@ function cycleTimesHours(tickets: Record<string, Ticket>, runs: RunLikeRecord[])
   for (const run of runs) {
     const ticketKey = recordString(run, 'ticket');
     if (!ticketKey) { continue; }
-    const list = groupedRuns.get(ticketKey) || [];
-    list.push(run);
-    groupedRuns.set(ticketKey, list);
+    groupedRunBucket(groupedRuns, ticketKey).push(run);
   }
 
   const hours: number[] = [];
   for (const [ticketKey, ticket] of recordEntriesFromUnknown(tickets)) {
-    const ticketRuns = groupedRuns.get(ticketKey) || [];
+    const ticketRuns = groupedRunsForTicket(groupedRuns, ticketKey);
     const runDates = ticketRuns
       .flatMap(run => [toValidDate(recordString(run, 'startedAt')), toValidDate(recordString(run, 'endedAt'))])
       .filter((date): date is Date => Boolean(date));
@@ -165,6 +163,19 @@ function cycleTimesHours(tickets: Record<string, Ticket>, runs: RunLikeRecord[])
     }
   }
   return hours;
+}
+
+function groupedRunBucket(groupedRuns: Map<string, RunLikeRecord[]>, ticketKey: string): RunLikeRecord[] {
+  const existing = groupedRuns.get(ticketKey);
+  if (existing) { return existing; }
+  const created: RunLikeRecord[] = [];
+  groupedRuns.set(ticketKey, created);
+  return created;
+}
+
+function groupedRunsForTicket(groupedRuns: Map<string, RunLikeRecord[]>, ticketKey: string): RunLikeRecord[] {
+  const existing = groupedRuns.get(ticketKey);
+  return existing ? existing : [];
 }
 
 function earliestDate(values: Array<Date | null>): Date | null {

@@ -209,11 +209,17 @@ export function groupTicketEntries(entries: Array<[string, Ticket]>, groupBy: Ti
   const groups = new Map<string, Array<[string, Ticket]>>();
   for (const entry of entries) {
     const group = ticketGroupLabel(entry[1], groupBy);
-    const items = groups.get(group) || [];
-    items.push(entry);
-    groups.set(group, items);
+    ticketGroupBucket(groups, group).push(entry);
   }
   return Array.from(groups.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+}
+
+function ticketGroupBucket(groups: Map<string, Array<[string, Ticket]>>, group: string): Array<[string, Ticket]> {
+  const existing = groups.get(group);
+  if (existing) { return existing; }
+  const created: Array<[string, Ticket]> = [];
+  groups.set(group, created);
+  return created;
 }
 
 function ticketGroupLabel(ticket: Ticket, groupBy: TicketGroupBy): string {

@@ -4960,6 +4960,8 @@ for (const marker of [
   'ticketFilterFacetValues',
   '...tickets.flatMap(ticket => ticketStringArray(ticket.projects))',
   'tickets.flatMap(ticket => ticketStringArray(ticket.labels))',
+  'ticketGroupBucket(groups, group).push(entry)',
+  'function ticketGroupBucket',
   'uniqueTicketFilterValues',
   'groupTicketEntries',
   'return ticketStringArray(ticket.projects)[0] || \'Unlinked\'',
@@ -4973,6 +4975,9 @@ for (const marker of [
 }
 if (ticketFilters.includes('ticket.projects || []') || ticketFilters.includes('ticket.labels || []')) {
   fail('Ticket filters must normalize project and label lists through ticketStringArray.');
+}
+if (ticketFilters.includes('groups.get(group) || []')) {
+  fail('Ticket filters must use ticketGroupBucket instead of map fallback buckets.');
 }
 
 for (const marker of [
@@ -5403,6 +5408,10 @@ for (const marker of [
   "const completedRuns = finishedRuns.filter(run => isSuccessfulRunStatus(recordString(run, 'status'))).length",
   "const failedRuns = finishedRuns.filter(run => isFailedTerminalRunStatus(recordString(run, 'status'))).length",
   'function cycleTimesHours(tickets: Record<string, Ticket>, runs: RunLikeRecord[]): number[]',
+  'groupedRunBucket(groupedRuns, ticketKey).push(run)',
+  'const ticketRuns = groupedRunsForTicket(groupedRuns, ticketKey)',
+  'function groupedRunBucket',
+  'function groupedRunsForTicket',
   'evidenceChecks(ticket)',
   'evidenceEnvironmentResults(ticket)',
   "evidenceString(check, 'result')",
@@ -5425,6 +5434,7 @@ for (const forbidden of [
   'const SUCCESS_RUN_STATUSES',
   'const FINISHED_RUN_STATUSES',
   'function isFailedRunStatus',
+  'groupedRuns.get(ticketKey) || []',
 ]) {
   if (trendMetrics.includes(forbidden)) {
     fail(`Trend metrics must normalize raw run payloads instead of using ${forbidden}.`);

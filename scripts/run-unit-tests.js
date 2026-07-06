@@ -5433,7 +5433,10 @@ test('ticket filters match operator search facets and grouped views', () => {
   assert.ok(source.includes('const labels = ticketStringArray(ticket.labels)'));
   assert.ok(source.includes('...tickets.flatMap(ticket => ticketStringArray(ticket.projects))'));
   assert.ok(source.includes('tickets.flatMap(ticket => ticketStringArray(ticket.labels))'));
+  assert.ok(source.includes('ticketGroupBucket(groups, group).push(entry)'));
+  assert.ok(source.includes('function ticketGroupBucket'));
   assert.ok(source.includes("return ticketStringArray(ticket.projects)[0] || 'Unlinked'"));
+  assert.equal(source.includes('groups.get(group) || []'), false);
   assert.equal(source.includes('ticket.projects || []'), false);
   assert.equal(source.includes('ticket.labels || []'), false);
 });
@@ -12766,6 +12769,10 @@ test('trend metrics report rework, build pass, verification pass, and cycle time
     "const completedRuns = finishedRuns.filter(run => isSuccessfulRunStatus(recordString(run, 'status'))).length",
     "const failedRuns = finishedRuns.filter(run => isFailedTerminalRunStatus(recordString(run, 'status'))).length",
     'function cycleTimesHours(tickets: Record<string, Ticket>, runs: RunLikeRecord[]): number[]',
+    'groupedRunBucket(groupedRuns, ticketKey).push(run)',
+    'const ticketRuns = groupedRunsForTicket(groupedRuns, ticketKey)',
+    'function groupedRunBucket',
+    'function groupedRunsForTicket',
     "countLabel(finishedRuns.length, 'finished run')",
     "countLabel(changesRequestedMrs, 'change-requested MR')",
     "countLabel(tickets.length, 'active ticket')",
@@ -12782,6 +12789,7 @@ test('trend metrics report rework, build pass, verification pass, and cycle time
     'const SUCCESS_RUN_STATUSES',
     'const FINISHED_RUN_STATUSES',
     'function isFailedRunStatus',
+    'groupedRuns.get(ticketKey) || []',
     'run(s)',
     'ticket(s)',
     'MR(s)',
