@@ -420,9 +420,6 @@ const serviceOwnedSafetyMarkers = new Set([
   'function isResumableRun(run: RunActionRecord): boolean',
   'export const FINISHED_ARCHIVE_STATUSES',
   'function isFinishedArchiveRun(run: RunActionRecord): boolean',
-  "import { countLabel } from './countLabels'",
-  'function runCountLabel(count: number): string',
-  "return countLabel(count, 'finished run')",
   'return !isFreshActiveRun(run) && resolveRunArtifactFile(run.promptPath).ok',
   'function resolveRunWorkspace',
   "import { isExistingRealPathInside } from './pathUtils'",
@@ -1030,6 +1027,12 @@ for (const marker of [
   if (!safetySource.includes(marker)) {
     fail(`Missing safety marker: ${marker}`);
   }
+}
+if (runActionHelpers.includes('function runCountLabel')) {
+  fail('runActionHelpers must not keep a wrapper around the shared count label helper.');
+}
+if (extension.includes('runCountLabel(')) {
+  fail('extension should use the shared count label helper directly for archive messages.');
 }
 if (extension.includes('Number.isFinite' + '(intervalMs)')) {
   fail('Extension polling helpers must use the shared interval config helper.');

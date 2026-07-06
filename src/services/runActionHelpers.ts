@@ -6,7 +6,6 @@ import { unknownErrorMessage } from './errorUtils';
 import { isFreshActiveRun } from './runStatus';
 import { isAttentionRunStatus, runAttentionDetail, runAttentionLine } from './runAttention';
 import { formatDateTimeLabel } from './dateLabels';
-import { countLabel } from './countLabels';
 import { recordsFromUnknown } from './records';
 
 export interface RunActionRecord {
@@ -95,10 +94,6 @@ export function isResumableRun(run: RunActionRecord): boolean {
 
 export function isFinishedArchiveRun(run: RunActionRecord): boolean {
   return typeof run.status === 'string' && FINISHED_ARCHIVE_STATUSES.has(run.status);
-}
-
-export function runCountLabel(count: number): string {
-  return countLabel(count, 'finished run');
 }
 
 export function resolveRunWorkspace(run: RunActionRecord): string | null {

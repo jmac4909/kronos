@@ -4505,11 +4505,16 @@ test('run action helpers resolve safe artifacts and quick-pick labels', () => {
   assert.equal(countLabels.nonZeroCountLabel(0, 'item'), '');
   assert.equal(countLabels.nonZeroCountLabel(1.8, 'item'), '1 item');
   assert.equal(countLabels.nonZeroCountLabel(Number.NaN, 'item'), '');
-  assert.equal(runActionHelpers.runCountLabel(1), '1 finished run');
-  assert.equal(runActionHelpers.runCountLabel(2), '2 finished runs');
   assert.equal(runActionHelpers.runProcessPid({ processPid: '1234' }), 1234);
   assert.equal(runActionHelpers.runProcessPid({ pid: '5678' }), 5678);
   assert.equal(runActionHelpers.runProcessPid({ processPid: '-1' }), undefined);
+
+  const runActionSource = readSourceFixture('src', 'services', 'runActionHelpers.ts');
+  const extensionSource = readSourceFixture('src', 'extension.ts');
+  assert.equal(runActionSource.includes('function runCountLabel'), false, 'runActionHelpers should not keep a countLabel wrapper');
+  assert.equal(extensionSource.includes('runCountLabel('), false, 'extension should use the shared count label helper directly');
+  assert.ok(extensionSource.includes("countLabel(runs.length, 'finished run')"));
+  assert.ok(extensionSource.includes("countLabel(archived, 'finished run')"));
 
   const countLabelsSource = readSourceFixture('src', 'services', 'countLabels.ts');
   for (const marker of [
@@ -11047,9 +11052,6 @@ test('extension run recovery helpers use typed run records', () => {
     'function isResumableRun(run: RunActionRecord): boolean',
     'export const FINISHED_ARCHIVE_STATUSES',
     'function isFinishedArchiveRun(run: RunActionRecord): boolean',
-    "import { countLabel } from './countLabels'",
-    'function runCountLabel(count: number): string',
-    "return countLabel(count, 'finished run')",
     'return !isFreshActiveRun(run) && resolveRunArtifactFile(run.promptPath).ok',
     "Run ${run.id} is still active. Stop it or let it finish before attempting to ${action}.",
     'async function resumeSelectedRun(state: KronosState, run: KronosRun)',

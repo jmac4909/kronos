@@ -126,6 +126,7 @@ import { activeRunStatusBarSummary } from './services/activeRunDisplay';
 import { isFreshActiveRun } from './services/runStatus';
 import { buildRunCompletionNotification } from './services/runCompletionNotification';
 import { LIVE_MR_DIFF_TIMEOUT_MS, loadMrFileHints } from './services/mergeRequestFileHints';
+import { countLabel } from './services/countLabels';
 import {
   RUN_ACTION_QUICK_PICK_ITEMS,
   buildRunQuickPickItems,
@@ -134,7 +135,6 @@ import {
   isRetryableRun,
   resolveRunArtifactFile,
   resolveRunWorkspace,
-  runCountLabel,
   runProcessPid,
   type RunActionQuickPickItem,
   type RunArtifactPathResult,
@@ -558,7 +558,7 @@ async function archiveFinishedRuns(): Promise<void> {
     return;
   }
   const confirm = await vscode.window.showWarningMessage(
-    `Archive ${runCountLabel(runs.length)}? Completed, review-ready, failed, and cancelled runs will move under the run archive. Active, paused, and needs-human runs stay visible.`,
+    `Archive ${countLabel(runs.length, 'finished run')}? Completed, review-ready, failed, and cancelled runs will move under the run archive. Active, paused, and needs-human runs stay visible.`,
     'Archive Finished',
     'Cancel'
   );
@@ -577,10 +577,10 @@ async function archiveFinishedRuns(): Promise<void> {
   }
 
   if (failed > 0) {
-    vscode.window.showWarningMessage(`Archived ${runCountLabel(archived)}; ${failed} failed. See developer console for details.`);
+    vscode.window.showWarningMessage(`Archived ${countLabel(archived, 'finished run')}; ${failed} failed. See developer console for details.`);
     return;
   }
-  vscode.window.showInformationMessage(`Archived ${runCountLabel(archived)}.`);
+  vscode.window.showInformationMessage(`Archived ${countLabel(archived, 'finished run')}.`);
 }
 
 async function pauseSelectedRun(run: KronosRun): Promise<void> {
