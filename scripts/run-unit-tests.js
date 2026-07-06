@@ -1750,13 +1750,14 @@ test('queue mutation helpers centralize queue membership and ticket project link
 
   const source = readSourceFixture('src', 'services', 'queueMutations.ts');
   for (const marker of [
-    "import { recordFromUnknown } from './records'",
+    "import { finiteNumberFromUnknown, recordFromUnknown } from './records'",
     "import { ticketStringArray } from './ticketFields'",
     'function normalizeQueueItem(item: unknown): QueueItem',
     'function queueString(value: unknown): string',
     'function queueNullableString(value: unknown): string | null',
     'const current = ticketStringArray(ticket.projects)',
     "projects: ticketStringArray(record['projects'])",
+    "priority_score: finiteNumberFromUnknown(record['priority_score'])",
   ]) {
     assert.ok(source.includes(marker), marker);
   }
@@ -4059,6 +4060,8 @@ test('record guard helper centralizes unknown object narrowing', () => {
   assert.deepEqual(records.definedValues(['ok', null, undefined, '', 'done']), ['ok', '', 'done']);
   assert.equal(records.trimmedStringFromUnknown(' K-1 '), 'K-1');
   assert.equal(records.trimmedStringFromUnknown(42, 'fallback'), 'fallback');
+  assert.equal(records.finiteNumberFromUnknown('42'), 42);
+  assert.equal(records.finiteNumberFromUnknown('bad', 7), 7);
   assert.deepEqual(records.recordsFromUnknown([{ ok: true }, null, [], 'raw']), [{ ok: true }]);
   assert.deepEqual(records.recordEntriesFromUnknown({ a: { ok: true }, b: 42 }), [['a', { ok: true }], ['b', 42]]);
   assert.deepEqual(records.recordEntriesFromUnknown(null), []);
@@ -4089,6 +4092,7 @@ test('record guard helper centralizes unknown object narrowing', () => {
     'export function arrayFromUnknown(value: unknown): unknown[]',
     'export function definedValues<T>(values: Array<T | null | undefined>): T[]',
     'export function trimmedStringFromUnknown(value: unknown, fallback = \'\'): string',
+    'export function finiteNumberFromUnknown(value: unknown, fallback = 0): number',
     'export function recordsFromUnknown(value: unknown): Record<string, unknown>[]',
     'export function recordEntriesFromUnknown<T>(value: Record<string, T> | null | undefined): Array<[string, T]>',
     'export function recordKeysFromUnknown(value: unknown): string[]',
@@ -4097,6 +4101,8 @@ test('record guard helper centralizes unknown object narrowing', () => {
     'return isRecord(value) ? value : {}',
     'return Array.isArray(value) ? value : []',
     'value !== undefined && value !== null',
+    'const parsed = Number(value)',
+    'return Number.isFinite(parsed) ? parsed : fallback',
     "typeof value === 'string' ? value.trim() : fallback",
     'return arrayFromUnknown(value).filter(isRecord)',
     'return isRecord(value) ? Object.entries(value) : []',
@@ -4122,7 +4128,7 @@ test('record guard helper centralizes unknown object narrowing', () => {
     ['runStore.ts', "import { isRecord, recordString } from './records'"],
     ['sessionStore.ts', "import { isRecord, recordsFromUnknown } from './records'"],
     ['sonarReportView.ts', "import { isRecord, recordsFromUnknown } from './records'"],
-    ['stateStore.ts', "import { isRecord as isPlainObject } from './records'"],
+    ['stateStore.ts', "import { finiteNumberFromUnknown, isRecord as isPlainObject } from './records'"],
     ['stateScriptAdapter.ts', "import { arrayFromUnknown, isRecord as isPlainObject } from './records'"],
   ]) {
     const source = readSourceFixture('src', 'services', file);
@@ -10667,7 +10673,8 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'evidenceCount: evidenceRecordCount(t)',
     "import { ticketStringArray, ticketStringField } from './ticketFields'",
     'function ticketAttachments',
-    "import { isRecord, recordEntriesFromUnknown, recordKeysFromUnknown, recordsFromUnknown } from './records'",
+    "import { finiteNumberFromUnknown, isRecord, recordEntriesFromUnknown, recordKeysFromUnknown, recordsFromUnknown } from './records'",
+    "size: finiteNumberFromUnknown(item['size'])",
     'return recordsFromUnknown(value)',
     'interface TicketAttachmentSummary',
     'interface JiraBoardTicketPayload',

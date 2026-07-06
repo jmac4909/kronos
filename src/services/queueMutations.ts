@@ -1,7 +1,7 @@
 import { KronosState, QueueDecision, QueueItem, QueueState } from '../state/types';
 import { QUEUE_FILE, STATE_FILE, readQueueFile, readStateFile, validateQueueState, validateStateFileShape, writeJsonFileAtomic } from './stateStore';
 import { PlannedAction, clearQueueDecision, planNextActions, planToQueueItem, recordQueueDecision } from './queuePlanner';
-import { recordFromUnknown } from './records';
+import { finiteNumberFromUnknown, recordFromUnknown } from './records';
 import { ticketStringArray } from './ticketFields';
 
 interface AddTicketToQueueResult {
@@ -281,7 +281,7 @@ function normalizeQueueItem(item: unknown): QueueItem {
     projects: ticketStringArray(record['projects']),
     project_path: queueString(record['project_path']),
     action: queueString(record['action']) || 'implement',
-    priority_score: Number.isFinite(Number(record['priority_score'])) ? Number(record['priority_score']) : 0,
+    priority_score: finiteNumberFromUnknown(record['priority_score']),
     reason: queueString(record['reason']),
   };
   const summary = queueNullableString(record['ticket_summary']);

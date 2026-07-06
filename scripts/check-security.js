@@ -375,7 +375,7 @@ const dashboardRendererSafetyMarkers = new Set([
   'evidenceCount: evidenceRecordCount(t)',
   "import { ticketStringArray, ticketStringField } from './ticketFields'",
   'function ticketAttachments',
-  "import { isRecord, recordEntriesFromUnknown, recordKeysFromUnknown, recordsFromUnknown } from './records'",
+  "import { finiteNumberFromUnknown, isRecord, recordEntriesFromUnknown, recordKeysFromUnknown, recordsFromUnknown } from './records'",
   'return recordsFromUnknown(value)',
   'interface TicketAttachmentSummary',
   'interface JiraBoardTicketPayload',
@@ -624,7 +624,7 @@ for (const marker of [
   'evidenceCount: evidenceRecordCount(t)',
   "import { ticketStringArray, ticketStringField } from './ticketFields'",
   'function ticketAttachments',
-  "import { isRecord, recordEntriesFromUnknown, recordKeysFromUnknown, recordsFromUnknown } from './records'",
+  "import { finiteNumberFromUnknown, isRecord, recordEntriesFromUnknown, recordKeysFromUnknown, recordsFromUnknown } from './records'",
   'return recordsFromUnknown(value)',
   'interface TicketAttachmentSummary',
   'interface JiraBoardTicketPayload',
@@ -2430,12 +2430,13 @@ for (const marker of [
   'queue-add-ticket',
   'ticket-link-project',
   'function normalizeQueueItem(item: unknown): QueueItem',
-  "import { recordFromUnknown } from './records'",
+  "import { finiteNumberFromUnknown, recordFromUnknown } from './records'",
   "import { ticketStringArray } from './ticketFields'",
   'function queueString(value: unknown): string',
   'function queueNullableString(value: unknown): string | null',
   'const current = ticketStringArray(ticket.projects)',
   "projects: ticketStringArray(record['projects'])",
+  "priority_score: finiteNumberFromUnknown(record['priority_score'])",
 ]) {
   if (!queueMutations.includes(marker)) {
     fail(`Missing queue mutation marker: ${marker}`);
@@ -2603,6 +2604,7 @@ for (const marker of [
   'export function arrayFromUnknown(value: unknown): unknown[]',
   'export function definedValues<T>(values: Array<T | null | undefined>): T[]',
   'export function trimmedStringFromUnknown(value: unknown, fallback = \'\'): string',
+  'export function finiteNumberFromUnknown(value: unknown, fallback = 0): number',
   'export function recordsFromUnknown(value: unknown): Record<string, unknown>[]',
   'export function recordEntriesFromUnknown<T>(value: Record<string, T> | null | undefined): Array<[string, T]>',
   'export function recordKeysFromUnknown(value: unknown): string[]',
@@ -2611,6 +2613,8 @@ for (const marker of [
   'return isRecord(value) ? value : {}',
   'return Array.isArray(value) ? value : []',
   'value !== undefined && value !== null',
+  'const parsed = Number(value)',
+  'return Number.isFinite(parsed) ? parsed : fallback',
   'return arrayFromUnknown(value).filter(isRecord)',
   'return isRecord(value) ? Object.entries(value) : []',
   'return isRecord(value) ? Object.keys(value) : []',
@@ -2956,6 +2960,19 @@ if (runActionHelpers.includes('function formatRunDateTime')) {
 }
 
 for (const [name, source, marker] of [
+  ['src/services/jiraBoardPanelView.ts', jiraBoardPanelView, "import { finiteNumberFromUnknown, isRecord, recordEntriesFromUnknown, recordKeysFromUnknown, recordsFromUnknown } from './records'"],
+  ['src/services/jiraBoardPanelView.ts', jiraBoardPanelView, "size: finiteNumberFromUnknown(item['size'])"],
+  ['src/services/stateStore.ts', stateStore, "version: finiteNumberFromUnknown(raw['version'], 1)"],
+  ['src/services/stateStore.ts', stateStore, "priority: finiteNumberFromUnknown(p['priority'])"],
+  ['src/services/stateStore.ts', stateStore, "open_mr_count: finiteNumberFromUnknown(p['open_mr_count'])"],
+  ['src/services/stateStore.ts', stateStore, "priority_score: finiteNumberFromUnknown(item['priority_score'])"],
+]) {
+  if (!source.includes(marker)) {
+    fail(`${name} must use the shared finite number helper: ${marker}`);
+  }
+}
+
+for (const [name, source, marker] of [
   ['src/extension.ts', extension, "import { isRecord, recordEntriesFromUnknown, recordFromUnknown, recordKeysFromUnknown, recordString } from './services/records'"],
   ['src/services/changedFiles.ts', changedFiles, "import { isRecord } from './records'"],
   ['src/services/agingAnalyzer.ts', agingAnalyzer, "import { recordEntriesFromUnknown } from './records'"],
@@ -2968,7 +2985,7 @@ for (const [name, source, marker] of [
   ['src/services/sessionStore.ts', sessionStore, "import { isRecord, recordsFromUnknown } from './records'"],
   ['src/services/sonarReportView.ts', sonarReportView, "import { isRecord, recordsFromUnknown } from './records'"],
   ['src/services/trendMetrics.ts', trendMetrics, "import { definedValues, recordEntriesFromUnknown, recordString } from './records'"],
-  ['src/services/stateStore.ts', stateStore, "import { isRecord as isPlainObject } from './records'"],
+  ['src/services/stateStore.ts', stateStore, "import { finiteNumberFromUnknown, isRecord as isPlainObject } from './records'"],
   ['src/services/stateScriptAdapter.ts', stateScriptAdapter, "import { arrayFromUnknown, isRecord as isPlainObject } from './records'"],
   ['src/runners/sessionDispatcher.ts', dispatcher, "import { arrayFromUnknown, isRecord, recordEntriesFromUnknown, recordFromUnknown } from '../services/records'"],
 ]) {
@@ -3022,7 +3039,7 @@ for (const [name, source, marker] of [
   ['src/services/runAttention.ts', runAttention, "import { recordsFromUnknown, recordFromUnknown } from './records'"],
   ['src/services/runCompletionNotification.ts', runCompletionNotification, "import { recordFromUnknown, recordString } from './records'"],
   ['src/services/runProgress.ts', runProgress, "import { recordsFromUnknown, recordFromUnknown, recordString } from './records'"],
-  ['src/services/queueMutations.ts', queueMutations, "import { recordFromUnknown } from './records'"],
+  ['src/services/queueMutations.ts', queueMutations, "import { finiteNumberFromUnknown, recordFromUnknown } from './records'"],
   ['src/services/postRunReadiness.ts', postRunReadiness, "import { arrayFromUnknown, recordFromUnknown, trimmedStringFromUnknown } from './records'"],
 ]) {
   if (!source.includes(marker)) {
@@ -3964,7 +3981,7 @@ for (const marker of [
   'function validateMergeRequest',
   'function validateBuildStatus',
   'function validateEvidenceNote',
-  "import { isRecord as isPlainObject } from './records'",
+  "import { finiteNumberFromUnknown, isRecord as isPlainObject } from './records'",
   'function requireFiniteNumber',
   "validateActionValue(t['next_action']",
   'validateActionValue(item.action',

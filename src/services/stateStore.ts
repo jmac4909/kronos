@@ -5,7 +5,7 @@ import { KronosState, QueueDecision, QueueItem, QueueState, Ticket, TicketEviden
 import { unknownErrorCode, unknownErrorMessage } from './errorUtils';
 import { readJsonFile } from './jsonFiles';
 import { QUEUE_ACTIONS, TICKET_ACTIONS } from './actionCatalog';
-import { isRecord as isPlainObject } from './records';
+import { finiteNumberFromUnknown, isRecord as isPlainObject } from './records';
 
 export const KRONOS_DIR = process.env['KRONOS_DIR'] || path.join(os.homedir(), '.claude', 'kronos');
 export const STATE_FILE = path.join(KRONOS_DIR, 'state.json');
@@ -114,7 +114,7 @@ function migrateStateFileShape(raw: unknown): KronosState {
   const settings = isPlainObject(raw['settings']) ? raw['settings'] : {};
   const overnight = isPlainObject(raw['overnight']) ? raw['overnight'] : undefined;
   const migrated: KronosState = {
-    version: Number.isFinite(Number(raw['version'])) ? Number(raw['version']) : 1,
+    version: finiteNumberFromUnknown(raw['version'], 1),
     last_updated: (raw['last_updated'] || null) as KronosState['last_updated'],
     settings: {
       ...settings,
@@ -133,12 +133,12 @@ function migrateStateFileShape(raw: unknown): KronosState {
     const p = isPlainObject(project) ? project : {};
     migrated.projects[name] = {
       path: String(p['path'] || ''),
-      priority: Number.isFinite(Number(p['priority'])) ? Number(p['priority']) : 0,
+      priority: finiteNumberFromUnknown(p['priority']),
       config: isPlainObject(p['config']) ? (p['config'] as KronosState['projects'][string]['config']) : {},
       health: typeof p['health'] === 'string' && ['green', 'yellow', 'red', 'gray'].includes(p['health']) ? (p['health'] as KronosState['projects'][string]['health']) : 'gray',
       summary: String(p['summary'] || ''),
       last_polled: (p['last_polled'] || null) as KronosState['projects'][string]['last_polled'],
-      open_mr_count: Number.isFinite(Number(p['open_mr_count'])) ? Number(p['open_mr_count']) : 0,
+      open_mr_count: finiteNumberFromUnknown(p['open_mr_count']),
     };
   }
 
@@ -246,7 +246,7 @@ function migrateQueueItemShape(item: unknown, idx: number): QueueItem {
     projects,
     project_path: String(item['project_path'] || item['path'] || item['cwd'] || ''),
     action,
-    priority_score: Number.isFinite(Number(item['priority_score'])) ? Number(item['priority_score']) : 0,
+    priority_score: finiteNumberFromUnknown(item['priority_score']),
     reason: String(item['reason'] || `Migrated queue item for ${ticket || action}`),
   } as QueueItem;
 }

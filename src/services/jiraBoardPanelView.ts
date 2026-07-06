@@ -1,7 +1,7 @@
 import type { KronosState as KronosStateSnapshot, QueueState } from '../state/types';
 import { evidenceRecordCount } from './evidenceData';
 import { mergeRequestReviewStatusLabel } from './mergeRequestLabels';
-import { isRecord, recordEntriesFromUnknown, recordKeysFromUnknown, recordsFromUnknown } from './records';
+import { finiteNumberFromUnknown, isRecord, recordEntriesFromUnknown, recordKeysFromUnknown, recordsFromUnknown } from './records';
 import { ticketStringArray, ticketStringField } from './ticketFields';
 import { WEBVIEW_READY_COMMAND, webviewRuntimeScriptTag, webviewRuntimeScriptUri } from './webviewSecurity';
 import { escapeAttr, escapeHtml, kronosWebviewBaseCss } from './webviewHtml';
@@ -17,7 +17,7 @@ function ticketAttachments(value: unknown): TicketAttachmentSummary[] {
   return recordsFromUnknown(value)
     .map(item => ({
       filename: ticketStringField(item, 'filename', 'attachment'),
-      size: Number.isFinite(Number(item['size'])) ? Number(item['size']) : 0,
+      size: finiteNumberFromUnknown(item['size']),
       mimeType: ticketStringField(item, 'mimeType'),
     }));
 }

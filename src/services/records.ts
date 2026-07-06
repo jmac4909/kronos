@@ -18,6 +18,11 @@ export function trimmedStringFromUnknown(value: unknown, fallback = ''): string 
   return typeof value === 'string' ? value.trim() : fallback;
 }
 
+export function finiteNumberFromUnknown(value: unknown, fallback = 0): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
 export function recordsFromUnknown(value: unknown): Record<string, unknown>[] {
   return arrayFromUnknown(value).filter(isRecord);
 }
