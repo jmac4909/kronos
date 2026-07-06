@@ -1,7 +1,7 @@
 import { KronosState, QueueDecision, QueueItem, QueueState } from '../state/types';
 import { QUEUE_FILE, STATE_FILE, readQueueFile, readStateFile, validateQueueState, validateStateFileShape, writeJsonFileAtomic } from './stateStore';
 import { PlannedAction, clearQueueDecision, planNextActions, planToQueueItem, recordQueueDecision } from './queuePlanner';
-import { recordFromUnknown } from './records';
+import { arrayFromUnknown, recordFromUnknown } from './records';
 
 interface AddTicketToQueueResult {
   added: boolean;
@@ -298,5 +298,5 @@ function queueNullableString(value: unknown): string | null {
 }
 
 function queueStringArray(value: unknown): string[] {
-  return Array.isArray(value) ? value.map(queueString).filter(Boolean) : [];
+  return arrayFromUnknown(value).map(queueString).filter(Boolean);
 }

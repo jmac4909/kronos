@@ -2381,10 +2381,11 @@ for (const marker of [
   'queue-add-ticket',
   'ticket-link-project',
   'function normalizeQueueItem(item: unknown): QueueItem',
-  "import { recordFromUnknown } from './records'",
+  "import { arrayFromUnknown, recordFromUnknown } from './records'",
   'function queueString(value: unknown): string',
   'function queueNullableString(value: unknown): string | null',
   'function queueStringArray(value: unknown): string[]',
+  'return arrayFromUnknown(value).map(queueString).filter(Boolean)',
 ]) {
   if (!queueMutations.includes(marker)) {
     fail(`Missing queue mutation marker: ${marker}`);
@@ -2392,6 +2393,9 @@ for (const marker of [
 }
 if (queueMutations.includes('function normalizeQueueItem(item: any): QueueItem')) {
   fail('Queue mutation normalization must accept unknown raw queue items.');
+}
+if (queueMutations.includes('return Array.isArray(value) ? value.map(queueString).filter(Boolean) : []')) {
+  fail('Queue mutation string-array normalization must use the shared array fallback helper.');
 }
 
 for (const marker of [
@@ -2915,7 +2919,7 @@ for (const [name, source, marker] of [
   ['src/services/runAttention.ts', runAttention, "import { recordsFromUnknown, recordFromUnknown } from './records'"],
   ['src/services/runCompletionNotification.ts', runCompletionNotification, "import { recordFromUnknown, recordString } from './records'"],
   ['src/services/runProgress.ts', runProgress, "import { recordsFromUnknown, recordFromUnknown, recordString } from './records'"],
-  ['src/services/queueMutations.ts', queueMutations, "import { recordFromUnknown } from './records'"],
+  ['src/services/queueMutations.ts', queueMutations, "import { arrayFromUnknown, recordFromUnknown } from './records'"],
   ['src/services/postRunReadiness.ts', postRunReadiness, "import { arrayFromUnknown, recordFromUnknown } from './records'"],
 ]) {
   if (!source.includes(marker)) {

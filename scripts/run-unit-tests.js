@@ -1748,15 +1748,17 @@ test('queue mutation helpers centralize queue membership and ticket project link
 
   const source = readSourceFixture('src', 'services', 'queueMutations.ts');
   for (const marker of [
-    "import { recordFromUnknown } from './records'",
+    "import { arrayFromUnknown, recordFromUnknown } from './records'",
     'function normalizeQueueItem(item: unknown): QueueItem',
     'function queueString(value: unknown): string',
     'function queueNullableString(value: unknown): string | null',
     'function queueStringArray(value: unknown): string[]',
+    'return arrayFromUnknown(value).map(queueString).filter(Boolean)',
   ]) {
     assert.ok(source.includes(marker), marker);
   }
   assert.equal(source.includes('function normalizeQueueItem(item: any): QueueItem'), false);
+  assert.equal(source.includes('return Array.isArray(value) ? value.map(queueString).filter(Boolean) : []'), false);
   assert.equal(source.includes('function queueRecord(value: unknown): Record<string, unknown>'), false);
 });
 
