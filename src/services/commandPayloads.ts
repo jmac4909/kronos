@@ -30,7 +30,8 @@ export function resolveProjectName(state: CommandPayloadState, item: unknown): s
   const ticketKey = record['ticketKey'];
   if (typeof ticketKey === 'string' && state.state) {
     const t = state.state.tickets[ticketKey];
-    if (t?.projects?.length) { return t.projects[0]; }
+    const firstStateProject = ticketStringArray(t?.projects)[0];
+    if (firstStateProject) { return firstStateProject; }
   }
   return undefined;
 }

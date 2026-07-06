@@ -1549,6 +1549,7 @@ for (const marker of [
   "const ticket = recordFromUnknown(record['ticket'])",
   "const projectName = stringFromUnknown(record['projectName'])",
   "const firstTicketProject = ticketStringArray(ticket['projects'])[0]",
+  "const firstStateProject = ticketStringArray(t?.projects)[0]",
   'export function resolveTicketKey',
   "const nestedItem = recordFromUnknown(record['item'])",
   'export function resolveQueueCommandItem',
@@ -1576,6 +1577,7 @@ for (const forbidden of [
   "recordFromUnknown(recordFromUnknown(item)['ticket'])",
   "recordFromUnknown(recordFromUnknown(item)['item'])",
   'function projectNames(value: unknown): string[]',
+  't?.projects?.length',
   'return arrayFromUnknown(value)',
 ]) {
   if (commandPayloads.includes(forbidden)) {
@@ -1754,6 +1756,8 @@ for (const marker of [
   'function humanReviewBrief',
   'function humanReviewNextStep',
   'humanReviewActionButtons',
+  "import { ticketStringArray } from './ticketFields'",
+  'const hasLinkedProject = ticketStringArray(ticket?.projects).length > 0',
   "actionButton('refreshPanel', 'Refresh')",
   "actionButton('extractAcceptanceCriteria', 'Extract AC'",
   "actionButton('startTicket', 'Start'",
@@ -1767,6 +1771,9 @@ for (const marker of [
   if (!humanReviewPanelView.includes(marker)) {
     fail(`Missing human review panel view marker: ${marker}`);
   }
+}
+if (humanReviewPanelView.includes('ticket?.projects?.length')) {
+  fail('Human review panel must normalize linked project checks through ticketStringArray.');
 }
 
 for (const marker of [

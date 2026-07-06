@@ -4294,7 +4294,7 @@ test('command payload helpers normalize tree, webview, queue, and run payloads',
     state: {
       tickets: {
         'K-1': ticket({ projects: ['api', 'web'] }),
-        'K-2': ticket({ projects: ['svc'] }),
+        'K-2': ticket({ projects: [' svc ', '', 42] }),
       },
     },
   };
@@ -4351,6 +4351,7 @@ test('command payload helpers normalize tree, webview, queue, and run payloads',
     'export function queueCommandPayloadFromRecord',
     "const projectName = stringFromUnknown(record['projectName'])",
     "const firstTicketProject = ticketStringArray(ticket['projects'])[0]",
+    "const firstStateProject = ticketStringArray(t?.projects)[0]",
     'return [...new Set(ticketStringArray(value))]',
     "const projects = ticketStringArray(record['projects'])",
     'return optionalTrimmedStringFromUnknown(value)',
@@ -4366,6 +4367,7 @@ test('command payload helpers normalize tree, webview, queue, and run payloads',
     "recordFromUnknown(recordFromUnknown(item)['ticket'])",
     "recordFromUnknown(recordFromUnknown(item)['item'])",
     'function projectNames(value: unknown): string[]',
+    't?.projects?.length',
     'return arrayFromUnknown(value)',
   ]) {
     assert.equal(source.includes(forbidden), false, forbidden);
@@ -9540,6 +9542,24 @@ test('human review inbox aggregates runs, tickets, evidence gaps, integrations, 
   assert.ok(html.includes('data-action="recoveryCenter" data-item-id="worktree:/repo/app/.claude/worktrees/K-2"'));
   assert.ok(html.includes('Kronos Human Review Inbox'));
 
+  const startableHtml = humanReviewPanelView.buildHumanReviewInboxHtml({
+    summary: { critical: 1, warning: 0, info: 0, total: 1 },
+    items: [{
+      id: 'ticket:START-1',
+      kind: 'ticket',
+      severity: 'critical',
+      title: 'Ticket needs review',
+      detail: 'Ready to start',
+      ticketKey: 'START-1',
+    }],
+  }, {
+    tickets: { 'START-1': ticket({ projects: [' ', ' app ', ''], next_action: 'implement' }) },
+    nonce: 'nonce-startable',
+    actionScriptUri: ACTION_SCRIPT_URI,
+  });
+  assert.ok(startableHtml.includes('data-action="startTicket"'));
+  assert.ok(startableHtml.includes('data-action="addToQueue"'));
+
   const escapedHtml = humanReviewPanelView.buildHumanReviewInboxHtml({
     summary: { critical: 1, warning: 0, info: 0, total: 1 },
     items: [{
@@ -10927,6 +10947,8 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'function humanReviewBrief',
     'function humanReviewNextStep',
     'humanReviewActionButtons',
+    "import { ticketStringArray } from './ticketFields'",
+    'const hasLinkedProject = ticketStringArray(ticket?.projects).length > 0',
     "actionButton('refreshPanel', 'Refresh')",
     "actionButton('extractAcceptanceCriteria', 'Extract AC'",
     "actionButton('startTicket', 'Start'",
@@ -10940,6 +10962,7 @@ test('extension webviews use shared UI shell and board filtering affordances', (
   ]) {
     assert.ok(humanReviewPanelViewSource.includes(marker), marker);
   }
+  assert.equal(humanReviewPanelViewSource.includes('ticket?.projects?.length'), false);
   for (const marker of [
     'export function buildEvidenceGateHtml',
     'export function buildEvidenceHandoffHtml',

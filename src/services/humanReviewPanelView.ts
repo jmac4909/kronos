@@ -1,6 +1,7 @@
 import type { Ticket } from '../state/types';
 import type { HumanReviewInbox, HumanReviewItem } from './humanReviewInbox';
 import { actionButton, actionRow, kronosActionPanelScript, kronosOperatorPanelCss, operatorCommandRow, operatorDecisionBrief } from './operatorPanel';
+import { ticketStringArray } from './ticketFields';
 import { escapeHtml } from './webviewHtml';
 
 interface HumanReviewInboxHtmlOptions {
@@ -78,7 +79,7 @@ function humanReviewNextStep(item: HumanReviewItem): string {
 
 function humanReviewActionButtons(item: HumanReviewItem, tickets: Record<string, Ticket>): string {
   const ticket = item.ticketKey ? tickets[item.ticketKey] : undefined;
-  const hasLinkedProject = Boolean(ticket?.projects?.length);
+  const hasLinkedProject = ticketStringArray(ticket?.projects).length > 0;
   const buttons: string[] = [];
 
   if (item.kind === 'evidence' && item.ticketKey) {
