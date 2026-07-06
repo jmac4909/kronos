@@ -14,6 +14,12 @@ export function recordsFromUnknown(value: unknown): Record<string, unknown>[] {
   return arrayFromUnknown(value).filter(isRecord);
 }
 
+export function recordEntriesFromUnknown<T>(value: Record<string, T> | null | undefined): Array<[string, T]>;
+export function recordEntriesFromUnknown(value: unknown): Array<[string, unknown]>;
+export function recordEntriesFromUnknown(value: unknown): Array<[string, unknown]> {
+  return isRecord(value) ? Object.entries(value) : [];
+}
+
 export function recordValuesFromUnknown(value: unknown): Record<string, unknown>[] {
   return isRecord(value) ? Object.values(value).filter(isRecord) : [];
 }

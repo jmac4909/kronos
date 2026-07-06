@@ -8,6 +8,7 @@ import type { TrendMetricsReport } from './trendMetrics';
 import { escapeClass, escapeHtml } from './webviewHtml';
 import { formatWebviewDateTime } from './webviewFormat';
 import { countLabel } from './countLabels';
+import { recordEntriesFromUnknown } from './records';
 
 interface SessionStatsRow {
   project: string;
@@ -186,7 +187,7 @@ export function buildIntegrationManifestHtml(status: IntegrationManifestStatus, 
       <td>${escapeHtml(script.path)}</td>
     </tr>`;
   }).join('');
-  const prompts = Object.entries(status.manifest?.prompts || {}).map(([name, entry]) => {
+  const prompts = recordEntriesFromUnknown(status.manifest?.prompts).map(([name, entry]) => {
     const artifact = artifactByKey.get(`prompt:${name}`);
     return `<tr>
       <td>${escapeHtml(name)}</td>
@@ -195,7 +196,7 @@ export function buildIntegrationManifestHtml(status: IntegrationManifestStatus, 
       <td>${escapeHtml(entry.sha256 || '-')}</td>
     </tr>`;
   }).join('');
-  const providers = Object.entries(status.manifest?.providers || {}).map(([name, entry]) => `<tr>
+  const providers = recordEntriesFromUnknown(status.manifest?.providers).map(([name, entry]) => `<tr>
     <td>${escapeHtml(name)}</td>
     <td>${escapeHtml(entry.enabled === false ? 'disabled' : 'enabled')}</td>
     <td>${escapeHtml(entry.baseUrl || '-')}</td>

@@ -1,4 +1,5 @@
 import { projectPathKey } from './pathUtils';
+import { recordEntriesFromUnknown } from './records';
 
 export interface ProjectRegistryEntry {
   path?: string | undefined;
@@ -15,7 +16,7 @@ export interface ProjectTicket {
 }
 
 export function buildRegisteredProjectItems(projects: Record<string, ProjectRegistryEntry> | undefined): ProjectSelectionItem[] {
-  return Object.entries(projects || {})
+  return recordEntriesFromUnknown(projects)
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([label, project]) => ({ label, description: project.path || '' }));
 }
@@ -66,7 +67,7 @@ export function getProjectNameForPath(
 ): string | undefined {
   const targetPath = projectPathKey(projectPath);
   if (!targetPath) { return undefined; }
-  for (const [projectName, project] of Object.entries(projects || {})) {
+  for (const [projectName, project] of recordEntriesFromUnknown(projects)) {
     if (projectPathKey(project.path) === targetPath) { return projectName; }
   }
   return undefined;

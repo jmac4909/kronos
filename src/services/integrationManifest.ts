@@ -7,6 +7,7 @@ import { safePromptFileName } from './fileNames';
 import { unknownErrorMessage } from './errorUtils';
 import { readJsonFile } from './jsonFiles';
 import { countLabel } from './countLabels';
+import { recordEntriesFromUnknown } from './records';
 
 export const INTEGRATION_MANIFEST_FILE = path.join(KRONOS_DIR, 'manifest.json');
 
@@ -116,7 +117,7 @@ function validateIntegrationManifest(manifest: IntegrationManifest): { errors: s
       warnings.push(`Required script not listed in manifest: ${script.name}`);
     }
   }
-  for (const [promptName, entry] of Object.entries(manifest.prompts || {})) {
+  for (const [promptName, entry] of recordEntriesFromUnknown(manifest.prompts)) {
     try {
       safePromptFileName(promptName);
     } catch {
@@ -218,7 +219,7 @@ export function auditIntegrationManifest(
   }
 
   const promptDir = options.promptDir || path.join(KRONOS_DIR, 'prompts');
-  for (const [name, entry] of Object.entries(status.manifest.prompts || {})) {
+  for (const [name, entry] of recordEntriesFromUnknown(status.manifest.prompts)) {
     const artifact = {
       kind: 'prompt',
       name,

@@ -12,6 +12,7 @@ import { unknownErrorMessage } from './errorUtils';
 import { normalizeMergeRequestStatus } from './integrationAdapters';
 import { parseJsonWithLabel } from './jsonFiles';
 import { countLabel } from './countLabels';
+import { recordEntriesFromUnknown } from './records';
 
 export interface DoctorCheck {
   name: string;
@@ -265,7 +266,7 @@ export async function runDoctorReachabilityChecks(input: DoctorChecksInput, opti
 
 function projectConfigGaps(state: KronosState | null, profile: KronosProfile): string[] {
   const gaps: string[] = [];
-  for (const [name, project] of Object.entries(state?.projects || {})) {
+  for (const [name, project] of recordEntriesFromUnknown(state?.projects)) {
     const config = project.config || {};
     if (!config.base_branch && !config.default_branch) {
       gaps.push(`${name}: missing base/default branch`);
@@ -349,7 +350,7 @@ function addReviewPollingPrerequisiteCheck(
     checks.push({ name: 'Review MR polling prerequisites', status: 'warn', detail: 'No readable state loaded; review MR polling candidates cannot be evaluated.' });
     return;
   }
-  const openReviewTickets = Object.entries(state.tickets || {})
+  const openReviewTickets = recordEntriesFromUnknown(state.tickets)
     .filter(([, ticket]) => ticket.next_action === 'await_review' && ticket.mr?.state === 'opened');
   if (openReviewTickets.length === 0) {
     checks.push({ name: 'Review MR polling prerequisites', status: 'pass', detail: 'No open review merge requests require polling.' });

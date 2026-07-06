@@ -6,6 +6,7 @@ import { toValidDate } from './dateValues';
 import { isFailedTerminalRunStatus, isFinishedRunStatus, isSuccessfulRunStatus } from './runStatus';
 import { hasRetryMetadata, runLikeRecordsFromUnknown, type RunLikeRecord } from './runRecords';
 import { countLabel } from './countLabels';
+import { recordEntriesFromUnknown } from './records';
 
 interface TrendMetricsInput {
   runs: unknown[];
@@ -36,7 +37,7 @@ export function computeTrendMetrics(input: TrendMetricsInput): TrendMetricsRepor
   const windowStart = new Date(now.getTime() - windowDays * 24 * 60 * 60 * 1000);
   const runs = runLikeRecordsFromUnknown(input.runs)
     .filter(run => isInWindow(recordString(run, 'endedAt') || recordString(run, 'startedAt'), windowStart, now));
-  const tickets = Object.entries(input.tickets || {})
+  const tickets = recordEntriesFromUnknown(input.tickets)
     .filter(([_, ticket]) => ticketInWindow(ticket, windowStart, now));
 
   const finishedRuns = runs.filter(run => isFinishedRunStatus(recordString(run, 'status')));
@@ -146,7 +147,7 @@ function cycleTimesHours(tickets: Record<string, Ticket>, runs: RunLikeRecord[])
   }
 
   const hours: number[] = [];
-  for (const [ticketKey, ticket] of Object.entries(tickets)) {
+  for (const [ticketKey, ticket] of recordEntriesFromUnknown(tickets)) {
     const ticketRuns = groupedRuns.get(ticketKey) || [];
     const runDates = ticketRuns
       .flatMap(run => [toValidDate(recordString(run, 'startedAt')), toValidDate(recordString(run, 'endedAt'))])

@@ -139,7 +139,7 @@ import {
   type RunActionQuickPickItem,
   type RunArtifactPathResult,
 } from './services/runActionHelpers';
-import { isRecord, recordFromUnknown, recordString } from './services/records';
+import { isRecord, recordEntriesFromUnknown, recordFromUnknown, recordString } from './services/records';
 import {
   explicitProjectName,
   resolveMergeRequestUrl,
@@ -2649,7 +2649,7 @@ export function activate(context: vscode.ExtensionContext) {
       const projectPath = getProjectPath(state.state?.projects, projectName);
       if (!projectPath) { return; }
 
-      const reviewTickets = Object.entries(state.state?.tickets || {})
+      const reviewTickets = recordEntriesFromUnknown(state.state?.tickets)
         .filter(([_, t]) => t.mr && t.mr.state === 'merged' && t.projects.includes(projectName))
         .map(([k]) => k);
       const tickets = reviewTickets;

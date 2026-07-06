@@ -1,4 +1,5 @@
 import { readIntegrationManifest, type IntegrationManifest } from './integrationManifest';
+import { recordEntriesFromUnknown } from './records';
 import {
   buildDefaultPromptSmokeTests,
   listPromptTemplates,
@@ -69,7 +70,7 @@ export function buildPromptSmokeTestsForWorkspace(
     }
   }
 
-  for (const [templateName, entry] of Object.entries(manifest?.prompts || {})) {
+  for (const [templateName, entry] of recordEntriesFromUnknown(manifest?.prompts)) {
     for (const [idx, smoke] of (entry.smoke_tests || []).entries()) {
       const test: PromptSmokeTest = {
         id: `manifest:${templateName}:${smoke.name || idx + 1}`,

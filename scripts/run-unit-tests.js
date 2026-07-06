@@ -4057,6 +4057,8 @@ test('record guard helper centralizes unknown object narrowing', () => {
   assert.deepEqual(records.arrayFromUnknown(['ok']), ['ok']);
   assert.deepEqual(records.arrayFromUnknown({ ok: true }), []);
   assert.deepEqual(records.recordsFromUnknown([{ ok: true }, null, [], 'raw']), [{ ok: true }]);
+  assert.deepEqual(records.recordEntriesFromUnknown({ a: { ok: true }, b: 42 }), [['a', { ok: true }], ['b', 42]]);
+  assert.deepEqual(records.recordEntriesFromUnknown(null), []);
   assert.deepEqual(records.recordValuesFromUnknown({ a: { ok: true }, b: null, c: [] }), [{ ok: true }]);
   assert.equal(records.recordString({ ticket: ' K-1 ' }, 'ticket'), 'K-1');
   assert.equal(records.recordString({ ticket: 42 }, 'ticket'), '');
@@ -4081,11 +4083,13 @@ test('record guard helper centralizes unknown object narrowing', () => {
     'export function recordFromUnknown(value: unknown): Record<string, unknown>',
     'export function arrayFromUnknown(value: unknown): unknown[]',
     'export function recordsFromUnknown(value: unknown): Record<string, unknown>[]',
+    'export function recordEntriesFromUnknown<T>(value: Record<string, T> | null | undefined): Array<[string, T]>',
     'export function recordValuesFromUnknown(value: unknown): Record<string, unknown>[]',
     'export function recordString(record: Record<string, unknown>, key: string): string',
     'return isRecord(value) ? value : {}',
     'return Array.isArray(value) ? value : []',
     'return arrayFromUnknown(value).filter(isRecord)',
+    'return isRecord(value) ? Object.entries(value) : []',
     'return isRecord(value) ? Object.values(value).filter(isRecord) : []',
   ]) {
     assert.ok(recordsSource.includes(marker), marker);
@@ -4098,6 +4102,7 @@ test('record guard helper centralizes unknown object narrowing', () => {
 
   for (const [file, marker] of [
     ['changedFiles.ts', "import { isRecord } from './records'"],
+    ['agingAnalyzer.ts', "import { recordEntriesFromUnknown } from './records'"],
     ['evidenceData.ts', "import { isRecord, recordsFromUnknown, recordValuesFromUnknown } from './records'"],
     ['integrationAdapters.ts', "import { arrayFromUnknown, isRecord, recordsFromUnknown } from './records'"],
     ['queuePlanner.ts', "import { arrayFromUnknown, isRecord } from './records'"],
@@ -4117,7 +4122,7 @@ test('record guard helper centralizes unknown object narrowing', () => {
   }
 
   const extensionSource = readSourceFixture('src', 'extension.ts');
-  assert.ok(extensionSource.includes("import { isRecord, recordFromUnknown, recordString } from './services/records'"));
+  assert.ok(extensionSource.includes("import { isRecord, recordEntriesFromUnknown, recordFromUnknown, recordString } from './services/records'"));
   assert.equal(extensionSource.includes('function ticketRecord'), false, 'extension should use shared record helper for ticket payload records');
 
   const ticketFieldsSource = readSourceFixture('src', 'services', 'ticketFields.ts');
@@ -7835,7 +7840,7 @@ test('collision detector flags active runs, duplicate queue work, and open MRs',
 
   const source = readSourceFixture('src', 'services', 'collisionDetector.ts');
   for (const marker of [
-    "import { recordsFromUnknown } from './records'",
+    "import { recordEntriesFromUnknown, recordsFromUnknown } from './records'",
     'staleActiveRunHours?: number',
     'const staleActiveRunHours = input.staleActiveRunHours ?? 12',
     'const isActive = isCollisionActiveRun(run, now, staleActiveRunHours)',
@@ -11568,7 +11573,7 @@ test('extension Sonar commands normalize webview and issue payloads', () => {
   for (const marker of [
     "import { buildSonarReport }",
     "import { buildSonarBranchPickItems, buildSonarFixBranchStrategy, buildSonarFixInstructionBlock } from './services/sonarCommandPlan'",
-    "import { isRecord, recordFromUnknown, recordString } from './services/records'",
+    "import { isRecord, recordEntriesFromUnknown, recordFromUnknown, recordString } from './services/records'",
     'stringFromUnknown,',
     "vscode.commands.registerCommand('kronos.sonarScan', async (item: unknown)",
     "vscode.commands.registerCommand('kronos.sonarReport', async (item: unknown)",

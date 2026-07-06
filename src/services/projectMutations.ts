@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { DiscoveredProject, KronosState, ProjectConfig } from '../state/types';
+import { recordEntriesFromUnknown } from './records';
 import { STATE_FILE, readStateFile, validateStateFileShape, writeJsonFileAtomic } from './stateStore';
 
 interface ProjectConfigUpdateResult {
@@ -118,7 +119,7 @@ export function removeProject(projectName: string): RemovedProjectResult {
     throw new Error(`Project not found: ${projectName}`);
   }
   const ticketsUnlinked: string[] = [];
-  for (const [ticketKey, ticket] of Object.entries(state.tickets || {})) {
+  for (const [ticketKey, ticket] of recordEntriesFromUnknown(state.tickets)) {
     if (!ticket.projects?.includes(projectName)) { continue; }
     ticket.projects = ticket.projects.filter(project => project !== projectName);
     ticketsUnlinked.push(ticketKey);

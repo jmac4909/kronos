@@ -2,6 +2,7 @@ import type { RunStoreIssue } from './runStore';
 import { toValidDate } from './dateValues';
 import { DoctorAttentionCheck, doctorCheckAttentionId, doctorCheckAttentionSeverity, doctorCheckNeedsAttention } from './doctorAttention';
 import { mergeRequestReviewStatusLabel } from './mergeRequestLabels';
+import { recordEntriesFromUnknown } from './records';
 import { runAttentionDetail } from './runAttention';
 import { severityRank, severitySummary } from './severityRank';
 
@@ -144,7 +145,7 @@ export function buildRecoveryInventory(input: RecoveryInventoryInput): RecoveryI
     if (item) { items.push(item); }
   }
 
-  for (const [ticketKey, ticket] of Object.entries(input.tickets || {})) {
+  for (const [ticketKey, ticket] of recordEntriesFromUnknown(input.tickets)) {
     const item = recoveryItemForOrphanMergeRequest(ticketKey, ticket);
     if (item) { items.push(item); }
   }

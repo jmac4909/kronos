@@ -1,4 +1,5 @@
 import { Ticket } from '../state/types';
+import { recordEntriesFromUnknown } from './records';
 
 type TicketWithOpenMergeRequest = Ticket & { mr: NonNullable<Ticket['mr']> };
 
@@ -14,7 +15,7 @@ export function isOpenReviewTicket(ticket: Ticket): ticket is TicketWithOpenMerg
 }
 
 export function openReviewTicketEntries(tickets: Record<string, Ticket> | null | undefined): Array<[string, TicketWithOpenMergeRequest]> {
-  return Object.entries(tickets || {})
+  return recordEntriesFromUnknown(tickets)
     .filter((entry): entry is [string, TicketWithOpenMergeRequest] => isOpenReviewTicket(entry[1]));
 }
 

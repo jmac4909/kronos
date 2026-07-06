@@ -2,6 +2,7 @@ import { Ticket } from '../state/types';
 import { isFailingBuildStatus } from './buildStatus';
 import { toValidDate } from './dateValues';
 import { mergeRequestReviewStatusLabel } from './mergeRequestLabels';
+import { recordEntriesFromUnknown } from './records';
 import { isOpenReviewTicket } from './reviewWork';
 import { severityRank, severitySummary } from './severityRank';
 
@@ -51,7 +52,7 @@ export function analyzeAging(input: {
   const thresholds = { ...DEFAULT_AGING_THRESHOLDS, ...(input.thresholds || {}) };
   const items: AgingItem[] = [];
 
-  for (const [ticketKey, ticket] of Object.entries(input.tickets || {})) {
+  for (const [ticketKey, ticket] of recordEntriesFromUnknown(input.tickets)) {
     const reference = referenceDate(ticket);
     if (!reference) { continue; }
 

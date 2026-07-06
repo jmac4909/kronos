@@ -5,7 +5,7 @@ import { mergeRequestReviewStatusLabel } from './mergeRequestLabels';
 import { isActiveRun, isStaleActiveRun } from './runStatus';
 import { severityRank } from './severityRank';
 import { toValidDate } from './dateValues';
-import { recordsFromUnknown } from './records';
+import { recordEntriesFromUnknown, recordsFromUnknown } from './records';
 
 type CollisionSeverity = 'high' | 'medium' | 'low';
 type CollisionKind = 'active_run' | 'queued_ticket' | 'queued_project' | 'open_mr' | 'recent_file' | 'ticket_area' | 'mr_file';
@@ -172,7 +172,7 @@ export function detectDispatchCollisions(input: DispatchCollisionInput): Dispatc
   }
 
   if (codeAction) {
-    for (const [otherKey, ticket] of Object.entries(input.tickets || {})) {
+    for (const [otherKey, ticket] of recordEntriesFromUnknown(input.tickets)) {
       if (otherKey === ticketKey || !ticket.mr || ticket.mr.state !== 'opened') { continue; }
       if (!ticket.projects?.some(project => targetProjects.has(project))) { continue; }
       collisions.push({
