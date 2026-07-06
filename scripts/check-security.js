@@ -2435,11 +2435,13 @@ for (const marker of [
   'add-evidence-check',
   'record-environment-result',
   'setAcceptanceCriteriaChecked',
+  "import { mergeRequestCommentsFromRecord, sortMergeRequestCommentsByCreated } from './mergeRequestComments'",
   "import { isRecord, optionalTrimmedStringFromUnknown } from './records'",
   "import { ticketStringArray } from './ticketFields'",
   'if (!isRecord(value)) { return null; }',
   "const body = optionalTrimmedStringFromUnknown(value['body'])",
   'for (const project of ticketStringArray(orphan.projects))',
+  'JSON.stringify(mergeRequestCommentsFromRecord(target)) === JSON.stringify(comments)',
   'function mutateState',
   "writeJsonFileAtomic(STATE_FILE, state, action)",
   'validateStateFileShape(state)',
@@ -2453,6 +2455,9 @@ if (ticketMutations.includes('function optionalTrim(value: string | undefined): 
 }
 if (ticketMutations.includes('for (const project of orphan.projects || [])')) {
   fail('Ticket MR linking must normalize orphan project links through ticketStringArray.');
+}
+if (ticketMutations.includes('JSON.stringify(target.comments || []) === JSON.stringify(comments)')) {
+  fail('Ticket MR comment updates must compare through mergeRequestCommentsFromRecord.');
 }
 
 for (const marker of [

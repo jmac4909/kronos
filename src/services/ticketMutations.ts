@@ -13,7 +13,7 @@ import { STATE_FILE, readStateFile, validateStateFileShape, writeJsonFileAtomic 
 import { isReviewReadyAction } from './actionSemantics';
 import { setAcceptanceCriteriaChecked } from './acceptanceCriteria';
 import { decideEvidenceHandoff } from './evidenceGatePolicy';
-import { sortMergeRequestCommentsByCreated } from './mergeRequestComments';
+import { mergeRequestCommentsFromRecord, sortMergeRequestCommentsByCreated } from './mergeRequestComments';
 import { isRecord, optionalTrimmedStringFromUnknown } from './records';
 import { ticketStringArray } from './ticketFields';
 
@@ -428,7 +428,7 @@ function setMergeRequestComments(target: MergeRequest, value: unknown): boolean 
   if (value === undefined) { return false; }
   if (!Array.isArray(value)) { return false; }
   const comments = normalizeStoredMergeRequestComments(value);
-  if (JSON.stringify(target.comments || []) === JSON.stringify(comments)) { return false; }
+  if (JSON.stringify(mergeRequestCommentsFromRecord(target)) === JSON.stringify(comments)) { return false; }
   target.comments = comments;
   return true;
 }

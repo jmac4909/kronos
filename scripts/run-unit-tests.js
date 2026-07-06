@@ -4203,8 +4203,11 @@ test('record guard helper centralizes unknown object narrowing', () => {
   const mergeRequestLabelsSource = readSourceFixture('src', 'services', 'mergeRequestLabels.ts');
   assert.equal(ticketMutationsSource.includes('function optionalTrim(value: string | undefined): string | undefined'), false, 'ticketMutations should use shared optional trimmed string helper');
   assert.ok(ticketMutationsSource.includes("import { ticketStringArray } from './ticketFields'"));
+  assert.ok(ticketMutationsSource.includes("import { mergeRequestCommentsFromRecord, sortMergeRequestCommentsByCreated } from './mergeRequestComments'"));
   assert.ok(ticketMutationsSource.includes('for (const project of ticketStringArray(orphan.projects))'));
+  assert.ok(ticketMutationsSource.includes('JSON.stringify(mergeRequestCommentsFromRecord(target)) === JSON.stringify(comments)'));
   assert.equal(ticketMutationsSource.includes('for (const project of orphan.projects || [])'), false);
+  assert.equal(ticketMutationsSource.includes('JSON.stringify(target.comments || []) === JSON.stringify(comments)'), false);
   for (const marker of [
     "import { arrayFromUnknown, trimmedStringFromUnknown } from './records'",
     'export function ticketStringField(record: object | null | undefined, key: string, fallback = \'\'): string',
