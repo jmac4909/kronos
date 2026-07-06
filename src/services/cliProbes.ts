@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { unknownErrorMessage } from './errorUtils';
 import { firstEnvValue } from './envValues';
+import { arrayFromUnknown } from './records';
 import { uniqueCaseInsensitiveStrings } from './stringLists';
 
 interface CliProbeCommandOptions {
@@ -173,7 +174,7 @@ export function readClaudeAgents<T = unknown>(options: CliProbeOptions = {}): T[
   }
   try {
     const parsed = JSON.parse(result.output);
-    return Array.isArray(parsed) ? parsed : [];
+    return arrayFromUnknown(parsed) as T[];
   } catch {
     return [];
   }

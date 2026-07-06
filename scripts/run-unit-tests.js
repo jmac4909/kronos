@@ -3451,15 +3451,18 @@ test('CLI probes normalize failures and invalid Claude agent output', () => {
     'catch (e: unknown)',
     "import { unknownErrorMessage } from './errorUtils'",
     "import { firstEnvValue } from './envValues'",
+    "import { arrayFromUnknown } from './records'",
     "import { uniqueCaseInsensitiveStrings } from './stringLists'",
     'uniqueCaseInsensitiveStrings([',
     'firstEnvValue(env, [',
+    'return arrayFromUnknown(parsed) as T[]',
     "unknownErrorMessage(e, 'CLI probe failed')",
   ]) {
     assert.ok(source.includes(marker), marker);
   }
   assert.equal(source.includes('function unique(values: Array<string | undefined>): string[]'), false);
   assert.equal(source.includes('function envValue(env: NodeJS.ProcessEnv, keys: string[]): string | undefined'), false);
+  assert.equal(source.includes('return Array.isArray(parsed) ? parsed : []'), false);
   for (const marker of [
     'catch (e: any)',
     'e?.message',

@@ -3595,9 +3595,11 @@ for (const marker of [
   'export function windowsCmdFileInvocation',
   'export function readableGoogleApplicationCredentials',
   "import { firstEnvValue } from './envValues'",
+  "import { arrayFromUnknown } from './records'",
   "import { uniqueCaseInsensitiveStrings } from './stringLists'",
   'function resolveCommandOnPath(command: string',
   'firstEnvValue(env, [',
+  'return arrayFromUnknown(parsed) as T[]',
   'uniqueCaseInsensitiveStrings([',
   'if (!resolution.available)',
   'install Google Cloud SDK or set GOOGLE_APPLICATION_CREDENTIALS',
@@ -3622,6 +3624,9 @@ if (cliProbes.includes('function unique(values: Array<string | undefined>): stri
 }
 if (cliProbes.includes('function envValue(env: NodeJS.ProcessEnv, keys: string[]): string | undefined')) {
   fail('cliProbes must use the shared env value helper.');
+}
+if (cliProbes.includes('return Array.isArray(parsed) ? parsed : []')) {
+  fail('cliProbes must use the shared array fallback helper for parsed Claude agents.');
 }
 for (const marker of [
   "import { firstEnvValue } from './envValues'",
