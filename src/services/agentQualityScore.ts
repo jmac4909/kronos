@@ -2,7 +2,7 @@ import { Ticket } from '../state/types';
 import { isReviewReadyAction } from './actionSemantics';
 import { isFailingBuildStatus, isPassingBuildStatus } from './buildStatus';
 import { evaluateEvidenceGates } from './evidenceGate';
-import { isActiveRun } from './runStatus';
+import { isActiveRun, isFailedOrCancelledRunStatus, isSuccessfulRunStatus } from './runStatus';
 import { recordString } from './records';
 import { hasRetryMetadata, isRunLikeRecord } from './runRecords';
 
@@ -26,8 +26,6 @@ export interface AgentQualityScore {
   metrics: QualityMetric[];
 }
 
-const SUCCESS_RUN_STATUSES = new Set(['completed', 'waiting_for_review']);
-
 export function computeAgentQualityScore(input: {
   runs: unknown[];
   tickets: Record<string, Ticket>;
@@ -35,8 +33,8 @@ export function computeAgentQualityScore(input: {
   const runs = (Array.isArray(input.runs) ? input.runs : []).filter(isRunLikeRecord);
   const tickets = input.tickets || {};
   const totalRuns = runs.length;
-  const completedRuns = runs.filter(run => SUCCESS_RUN_STATUSES.has(recordString(run, 'status'))).length;
-  const failedRuns = runs.filter(run => recordString(run, 'status') === 'failed' || recordString(run, 'status') === 'cancelled').length;
+  const completedRuns = runs.filter(run => isSuccessfulRunStatus(recordString(run, 'status'))).length;
+  const failedRuns = runs.filter(run => isFailedOrCancelledRunStatus(recordString(run, 'status'))).length;
   const needsHumanRuns = runs.filter(run => recordString(run, 'status') === 'needs_human').length;
   const retryRuns = runs.filter(hasRetryMetadata).length;
   const activeRuns = runs.filter(isActiveRun).length;

@@ -4077,9 +4077,17 @@ for (const marker of [
   "import { toValidDate } from './dateValues'",
   "const ACTIVE_RUN_STATUSES = new Set(['preflight', 'running', 'paused'])",
   "const STALEABLE_ACTIVE_RUN_STATUSES = new Set(['preflight', 'running'])",
+  "const SUCCESSFUL_RUN_STATUSES = new Set(['completed', 'waiting_for_review'])",
+  "const FAILED_OR_CANCELLED_RUN_STATUSES = new Set(['failed', 'cancelled'])",
+  "const FAILED_TERMINAL_RUN_STATUSES = new Set(['failed', 'cancelled', 'needs_human'])",
+  'const FINISHED_RUN_STATUSES = new Set([...SUCCESSFUL_RUN_STATUSES, ...FAILED_TERMINAL_RUN_STATUSES])',
   'const DEFAULT_STALE_ACTIVE_RUN_MS = 12 * 60 * 60 * 1000',
   'interface RunStatusLike',
   'export function isActiveRunStatus',
+  'export function isSuccessfulRunStatus',
+  'export function isFailedOrCancelledRunStatus',
+  'export function isFailedTerminalRunStatus',
+  'export function isFinishedRunStatus',
   'export function isActiveRun',
   'export function isStaleActiveRun',
   'export function isFreshActiveRun',
@@ -4106,6 +4114,8 @@ for (const marker of [
 for (const staleMarker of [
   'export const ACTIVE_RUN_STATUSES',
   'export const STALEABLE_ACTIVE_RUN_STATUSES',
+  'export const SUCCESSFUL_RUN_STATUSES',
+  'export const FINISHED_RUN_STATUSES',
   'export const DEFAULT_STALE_ACTIVE_RUN_MS',
   'export interface RunStatusLike',
   'export function hasTerminalRunSignal',
@@ -4468,13 +4478,13 @@ for (const marker of [
   'export function computeAgentQualityScore',
   "import { hasRetryMetadata, isRunLikeRecord } from './runRecords'",
   'runs: unknown[]',
-  'SUCCESS_RUN_STATUSES',
-  'waiting_for_review',
   'Run completion',
   'Evidence readiness',
   'Build and review health',
   'Retry discipline',
-  "import { isActiveRun } from './runStatus'",
+  "import { isActiveRun, isFailedOrCancelledRunStatus, isSuccessfulRunStatus } from './runStatus'",
+  "isSuccessfulRunStatus(recordString(run, 'status'))",
+  "isFailedOrCancelledRunStatus(recordString(run, 'status'))",
   'gradeForScore',
   'const runs = (Array.isArray(input.runs) ? input.runs : []).filter(isRunLikeRecord)',
   "import { recordString } from './records'",
@@ -4487,6 +4497,7 @@ for (const forbidden of [
   'type RunQualityRecord',
   'function hasRetryMetadata',
   'function isRunRecord',
+  'const SUCCESS_RUN_STATUSES',
 ]) {
   if (agentQualityScore.includes(forbidden)) {
     fail(`Agent quality score must use shared run record helpers: ${forbidden}`);
@@ -4640,17 +4651,19 @@ if (evidencePublisher.includes('} catch (e) {')) {
 for (const marker of [
   'export function computeTrendMetrics',
   'runs: unknown[]',
-  'SUCCESS_RUN_STATUSES',
-  'FINISHED_RUN_STATUSES',
   'Rework rate',
   'Build pass rate',
   'Verification pass rate',
   'Average cycle time',
   'Review health',
   "import { recordString } from './records'",
+  "import { isFailedTerminalRunStatus, isFinishedRunStatus, isSuccessfulRunStatus } from './runStatus'",
   "import { hasRetryMetadata, isRunLikeRecord, type RunLikeRecord } from './runRecords'",
   'const rawRuns = Array.isArray(input.runs) ? input.runs : []',
   '.filter(isRunLikeRecord)',
+  "const finishedRuns = runs.filter(run => isFinishedRunStatus(recordString(run, 'status')))",
+  "const completedRuns = finishedRuns.filter(run => isSuccessfulRunStatus(recordString(run, 'status'))).length",
+  "const failedRuns = finishedRuns.filter(run => isFailedTerminalRunStatus(recordString(run, 'status'))).length",
   'function cycleTimesHours(tickets: Record<string, Ticket>, runs: RunLikeRecord[]): number[]',
   'evidenceChecks(ticket)',
   'evidenceEnvironmentResults(ticket)',
@@ -4666,6 +4679,9 @@ for (const forbidden of [
   'Record<string, any>',
   'type RunMetricRecord',
   'function hasRetryMetadata',
+  'const SUCCESS_RUN_STATUSES',
+  'const FINISHED_RUN_STATUSES',
+  'function isFailedRunStatus',
 ]) {
   if (trendMetrics.includes(forbidden)) {
     fail(`Trend metrics must normalize raw run payloads instead of using ${forbidden}.`);
@@ -4681,7 +4697,7 @@ for (const marker of [
   'stale_items',
   'evidenceStatusForRun',
   "import { formatRunProgress } from './runProgress'",
-  "import { isFreshActiveRun } from './runStatus'",
+  "import { isFreshActiveRun, isSuccessfulRunStatus } from './runStatus'",
   "import { isRunLikeRecord, type RunLikeRecord } from './runRecords'",
   'const rawRuns: unknown[] = Array.isArray(input.runs) ? input.runs : []',
   'const runs = rawRuns.filter(isRunLikeRecord)',
@@ -4689,6 +4705,7 @@ for (const marker of [
   'return isFreshActiveRun(run);',
   'function activeRunDetail(run: RunLikeRecord, status: string, ticketKey: string): string',
   'formatRunProgress(run)',
+  "runs.filter(run => isSuccessfulRunStatus(recordString(run, 'status')))",
   "recordString(run, 'status')",
   'function runId',
 ]) {
@@ -4699,6 +4716,7 @@ for (const marker of [
 for (const forbidden of [
   'type DashboardRunRecord',
   'function isRunRecord',
+  'const COMPLETED_RUN_STATUSES',
 ]) {
   if (dashboardWorklist.includes(forbidden)) {
     fail(`Dashboard worklist must use shared run record helpers: ${forbidden}`);
@@ -4768,8 +4786,10 @@ for (const marker of [
   'function isPassingSonar',
   'export function classifyRunFailure(run: unknown): RunFailureKind',
   "import { isHandoffAction } from './actionSemantics'",
+  "import { isSuccessfulRunStatus, terminalRunOutcome } from './runStatus'",
   'isHandoffAction(input.ticket.next_action)',
-  'SUCCESS_RUN_STATUSES',
+  'if (!isSuccessfulRunStatus(runStatus)) { return undefined; }',
+  'isSuccessfulRunStatus(status)',
   'claude cli',
   'exitCode === 124',
   "skill.includes('sonar')",
@@ -4793,6 +4813,8 @@ for (const marker of [
 for (const forbidden of [
   'run: any',
   'event: any',
+  'const SUCCESS_RUN_STATUSES',
+  'const READINESS_STATUS_TRANSITION_RUN_STATUSES',
 ]) {
   if (postRunReadiness.includes(forbidden)) {
     fail(`Post-run readiness must normalize raw run payloads instead of using ${forbidden}.`);

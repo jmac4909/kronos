@@ -3,6 +3,7 @@ import { isFailingBuildStatus, isPassingBuildStatus } from './buildStatus';
 import { evidenceChecks, evidenceEnvironmentResults, evidenceString } from './evidenceData';
 import { recordString } from './records';
 import { toValidDate } from './dateValues';
+import { isFailedTerminalRunStatus, isFinishedRunStatus, isSuccessfulRunStatus } from './runStatus';
 import { hasRetryMetadata, isRunLikeRecord, type RunLikeRecord } from './runRecords';
 
 interface TrendMetricsInput {
@@ -28,9 +29,6 @@ export interface TrendMetricsReport {
   metrics: TrendMetric[];
 }
 
-const SUCCESS_RUN_STATUSES = new Set(['completed', 'waiting_for_review']);
-const FINISHED_RUN_STATUSES = new Set(['completed', 'waiting_for_review', 'failed', 'cancelled', 'needs_human']);
-
 export function computeTrendMetrics(input: TrendMetricsInput): TrendMetricsReport {
   const now = input.now || new Date();
   const windowDays = input.windowDays || 14;
@@ -42,12 +40,12 @@ export function computeTrendMetrics(input: TrendMetricsInput): TrendMetricsRepor
   const tickets = Object.entries(input.tickets || {})
     .filter(([_, ticket]) => ticketInWindow(ticket, windowStart, now));
 
-  const finishedRuns = runs.filter(run => FINISHED_RUN_STATUSES.has(recordString(run, 'status')));
-  const completedRuns = finishedRuns.filter(run => SUCCESS_RUN_STATUSES.has(recordString(run, 'status'))).length;
-  const failedRuns = finishedRuns.filter(run => isFailedRunStatus(recordString(run, 'status'))).length;
+  const finishedRuns = runs.filter(run => isFinishedRunStatus(recordString(run, 'status')));
+  const completedRuns = finishedRuns.filter(run => isSuccessfulRunStatus(recordString(run, 'status'))).length;
+  const failedRuns = finishedRuns.filter(run => isFailedTerminalRunStatus(recordString(run, 'status'))).length;
   const retryRuns = runs.filter(hasRetryMetadata).length;
   const verificationRuns = finishedRuns.filter(run => recordString(run, 'skill').includes('verify'));
-  const passedVerificationRuns = verificationRuns.filter(run => SUCCESS_RUN_STATUSES.has(recordString(run, 'status'))).length;
+  const passedVerificationRuns = verificationRuns.filter(run => isSuccessfulRunStatus(recordString(run, 'status'))).length;
 
   const builds = tickets.map(([_, ticket]) => ticket.build).filter(Boolean) as NonNullable<Ticket['build']>[];
   const passedBuilds = builds.filter(build => isPassingBuildStatus(build.status)).length;
@@ -168,10 +166,6 @@ function cycleTimesHours(tickets: Record<string, Ticket>, runs: RunLikeRecord[])
     }
   }
   return hours;
-}
-
-function isFailedRunStatus(status: string): boolean {
-  return status === 'failed' || status === 'cancelled' || status === 'needs_human';
 }
 
 function earliestDate(values: Array<Date | null>): Date | null {

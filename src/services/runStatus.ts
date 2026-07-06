@@ -3,6 +3,10 @@ import { toValidDate } from './dateValues';
 
 const ACTIVE_RUN_STATUSES = new Set(['preflight', 'running', 'paused']);
 const STALEABLE_ACTIVE_RUN_STATUSES = new Set(['preflight', 'running']);
+const SUCCESSFUL_RUN_STATUSES = new Set(['completed', 'waiting_for_review']);
+const FAILED_OR_CANCELLED_RUN_STATUSES = new Set(['failed', 'cancelled']);
+const FAILED_TERMINAL_RUN_STATUSES = new Set(['failed', 'cancelled', 'needs_human']);
+const FINISHED_RUN_STATUSES = new Set([...SUCCESSFUL_RUN_STATUSES, ...FAILED_TERMINAL_RUN_STATUSES]);
 const DEFAULT_STALE_ACTIVE_RUN_MS = 12 * 60 * 60 * 1000;
 
 interface RunStatusLike {
@@ -21,6 +25,22 @@ export function runStatus(value: RunStatusLike | unknown): string {
 
 export function isActiveRunStatus(status: unknown): boolean {
   return typeof status === 'string' && ACTIVE_RUN_STATUSES.has(status);
+}
+
+export function isSuccessfulRunStatus(status: unknown): boolean {
+  return typeof status === 'string' && SUCCESSFUL_RUN_STATUSES.has(status);
+}
+
+export function isFailedOrCancelledRunStatus(status: unknown): boolean {
+  return typeof status === 'string' && FAILED_OR_CANCELLED_RUN_STATUSES.has(status);
+}
+
+export function isFailedTerminalRunStatus(status: unknown): boolean {
+  return typeof status === 'string' && FAILED_TERMINAL_RUN_STATUSES.has(status);
+}
+
+export function isFinishedRunStatus(status: unknown): boolean {
+  return typeof status === 'string' && FINISHED_RUN_STATUSES.has(status);
 }
 
 export function isActiveRun(run: RunStatusLike | unknown): boolean {

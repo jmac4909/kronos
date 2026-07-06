@@ -7123,6 +7123,16 @@ test('run status helper centralizes active persisted run semantics', () => {
   assert.equal(runStatus.isActiveRunStatus('queued'), false);
   assert.equal(runStatus.isActiveRunStatus('paused'), true);
   assert.equal(runStatus.isActiveRunStatus('completed'), false);
+  assert.equal(runStatus.isSuccessfulRunStatus('completed'), true);
+  assert.equal(runStatus.isSuccessfulRunStatus('waiting_for_review'), true);
+  assert.equal(runStatus.isSuccessfulRunStatus('failed'), false);
+  assert.equal(runStatus.isFailedOrCancelledRunStatus('failed'), true);
+  assert.equal(runStatus.isFailedOrCancelledRunStatus('cancelled'), true);
+  assert.equal(runStatus.isFailedOrCancelledRunStatus('needs_human'), false);
+  assert.equal(runStatus.isFailedTerminalRunStatus('needs_human'), true);
+  assert.equal(runStatus.isFinishedRunStatus('waiting_for_review'), true);
+  assert.equal(runStatus.isFinishedRunStatus('needs_human'), true);
+  assert.equal(runStatus.isFinishedRunStatus('running'), false);
   assert.equal(runStatus.isActiveRun({ status: 'queued' }), false);
   assert.equal(runStatus.isActiveRun({ status: 'running' }), true);
   assert.equal(runStatus.isFreshActiveRun({ status: 'running', startedAt: '2026-07-01T11:00:00.000Z' }, new Date('2026-07-01T12:00:00.000Z')), true);
@@ -7167,9 +7177,17 @@ test('run status helper centralizes active persisted run semantics', () => {
     "import { toValidDate } from './dateValues'",
     "const ACTIVE_RUN_STATUSES = new Set(['preflight', 'running', 'paused'])",
     "const STALEABLE_ACTIVE_RUN_STATUSES = new Set(['preflight', 'running'])",
+    "const SUCCESSFUL_RUN_STATUSES = new Set(['completed', 'waiting_for_review'])",
+    "const FAILED_OR_CANCELLED_RUN_STATUSES = new Set(['failed', 'cancelled'])",
+    "const FAILED_TERMINAL_RUN_STATUSES = new Set(['failed', 'cancelled', 'needs_human'])",
+    'const FINISHED_RUN_STATUSES = new Set([...SUCCESSFUL_RUN_STATUSES, ...FAILED_TERMINAL_RUN_STATUSES])',
     'const DEFAULT_STALE_ACTIVE_RUN_MS = 12 * 60 * 60 * 1000',
     'interface RunStatusLike',
     'export function isActiveRunStatus',
+    'export function isSuccessfulRunStatus',
+    'export function isFailedOrCancelledRunStatus',
+    'export function isFailedTerminalRunStatus',
+    'export function isFinishedRunStatus',
     'export function isActiveRun',
     'export function isStaleActiveRun',
     'export function isFreshActiveRun',
@@ -7194,6 +7212,8 @@ test('run status helper centralizes active persisted run semantics', () => {
   for (const marker of [
     'export const ACTIVE_RUN_STATUSES',
     'export const STALEABLE_ACTIVE_RUN_STATUSES',
+    'export const SUCCESSFUL_RUN_STATUSES',
+    'export const FINISHED_RUN_STATUSES',
     'export const DEFAULT_STALE_ACTIVE_RUN_MS',
     'export interface RunStatusLike',
     'export function hasTerminalRunSignal',
@@ -9715,13 +9735,13 @@ test('post-run readiness distinguishes process completion from handoff readiness
   for (const marker of [
     'run: unknown',
     "import { runProgressSummary } from './runProgress'",
-    "import { terminalRunOutcome } from './runStatus'",
+    "import { isSuccessfulRunStatus, terminalRunOutcome } from './runStatus'",
     "import { evidenceChecks, evidenceNotes, evidenceString } from './evidenceData'",
     'export function shouldRecordRunCompletionEvidence',
     'export function resolvePostRunTicket',
     'export function postRunReadinessRunPatch',
     'function postRunReadinessStatusTransition',
-    "const READINESS_STATUS_TRANSITION_RUN_STATUSES = new Set(['completed', 'waiting_for_review'])",
+    'if (!isSuccessfulRunStatus(runStatus)) { return undefined; }',
     'interface PostRunTicketResolution',
     'const runResolved = resolveTicketFromRunRecord(tickets, input.run)',
     'const matchedProjectTickets',
@@ -11884,9 +11904,13 @@ test('trend metrics report rework, build pass, verification pass, and cycle time
   for (const marker of [
     'runs: unknown[]',
     "import { recordString } from './records'",
+    "import { isFailedTerminalRunStatus, isFinishedRunStatus, isSuccessfulRunStatus } from './runStatus'",
     "import { hasRetryMetadata, isRunLikeRecord, type RunLikeRecord } from './runRecords'",
     'const rawRuns = Array.isArray(input.runs) ? input.runs : []',
     '.filter(isRunLikeRecord)',
+    'const finishedRuns = runs.filter(run => isFinishedRunStatus(recordString(run, \'status\')))',
+    "const completedRuns = finishedRuns.filter(run => isSuccessfulRunStatus(recordString(run, 'status'))).length",
+    "const failedRuns = finishedRuns.filter(run => isFailedTerminalRunStatus(recordString(run, 'status'))).length",
     'function cycleTimesHours(tickets: Record<string, Ticket>, runs: RunLikeRecord[]): number[]',
   ]) {
     assert.ok(source.includes(marker), marker);
@@ -11896,6 +11920,9 @@ test('trend metrics report rework, build pass, verification pass, and cycle time
     'Record<string, any>',
     'type RunMetricRecord',
     'function hasRetryMetadata',
+    'const SUCCESS_RUN_STATUSES',
+    'const FINISHED_RUN_STATUSES',
+    'function isFailedRunStatus',
   ]) {
     assert.equal(source.includes(marker), false, marker);
   }
@@ -11948,7 +11975,7 @@ test('dashboard worklist builds command-center lanes from review, run, gate, and
 
   const source = readSourceFixture('src', 'services', 'dashboardWorklist.ts');
   assert.ok(source.includes("import { formatRunProgress } from './runProgress'"));
-  assert.ok(source.includes("import { isFreshActiveRun } from './runStatus'"));
+  assert.ok(source.includes("import { isFreshActiveRun, isSuccessfulRunStatus } from './runStatus'"));
   assert.ok(source.includes("import { isRunLikeRecord, type RunLikeRecord } from './runRecords'"));
   assert.ok(source.includes('const rawRuns: unknown[] = Array.isArray(input.runs) ? input.runs : []'));
   assert.ok(source.includes('const runs = rawRuns.filter(isRunLikeRecord)'));
@@ -11956,6 +11983,8 @@ test('dashboard worklist builds command-center lanes from review, run, gate, and
   assert.ok(source.includes('return isFreshActiveRun(run);'));
   assert.ok(source.includes('function activeRunDetail(run: RunLikeRecord, status: string, ticketKey: string): string'));
   assert.ok(source.includes('formatRunProgress(run)'));
+  assert.ok(source.includes("runs.filter(run => isSuccessfulRunStatus(recordString(run, 'status')))"));
+  assert.equal(source.includes('const COMPLETED_RUN_STATUSES'), false);
   assert.equal(source.includes('type DashboardRunRecord = RunRecord & Record<string, unknown>'), false);
   assert.equal(source.includes('type DashboardRunRecord = RunRecord & Record<string, any>'), false);
   assert.equal(source.includes('function isRunRecord'), false);
@@ -11999,10 +12028,13 @@ test('agent quality score combines run outcomes, evidence gates, builds, reviews
   assert.match(score.summary, /needs-human run/);
 
   const source = readSourceFixture('src', 'services', 'agentQualityScore.ts');
-  assert.ok(source.includes("import { isActiveRun } from './runStatus'"));
+  assert.ok(source.includes("import { isActiveRun, isFailedOrCancelledRunStatus, isSuccessfulRunStatus } from './runStatus'"));
   assert.ok(source.includes("import { hasRetryMetadata, isRunLikeRecord } from './runRecords'"));
   assert.ok(source.includes('runs: unknown[]'));
   assert.ok(source.includes('.filter(isRunLikeRecord)'));
+  assert.ok(source.includes("isSuccessfulRunStatus(recordString(run, 'status'))"));
+  assert.ok(source.includes("isFailedOrCancelledRunStatus(recordString(run, 'status'))"));
+  assert.equal(source.includes('const SUCCESS_RUN_STATUSES'), false);
   assert.equal(source.includes('type RunQualityRecord'), false);
   assert.equal(source.includes('type RunQualityRecord = RunRecord & Record<string, any>'), false);
   assert.equal(source.includes('function hasRetryMetadata'), false);

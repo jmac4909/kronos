@@ -4,7 +4,7 @@ import { isPassingBuildStatus } from './buildStatus';
 import { EvidenceGateResult, evaluateEvidenceGate } from './evidenceGate';
 import { evidenceChecks, evidenceNotes, evidenceString } from './evidenceData';
 import { runProgressSummary } from './runProgress';
-import { terminalRunOutcome } from './runStatus';
+import { isSuccessfulRunStatus, terminalRunOutcome } from './runStatus';
 import { escapeRegExp } from './regexp';
 import { recordFromUnknown } from './records';
 
@@ -59,9 +59,6 @@ interface PostRunTicketResolution {
   ticketKey?: string;
   ticket?: Ticket;
 }
-
-const SUCCESS_RUN_STATUSES = new Set(['completed', 'waiting_for_review']);
-const READINESS_STATUS_TRANSITION_RUN_STATUSES = new Set(['completed', 'waiting_for_review']);
 
 export function resolvePostRunTicket(input: {
   tickets?: Record<string, Ticket>;
@@ -186,8 +183,8 @@ export function evaluatePostRunReadiness(input: {
   if (!input.ticketKey || !input.ticket) {
     const readiness: PostRunReadiness = {
       evaluatedAt: now.toISOString(),
-      status: SUCCESS_RUN_STATUSES.has(runStatus) ? 'needs_human' : 'blocked',
-      summary: SUCCESS_RUN_STATUSES.has(runStatus)
+      status: isSuccessfulRunStatus(runStatus) ? 'needs_human' : 'blocked',
+      summary: isSuccessfulRunStatus(runStatus)
         ? 'Run completed, but Kronos could not resolve current ticket state for readiness evaluation.'
         : `Run did not complete cleanly (${failureSummaryDetail(failureKind, failureReason)}).`,
       failureKind,
@@ -206,7 +203,7 @@ export function evaluatePostRunReadiness(input: {
     warnings,
   };
 
-  if (!SUCCESS_RUN_STATUSES.has(runStatus)) {
+  if (!isSuccessfulRunStatus(runStatus)) {
     return {
       evaluatedAt: now.toISOString(),
       ticketKey: input.ticketKey,
@@ -284,7 +281,7 @@ export function postRunReadinessRunPatch(run: unknown, readiness: PostRunReadine
 }
 
 function postRunReadinessStatusTransition(runStatus: string, readiness: PostRunReadiness): PostRunReadinessRunPatch['status'] {
-  if (!READINESS_STATUS_TRANSITION_RUN_STATUSES.has(runStatus)) { return undefined; }
+  if (!isSuccessfulRunStatus(runStatus)) { return undefined; }
   if (readiness.status === 'ready') { return 'waiting_for_review'; }
   if (readiness.status === 'needs_human' || readiness.status === 'blocked') { return 'needs_human'; }
   return undefined;
@@ -294,7 +291,7 @@ export function classifyRunFailure(run: unknown): RunFailureKind {
   const record = recordFromUnknown(run);
   const status = runString(record['status']);
   if (!status && Object.keys(record).length === 0) { return 'unknown'; }
-  if (SUCCESS_RUN_STATUSES.has(status)) { return 'none'; }
+  if (isSuccessfulRunStatus(status)) { return 'none'; }
   if (status === 'cancelled') { return 'cancelled'; }
   const skill = runString(record['skill']).toLowerCase();
   const exitCode = Number(record['exitCode']);
@@ -321,7 +318,7 @@ export function classifyRunFailure(run: unknown): RunFailureKind {
 
 function runCompletedForEvidence(record: Record<string, unknown>): boolean {
   const status = runString(record['status']);
-  return SUCCESS_RUN_STATUSES.has(status) || (status === 'needs_human' && terminalRunOutcome(record) === 'completed');
+  return isSuccessfulRunStatus(status) || (status === 'needs_human' && terminalRunOutcome(record) === 'completed');
 }
 
 function completionEvidenceRunId(record: Record<string, unknown>): string {

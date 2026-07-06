@@ -2,7 +2,7 @@ import { AgingReport } from './agingAnalyzer';
 import { EvidenceGateResult } from './evidenceGate';
 import { HumanReviewInbox } from './humanReviewInbox';
 import { formatRunProgress } from './runProgress';
-import { isFreshActiveRun } from './runStatus';
+import { isFreshActiveRun, isSuccessfulRunStatus } from './runStatus';
 import { recordString } from './records';
 import { toValidDate } from './dateValues';
 import { isRunLikeRecord, type RunLikeRecord } from './runRecords';
@@ -33,8 +33,6 @@ interface DashboardWorklistInput {
   evidenceGates: EvidenceGateResult[];
   agingReport: AgingReport;
 }
-
-const COMPLETED_RUN_STATUSES = new Set(['completed', 'waiting_for_review']);
 
 export function buildDashboardWorklist(input: DashboardWorklistInput, limit = 5): DashboardWorklistLane[] {
   const rawRuns: unknown[] = Array.isArray(input.runs) ? input.runs : [];
@@ -88,7 +86,7 @@ export function buildDashboardWorklist(input: DashboardWorklistInput, limit = 5)
       kind: 'recent_completed',
       title: 'Recently Completed',
       emptyText: 'No completed runs recorded.',
-      items: sortRuns(runs.filter(run => COMPLETED_RUN_STATUSES.has(recordString(run, 'status'))), 'endedAt')
+      items: sortRuns(runs.filter(run => isSuccessfulRunStatus(recordString(run, 'status'))), 'endedAt')
         .slice(0, limit)
         .map(run => {
           const status = recordString(run, 'status') || 'completed';
