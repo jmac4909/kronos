@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { KronosState } from '../state/KronosState';
 import { Ticket } from '../state/types';
+import { mergeRequestCommentsFromRecord } from '../services/mergeRequestComments';
 import { mergeRequestReviewStatusLabel } from '../services/mergeRequestLabels';
 import { compactSingleLineText } from '../services/textFormat';
 import { ticketStringArray } from '../services/ticketFields';
@@ -376,7 +377,7 @@ class ReviewItem extends vscode.TreeItem {
 }
 
 function latestMergeRequestCommentSummary(ticket: Ticket): string {
-  const comments = ticket.mr?.comments || [];
+  const comments = mergeRequestCommentsFromRecord(ticket.mr);
   const latest = comments.at(-1);
   if (!latest) { return ''; }
   const author = latest.author ? `${latest.author}: ` : '';

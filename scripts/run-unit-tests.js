@@ -12194,8 +12194,10 @@ test('tree providers share action labels and icons', () => {
     "new vscode.ThemeIcon('circle-filled'",
     "new vscode.ThemeIcon('git-pull-request', color)",
     "import { ticketStringArray } from '../services/ticketFields'",
+    "import { mergeRequestCommentsFromRecord } from '../services/mergeRequestComments'",
     'projectNames: ticketStringArray(ticket.projects)',
     "const projs = ticketStringArray(ticket.projects).join(', ') || 'unlinked'",
+    'const comments = mergeRequestCommentsFromRecord(ticket.mr)',
     "import { openReviewTicketEntries } from '../services/reviewWork'",
     'type TicketWithOpenMergeRequest = ReturnType<typeof openReviewTicketEntries>[number][1]',
     'return openReviewTicketEntries(state.tickets)',
@@ -12204,6 +12206,7 @@ test('tree providers share action labels and icons', () => {
   }
   assert.equal(reviewTree.includes('projectNames: ticket.projects || []'), false, 'review new-item summaries should normalize project names through ticketStringArray');
   assert.equal(reviewTree.includes('ticket.projects?.join'), false, 'review item descriptions should normalize project names through ticketStringArray');
+  assert.equal(reviewTree.includes('const comments = ticket.mr?.comments || []'), false, 'review item comment summaries should use the shared MR comment normalizer');
   for (const marker of [
     'projectTree.dispose()',
     'ticketTree.dispose()',

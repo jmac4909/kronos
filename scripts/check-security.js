@@ -4623,11 +4623,17 @@ if (!reviewTreeProvider.includes('const summary = compactSingleLineText(latest.b
 if (!reviewTreeProvider.includes("import { ticketStringArray } from '../services/ticketFields'") || !reviewTreeProvider.includes('projectNames: ticketStringArray(ticket.projects)') || !reviewTreeProvider.includes("const projs = ticketStringArray(ticket.projects).join(', ') || 'unlinked'")) {
   fail('ReviewTreeProvider should normalize project names through ticketStringArray.');
 }
+if (!reviewTreeProvider.includes("import { mergeRequestCommentsFromRecord } from '../services/mergeRequestComments'") || !reviewTreeProvider.includes('const comments = mergeRequestCommentsFromRecord(ticket.mr)')) {
+  fail('ReviewTreeProvider should normalize MR comments through mergeRequestCommentsFromRecord.');
+}
 if (reviewTreeProvider.includes('projectNames: ticket.projects || []')) {
   fail('ReviewTreeProvider must not expose raw ticket project arrays.');
 }
 if (reviewTreeProvider.includes('ticket.projects?.join')) {
   fail('ReviewTreeProvider must not render raw ticket project arrays.');
+}
+if (reviewTreeProvider.includes('const comments = ticket.mr?.comments || []')) {
+  fail('ReviewTreeProvider must not render raw MR comment arrays.');
 }
 for (const [name, source] of [
   ['src/services/runAttention.ts', runAttention],
