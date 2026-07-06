@@ -1618,12 +1618,17 @@ for (const marker of [
   'export function buildQueueDispatchExtraPrompt',
   'export function buildQueueDispatchScopeHint',
   'export function buildQueueDispatchAppendPrompt',
+  'const inputProjects = input.projects ?? []',
+  'const projects = inputProjects.length > 0\n    ? inputProjects',
   'directProjectPath',
   'missingProjects',
 ]) {
   if (!queueDispatchPlan.includes(marker)) {
     fail(`Missing queue dispatch plan marker: ${marker}`);
   }
+}
+if (queueDispatchPlan.includes('input.projects || []')) {
+  fail('Queue dispatch planning should reuse one normalized input projects value.');
 }
 
 const queueCommandStart = extension.indexOf("vscode.commands.registerCommand('kronos.addToQueue'");

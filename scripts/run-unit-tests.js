@@ -2046,11 +2046,14 @@ test('queue dispatch plan resolves registered, missing, and direct project targe
     'export function buildQueueDispatchExtraPrompt',
     'export function buildQueueDispatchScopeHint',
     'export function buildQueueDispatchAppendPrompt',
+    'const inputProjects = input.projects ?? []',
+    'const projects = inputProjects.length > 0\n    ? inputProjects',
     'directProjectPath',
     'missingProjects',
   ]) {
     assert.ok(source.includes(marker), marker);
   }
+  assert.equal(source.includes('input.projects || []'), false);
 });
 
 test('next action context explains command, risk, preflight, and blockers', () => {

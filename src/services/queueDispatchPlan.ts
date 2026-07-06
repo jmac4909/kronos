@@ -24,8 +24,9 @@ export function buildQueueDispatchPlan(input: {
   pathProject?: string | undefined;
   resolveProjectPath: (projectName: string) => string | undefined;
 }): QueueDispatchPlan {
-  const projects = (input.projects || []).length > 0
-    ? input.projects || []
+  const inputProjects = input.projects ?? [];
+  const projects = inputProjects.length > 0
+    ? inputProjects
     : input.pathProject
       ? [input.pathProject]
       : [];
