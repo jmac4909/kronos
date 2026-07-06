@@ -313,7 +313,7 @@ function startBackgroundRefreshPoll(throttledRefresh: () => Promise<void>, inter
 }
 
 function startStatusBarRunRefresh(state: KronosState, intervalMs: number): vscode.Disposable {
-  const safeIntervalMs = Number.isFinite(intervalMs) && intervalMs > 0 ? intervalMs : 5000;
+  const safeIntervalMs = configIntervalMs(intervalMs, 5000);
   let hadActiveRuns = false;
   const timer = setInterval(() => {
     const hasActiveRuns = listRuns().some(run => isFreshActiveRun(run));

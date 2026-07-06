@@ -773,6 +773,7 @@ for (const marker of [
   "import { decideReviewMonitorAction, reviewDeployMonitorActionHandled, reviewMergeRequestNotificationKey, reviewTerminalMergeRequestActionKey, type ReviewDeployMonitorResult, type ReviewMonitorDecision, type ReviewTerminalMergeRequestAction } from './services/reviewMonitor'",
   'const REVIEW_POLL_FAILURE_NOTIFICATION_MS = 15 * 60 * 1000',
   "const sessionPollMs = configIntervalMs(config.get<number>('sessionPollIntervalMs', 5000), 5000, 1000)",
+  'const safeIntervalMs = configIntervalMs(intervalMs, 5000)',
   'startBackgroundRefreshPoll(throttledRefresh, configIntervalSecondsMs(config.get<number>(\'pollIntervalSec\', 300), 300, 1))',
   "const pollIntervalMs = configIntervalSecondsMs(config.get<number>('reviewPollIntervalSec', fallbackSec), fallbackSec, 60)",
   'let disposed = false',
@@ -1055,6 +1056,9 @@ for (const marker of [
   if (!safetySource.includes(marker)) {
     fail(`Missing safety marker: ${marker}`);
   }
+}
+if (extension.includes('Number.isFinite' + '(intervalMs)')) {
+  fail('Extension polling helpers must use the shared interval config helper.');
 }
 if (extension.indexOf('const startupSideEffectsTimer = setTimeout(runStartupSideEffects, 0)') < extension.indexOf("vscode.commands.registerCommand('kronos.cleanupWorktrees'")) {
   fail('Kronos startup side effects must be deferred until after command registration.');
@@ -3093,8 +3097,9 @@ for (const marker of [
   "import { formatRunProgress } from '../services/runProgress'",
   "import { isAttentionRunStatus, runAttentionLine } from '../services/runAttention'",
   "import { unknownErrorMessage } from '../services/errorUtils'",
+  "import { configIntervalMs } from '../services/intervalConfig'",
   'private _refreshing = false',
-  'const safeIntervalMs = Number.isFinite(intervalMs) && intervalMs > 0 ? intervalMs : 5000',
+  'const safeIntervalMs = configIntervalMs(intervalMs, 5000)',
   'void this.refreshSessionsSafely()',
   'private async refreshSessionsSafely(): Promise<void>',
   "unknownErrorMessage(e, 'Kronos session refresh failed.')",
@@ -3116,15 +3121,20 @@ for (const marker of [
 if (sessionTreeProvider.includes('setInterval(async () =>')) {
   fail('Session tree polling must not leave rejected async intervals unhandled.');
 }
+if (sessionTreeProvider.includes('Number.isFinite' + '(intervalMs)')) {
+  fail('Session tree polling must use the shared interval config helper.');
+}
 
 for (const marker of [
   "import { KronosRun, listRuns } from '../runners/sessionDispatcher'",
   "import { isFreshActiveRun } from '../services/runStatus'",
   "import { formatRunProgress } from '../services/runProgress'",
   "import { activeRunForQueueItem } from '../services/queueActiveRun'",
+  "import { configIntervalMs } from '../services/intervalConfig'",
   'const activeRuns = listRuns().filter(run => isFreshActiveRun(run))',
   'new QueueTreeItem(item, idx, activeRunForQueueItem(item, activeRuns))',
   'startPolling(intervalMs: number): void',
+  'const safeIntervalMs = configIntervalMs(intervalMs, 5000)',
   'queueTree.startPolling(sessionPollMs)',
   'queueTree.dispose()',
   'const progress = activeRun ? formatRunProgress(activeRun) :',
@@ -3160,6 +3170,9 @@ if (`${queueTreeProvider}\n${queueActiveRun}`.includes('activeRuns.find(run => r
 }
 if (queueTreeProvider.includes('export class QueueTreeItem')) {
   fail('QueueTreeItem should stay internal to QueueTreeProvider.');
+}
+if (queueTreeProvider.includes('Number.isFinite' + '(intervalMs)')) {
+  fail('Queue tree polling must use the shared interval config helper.');
 }
 
 for (const marker of [

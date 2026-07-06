@@ -4,6 +4,7 @@ import { QueueItem } from '../state/types';
 import { KronosRun, listRuns } from '../runners/sessionDispatcher';
 import { actionDisplayLabel as actionToLabel } from '../services/actionCatalog';
 import { activeRunForQueueItem } from '../services/queueActiveRun';
+import { configIntervalMs } from '../services/intervalConfig';
 import { formatRunProgress } from '../services/runProgress';
 import { isFreshActiveRun } from '../services/runStatus';
 import { queueActionIcon } from './actionIcons';
@@ -43,7 +44,7 @@ export class QueueTreeProvider implements vscode.TreeDataProvider<QueueTreeItem>
 
   startPolling(intervalMs: number): void {
     this.stopPolling();
-    const safeIntervalMs = Number.isFinite(intervalMs) && intervalMs > 0 ? intervalMs : 5000;
+    const safeIntervalMs = configIntervalMs(intervalMs, 5000);
     this._timer = setInterval(() => {
       const activeNow = listRuns().some(run => isFreshActiveRun(run));
       if (activeNow || this.hadActiveRuns) {

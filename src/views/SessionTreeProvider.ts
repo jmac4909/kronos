@@ -3,6 +3,7 @@ import * as path from 'path';
 import { KronosState } from '../state/KronosState';
 import { ClaudeSession } from '../state/types';
 import { KronosRun, listRuns } from '../runners/sessionDispatcher';
+import { configIntervalMs } from '../services/intervalConfig';
 import { isFreshActiveRun } from '../services/runStatus';
 import { formatRunProgress } from '../services/runProgress';
 import { isAttentionRunStatus, runAttentionLine } from '../services/runAttention';
@@ -27,7 +28,7 @@ export class SessionTreeProvider implements vscode.TreeDataProvider<SessionTreeI
 
   startPolling(intervalMs: number): void {
     this.stopPolling();
-    const safeIntervalMs = Number.isFinite(intervalMs) && intervalMs > 0 ? intervalMs : 5000;
+    const safeIntervalMs = configIntervalMs(intervalMs, 5000);
     this._timer = setInterval(() => {
       void this.refreshSessionsSafely();
     }, safeIntervalMs);

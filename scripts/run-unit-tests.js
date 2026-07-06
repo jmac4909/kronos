@@ -10720,12 +10720,14 @@ test('extension activation tracks long-lived disposables', () => {
   for (const marker of [
     'function startBackgroundRefreshPoll(throttledRefresh: () => Promise<void>, intervalMs: number): vscode.Disposable',
     'function startStatusBarRunRefresh(state: KronosState, intervalMs: number): vscode.Disposable',
+    'const safeIntervalMs = configIntervalMs(intervalMs, 5000)',
     'const hasActiveRuns = listRuns().some(run => isFreshActiveRun(run))',
     'if (hasActiveRuns || hadActiveRuns)',
     'return { dispose: () => clearInterval(timer) }',
   ]) {
     assert.ok(source.includes(marker), marker);
   }
+  assert.equal(source.includes('Number.isFinite(intervalMs)'), false, 'extension polling helpers should use shared interval config helper');
   assert.equal(
     activateSource.includes("vscode.window.registerTreeDataProvider('kronosSessions', sessionTree);\n  vscode.window.registerTreeDataProvider('kronosTasks', taskTree);"),
     false,
@@ -11543,6 +11545,7 @@ test('tree providers share action labels and icons', () => {
     "import { isFreshActiveRun } from '../services/runStatus'",
     "import { formatRunProgress } from '../services/runProgress'",
     "import { activeRunForQueueItem } from '../services/queueActiveRun'",
+    "import { configIntervalMs } from '../services/intervalConfig'",
     'const activeRuns = listRuns().filter(run => isFreshActiveRun(run))',
     'private hadActiveRuns = false',
     'this.hadActiveRuns = activeRuns.length > 0',
@@ -11551,13 +11554,14 @@ test('tree providers share action labels and icons', () => {
     'this.hadActiveRuns = activeNow',
     'new QueueTreeItem(item, idx, activeRunForQueueItem(item, activeRuns))',
     'startPolling(intervalMs: number): void',
-    'const safeIntervalMs = Number.isFinite(intervalMs) && intervalMs > 0 ? intervalMs : 5000',
+    'const safeIntervalMs = configIntervalMs(intervalMs, 5000)',
     'const progress = activeRun ? formatRunProgress(activeRun) :',
     'Active run: ${activeRun.id}',
     "new vscode.ThemeIcon('sync~spin'",
   ]) {
     assert.ok(queueTree.includes(marker), marker);
   }
+  assert.equal(queueTree.includes('Number.isFinite(intervalMs)'), false, 'queue tree polling should use shared interval config helper');
   for (const marker of [
     "import { skillForAction } from './nextActionContext'",
     "import { isFreshActiveRun } from './runStatus'",
@@ -11588,12 +11592,13 @@ test('tree providers share action labels and icons', () => {
     "import { formatRunProgress } from '../services/runProgress'",
     "import { isAttentionRunStatus, runAttentionLine } from '../services/runAttention'",
     "import { unknownErrorMessage } from '../services/errorUtils'",
+    "import { configIntervalMs } from '../services/intervalConfig'",
     'private _refreshing = false',
     'private readonly sessionSubscription: vscode.Disposable',
     'this.sessionSubscription = kronosState.onDidSessionChange',
     'this.sessionSubscription.dispose()',
     'this._onDidChangeTreeData.dispose()',
-    'const safeIntervalMs = Number.isFinite(intervalMs) && intervalMs > 0 ? intervalMs : 5000',
+    'const safeIntervalMs = configIntervalMs(intervalMs, 5000)',
     'void this.refreshSessionsSafely()',
     'private async refreshSessionsSafely(): Promise<void>',
     "unknownErrorMessage(e, 'Kronos session refresh failed.')",
@@ -11612,6 +11617,7 @@ test('tree providers share action labels and icons', () => {
   ]) {
     assert.ok(sessionTree.includes(marker), marker);
   }
+  assert.equal(sessionTree.includes('Number.isFinite(intervalMs)'), false, 'session tree polling should use shared interval config helper');
   assert.equal(sessionTree.includes('setInterval(async () =>'), false, 'session tree polling should not leave rejected async intervals unhandled');
   for (const marker of [
     'readonly onDidChangeNewReviewCount',
