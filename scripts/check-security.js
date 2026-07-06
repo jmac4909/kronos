@@ -1531,13 +1531,17 @@ for (const marker of [
   }
 }
 for (const marker of [
+  "import { arrayFromUnknown, recordFromUnknown } from './records'",
   'export interface QueueCommandPayload',
   'export function resolveProjectName',
   "const ticket = recordFromUnknown(record['ticket'])",
+  "const firstTicketProject = arrayFromUnknown(ticket['projects'])[0]",
   'export function resolveTicketKey',
   "const nestedItem = recordFromUnknown(record['item'])",
   'export function resolveQueueCommandItem',
   'export function queueCommandPayloadFromRecord',
+  'function projectNames(value: unknown): string[]',
+  'return arrayFromUnknown(value)',
   'export function resolveQueueIndex',
   "typeof index === 'number' && Number.isInteger(index) && index >= 0",
   'export function stringFromUnknown',
@@ -1549,6 +1553,17 @@ for (const marker of [
 ]) {
   if (!commandPayloads.includes(marker)) {
     fail(`Missing command payload helper marker: ${marker}`);
+  }
+}
+for (const forbidden of [
+  "import { recordFromUnknown } from './records'",
+  "Array.isArray(record['projects'])",
+  'if (!Array.isArray(value)) { return []; }',
+  "recordFromUnknown(recordFromUnknown(item)['ticket'])",
+  "recordFromUnknown(recordFromUnknown(item)['item'])",
+]) {
+  if (commandPayloads.includes(forbidden)) {
+    fail(`Command payload helpers must use shared normalizers instead of ${forbidden}`);
   }
 }
 for (const marker of [

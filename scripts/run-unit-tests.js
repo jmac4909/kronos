@@ -4222,6 +4222,7 @@ test('command payload helpers normalize tree, webview, queue, and run payloads',
   assert.deepEqual(commandPayloads.ticketProjectNamesForCommand(state, { item: { ticket: { projects: [' nested '] } } }, undefined), ['nested']);
   assert.deepEqual(commandPayloads.ticketProjectNamesForCommand(state, {}, 'K-1'), ['api', 'web']);
   assert.deepEqual(commandPayloads.uniqueProjectNames([' api ', 'api', '', 42, 'web']), ['api', 'web']);
+  assert.deepEqual(commandPayloads.uniqueProjectNames('api'), []);
 
   assert.equal(commandPayloads.resolveRunId(' run-1 '), 'run-1');
   assert.equal(commandPayloads.resolveRunId({ runId: ' run-2 ' }), 'run-2');
@@ -4253,17 +4254,29 @@ test('command payload helpers normalize tree, webview, queue, and run payloads',
 
   const source = readSourceFixture('src', 'services', 'commandPayloads.ts');
   for (const marker of [
-    "import { recordFromUnknown } from './records'",
+    "import { arrayFromUnknown, recordFromUnknown } from './records'",
     'export interface QueueCommandPayload',
     'export function resolveProjectName',
     'export function ticketProjectNamesForCommand',
     'export function resolveRecoveryFocusId',
     'export function resolveQueueCommandItem',
     'export function queueCommandPayloadFromRecord',
+    "const firstTicketProject = arrayFromUnknown(ticket['projects'])[0]",
+    'function projectNames(value: unknown): string[]',
+    'return arrayFromUnknown(value)',
     "stringFromUnknown(record['project_path']) || stringFromUnknown(record['projectPath'])",
     "typeof index === 'number' && Number.isInteger(index) && index >= 0",
   ]) {
     assert.ok(source.includes(marker), marker);
+  }
+  for (const forbidden of [
+    "import { recordFromUnknown } from './records'",
+    "Array.isArray(record['projects'])",
+    'if (!Array.isArray(value)) { return []; }',
+    "recordFromUnknown(recordFromUnknown(item)['ticket'])",
+    "recordFromUnknown(recordFromUnknown(item)['item'])",
+  ]) {
+    assert.equal(source.includes(forbidden), false, forbidden);
   }
 });
 

@@ -1,5 +1,5 @@
 import type { KronosState as KronosStateSnapshot } from '../state/types';
-import { recordFromUnknown } from './records';
+import { arrayFromUnknown, recordFromUnknown } from './records';
 
 interface CommandPayloadState {
   state?: Pick<KronosStateSnapshot, 'tickets'> | null | undefined;
@@ -22,9 +22,9 @@ export function resolveProjectName(state: CommandPayloadState, item: unknown): s
   const projectName = record['projectName'];
   if (typeof projectName === 'string' && projectName.trim()) { return projectName; }
   const ticket = recordFromUnknown(record['ticket']);
-  const ticketProjects = ticket['projects'];
-  if (Array.isArray(ticketProjects) && typeof ticketProjects[0] === 'string' && ticketProjects[0].trim()) {
-    return ticketProjects[0];
+  const firstTicketProject = arrayFromUnknown(ticket['projects'])[0];
+  if (typeof firstTicketProject === 'string' && firstTicketProject.trim()) {
+    return firstTicketProject;
   }
   const ticketKey = record['ticketKey'];
   if (typeof ticketKey === 'string' && state.state) {
@@ -58,10 +58,7 @@ export function ticketProjectNamesForCommand(state: CommandPayloadState, item: u
 }
 
 export function uniqueProjectNames(value: unknown): string[] {
-  if (!Array.isArray(value)) { return []; }
-  return [...new Set(value
-    .filter((project): project is string => typeof project === 'string' && project.trim().length > 0)
-    .map(project => project.trim()))];
+  return [...new Set(projectNames(value))];
 }
 
 export function resolveRunId(item: unknown): string | undefined {
@@ -99,24 +96,22 @@ export function resolveTicketKey(item: unknown): string | undefined {
 }
 
 export function resolveMergeRequestUrl(item: unknown): string | undefined {
-  const ticket = recordFromUnknown(recordFromUnknown(item)['ticket']);
+  const record = recordFromUnknown(item);
+  const ticket = recordFromUnknown(record['ticket']);
   const mr = recordFromUnknown(ticket['mr']);
   return stringFromUnknown(mr['url']);
 }
 
 export function resolveQueueCommandItem(item: unknown): QueueCommandPayload | undefined {
-  return queueCommandPayloadFromRecord(recordFromUnknown(item))
-    || queueCommandPayloadFromRecord(recordFromUnknown(recordFromUnknown(item)['item']));
+  const record = recordFromUnknown(item);
+  return queueCommandPayloadFromRecord(record)
+    || queueCommandPayloadFromRecord(recordFromUnknown(record['item']));
 }
 
 export function queueCommandPayloadFromRecord(record: Record<string, unknown>): QueueCommandPayload | undefined {
   const action = record['action'];
   if (typeof action !== 'string' || !action.trim()) { return undefined; }
-  const projects = Array.isArray(record['projects'])
-    ? record['projects']
-      .filter((project): project is string => typeof project === 'string' && project.trim().length > 0)
-      .map(project => project.trim())
-    : [];
+  const projects = projectNames(record['projects']);
   const ticket = stringFromUnknown(record['ticket']);
   const id = stringFromUnknown(record['id']);
   const projectPath = stringFromUnknown(record['project_path']) || stringFromUnknown(record['projectPath']);
@@ -135,4 +130,10 @@ export function resolveQueueIndex(item: unknown): number | undefined {
 export function resolveTaskId(item: unknown): string | undefined {
   const taskId = recordFromUnknown(item)['taskId'];
   return typeof taskId === 'string' && taskId.trim() ? taskId : undefined;
+}
+
+function projectNames(value: unknown): string[] {
+  return arrayFromUnknown(value)
+    .filter((project): project is string => typeof project === 'string' && project.trim().length > 0)
+    .map(project => project.trim());
 }
