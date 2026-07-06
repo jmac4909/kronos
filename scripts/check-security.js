@@ -3634,10 +3634,14 @@ for (const marker of [
   'arm(): void',
   'export function createWebviewReadyMonitor',
   'function logWebviewReadyMessage',
+  "import { isRecord, trimmedStringFromUnknown } from './records'",
   'const arm = (): void =>',
   'reportedReady = false',
   'monitor.arm = arm',
-  "message.command !== WEBVIEW_READY_COMMAND",
+  'if (!isRecord(raw)) { return false; }',
+  "message['command'] !== WEBVIEW_READY_COMMAND",
+  "const reportedName = trimmedStringFromUnknown(message['webviewName'])",
+  "const userAgentValue = trimmedStringFromUnknown(message['userAgent'])",
   'fallbackWebviewName',
   'Kronos webview script did not report ready:',
   'Check VS Code Webview Developer Tools and the Extension Host DevTools console for CSP or sandbox errors.',
@@ -3645,6 +3649,14 @@ for (const marker of [
 ]) {
   if (!webviewDiagnostics.includes(marker)) {
     fail(`Missing webview diagnostics marker: ${marker}`);
+  }
+}
+for (const marker of [
+  "if (!raw || typeof raw !== 'object') { return false; }",
+  'const message = raw as { command?: unknown; webviewName?: unknown; readyState?: unknown; userAgent?: unknown }',
+]) {
+  if (webviewDiagnostics.includes(marker)) {
+    fail(`Webview diagnostics should use shared record/string helpers instead of ${marker}.`);
   }
 }
 for (const staleMarker of [

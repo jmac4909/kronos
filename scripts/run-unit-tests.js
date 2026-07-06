@@ -3334,25 +3334,30 @@ test('webview diagnostics centralize host ready monitoring', () => {
       },
     };
     const monitor = webviewDiagnostics.createWebviewReadyMonitor(panel, 'Kronos Monitor Panel', 10000);
+    assert.equal(monitor(null), false);
+    assert.equal(monitor([webviewSecurity.WEBVIEW_READY_COMMAND]), false);
     assert.equal(monitor({ command: 'noop' }), false);
     assert.equal(monitor({
       command: webviewSecurity.WEBVIEW_READY_COMMAND,
-      readyState: 'complete',
+      readyState: ' complete ',
+      userAgent: ' KronosAgent/1.0 ',
     }), true);
     assert.match(infoMessages.join('\n'), /Kronos Monitor Panel/);
+    assert.match(infoMessages.join('\n'), /complete; KronosAgent\/1\.0/);
     assert.equal(monitor({
       command: webviewSecurity.WEBVIEW_READY_COMMAND,
-      webviewName: 'Kronos Monitor Panel',
+      webviewName: ' Kronos Monitor Panel ',
       readyState: 'interactive',
     }), true);
     assert.match(infoMessages.join('\n'), /interactive/);
     const specificPanelMonitor = webviewDiagnostics.createWebviewReadyMonitor(panel, 'Specific Panel', 10000);
     assert.equal(specificPanelMonitor({
       command: webviewSecurity.WEBVIEW_READY_COMMAND,
-      webviewName: 'Kronos action panel',
-      readyState: 'complete',
+      webviewName: ' Kronos action panel ',
+      readyState: ' ',
     }), true);
     assert.match(infoMessages.join('\n'), /Specific Panel/);
+    assert.match(infoMessages.join('\n'), /unknown/);
     assert.equal(typeof disposeListener, 'function');
     disposeListener();
   } finally {
