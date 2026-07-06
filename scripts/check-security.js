@@ -3931,6 +3931,8 @@ for (const marker of [
   'const projects = state.projects',
   'const tickets = state.tickets',
   'const discovered = state.discovered_projects',
+  'function discoveredFolderBucket',
+  'discoveredFolderBucket(byFolder, folder).push(d)',
   'ticketStringArray(t.projects).includes(name)',
   "countLabel(proj.open_mr_count, 'open MR')",
   'formatRelativeTime(proj.last_polled)',
@@ -3950,6 +3952,9 @@ if (projectTreeProvider.includes('state.tickets || {}')) {
 }
 if (projectTreeProvider.includes('state.discovered_projects || []')) {
   fail('Project tree provider must trust normalized discovered projects after load.');
+}
+if (projectTreeProvider.includes('byFolder[folder] || []')) {
+  fail('Project tree provider must use the discovered folder bucket helper.');
 }
 
 for (const marker of [

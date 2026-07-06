@@ -12354,6 +12354,8 @@ test('tree providers share action labels and icons', () => {
     'const projects = state.projects',
     'const tickets = state.tickets',
     'const discovered = state.discovered_projects',
+    'function discoveredFolderBucket',
+    'discoveredFolderBucket(byFolder, folder).push(d)',
     'ticketStringArray(t.projects).includes(name)',
     "countLabel(proj.open_mr_count, 'open MR')",
     'formatRelativeTime(proj.last_polled)',
@@ -12364,6 +12366,7 @@ test('tree providers share action labels and icons', () => {
   assert.equal(projectTree.includes('t.projects?.includes(name)'), false, 'project tree should normalize linked ticket counts through ticketStringArray');
   assert.equal(projectTree.includes('state.tickets || {}'), false, 'project tree should trust normalized state tickets after load');
   assert.equal(projectTree.includes('state.discovered_projects || []'), false, 'project tree should trust normalized discovered projects after load');
+  assert.equal(projectTree.includes('byFolder[folder] || []'), false, 'project tree should use a folder bucket helper');
   for (const [name, source] of [
     ['ProjectTreeProvider', projectTree],
     ['TicketTreeProvider', ticketTree],
