@@ -1,6 +1,7 @@
 import { Ticket } from '../state/types';
 import { isHandoffAction } from './actionSemantics';
 import { isPassingBuildStatus } from './buildStatus';
+import { normalizeChangedFiles } from './changedFiles';
 import { EvidenceGateResult, evaluateEvidenceGate } from './evidenceGate';
 import { evidenceChecks, evidenceNotes, evidenceString } from './evidenceData';
 import { runProgressSummary } from './runProgress';
@@ -421,8 +422,8 @@ function ticketLinkedToProject(ticket: Ticket, projectName: string): boolean {
 }
 
 function mergeRequestChangedFileCount(ticket?: Ticket): number | undefined {
-  const files = ticket?.mr?.changed_files || ticket?.mr?.files;
-  return Array.isArray(files) ? files.length : undefined;
+  const files = ticket?.mr?.changed_files ?? ticket?.mr?.files;
+  return Array.isArray(files) ? normalizeChangedFiles(files).length : undefined;
 }
 
 function ticketSonarStatus(ticket?: Ticket): string | undefined {

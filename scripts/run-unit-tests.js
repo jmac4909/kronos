@@ -9999,7 +9999,7 @@ test('post-run readiness distinguishes process completion from handoff readiness
       state: 'opened',
       review_status: 'approved',
       url: 'https://gitlab.example/1',
-      changed_files: [{ path: 'src/app.ts' }],
+      changed_files: [42, { path: 'src/app.ts' }],
     },
     build: { number: 12, status: 'SUCCESS', url: 'https://jenkins.example/12' },
   }));
@@ -10124,6 +10124,7 @@ test('post-run readiness distinguishes process completion from handoff readiness
     'run: unknown',
     "import { runProgressSummary } from './runProgress'",
     "import { isSuccessfulRunStatus, terminalRunOutcome } from './runStatus'",
+    "import { normalizeChangedFiles } from './changedFiles'",
     "import { evidenceChecks, evidenceNotes, evidenceString } from './evidenceData'",
     "import { arrayFromUnknown, optionalFiniteNumberFromUnknown, optionalTrimmedStringFromUnknown, recordFromUnknown } from './records'",
     'export function shouldRecordRunCompletionEvidence',
@@ -10154,6 +10155,8 @@ test('post-run readiness distinguishes process completion from handoff readiness
     'export function buildRunCompletionEvidenceCheck',
     'function runCompletionEvidenceContext(run: unknown, ticket?: Ticket): RunCompletionEvidenceContext',
     'interface RunCompletionEvidenceCheck',
+    'function mergeRequestChangedFileCount(ticket?: Ticket): number | undefined',
+    'normalizeChangedFiles(files).length',
     'function ticketSonarStatus(ticket?: Ticket): string | undefined',
     "import { isPassingBuildStatus } from './buildStatus'",
     'function isPassingSonar',
@@ -10173,6 +10176,7 @@ test('post-run readiness distinguishes process completion from handoff readiness
   ]) {
     assert.ok(source.includes(marker), marker);
   }
+  assert.equal(source.includes('return Array.isArray(files) ? files.length : undefined'), false, 'post-run readiness should count normalized MR changed files');
   for (const marker of [
     'run: any',
     'event: any',

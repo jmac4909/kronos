@@ -5295,6 +5295,8 @@ for (const marker of [
   'interface RunCompletionEvidenceCheck',
   'function ticketSonarStatus(ticket?: Ticket): string | undefined',
   "import { isPassingBuildStatus } from './buildStatus'",
+  "import { normalizeChangedFiles } from './changedFiles'",
+  'normalizeChangedFiles(files).length',
   'function isPassingSonar',
   'export function classifyRunFailure(run: unknown): RunFailureKind',
   "import { isHandoffAction } from './actionSemantics'",
@@ -5329,6 +5331,7 @@ for (const forbidden of [
   'event: any',
   'const SUCCESS_RUN_STATUSES',
   'const READINESS_STATUS_TRANSITION_RUN_STATUSES',
+  'return Array.isArray(files) ? files.length : undefined',
 ]) {
   if (postRunReadiness.includes(forbidden)) {
     fail(`Post-run readiness must normalize raw run payloads instead of using ${forbidden}.`);
