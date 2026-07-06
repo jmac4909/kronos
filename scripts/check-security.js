@@ -1768,13 +1768,14 @@ for (const marker of [
   'interface TicketPanelRenderInput',
   'queue?: QueueState | null',
   'runs?: TicketTimelineRuns',
+  "import { mergeRequestCommentsFromRecord } from './mergeRequestComments'",
   "import { ticketStringArray, ticketStringField } from './ticketFields'",
   'const timeline = buildTicketTimeline({',
   '...(input.runs !== undefined ? { runs: input.runs } : {})',
   'const projectList = ticketStringArray(ticket.projects)',
   'const mr = ticket.mr',
   'const build = ticket.build',
-  'const comments = mergeRequestComments(mr).slice(-5).reverse()',
+  'const comments = mergeRequestCommentsFromRecord(mr).slice(-5).reverse()',
   'class="mr-comments"',
   "const discussionCount = ticketStringField(mr, 'discussion_count')",
   'Discussions: ${esc(discussionCount ||',
@@ -1787,6 +1788,9 @@ for (const marker of [
   if (!ticketPanelView.includes(marker)) {
     fail(`Missing ticket panel view marker: ${marker}`);
   }
+}
+if (ticketPanelView.includes('function mergeRequestComments')) {
+  fail('Ticket panel view must not carry local merge request comment normalization.');
 }
 for (const [name, source] of [
   ['src/services/jiraBoardPanelView.ts', jiraBoardPanelView],
@@ -2503,6 +2507,16 @@ for (const marker of [
 ]) {
   if (!ticketFields.includes(marker)) {
     fail(`Missing ticket field helper marker: ${marker}`);
+  }
+}
+
+for (const marker of [
+  'export function mergeRequestCommentsFromRecord(record: object | null | undefined): MergeRequestComment[]',
+  'Reflect.get(record, \'comments\')',
+  "value.filter((item): item is MergeRequestComment => isRecord(item) && typeof item['body'] === 'string')",
+]) {
+  if (!mergeRequestComments.includes(marker)) {
+    fail(`Missing merge request comment helper marker: ${marker}`);
   }
 }
 

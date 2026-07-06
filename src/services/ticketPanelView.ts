@@ -2,8 +2,8 @@ import { QueueState, Ticket } from '../state/types';
 import { buildStatusKind } from './buildStatus';
 import { evidenceAcceptanceCriteria, evidenceChecked, evidenceChecks, evidenceEnvironmentResults, evidenceNotes, evidenceString } from './evidenceData';
 import { EvidenceGateResult, evaluateEvidenceGate } from './evidenceGate';
+import { mergeRequestCommentsFromRecord } from './mergeRequestComments';
 import { actionButton, kronosActionPanelScript } from './operatorPanel';
-import { isRecord } from './records';
 import { ticketStringArray, ticketStringField } from './ticketFields';
 import { TimelineEvent, buildTicketTimeline } from './ticketTimeline';
 import { escapeClass, escapeHtml, kronosWebviewBaseCss, safeHttpHref } from './webviewHtml';
@@ -117,7 +117,7 @@ export function buildTicketHtml(key: string, ticket: Ticket, input: TicketPanelR
     const unresolvedDiscussions = ticketStringField(mr, 'unresolved_discussion_count');
     const lastDiscussionAt = ticketStringField(mr, 'last_discussion_at');
     const discussionsResolved = ticketStringField(mr, 'discussions_resolved');
-    const comments = mergeRequestComments(mr).slice(-5).reverse();
+    const comments = mergeRequestCommentsFromRecord(mr).slice(-5).reverse();
     const commentsHtml = comments.length > 0
       ? `<div class="mr-comments">${comments.map(comment => {
         const author = ticketStringField(comment, 'author');
@@ -297,12 +297,4 @@ export function buildTicketTimelineHtml(events: TimelineEvent[]): string {
     </div>`;
   }).join('');
   return `<div class="section"><h3>Ticket Timeline</h3><div class="timeline">${rows}</div></div>`;
-}
-
-function mergeRequestComments(record: object | null | undefined): Array<Record<string, unknown>> {
-  if (!record) { return []; }
-  const value = Reflect.get(record, 'comments');
-  return Array.isArray(value)
-    ? value.filter((item): item is Record<string, unknown> => isRecord(item) && typeof item['body'] === 'string')
-    : [];
 }

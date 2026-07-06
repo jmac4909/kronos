@@ -207,6 +207,7 @@ const runRecovery = require('../out/services/runRecovery.js');
 const providerReachability = require('../out/services/providerReachability.js');
 const ticketMutations = require('../out/services/ticketMutations.js');
 const mergeRequestNotifications = require('../out/services/mergeRequestNotifications.js');
+const mergeRequestComments = require('../out/services/mergeRequestComments.js');
 const queueMutations = require('../out/services/queueMutations.js');
 const projectMutations = require('../out/services/projectMutations.js');
 const doctorChecks = require('../out/services/doctorChecks.js');
@@ -3951,6 +3952,10 @@ test('record guard helper centralizes unknown object narrowing', () => {
   assert.equal(ticketFields.ticketStringField({ ticket: 42 }, 'ticket'), '42');
   assert.equal(ticketFields.ticketStringField({}, 'missing', 'fallback'), 'fallback');
   assert.deepEqual(ticketFields.ticketStringArray([' K-1 ', 42, '', null]), ['K-1', '42']);
+  assert.deepEqual(mergeRequestComments.mergeRequestCommentsFromRecord({
+    comments: [{ body: 'ok', author: 'Reviewer' }, { author: 'missing body' }, 'raw'],
+  }), [{ body: 'ok', author: 'Reviewer' }]);
+  assert.deepEqual(mergeRequestComments.mergeRequestCommentsFromRecord(null), []);
   assert.equal(runRecords.isRunLikeRecord({ id: 'run-1' }), true);
   assert.equal(runRecords.isRunLikeRecord([]), false);
   assert.equal(runRecords.hasRetryMetadata({ promptMetadata: { retryOfRunId: 'run-0' } }), true);
@@ -3981,6 +3986,7 @@ test('record guard helper centralizes unknown object narrowing', () => {
   assert.equal(extensionSource.includes('function ticketRecord'), false, 'extension should use shared record helper for ticket payload records');
 
   const ticketFieldsSource = readSourceFixture('src', 'services', 'ticketFields.ts');
+  const mergeRequestCommentsSource = readSourceFixture('src', 'services', 'mergeRequestComments.ts');
   for (const marker of [
     'export function ticketStringField(record: object | null | undefined, key: string, fallback = \'\'): string',
     'Reflect.get(record, key)',
@@ -3988,6 +3994,13 @@ test('record guard helper centralizes unknown object narrowing', () => {
     "value.map(item => String(item ?? '').trim()).filter(Boolean)",
   ]) {
     assert.ok(ticketFieldsSource.includes(marker), marker);
+  }
+  for (const marker of [
+    'export function mergeRequestCommentsFromRecord(record: object | null | undefined): MergeRequestComment[]',
+    'Reflect.get(record, \'comments\')',
+    "value.filter((item): item is MergeRequestComment => isRecord(item) && typeof item['body'] === 'string')",
+  ]) {
+    assert.ok(mergeRequestCommentsSource.includes(marker), marker);
   }
 
   const dispatcherSource = readSourceFixture('src', 'runners', 'sessionDispatcher.ts');
@@ -11178,11 +11191,11 @@ test('ticket detail rendering uses typed tickets and evidence records', () => {
     'interface TicketPanelRenderInput',
     'queue?: QueueState | null',
     'runs?: TicketTimelineRuns',
+    "import { mergeRequestCommentsFromRecord } from './mergeRequestComments'",
     "import { ticketStringArray, ticketStringField } from './ticketFields'",
     'const mr = ticket.mr',
     'const build = ticket.build',
-    'function mergeRequestComments(record: object | null | undefined)',
-    'const comments = mergeRequestComments(mr).slice(-5).reverse()',
+    'const comments = mergeRequestCommentsFromRecord(mr).slice(-5).reverse()',
     'class="mr-comments"',
     "const discussionCount = ticketStringField(mr, 'discussion_count')",
     'Discussions: ${esc(discussionCount ||',
@@ -11194,6 +11207,7 @@ test('ticket detail rendering uses typed tickets and evidence records', () => {
   }
   assert.equal(ticketPanelViewSource.includes('function ticketStringField'), false);
   assert.equal(ticketPanelViewSource.includes('function ticketStringArray'), false);
+  assert.equal(ticketPanelViewSource.includes('function mergeRequestComments'), false);
   for (const marker of [
     "import { isRecord } from './records'",
     'type EvidenceRecord = object',
