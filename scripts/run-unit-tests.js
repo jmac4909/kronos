@@ -6658,6 +6658,7 @@ test('dispatcher records branch and permission metadata for persisted runs', () 
     "const actionHeader = interactive ? '<th>Actions</th>' : ''",
     'const actionCell = interactive ?',
     'const promptMeta = isRecord(run.promptMetadata) ? run.promptMetadata : undefined',
+    'const toolCount = arrayFromUnknown(permissions?.allowedTools).length',
     '${escapeClass(readinessStatus)}',
     "stringOrDefault(run.worktreePath || run.cwd, 'unknown workspace')",
     "const id = safeFileStem(`${project}-${skill}-${ticket || 'no-ticket'}-${Date.now().toString(36)}`, { fallback: 'run', maxLength: 160 })",
@@ -6697,6 +6698,7 @@ test('dispatcher records branch and permission metadata for persisted runs', () 
     'const cfg = parsed as Record<string, unknown>',
     'const runEvents = Array.isArray(run.events) ? run.events : []',
     'dirs: Array.isArray(dirs)',
+    'Array.isArray(permissions?.allowedTools)',
     'const missingVariables = arrayFromUnknown(rawMissingVariables).map(String)',
     'const missingVariables = Array.isArray(rawMissingVariables) ? rawMissingVariables.map(String) : []',
   ]) {

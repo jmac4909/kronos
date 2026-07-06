@@ -1550,7 +1550,7 @@ function buildRunCenterHtml(runs: KronosRun[], nonce?: string, actionScriptUri?:
     const readinessSummary = stringOrDefault(readiness?.summary, 'Not evaluated yet.');
     const permissions = isRecord(run.permissions) ? run.permissions : undefined;
     const permissionMode = stringOrDefault(permissions?.permissionMode, '');
-    const toolCount = Array.isArray(permissions?.allowedTools) ? permissions.allowedTools.length : 0;
+    const toolCount = arrayFromUnknown(permissions?.allowedTools).length;
     const permissionSummary = permissionMode ? `${permissionMode}${toolCount ? `, ${toolCount} tools` : ''}` : '';
     const branch = isRecord(run.branch) ? run.branch : undefined;
     const currentRef = stringOrDefault(branch?.['currentRef'], '');
