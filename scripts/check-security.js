@@ -4631,6 +4631,13 @@ for (const marker of [
   'function isCollisionActiveRun(run: CollisionRun, now: Date, staleActiveRunHours: number): boolean',
   'isStaleActiveRun(run, now, staleActiveRunHours * 60 * 60 * 1000)',
   'sharedFilePaths',
+  "import { ticketStringArray } from './ticketFields'",
+  'const targetProjects = new Set(ticketStringArray(input.projects))',
+  'for (const project of ticketStringArray(target.projects))',
+  'const linkedProjects = ticketStringArray(ticket.projects)',
+  'const itemProjects = ticketStringArray(item.projects)',
+  'const ticketProjects = ticketStringArray(ticket.projects)',
+  'for (const label of ticketStringArray(ticket.labels))',
 ]) {
   if (!collisionDetector.includes(marker)) {
     fail(`Missing collision detector marker: ${marker}`);
@@ -4638,6 +4645,9 @@ for (const marker of [
 }
 if (collisionDetector.includes('const events = Array.isArray(run.events) ? run.events : []')) {
   fail('Collision detector must normalize run events through recordsFromUnknown.');
+}
+if (collisionDetector.includes('target.projects || []') || collisionDetector.includes('input.projects || []') || collisionDetector.includes('ticket.labels || []')) {
+  fail('Collision detector must normalize project and label lists through ticketStringArray.');
 }
 for (const marker of [
   'export const LIVE_MR_DIFF_LIMIT = 4',

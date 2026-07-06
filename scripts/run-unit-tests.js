@@ -7822,14 +7822,14 @@ test('attention badge aggregates review, aging, and paused-run signals', () => {
 
 test('collision detector flags active runs, duplicate queue work, and open MRs', () => {
   const tickets = {
-    'K-1': ticket({ projects: ['app'], summary: 'Fix checkout retry routing', labels: ['checkout'] }),
+    'K-1': ticket({ projects: [' app ', '', 42], summary: 'Fix checkout retry routing', labels: [' checkout ', '', 42] }),
     'K-2': ticket({
-      projects: ['app'],
+      projects: ['app', '', 42],
       summary: 'Review checkout retry handler',
-      labels: ['checkout'],
+      labels: ['checkout', '', 42],
       mr: { iid: 7, state: 'opened', review_status: 'pending_review', url: 'https://gitlab.example/7' },
     }),
-    'K-3': ticket({ projects: ['app'], summary: 'Repair checkout retry tests', labels: ['checkout'] }),
+    'K-3': ticket({ projects: ['app'], summary: 'Repair checkout retry tests', labels: ['checkout', '', 42] }),
   };
   const queue = {
     items: [
@@ -7845,7 +7845,7 @@ test('collision detector flags active runs, duplicate queue work, and open MRs',
       {
         id: 'same-project',
         ticket: 'K-3',
-        projects: ['app'],
+        projects: [' app ', '', 42],
         project_path: '/repo/app',
         action: 'fix_build',
         priority_score: 40,
@@ -7857,7 +7857,7 @@ test('collision detector flags active runs, duplicate queue work, and open MRs',
 
   const collisions = collisionDetector.detectDispatchCollisions({
     ticketKey: 'K-1',
-    projects: ['app'],
+    projects: [' app ', '', 42],
     action: 'implement',
     queue,
     mrFiles: {
@@ -7935,16 +7935,23 @@ test('collision detector flags active runs, duplicate queue work, and open MRs',
   const source = readSourceFixture('src', 'services', 'collisionDetector.ts');
   for (const marker of [
     "import { recordEntriesFromUnknown, recordsFromUnknown } from './records'",
+    "import { ticketStringArray } from './ticketFields'",
     'staleActiveRunHours?: number',
+    'const targetProjects = new Set(ticketStringArray(input.projects))',
     'const staleActiveRunHours = input.staleActiveRunHours ?? 12',
     'const isActive = isCollisionActiveRun(run, now, staleActiveRunHours)',
     'for (const event of recordsFromUnknown(run.events))',
+    'const itemProjects = ticketStringArray(item.projects)',
+    'const ticketProjects = ticketStringArray(ticket.projects)',
+    'for (const label of ticketStringArray(ticket.labels))',
     'function isCollisionActiveRun(run: CollisionRun, now: Date, staleActiveRunHours: number): boolean',
     'isStaleActiveRun(run, now, staleActiveRunHours * 60 * 60 * 1000)',
   ]) {
     assert.ok(source.includes(marker), marker);
   }
   assert.equal(source.includes('const events = Array.isArray(run.events) ? run.events : []'), false);
+  assert.equal(source.includes('input.projects || []'), false);
+  assert.equal(source.includes('ticket.labels || []'), false);
 });
 
 test('collision detector selects MR file hint candidates for code work', () => {
@@ -7972,7 +7979,7 @@ test('collision detector selects MR file hint candidates for code work', () => {
   };
 
   assert.deepEqual(collisionDetector.mrFileHintCandidateKeys({
-    targets: [{ ticketKey: 'K-TARGET', projects: ['app'], action: 'implement' }],
+    targets: [{ ticketKey: 'K-TARGET', projects: [' app ', '', 42], action: 'implement' }],
     tickets,
     limit: 3,
   }), ['K-TARGET', 'K-SAME-1', 'K-SAME-2']);
@@ -8003,12 +8010,15 @@ test('collision detector selects MR file hint candidates for code work', () => {
   for (const marker of [
     'export interface MrFileHintTarget',
     'export function mrFileHintCandidateKeys',
+    'for (const project of ticketStringArray(target.projects))',
+    'const linkedProjects = ticketStringArray(ticket.projects)',
     'if (!isCodeAction(target.action)) { continue; }',
     "ticket.mr?.state !== 'opened'",
     'return Array.from(candidateKeys).slice(0, input.limit)',
   ]) {
     assert.ok(source.includes(marker), marker);
   }
+  assert.equal(source.includes('target.projects || []'), false);
 });
 
 test('MR file hint service loads candidate diffs and keeps failed hints non-fatal', async () => {

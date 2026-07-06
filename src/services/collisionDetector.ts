@@ -6,6 +6,7 @@ import { isActiveRun, isStaleActiveRun } from './runStatus';
 import { severityRank } from './severityRank';
 import { toValidDate } from './dateValues';
 import { recordEntriesFromUnknown, recordsFromUnknown } from './records';
+import { ticketStringArray } from './ticketFields';
 
 type CollisionSeverity = 'high' | 'medium' | 'low';
 type CollisionKind = 'active_run' | 'queued_ticket' | 'queued_project' | 'open_mr' | 'recent_file' | 'ticket_area' | 'mr_file';
@@ -60,8 +61,8 @@ export function mrFileHintCandidateKeys(input: {
 
   for (const target of input.targets) {
     if (!isCodeAction(target.action)) { continue; }
-    for (const project of target.projects || []) {
-      if (project) { projectTargets.add(project); }
+    for (const project of ticketStringArray(target.projects)) {
+      projectTargets.add(project);
     }
     if (target.ticketKey && tickets[target.ticketKey]?.mr?.state === 'opened') {
       candidateKeys.add(target.ticketKey);
@@ -75,7 +76,8 @@ export function mrFileHintCandidateKeys(input: {
   for (const [ticketKey, ticket] of Object.entries(tickets)) {
     if (candidateKeys.size >= input.limit) { break; }
     if (ticket.mr?.state !== 'opened') { continue; }
-    if (ticket.projects?.some(project => projectTargets.has(project))) {
+    const linkedProjects = ticketStringArray(ticket.projects);
+    if (linkedProjects.some(project => projectTargets.has(project))) {
       candidateKeys.add(ticketKey);
     }
   }
@@ -84,7 +86,7 @@ export function mrFileHintCandidateKeys(input: {
 }
 
 export function detectDispatchCollisions(input: DispatchCollisionInput): DispatchCollision[] {
-  const targetProjects = new Set((input.projects || []).filter(Boolean));
+  const targetProjects = new Set(ticketStringArray(input.projects));
   const ticketKey = input.ticketKey || '';
   const codeAction = isCodeAction(input.action);
   const now = input.now || new Date();
@@ -136,6 +138,7 @@ export function detectDispatchCollisions(input: DispatchCollisionInput): Dispatc
   }
 
   for (const item of input.queue?.items || []) {
+    const itemProjects = ticketStringArray(item.projects);
     if (input.excludeQueueItemId && item.id === input.excludeQueueItemId) { continue; }
     if (ticketKey && item.ticket === ticketKey) {
       collisions.push({
@@ -147,19 +150,19 @@ export function detectDispatchCollisions(input: DispatchCollisionInput): Dispatc
       });
       continue;
     }
-    if (codeAction && item.projects?.some(project => targetProjects.has(project)) && isCodeAction(item.action)) {
+    if (codeAction && itemProjects.some(project => targetProjects.has(project)) && isCodeAction(item.action)) {
       collisions.push({
         id: `queue-project:${item.id}`,
         kind: 'queued_project',
         severity: 'low',
-        title: `Queued code work already targets ${item.projects.filter(project => targetProjects.has(project)).join(', ')}`,
+        title: `Queued code work already targets ${itemProjects.filter(project => targetProjects.has(project)).join(', ')}`,
         detail: `${item.ticket || 'unticketed'} ${item.action}: ${item.reason || 'No reason recorded'}`,
       });
     }
     const queuedTicket = item.ticket ? input.tickets?.[item.ticket] : undefined;
     if (codeAction && item.ticket && item.ticket !== ticketKey && queuedTicket) {
       const overlap = sharedAreaTokens(targetArea, ticketAreaTokens(queuedTicket));
-      if (overlap.length > 0 && item.projects?.some(project => targetProjects.has(project))) {
+      if (overlap.length > 0 && itemProjects.some(project => targetProjects.has(project))) {
         collisions.push({
           id: `queue-area:${item.id}`,
           kind: 'ticket_area',
@@ -174,12 +177,13 @@ export function detectDispatchCollisions(input: DispatchCollisionInput): Dispatc
   if (codeAction) {
     for (const [otherKey, ticket] of recordEntriesFromUnknown(input.tickets)) {
       if (otherKey === ticketKey || !ticket.mr || ticket.mr.state !== 'opened') { continue; }
-      if (!ticket.projects?.some(project => targetProjects.has(project))) { continue; }
+      const ticketProjects = ticketStringArray(ticket.projects);
+      if (!ticketProjects.some(project => targetProjects.has(project))) { continue; }
       collisions.push({
         id: `mr:${otherKey}:${ticket.mr.iid}`,
         kind: 'open_mr',
         severity: 'low',
-        title: `Open MR for ${otherKey} shares ${ticket.projects.filter(project => targetProjects.has(project)).join(', ')}`,
+        title: `Open MR for ${otherKey} shares ${ticketProjects.filter(project => targetProjects.has(project)).join(', ')}`,
         detail: `MR !${ticket.mr.iid} is ${mergeRequestReviewStatusLabel(ticket.mr.review_status)}`,
       });
       const mrFiles = changedFilesForTicket(otherKey, ticket, input.mrFiles);
@@ -287,7 +291,7 @@ function isCollisionActiveRun(run: CollisionRun, now: Date, staleActiveRunHours:
 
 function ticketAreaTokens(ticket: Ticket): Set<string> {
   const tokens = new Set<string>();
-  for (const label of ticket.labels || []) {
+  for (const label of ticketStringArray(ticket.labels)) {
     addToken(tokens, label);
   }
   for (const word of String(ticket.summary || '').split(/[^a-zA-Z0-9_/-]+/)) {
