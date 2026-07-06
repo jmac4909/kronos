@@ -7580,10 +7580,12 @@ test('ticket timeline combines queue, runs, evidence, MR, build, and ticket even
   assert.ok(source.includes("import { isAttentionRunStatus, runAttentionDetail } from './runAttention'"));
   assert.ok(source.includes("import { isSuccessfulRunStatus } from './runStatus'"));
   assert.ok(source.includes("import { runProgressSummary } from './runProgress'"));
+  assert.ok(source.includes('runs?: unknown[]'));
   assert.ok(source.includes("if (isSuccessfulRunStatus(status)) { return 'success'; }"));
   assert.ok(source.includes('const attentionDetail = isAttentionRunStatus(status) ? runAttentionDetail(run) :'));
   assert.ok(source.includes('const progress = runProgressSummary(run)'));
   assert.equal(source.includes("recordString(run, 'promptHash')"), false);
+  assert.equal(source.includes('interface TimelineRun'), false);
   assert.equal(source.includes('const rawRuns'), false);
   assert.equal(source.includes('filter(isRunLikeRecord)'), false);
   assert.equal(source.includes('type TimelineRunRecord = TimelineRun & Record<string, unknown>'), false);

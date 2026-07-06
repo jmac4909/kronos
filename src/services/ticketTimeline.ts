@@ -12,21 +12,6 @@ import { runProgressSummary } from './runProgress';
 type TimelineSource = 'jira' | 'queue' | 'run' | 'evidence' | 'mr' | 'build' | 'ticket';
 type TimelineSeverity = 'info' | 'success' | 'warning' | 'failure';
 
-interface TimelineRun {
-  id: string;
-  ticket?: string;
-  project?: string;
-  skill?: string;
-  status?: string;
-  startedAt?: string;
-  endedAt?: string;
-  failureReason?: string;
-  model?: string;
-  promptHash?: string;
-  worktreePath?: string;
-  logPath?: string;
-}
-
 export interface TimelineEvent {
   id: string;
   at?: string;
@@ -42,7 +27,7 @@ interface TicketTimelineInput {
   ticketKey: string;
   ticket: Ticket;
   queue?: QueueState | null;
-  runs?: TimelineRun[];
+  runs?: unknown[];
 }
 
 export function buildTicketTimeline(input: TicketTimelineInput): TimelineEvent[] {

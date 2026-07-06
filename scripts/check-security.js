@@ -5388,6 +5388,7 @@ for (const marker of [
   'const notes = evidenceNotes(ticket)',
   'const checks = evidenceChecks(ticket)',
   'const environmentResults = evidenceEnvironmentResults(ticket)',
+  'runs?: unknown[]',
   'const attentionDetail = isAttentionRunStatus(status) ? runAttentionDetail(run) :',
   'const progress = runProgressSummary(run)',
   "if (isSuccessfulRunStatus(status)) { return 'success'; }",
@@ -5398,6 +5399,7 @@ for (const marker of [
   }
 }
 for (const forbidden of [
+  'interface TimelineRun',
   'type TimelineRunRecord',
   'function isRunRecord',
   'const rawRuns',
