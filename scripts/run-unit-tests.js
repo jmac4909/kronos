@@ -8819,6 +8819,8 @@ test('integration adapters keep raw provider payloads unknown until normalized',
     "runner.runScript(['--mr-diff', ticketKey], options)",
     'function isUnsupportedMergeRequestStatusCommand',
     'function isUnsupportedMergeRequestStatusText',
+    'function normalizeSonarBranches',
+    'for (const item of arrayFromUnknown(value))',
     'function mergeRequestCommentInputs',
     "const rawComments = isRecord(value) ? arrayFromUnknown(value['comments']) : arrayFromUnknown(value)",
     "const notes = arrayFromUnknown(item['notes'])",
@@ -8838,6 +8840,7 @@ test('integration adapters keep raw provider payloads unknown until normalized',
     'function stringField(value: unknown): string | undefined',
     'function unknownErrorMessage(error: unknown',
     "Array.isArray(value) ? value : isRecord(value) ? arrayFromUnknown(value['comments']) : []",
+    'if (!Array.isArray(value)) { return []; }',
   ]) {
     assert.equal(source.includes(marker), false, marker);
   }

@@ -143,9 +143,8 @@ export const sonarAdapter = {
 };
 
 function normalizeSonarBranches(value: unknown): SonarBranch[] {
-  if (!Array.isArray(value)) { return []; }
   const normalized: SonarBranch[] = [];
-  for (const item of value) {
+  for (const item of arrayFromUnknown(value)) {
     const branch = normalizeSonarBranch(item);
     if (branch) {
       normalized.push(branch);

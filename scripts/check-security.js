@@ -5424,6 +5424,7 @@ for (const marker of [
   'function normalizeSonarBranches',
   'function normalizeSonarBranch',
   "import { arrayFromUnknown, isRecord, optionalFiniteNumberFromUnknown, optionalTrimmedStringFromUnknown, recordsFromUnknown } from './records'",
+  'for (const item of arrayFromUnknown(value))',
   "const authorRecord = isRecord(value['author']) ? value['author'] : undefined",
   "const str = optionalTrimmedStringFromUnknown(value)",
   'const numeric = optionalFiniteNumberFromUnknown(value)',
@@ -5439,6 +5440,9 @@ for (const marker of [
 }
 if (integrationAdapters.includes("Array.isArray(value) ? value : isRecord(value) ? arrayFromUnknown(value['comments']) : []")) {
   fail('Integration adapters must use the shared array fallback helper for Jira comment payloads.');
+}
+if (integrationAdapters.includes('if (!Array.isArray(value)) { return []; }')) {
+  fail('Integration adapters must use the shared array fallback helper for provider list payloads.');
 }
 if (integrationAdapters.includes('function stringField(value: unknown): string | undefined')) {
   fail('Integration adapters must use the shared optional trimmed string helper.');
