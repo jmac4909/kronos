@@ -6,6 +6,10 @@ export function recordFromUnknown(value: unknown): Record<string, unknown> {
   return isRecord(value) ? value : {};
 }
 
+export function arrayFromUnknown(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
 export function recordString(record: Record<string, unknown>, key: string): string {
   const value = record[key];
   return typeof value === 'string' ? value.trim() : '';

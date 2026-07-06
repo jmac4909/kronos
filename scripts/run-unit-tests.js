@@ -3995,6 +3995,8 @@ test('record guard helper centralizes unknown object narrowing', () => {
   assert.equal(records.isRecord('value'), false);
   assert.deepEqual(records.recordFromUnknown({ ok: true }), { ok: true });
   assert.deepEqual(records.recordFromUnknown(null), {});
+  assert.deepEqual(records.arrayFromUnknown(['ok']), ['ok']);
+  assert.deepEqual(records.arrayFromUnknown({ ok: true }), []);
   assert.equal(records.recordString({ ticket: ' K-1 ' }, 'ticket'), 'K-1');
   assert.equal(records.recordString({ ticket: 42 }, 'ticket'), '');
   assert.equal(ticketFields.ticketStringField({ ticket: 42 }, 'ticket'), '42');
@@ -4012,18 +4014,30 @@ test('record guard helper centralizes unknown object narrowing', () => {
   assert.equal(runRecords.hasRetryMetadata({ promptMetadata: { retryOfRunId: 'run-0' } }), true);
   assert.equal(runRecords.hasRetryMetadata({ promptMetadata: 'run-0' }), false);
 
+  const recordsSource = readSourceFixture('src', 'services', 'records.ts');
+  for (const marker of [
+    'export function isRecord(value: unknown): value is Record<string, unknown>',
+    'export function recordFromUnknown(value: unknown): Record<string, unknown>',
+    'export function arrayFromUnknown(value: unknown): unknown[]',
+    'export function recordString(record: Record<string, unknown>, key: string): string',
+    'return isRecord(value) ? value : {}',
+    'return Array.isArray(value) ? value : []',
+  ]) {
+    assert.ok(recordsSource.includes(marker), marker);
+  }
+
   for (const [file, marker] of [
     ['changedFiles.ts', "import { isRecord } from './records'"],
     ['evidenceData.ts', "import { isRecord } from './records'"],
     ['integrationAdapters.ts', "import { isRecord } from './records'"],
-    ['queuePlanner.ts', "import { isRecord } from './records'"],
+    ['queuePlanner.ts', "import { arrayFromUnknown, isRecord } from './records'"],
     ['runStatus.ts', "import { isRecord } from './records'"],
     ['runRecords.ts', "import { isRecord, recordString } from './records'"],
     ['runStore.ts', "import { isRecord, recordString } from './records'"],
     ['sessionStore.ts', "import { isRecord } from './records'"],
     ['sonarReportView.ts', "import { isRecord } from './records'"],
     ['stateStore.ts', "import { isRecord as isPlainObject } from './records'"],
-    ['stateScriptAdapter.ts', "import { isRecord as isPlainObject } from './records'"],
+    ['stateScriptAdapter.ts', "import { arrayFromUnknown, isRecord as isPlainObject } from './records'"],
   ]) {
     const source = readSourceFixture('src', 'services', file);
     assert.ok(source.includes(marker), `${file} should import shared record guard`);
@@ -4748,15 +4762,18 @@ test('queue planner groups recommendations into release batch plans', () => {
     'queueItem?: QueueItem',
     'export function planToQueueItem(input: PlannerInput, plan: PlannedAction): QueueItem',
     "import { evidenceRecordCount } from './evidenceData'",
+    "import { arrayFromUnknown, isRecord } from './records'",
     'evidenceRecordCount(ticket)',
     'function releaseKeysForPlan(ticket?: Ticket, queueItem?: unknown): string[]',
     'function releaseField(source: unknown, field: string): unknown',
+    "arrayFromUnknown(releaseField(queueItem, 'labels'))",
     'function collectReleaseValues(target: string[], value: unknown): void',
     'function releaseFromLabel(label: unknown): string | undefined',
   ]) {
     assert.ok(queuePlannerSource.includes(marker), marker);
   }
   assert.equal(queuePlannerSource.includes('export interface PlannerInput'), false);
+  assert.equal(queuePlannerSource.includes('function unknownArray'), false, 'queuePlanner should use shared array fallback helper');
   assert.equal(/\bany\b/.test(queuePlannerSource), false, 'queuePlanner should keep planner payloads typed without any');
 });
 
@@ -7955,14 +7972,17 @@ test('state script adapter keeps raw JSON payloads unknown until normalized', ()
   for (const marker of [
     '[key: string]: unknown',
     "parseJsonWithLabel(discoverProjects(options), 'kronos_state.py --discover', { includePreview: true })",
-    "import { isRecord as isPlainObject } from './records'",
+    "import { arrayFromUnknown, isRecord as isPlainObject } from './records'",
     "import { parseJsonWithLabel } from './jsonFiles'",
+    "completed: arrayFromUnknown(parsed['completed'])",
+    "ready_to_go: arrayFromUnknown(parsed['ready_to_go'])",
   ]) {
     assert.ok(source.includes(marker), marker);
   }
   for (const marker of [
     '[key: string]: any',
     'function parseStateScriptJson',
+    'function arrayOrEmpty',
     'catch (e: any)',
     'e?.message',
     'value is Record<string, any>',
@@ -9880,6 +9900,11 @@ test('dashboard panel view renders escaped command center data', () => {
   assert.match(html, /data-kronos-ready-command="__kronosWebviewReady"/);
   assert.doesNotMatch(html, /Project <summary>/);
   assert.doesNotMatch(html, /Brief <failed>/);
+
+  const source = readSourceFixture('src', 'services', 'dashboardPanelView.ts');
+  assert.ok(source.includes("import { arrayFromUnknown, recordString } from './records'"));
+  assert.ok(source.includes('return arrayFromUnknown(brief[key])'));
+  assert.equal(source.includes('return Array.isArray(value) ? value : []'), false, 'dashboard panel should use shared array fallback helper');
 });
 
 test('jira board panel view renders escaped ticket data and packaged script', () => {

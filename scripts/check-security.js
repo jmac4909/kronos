@@ -2499,8 +2499,10 @@ for (const [name, source] of [
 for (const marker of [
   'export function isRecord(value: unknown): value is Record<string, unknown>',
   'export function recordFromUnknown(value: unknown): Record<string, unknown>',
+  'export function arrayFromUnknown(value: unknown): unknown[]',
   'export function recordString(record: Record<string, unknown>, key: string): string',
   'return isRecord(value) ? value : {}',
+  'return Array.isArray(value) ? value : []',
   "typeof value === 'object'",
   '!Array.isArray(value)',
   "typeof value === 'string' ? value.trim() : ''",
@@ -2794,7 +2796,7 @@ for (const [name, source, marker] of [
   ['src/services/changedFiles.ts', changedFiles, "import { isRecord } from './records'"],
   ['src/services/evidenceData.ts', evidenceData, "import { isRecord } from './records'"],
   ['src/services/integrationAdapters.ts', integrationAdapters, "import { isRecord } from './records'"],
-  ['src/services/queuePlanner.ts', queuePlanner, "import { isRecord } from './records'"],
+  ['src/services/queuePlanner.ts', queuePlanner, "import { arrayFromUnknown, isRecord } from './records'"],
   ['src/services/runStatus.ts', runStatus, "import { isRecord } from './records'"],
   ['src/services/runRecords.ts', runRecords, "import { isRecord, recordString } from './records'"],
   ['src/services/runStore.ts', runStore, "import { isRecord, recordString } from './records'"],
@@ -2802,7 +2804,7 @@ for (const [name, source, marker] of [
   ['src/services/sonarReportView.ts', sonarReportView, "import { isRecord } from './records'"],
   ['src/services/trendMetrics.ts', trendMetrics, "import { recordString } from './records'"],
   ['src/services/stateStore.ts', stateStore, "import { isRecord as isPlainObject } from './records'"],
-  ['src/services/stateScriptAdapter.ts', stateScriptAdapter, "import { isRecord as isPlainObject } from './records'"],
+  ['src/services/stateScriptAdapter.ts', stateScriptAdapter, "import { arrayFromUnknown, isRecord as isPlainObject } from './records'"],
   ['src/runners/sessionDispatcher.ts', dispatcher, "import { isRecord } from '../services/records'"],
 ]) {
   if (!source.includes(marker)) {
@@ -2817,6 +2819,15 @@ for (const [name, source, marker] of [
   if (source.includes('function isPlainObject')) {
     fail(`${name} must not carry a local isPlainObject helper.`);
   }
+}
+if (!dashboardPanelView.includes("import { arrayFromUnknown, recordString } from './records'")) {
+  fail('src/services/dashboardPanelView.ts must import the shared array fallback helper.');
+}
+if (!dashboardPanelView.includes('return arrayFromUnknown(brief[key])')) {
+  fail('Dashboard panel brief items must use the shared array fallback helper.');
+}
+if (dashboardPanelView.includes('return Array.isArray(value) ? value : []')) {
+  fail('Dashboard panel must not carry a local unknown-array fallback.');
 }
 
 for (const [name, source, marker] of [
@@ -2966,11 +2977,11 @@ for (const marker of [
   'export function completeAdhocTask',
   'function readMorningBrief(',
   'export function readMorningBriefJson',
-  'function arrayOrEmpty',
+  "import { arrayFromUnknown, isRecord as isPlainObject } from './records'",
   'function finiteNumberOrZero',
   'function stringOrNull',
-  "completed: arrayOrEmpty(parsed['completed'])",
-  "ready_to_go: arrayOrEmpty(parsed['ready_to_go'])",
+  "completed: arrayFromUnknown(parsed['completed'])",
+  "ready_to_go: arrayFromUnknown(parsed['ready_to_go'])",
   "parseJsonWithLabel(discoverProjects(options), 'kronos_state.py --discover', { includePreview: true })",
   'kronos_state.py --discover',
   'kronos_state.py --morning-brief',
@@ -2979,6 +2990,9 @@ for (const marker of [
   if (!stateScriptAdapter.includes(marker)) {
     fail(`Missing state script adapter marker: ${marker}`);
   }
+}
+if (stateScriptAdapter.includes('function arrayOrEmpty')) {
+  fail('State script adapter must use the shared array fallback helper.');
 }
 for (const marker of [
   'export function discoverProjects(',
@@ -4289,7 +4303,8 @@ for (const marker of [
   'export function planToQueueItem(input: PlannerInput, plan: PlannedAction): QueueItem',
   'function releaseKeysForPlan(ticket?: Ticket, queueItem?: unknown): string[]',
   'function releaseField(source: unknown, field: string): unknown',
-  'function unknownArray(value: unknown): unknown[]',
+  "import { arrayFromUnknown, isRecord } from './records'",
+  "arrayFromUnknown(releaseField(queueItem, 'labels'))",
   'function collectReleaseValues(target: string[], value: unknown): void',
   'function releaseFromLabel(label: unknown): string | undefined',
   'export interface BacklogTriageReport',
@@ -4316,6 +4331,9 @@ for (const marker of [
 }
 if (queuePlanner.includes('export interface PlannerInput')) {
   fail('PlannerInput should stay private to queuePlanner.');
+}
+if (queuePlanner.includes('function unknownArray')) {
+  fail('Queue planner must use the shared array fallback helper.');
 }
 if (/\bany\b/.test(queuePlanner)) {
   fail('Queue planner should not use any for planner payload normalization.');

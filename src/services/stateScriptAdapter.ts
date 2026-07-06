@@ -1,6 +1,6 @@
 import { ScriptRunOptions, runKronosStateScript } from './scriptClient';
 import { parseJsonWithLabel } from './jsonFiles';
-import { isRecord as isPlainObject } from './records';
+import { arrayFromUnknown, isRecord as isPlainObject } from './records';
 import { DiscoveredProject } from '../state/types';
 
 type StateScriptRunner = (args: string[], options?: ScriptRunOptions) => string;
@@ -98,16 +98,12 @@ export function readMorningBriefJson(options: StateScriptAdapterOptions = {}): M
   if (!isPlainObject(parsed)) { return {}; }
   return {
     ...parsed,
-    completed: arrayOrEmpty(parsed['completed']),
-    needs_attention: arrayOrEmpty(parsed['needs_attention']),
-    ready_to_go: arrayOrEmpty(parsed['ready_to_go']),
+    completed: arrayFromUnknown(parsed['completed']),
+    needs_attention: arrayFromUnknown(parsed['needs_attention']),
+    ready_to_go: arrayFromUnknown(parsed['ready_to_go']),
     overnight_actions: finiteNumberOrZero(parsed['overnight_actions']),
     vpn_drops: finiteNumberOrZero(parsed['vpn_drops']),
   };
-}
-
-function arrayOrEmpty(value: unknown): unknown[] {
-  return Array.isArray(value) ? value : [];
 }
 
 function stringOrNull(value: unknown): string | null {

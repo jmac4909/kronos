@@ -8,7 +8,7 @@ import { buildHumanReviewInbox } from './humanReviewInbox';
 import { buildNextActionContext } from './nextActionContext';
 import { actionButton, actionRow, kronosActionPanelScript } from './operatorPanel';
 import type { PlannedAction } from './queuePlanner';
-import { recordString } from './records';
+import { arrayFromUnknown, recordString } from './records';
 import { isRunLikeRecord } from './runRecords';
 import { isFreshActiveRun } from './runStatus';
 import { computeTrendMetrics } from './trendMetrics';
@@ -42,8 +42,7 @@ function dashboardBriefRecord(brief: unknown): Record<string, unknown> {
 }
 
 function dashboardBriefItems(brief: Record<string, unknown>, key: string): unknown[] {
-  const value = brief[key];
-  return Array.isArray(value) ? value : [];
+  return arrayFromUnknown(brief[key]);
 }
 
 function dashboardBriefCount(brief: Record<string, unknown>, key: string): number {

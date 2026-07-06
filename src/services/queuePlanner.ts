@@ -6,7 +6,7 @@ import { isFailingBuildStatus, isPassingBuildStatus } from './buildStatus';
 import { toValidDate } from './dateValues';
 import { evidenceRecordCount } from './evidenceData';
 import { mergeRequestReviewStatusLabel } from './mergeRequestLabels';
-import { isRecord } from './records';
+import { arrayFromUnknown, isRecord } from './records';
 import { severityRank } from './severityRank';
 
 interface PlannerInput {
@@ -354,7 +354,7 @@ function releaseKeysForPlan(ticket?: Ticket, queueItem?: unknown): string[] {
   collectReleaseValues(values, ticket?.fixVersions);
   collectReleaseValues(values, ticket?.milestone);
   collectReleaseValues(values, ticket?.sprint);
-  for (const label of [...unknownArray(releaseField(queueItem, 'labels')), ...(ticket?.labels || [])]) {
+  for (const label of [...arrayFromUnknown(releaseField(queueItem, 'labels')), ...(ticket?.labels || [])]) {
     const release = releaseFromLabel(label);
     if (release) { values.push(release); }
   }
@@ -364,10 +364,6 @@ function releaseKeysForPlan(ticket?: Ticket, queueItem?: unknown): string[] {
 
 function releaseField(source: unknown, field: string): unknown {
   return isRecord(source) ? Reflect.get(source, field) : undefined;
-}
-
-function unknownArray(value: unknown): unknown[] {
-  return Array.isArray(value) ? value : [];
 }
 
 function collectReleaseValues(target: string[], value: unknown): void {
