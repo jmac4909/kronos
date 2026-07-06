@@ -4835,11 +4835,14 @@ for (const marker of [
   'latestPromptHistorySnapshot',
   'repairRequiredPromptTemplates',
   'STARTER_PROMPT_VARIABLES',
-  'Rendered prompt still contains unresolved',
+  'Rendered prompt still contains one or more unresolved {{VARIABLE}} placeholders.',
 ]) {
   if (!promptManager.includes(marker)) {
     fail(`Missing prompt manager marker: ${marker}`);
   }
+}
+if (promptManager.includes('placeholder(s)')) {
+  fail('Prompt manager should use plain wording instead of placeholder(s).');
 }
 if (promptManager.includes('export const PROMPT_HISTORY_DIR')) {
   fail('Prompt history directory should stay private to promptManager.');

@@ -202,7 +202,7 @@ export function runPromptSmokeTests(tests: PromptSmokeTest[]): PromptSmokeResult
         errors.push(`Missing variables: ${rendered.missingVariables.join(', ')}`);
       }
       if (/\{\{[A-Z0-9_]+\}\}/.test(rendered.text)) {
-        errors.push('Rendered prompt still contains unresolved {{VARIABLE}} placeholder(s).');
+        errors.push('Rendered prompt still contains one or more unresolved {{VARIABLE}} placeholders.');
       }
       for (const expected of test.mustContain || []) {
         if (!rendered.text.includes(expected)) {

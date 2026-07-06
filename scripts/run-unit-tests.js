@@ -435,12 +435,14 @@ test('prompt manager runs default and manifest-style smoke tests', () => {
     "import { unknownErrorMessage } from './errorUtils'",
     'catch (e: unknown)',
     "unknownErrorMessage(e, 'Prompt smoke test failed')",
+    'Rendered prompt still contains one or more unresolved {{VARIABLE}} placeholders.',
   ]) {
     assert.ok(source.includes(marker), marker);
   }
   for (const marker of [
     'catch (e: any)',
     "e?.message || 'Prompt smoke test failed'",
+    'placeholder(s)',
   ]) {
     assert.equal(source.includes(marker), false, marker);
   }
