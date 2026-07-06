@@ -2405,6 +2405,9 @@ for (const marker of [
   'add-evidence-check',
   'record-environment-result',
   'setAcceptanceCriteriaChecked',
+  "import { isRecord, optionalTrimmedStringFromUnknown } from './records'",
+  'if (!isRecord(value)) { return null; }',
+  "const body = optionalTrimmedStringFromUnknown(value['body'])",
   'function mutateState',
   "writeJsonFileAtomic(STATE_FILE, state, action)",
   'validateStateFileShape(state)',
@@ -2412,6 +2415,9 @@ for (const marker of [
   if (!ticketMutations.includes(marker)) {
     fail(`Missing ticket mutation marker: ${marker}`);
   }
+}
+if (ticketMutations.includes('function optionalTrim(value: string | undefined): string | undefined')) {
+  fail('Ticket mutations must use the shared optional trimmed string helper.');
 }
 
 for (const marker of [
@@ -2987,6 +2993,7 @@ for (const [name, source, marker] of [
   ['src/services/agingAnalyzer.ts', agingAnalyzer, "import { recordEntriesFromUnknown } from './records'"],
   ['src/services/evidenceData.ts', evidenceData, "import { isRecord, recordsFromUnknown, recordValuesFromUnknown, trimmedStringFromUnknown } from './records'"],
   ['src/services/integrationAdapters.ts', integrationAdapters, "import { arrayFromUnknown, isRecord, optionalFiniteNumberFromUnknown, optionalTrimmedStringFromUnknown, recordsFromUnknown } from './records'"],
+  ['src/services/ticketMutations.ts', ticketMutations, "import { isRecord, optionalTrimmedStringFromUnknown } from './records'"],
   ['src/services/queuePlanner.ts', queuePlanner, "import { arrayFromUnknown, isRecord } from './records'"],
   ['src/services/runStatus.ts', runStatus, "import { isRecord, recordsFromUnknown } from './records'"],
   ['src/services/runRecords.ts', runRecords, "import { isRecord, recordsFromUnknown, recordString } from './records'"],

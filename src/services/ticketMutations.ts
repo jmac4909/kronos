@@ -14,6 +14,7 @@ import { isReviewReadyAction } from './actionSemantics';
 import { setAcceptanceCriteriaChecked } from './acceptanceCriteria';
 import { decideEvidenceHandoff } from './evidenceGatePolicy';
 import { sortMergeRequestCommentsByCreated } from './mergeRequestComments';
+import { isRecord, optionalTrimmedStringFromUnknown } from './records';
 
 type EvidenceNoteKind = TicketEvidenceNote['kind'];
 type EvidenceResult = TicketEvidenceCheck['result'];
@@ -127,7 +128,7 @@ export function recordTicketEnvironmentResult(ticketKey: string, input: TicketEn
       checked_at: at,
       detail: input.detail.trim(),
     };
-    const artifactPath = optionalTrim(input.artifactPath);
+    const artifactPath = optionalTrimmedStringFromUnknown(input.artifactPath);
     if (artifactPath) { result.artifact_path = artifactPath; }
     evidence.environment_results[input.environment] = result;
     evidence.updated_at = at;
@@ -365,10 +366,10 @@ function appendEvidenceCheck(evidence: TicketEvidence, input: TicketEvidenceChec
     result: input.result,
     confidence: input.confidence,
   };
-  const environment = optionalTrim(input.environment);
-  const command = optionalTrim(input.command);
-  const summary = optionalTrim(input.summary);
-  const artifactPath = optionalTrim(input.artifactPath);
+  const environment = optionalTrimmedStringFromUnknown(input.environment);
+  const command = optionalTrimmedStringFromUnknown(input.command);
+  const summary = optionalTrimmedStringFromUnknown(input.summary);
+  const artifactPath = optionalTrimmedStringFromUnknown(input.artifactPath);
   if (environment) { check.environment = environment; }
   if (command) { check.command = command; }
   if (summary) { check.summary = summary; }
@@ -408,7 +409,7 @@ function setMergeRequestField<K extends keyof MergeRequest>(target: MergeRequest
 }
 
 function setMergeRequestString<K extends keyof MergeRequest>(target: MergeRequest, key: K, value: unknown): boolean {
-  const trimmed = optionalTrim(typeof value === 'string' ? value : undefined);
+  const trimmed = optionalTrimmedStringFromUnknown(value);
   return setMergeRequestField(target, key, trimmed as MergeRequest[K] | undefined);
 }
 
@@ -439,14 +440,13 @@ function normalizeStoredMergeRequestComments(value: unknown[]): MergeRequestComm
 }
 
 function normalizeStoredMergeRequestComment(value: unknown): MergeRequestComment | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) { return null; }
-  const record = value as Record<string, unknown>;
-  const body = optionalTrim(typeof record['body'] === 'string' ? record['body'] : undefined);
+  if (!isRecord(value)) { return null; }
+  const body = optionalTrimmedStringFromUnknown(value['body']);
   if (!body) { return null; }
-  const idValue = record['id'];
-  const id = typeof idValue === 'string' || typeof idValue === 'number' ? optionalTrim(String(idValue)) : undefined;
-  const author = optionalTrim(typeof record['author'] === 'string' ? record['author'] : undefined);
-  const created = optionalTrim(typeof record['created'] === 'string' ? record['created'] : undefined);
+  const idValue = value['id'];
+  const id = typeof idValue === 'string' || typeof idValue === 'number' ? optionalTrimmedStringFromUnknown(String(idValue)) : undefined;
+  const author = optionalTrimmedStringFromUnknown(value['author']);
+  const created = optionalTrimmedStringFromUnknown(value['created']);
   const comment: MergeRequestComment = { body: body.length > 500 ? `${body.slice(0, 497)}...` : body };
   if (id) { comment.id = id; }
   if (author) { comment.author = author; }
@@ -472,11 +472,6 @@ function attachMergeRequest(target: Ticket, orphan: Ticket, mr: MergeRequest): v
       target.projects.push(project);
     }
   }
-}
-
-function optionalTrim(value: string | undefined): string | undefined {
-  const trimmed = value?.trim();
-  return trimmed || undefined;
 }
 
 function isoNow(now: Date | undefined): string {

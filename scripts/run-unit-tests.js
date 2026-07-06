@@ -4142,6 +4142,7 @@ test('record guard helper centralizes unknown object narrowing', () => {
     ['agingAnalyzer.ts', "import { recordEntriesFromUnknown } from './records'"],
     ['evidenceData.ts', "import { isRecord, recordsFromUnknown, recordValuesFromUnknown, trimmedStringFromUnknown } from './records'"],
     ['integrationAdapters.ts', "import { arrayFromUnknown, isRecord, optionalFiniteNumberFromUnknown, optionalTrimmedStringFromUnknown, recordsFromUnknown } from './records'"],
+    ['ticketMutations.ts', "import { isRecord, optionalTrimmedStringFromUnknown } from './records'"],
     ['queuePlanner.ts', "import { arrayFromUnknown, isRecord } from './records'"],
     ['runStatus.ts', "import { isRecord, recordsFromUnknown } from './records'"],
     ['runRecords.ts', "import { isRecord, recordsFromUnknown, recordString } from './records'"],
@@ -4163,8 +4164,10 @@ test('record guard helper centralizes unknown object narrowing', () => {
   assert.equal(extensionSource.includes('function ticketRecord'), false, 'extension should use shared record helper for ticket payload records');
 
   const ticketFieldsSource = readSourceFixture('src', 'services', 'ticketFields.ts');
+  const ticketMutationsSource = readSourceFixture('src', 'services', 'ticketMutations.ts');
   const mergeRequestCommentsSource = readSourceFixture('src', 'services', 'mergeRequestComments.ts');
   const mergeRequestLabelsSource = readSourceFixture('src', 'services', 'mergeRequestLabels.ts');
+  assert.equal(ticketMutationsSource.includes('function optionalTrim(value: string | undefined): string | undefined'), false, 'ticketMutations should use shared optional trimmed string helper');
   for (const marker of [
     "import { arrayFromUnknown, trimmedStringFromUnknown } from './records'",
     'export function ticketStringField(record: object | null | undefined, key: string, fallback = \'\'): string',
