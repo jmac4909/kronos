@@ -4,7 +4,7 @@ import { safeFileStem } from './fileNames';
 import { KRONOS_DIR } from './stateStore';
 import { unknownErrorMessage } from './errorUtils';
 import { readJsonFile } from './jsonFiles';
-import { isRecord } from './records';
+import { isRecord, recordsFromUnknown } from './records';
 import { toValidDate } from './dateValues';
 
 const SESSIONS_DIR = path.join(KRONOS_DIR, 'sessions');
@@ -190,15 +190,13 @@ function readAggregateStatsResult(): { stats?: AggregateStats; issue?: SessionSt
 }
 
 function normalizeAggregateSessions(value: unknown): AggregateSessionStats[] {
-  if (!Array.isArray(value)) { return []; }
-  return value
+  return recordsFromUnknown(value)
     .map(normalizeAggregateSession)
     .filter((session): session is AggregateSessionStats => Boolean(session));
 }
 
 function normalizeSavedSessionEvents(value: unknown): SavedSessionEvent[] {
-  if (!Array.isArray(value)) { return []; }
-  return value
+  return recordsFromUnknown(value)
     .map(normalizeSavedSessionEvent)
     .filter((event): event is SavedSessionEvent => Boolean(event));
 }

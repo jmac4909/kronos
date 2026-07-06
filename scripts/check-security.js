@@ -2269,6 +2269,7 @@ for (const marker of [
   'interface SavedSessionEvent',
   'interface AggregateStats',
   'function normalizeSavedSessionEvents',
+  'recordsFromUnknown(value)',
   'function normalizeSavedSessionEvent',
   'function normalizeAggregateSessions',
   'function normalizeAggregateSession',
@@ -2288,6 +2289,12 @@ for (const marker of [
   if (!sessionStore.includes(marker)) {
     fail(`Missing session store marker: ${marker}`);
   }
+}
+if (!sessionStore.includes("import { isRecord, recordsFromUnknown } from './records'")) {
+  fail('Session store must import the shared record-list normalizer.');
+}
+if (sessionStore.includes('if (!Array.isArray(value)) { return []; }')) {
+  fail('Session store normalizers must use recordsFromUnknown instead of local array guards.');
 }
 if (dispatcher.includes("const id = `${project}-${skill}-${ticket || 'no-ticket'}-${Date.now().toString(36)}`;")) {
   fail('Saved session filenames must be sanitized before writing to disk.');
@@ -2854,7 +2861,7 @@ for (const [name, source, marker] of [
   ['src/services/runStatus.ts', runStatus, "import { isRecord, recordsFromUnknown } from './records'"],
   ['src/services/runRecords.ts', runRecords, "import { isRecord, recordsFromUnknown, recordString } from './records'"],
   ['src/services/runStore.ts', runStore, "import { isRecord, recordString } from './records'"],
-  ['src/services/sessionStore.ts', sessionStore, "import { isRecord } from './records'"],
+  ['src/services/sessionStore.ts', sessionStore, "import { isRecord, recordsFromUnknown } from './records'"],
   ['src/services/sonarReportView.ts', sonarReportView, "import { isRecord, recordsFromUnknown } from './records'"],
   ['src/services/trendMetrics.ts', trendMetrics, "import { recordString } from './records'"],
   ['src/services/stateStore.ts', stateStore, "import { isRecord as isPlainObject } from './records'"],

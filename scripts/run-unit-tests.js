@@ -4093,7 +4093,7 @@ test('record guard helper centralizes unknown object narrowing', () => {
     ['runStatus.ts', "import { isRecord, recordsFromUnknown } from './records'"],
     ['runRecords.ts', "import { isRecord, recordsFromUnknown, recordString } from './records'"],
     ['runStore.ts', "import { isRecord, recordString } from './records'"],
-    ['sessionStore.ts', "import { isRecord } from './records'"],
+    ['sessionStore.ts', "import { isRecord, recordsFromUnknown } from './records'"],
     ['sonarReportView.ts', "import { isRecord, recordsFromUnknown } from './records'"],
     ['stateStore.ts', "import { isRecord as isPlainObject } from './records'"],
     ['stateScriptAdapter.ts', "import { arrayFromUnknown, isRecord as isPlainObject } from './records'"],
@@ -6610,16 +6610,21 @@ test('session store normalizes aggregate stats rows for rendering', () => {
   const source = readSourceFixture('src', 'services', 'sessionStore.ts');
   for (const marker of [
     "import { unknownErrorMessage } from './errorUtils'",
+    "import { isRecord, recordsFromUnknown } from './records'",
     'catch (e: unknown)',
     "unknownErrorMessage(e, 'Unable to parse saved session JSON.')",
     "unknownErrorMessage(e, 'Unable to parse stats.json.')",
     'stats.sessions = stats.sessions.filter(existing => existing.id !== aggregateSession.id)',
+    'function normalizeSavedSessionEvents',
+    'function normalizeAggregateSessions',
+    'recordsFromUnknown(value)',
   ]) {
     assert.ok(source.includes(marker), marker);
   }
   for (const marker of [
     'catch (e: any)',
     'e?.message',
+    'if (!Array.isArray(value)) { return []; }',
   ]) {
     assert.equal(source.includes(marker), false, marker);
   }
