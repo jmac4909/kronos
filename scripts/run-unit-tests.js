@@ -5180,8 +5180,8 @@ test('ticket filters match operator search facets and grouped views', () => {
       summary: 'Review profile page',
       priority: 'Medium',
       next_action: 'await_review',
-      projects: ['web'],
-      labels: ['profile'],
+      projects: [' web ', '', 42],
+      labels: [' profile ', '', 42],
       updated: '2026-07-01T10:00:00.000Z',
       build: { number: 13, status: 'SUCCESS', url: '' },
       mr: { iid: 2, state: 'opened', review_status: 'approved', url: '' },
@@ -5196,6 +5196,7 @@ test('ticket filters match operator search facets and grouped views', () => {
 
   assert.deepEqual(ticketFilters.filterTickets(entries, { query: 'checkout', label: 'checkout', buildStatus: 'FAILURE' }, now).map(([key]) => key), ['K-1']);
   assert.deepEqual(ticketFilters.filterTickets(entries, { project: 'web', mrState: 'approved' }, now).map(([key]) => key), ['K-2']);
+  assert.deepEqual(ticketFilters.filterTickets(entries, { query: 'profile', label: 'profile' }, now).map(([key]) => key), ['K-2']);
   assert.deepEqual(ticketFilters.filterTickets(entries, { linked: 'unlinked', staleDays: 7 }, now).map(([key]) => key), ['K-3']);
   assert.match(ticketFilters.describeTicketFilter({ query: 'retry', staleDays: 7 }), /search "retry".*stale 7\+ days/);
   assert.deepEqual(ticketFilters.cleanTicketFilter({
@@ -5241,13 +5242,25 @@ test('ticket filters match operator search facets and grouped views', () => {
   ]);
   const tickets = entries.map(([, value]) => value);
   assert.deepEqual(ticketFilters.ticketFilterFacetValues('project', tickets, { ops: {} }), ['app', 'ops', 'web']);
+  assert.deepEqual(ticketFilters.ticketFilterFacetValues('label', tickets), ['checkout', 'intake', 'profile']);
   assert.deepEqual(ticketFilters.ticketFilterFacetValues('action', tickets), ['await_review', 'fix_build', 'implement']);
   assert.ok(ticketFilters.ticketFilterFacetValues('mrState', tickets).includes('changes_requested'));
   assert.ok(ticketFilters.ticketFilterFacetValues('buildStatus', tickets).includes('SUCCESS'));
 
   const grouped = ticketFilters.groupTicketEntries(entries, 'project');
+  assert.ok(grouped.some(([label, groupEntries]) => label === 'web' && groupEntries.length === 1));
   assert.ok(grouped.some(([label, groupEntries]) => label === 'Unlinked' && groupEntries.length === 1));
   assert.ok(ticketFilters.TICKET_FILTER_PRESETS.some(preset => preset.id === 'stale_week'));
+
+  const source = readSourceFixture('src', 'services', 'ticketFilters.ts');
+  assert.ok(source.includes("import { ticketStringArray } from './ticketFields'"));
+  assert.ok(source.includes('const projects = ticketStringArray(ticket.projects)'));
+  assert.ok(source.includes('const labels = ticketStringArray(ticket.labels)'));
+  assert.ok(source.includes('...tickets.flatMap(ticket => ticketStringArray(ticket.projects))'));
+  assert.ok(source.includes('tickets.flatMap(ticket => ticketStringArray(ticket.labels))'));
+  assert.ok(source.includes("return ticketStringArray(ticket.projects)[0] || 'Unlinked'"));
+  assert.equal(source.includes('ticket.projects || []'), false);
+  assert.equal(source.includes('ticket.labels || []'), false);
 });
 
 test('evidence store formats markdown and compact comment handoff', () => {

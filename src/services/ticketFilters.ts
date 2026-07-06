@@ -1,6 +1,7 @@
 import type { Ticket } from '../state/types';
 import { toValidDate } from './dateValues';
 import { recordKeysFromUnknown } from './records';
+import { ticketStringArray } from './ticketFields';
 
 export type TicketGroupBy = 'none' | 'action' | 'project' | 'priority';
 export type TicketFilterPromptFieldId =
@@ -65,12 +66,14 @@ export function filterTickets(entries: Array<[string, Ticket]>, filter: TicketFi
 export function ticketMatchesFilter(key: string, ticket: Ticket, filter: TicketFilter = {}, now = new Date()): boolean {
   if (!hasTicketFilter(filter)) { return true; }
   if (filter.query && !searchText(key, ticket).includes(normalize(filter.query))) { return false; }
-  if (filter.project && !(ticket.projects || []).some(project => normalize(project) === normalize(filter.project))) { return false; }
+  const projects = ticketStringArray(ticket.projects);
+  const labels = ticketStringArray(ticket.labels);
+  if (filter.project && !projects.some(project => normalize(project) === normalize(filter.project))) { return false; }
   if (filter.action && normalize(ticket.next_action) !== normalize(filter.action)) { return false; }
   if (filter.priority && normalize(ticket.priority) !== normalize(filter.priority)) { return false; }
-  if (filter.label && !(ticket.labels || []).some(label => normalize(label) === normalize(filter.label))) { return false; }
-  if (filter.linked === 'linked' && (ticket.projects || []).length === 0) { return false; }
-  if (filter.linked === 'unlinked' && (ticket.projects || []).length > 0) { return false; }
+  if (filter.label && !labels.some(label => normalize(label) === normalize(filter.label))) { return false; }
+  if (filter.linked === 'linked' && projects.length === 0) { return false; }
+  if (filter.linked === 'unlinked' && projects.length > 0) { return false; }
   if (filter.mrState && !matchesMrState(ticket, filter.mrState)) { return false; }
   if (filter.buildStatus && !matchesBuildStatus(ticket, filter.buildStatus)) { return false; }
   if (filter.staleDays && !isStale(ticket.updated, filter.staleDays, now)) { return false; }
@@ -165,7 +168,7 @@ export function ticketFilterFacetValues(
   if (facet === 'project') {
     return uniqueTicketFilterValues([
       ...recordKeysFromUnknown(projects),
-      ...tickets.flatMap(ticket => ticket.projects || []),
+      ...tickets.flatMap(ticket => ticketStringArray(ticket.projects)),
     ]);
   }
   if (facet === 'action') {
@@ -175,7 +178,7 @@ export function ticketFilterFacetValues(
     return uniqueTicketFilterValues(tickets.map(ticket => ticket.priority));
   }
   if (facet === 'label') {
-    return uniqueTicketFilterValues(tickets.flatMap(ticket => ticket.labels || []));
+    return uniqueTicketFilterValues(tickets.flatMap(ticket => ticketStringArray(ticket.labels)));
   }
   if (facet === 'mrState') {
     return uniqueTicketFilterValues([
@@ -216,7 +219,7 @@ export function groupTicketEntries(entries: Array<[string, Ticket]>, groupBy: Ti
 function ticketGroupLabel(ticket: Ticket, groupBy: TicketGroupBy): string {
   if (groupBy === 'action') { return ticket.next_action || 'No action'; }
   if (groupBy === 'priority') { return ticket.priority || 'No priority'; }
-  if (groupBy === 'project') { return ticket.projects?.[0] || 'Unlinked'; }
+  if (groupBy === 'project') { return ticketStringArray(ticket.projects)[0] || 'Unlinked'; }
   return 'Tickets';
 }
 
@@ -247,8 +250,8 @@ function searchText(key: string, ticket: Ticket): string {
     ticket.priority,
     ticket.jira_status,
     ticket.next_action,
-    ...(ticket.labels || []),
-    ...(ticket.projects || []),
+    ...ticketStringArray(ticket.labels),
+    ...ticketStringArray(ticket.projects),
   ].map(value => normalize(value)).join(' ');
 }
 

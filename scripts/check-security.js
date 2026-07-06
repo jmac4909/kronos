@@ -4645,21 +4645,32 @@ for (const marker of [
 
 for (const marker of [
   'export interface TicketFilter',
+  "import { ticketStringArray } from './ticketFields'",
   'TICKET_FILTER_PRESETS',
   'filterTickets',
   'ticketMatchesFilter',
+  'const projects = ticketStringArray(ticket.projects)',
+  'const labels = ticketStringArray(ticket.labels)',
   'cleanTicketFilter',
   'setTicketFilterString',
   'ticketFilterPromptFields',
   'ticketFilterChoiceItems',
   'ticketFilterFacetValues',
+  '...tickets.flatMap(ticket => ticketStringArray(ticket.projects))',
+  'tickets.flatMap(ticket => ticketStringArray(ticket.labels))',
   'uniqueTicketFilterValues',
   'groupTicketEntries',
+  'return ticketStringArray(ticket.projects)[0] || \'Unlinked\'',
+  '...ticketStringArray(ticket.labels)',
+  '...ticketStringArray(ticket.projects)',
   'staleDays',
 ]) {
   if (!ticketFilters.includes(marker)) {
     fail(`Missing ticket filter marker: ${marker}`);
   }
+}
+if (ticketFilters.includes('ticket.projects || []') || ticketFilters.includes('ticket.labels || []')) {
+  fail('Ticket filters must normalize project and label lists through ticketStringArray.');
 }
 
 for (const marker of [
