@@ -52,6 +52,7 @@ npm run feedback:ready
 `npm run webview:dom` exercises the packaged Jira Board and action-panel browser scripts against a DOM implementation, covering board filtering, ticket modals, comments, and posted action payloads.
 `npm run feedback:smoke` creates the safe fixture, compiles, and runs the main Kronos operator panels inside a VS Code Extension Development Host. It verifies command registration, rendered fixture content, and key operator action wiring for the dashboard, board, ticket detail, evidence gate/handoff, run center, recovery, review, doctor, prompt, planning, and Spec Beanstalk panels. On headless Linux it uses `xvfb-run` when available and requires the native VS Code/Electron GUI libraries such as GTK 3.
 Spec Beanstalk generation uses the packaged `resources/spec-beanstalk/xlsx_to_markdown.py` analyzer and Python standard library only. It writes `spec-beanstalk.md`, per-sheet Markdown, `spec-beanstalk-trace.json`, and `spec-beanstalk-summary.json` under `docs/api-spec` by default.
+External provider scripts must follow the contract in `docs/integration-script-contract.md`; Kronos Doctor checks the GitLab MR polling contract against registered `gitlab_project_id` plus MR IID metadata.
 `npm run feedback:ready` runs the full validation/package path, verifies the VSIX contains the expected user-facing files and compiled extension output, and reminds the tester that human operator feedback is still required before broader release.
 
 ## Feedback Target

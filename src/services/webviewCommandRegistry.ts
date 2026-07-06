@@ -104,6 +104,7 @@ export const TICKET_DETAIL_MESSAGE_COMMANDS = new Set([
 
 export const RECOVERY_MESSAGE_COMMANDS = new Set([
   'refreshPanel',
+  'archiveFinishedRuns',
   'executeRecoveryItem',
 ]);
 

@@ -4861,7 +4861,7 @@ test('date value helper centralizes valid date coercion', () => {
   assert.equal(dispatcherSource.includes('function toValidDate'), false);
 
   const extensionSource = readSourceFixture('src', 'extension.ts');
-  assert.ok(extensionSource.includes("import { formatDateTimeLabel } from './services/dateLabels'"));
+  assert.ok(extensionSource.includes("import { formatDateTimeLabel, formatTimeLabel } from './services/dateLabels'"));
   assert.equal(extensionSource.includes("import { toValidDate } from './services/dateValues'"), false);
   assert.equal(extensionSource.includes("import { formatWebviewDateTime } from './services/webviewFormat'"), false);
   assert.equal(extensionSource.includes('function formatWebviewDateTime'), false);
@@ -9020,6 +9020,12 @@ test('state script adapter keeps raw JSON payloads unknown until normalized', ()
 test('integration adapters wrap selected Jira, GitLab, and Sonar script contracts', async () => {
   const calls = [];
   const runner = {
+    state: {
+      projects: { app: { config: { gitlab_project_id: 123 } } },
+      tickets: {
+        'K-7': { projects: ['app'], mr: { iid: 7 } },
+      },
+    },
     async runScript(args) {
       calls.push(args);
       if (args[0] === '--ticket-comments') {
@@ -9090,16 +9096,22 @@ test('integration adapters wrap selected Jira, GitLab, and Sonar script contract
   assert.equal(discussionOnlyStatus.last_discussion_at, '2026-07-02T03:30:00.000Z');
   assert.deepEqual(calls, [
     ['--ticket-comments', 'K-7'],
-    ['--mr-diff', 'K-7'],
-    ['--mr-branch', 'K-7'],
-    ['--mr-status', 'K-7'],
+    ['--mr-diff', '123', '7'],
+    ['--mr-branch', '123', '7'],
+    ['--mr-status', '123', '7'],
   ]);
   const fallbackCalls = [];
   const fallbackStatus = await integrationAdapters.gitlabAdapter.mergeRequestStatus({
+    state: {
+      projects: { app: { config: { gitlab_project_id: 456 } } },
+      tickets: {
+        'K-8': { projects: ['app'], mr: { iid: 8 } },
+      },
+    },
     async runScript(args) {
       fallbackCalls.push(args);
-      if (args[0] === '--mr-status') {
-        throw new Error('gitlab_api.py --mr-status K-8 failed: unrecognized arguments: --mr-status');
+      if (args[0] === '--mr-status' && args.length === 3) {
+        throw new Error('gitlab_api.py --mr-status 456 8 failed: unrecognized arguments: --mr-status 456 8');
       }
       return JSON.stringify({ mr: { state: 'closed', review_status: 'changes_requested', web_url: 'https://gitlab.example/mr/8' } });
     },
@@ -9107,15 +9119,21 @@ test('integration adapters wrap selected Jira, GitLab, and Sonar script contract
   assert.equal(fallbackStatus.state, 'closed');
   assert.equal(fallbackStatus.review_status, 'changes_requested');
   assert.deepEqual(fallbackCalls, [
+    ['--mr-status', '456', '8'],
     ['--mr-status', 'K-8'],
-    ['--mr-diff', 'K-8'],
   ]);
   const stdoutFallbackCalls = [];
   const stdoutFallbackStatus = await integrationAdapters.gitlabAdapter.mergeRequestStatus({
+    state: {
+      projects: { app: { config: { gitlab_project_id: 789 } } },
+      tickets: {
+        'K-9': { projects: ['app'], mr: { iid: 9 } },
+      },
+    },
     async runScript(args) {
       stdoutFallbackCalls.push(args);
       if (args[0] === '--mr-status') {
-        return 'usage: gitlab_api.py [-h]\nerror: unrecognized arguments: --mr-status K-9';
+        return 'usage: gitlab_api.py [-h]\nerror: unrecognized arguments: --mr-status 789 9';
       }
       return JSON.stringify({ mr: { state: 'merged', approved: true } });
     },
@@ -9123,8 +9141,8 @@ test('integration adapters wrap selected Jira, GitLab, and Sonar script contract
   assert.equal(stdoutFallbackStatus.state, 'merged');
   assert.equal(stdoutFallbackStatus.review_status, 'approved');
   assert.deepEqual(stdoutFallbackCalls, [
-    ['--mr-status', 'K-9'],
-    ['--mr-diff', 'K-9'],
+    ['--mr-status', '789', '9'],
+    ['--mr-diff', '789', '9'],
   ]);
   await assert.rejects(
     () => integrationAdapters.gitlabAdapter.mergeRequestStatus({
@@ -9339,13 +9357,15 @@ test('integration adapters keep raw provider payloads unknown until normalized',
     'issues(sonarKey: string, branch: string): Promise<unknown>',
     'return runPipelineJson<unknown>',
     "import { parseJsonWithLabel } from './jsonFiles'",
-    'parseJsonWithLabel(await runner.runScript',
+    'parseJsonWithLabel(await runMergeRequestCommand',
     'catch (e: unknown)',
     "import { arrayFromUnknown, isRecord, optionalFiniteNumberFromUnknown, optionalTrimmedStringFromUnknown, recordsFromUnknown } from './records'",
     "import { unknownErrorMessage } from './errorUtils'",
     'async function runMergeRequestStatusJson',
-    "runner.runScript(['--mr-status', ticketKey], options)",
-    "runner.runScript(['--mr-diff', ticketKey], options)",
+    'async function runMergeRequestCommand',
+    'function mergeRequestScriptTarget',
+    'const primaryArgs = target ? [command, String(target.projectId), String(target.iid)] : [command, ticketKey]',
+    'return runner.runScript([command, ticketKey], options)',
     'function isUnsupportedMergeRequestStatusCommand',
     'function isUnsupportedMergeRequestStatusText',
     'function normalizeSonarBranches',
@@ -9589,6 +9609,7 @@ test('provider reachability keeps request and URL errors unknown', () => {
 
 test('doctor checks centralize command, credential, project config, and reachability inputs', async () => {
   fs.writeFileSync(path.join(process.env.KRONOS_SCRIPTS_DIR, 'kronos_state.py'), 'print("{}")\n');
+  fs.writeFileSync(path.join(process.env.KRONOS_SCRIPTS_DIR, 'gitlab_api.py'), 'print("{}")\n');
   const state = baseState({
     'K-1': ticket({ summary: 'Doctor ticket' }),
   });
@@ -9611,7 +9632,7 @@ test('doctor checks centralize command, credential, project config, and reachabi
   const commandRunner = (command, args) => {
     const joined = mockCommandLine(command, args);
     if (joined === 'python --version') { return 'Python 3.12.0\n'; }
-    if (command === 'python' && String(args[0]).endsWith('kronos_state.py') && args[1] === '--mr-status') {
+    if (command === 'python' && String(args[0]).endsWith('gitlab_api.py') && args[1] === '--mr-status' && args[2] === '42' && args[3] === '7') {
       return JSON.stringify({
         mr: {
           state: 'opened',
@@ -9697,7 +9718,7 @@ test('doctor checks centralize command, credential, project config, and reachabi
     platform: 'win32',
     gcloudExistsSync: filePath => filePath === gcloudCmd,
     commandRunner: (command, args, options) => {
-      if (command === 'python' && String(args[0]).endsWith('kronos_state.py') && args[1] === '--mr-status') {
+      if (command === 'python' && String(args[0]).endsWith('gitlab_api.py') && args[1] === '--mr-status' && args[2] === '42' && args[3] === '7') {
         return JSON.stringify({ mr: { state: 'opened' } });
       }
       return commandRunner(command, args, options);
@@ -9706,7 +9727,7 @@ test('doctor checks centralize command, credential, project config, and reachabi
   });
   const staleContractByName = Object.fromEntries(staleContractChecks.map(check => [check.name, check]));
   assert.equal(staleContractByName['Review MR polling prerequisites'].status, 'warn');
-  assert.match(staleContractByName['Review MR polling prerequisites'].detail, /--mr-status K-REVIEW missing review_status or approved flag/);
+  assert.match(staleContractByName['Review MR polling prerequisites'].detail, /--mr-status 42 7 missing review_status or approved flag/);
   assert.match(staleContractByName['Review MR polling prerequisites'].detail, /comment metadata/);
   assert.match(staleContractByName['Review MR polling prerequisites'].detail, /discussion metadata/);
 
@@ -9912,15 +9933,17 @@ test('doctor checks centralize command, credential, project config, and reachabi
     'function reviewMergeRequestStatusContractIssue',
     'function hasMergeRequestCommentSignal',
     'function hasMergeRequestDiscussionSignal',
-    'parseJsonWithLabel(raw, `MR status for ${ticketKey}`)',
+    'parseJsonWithLabel(raw, `MR status for ${target.ticketKey}`)',
     "'Review MR polling prerequisites'",
     "ticket.next_action === 'await_review' && ticket.mr?.state === 'opened'",
-    "commandRunner('python', [scriptPath, '--mr-status', ticketKey]",
+    "const args = [scriptPath, '--mr-status', String(target.projectId), String(target.iid)]",
+    "commandRunner('python', args",
     "countLabel(templates.length, 'template')",
     "countLabel(projectCount, 'project')",
     "countLabel(input.queue.items?.length || 0, 'queue item')",
     "countLabel(openReviewTickets.length, 'open review MR')",
-    'for (const projectName of ticketStringArray(ticket.projects))',
+    'const projectNames = ticketStringArray(ticket.projects)',
+    'for (const projectName of projectNames)',
     'const config = recordFromUnknown(project.config)',
   ]) {
     assert.ok(source.includes(marker), marker);
@@ -11276,6 +11299,12 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'function executeTicketDetailAction',
     'function openTicketExternalUrl',
     'const updateReviewBadge = () =>',
+    'vscode.window.createOutputChannel(\'Kronos\')',
+    'function appendKronosLog(message: string, detail?: string): void',
+    'function recordReviewPollStatus(result: ReviewPollResult): void',
+    'view.message = reviewPollTreeMessage()',
+    "vscode.commands.registerCommand('kronos.pollReviewMergeRequests'",
+    'ensureInitialIntegrationManifest()',
     "import { REVIEW_SEEN_KEYS_STORAGE_KEY, normalizeReviewSeenKeys, planNewReviewNotification } from './services/reviewNotifications'",
     'function reviewSeenKeysStore(globalState: vscode.Memento): ReviewSeenKeysStore',
     'new ReviewTreeProvider(state, reviewSeenKeysStore(context.globalState))',
@@ -11322,7 +11351,8 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     "const pollIntervalMs = configIntervalSecondsMs(config.get<number>('reviewPollIntervalSec', fallbackSec), fallbackSec, 60)",
     'let disposed = false',
     'if (disposed || running) { return; }',
-    'await pollReviewMergeRequests(state, () => !disposed)',
+    'const result = await pollReviewMergeRequests(state, () => !disposed)',
+    'recordReviewPollStatus(result)',
     'disposed = true',
     'async function runSettingsMenu(state: KronosState): Promise<void>',
     "type SettingsMenuItemId = 'profile' | 'dispatchModel' | 'pollInterval' | 'sessionPoll' | 'scanDirectories' | 'authCheck'",
@@ -11336,10 +11366,11 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'const exhaustive: never = pick.id',
     'function updatePositiveNumberSetting',
     'parsePositiveNumberInput(input)',
-    "console.warn(unknownErrorMessage(e, 'Review MR polling failed.'))",
+    "appendKronosLog('Review MR polling failed.'",
     'void poll();',
-    'function pollReviewMergeRequests(state: KronosState, shouldContinue: () => boolean = () => true)',
-    'if (!shouldContinue()) { return; }',
+    'function finishReviewPollResult(result: ReviewPollResult): ReviewPollResult',
+    'async function pollReviewMergeRequests(state: KronosState, shouldContinue: () => boolean = () => true): Promise<ReviewPollResult>',
+    'if (!shouldContinue()) { return finishReviewPollResult(result); }',
     'state.reloadAndNotify();',
     'await reconcileTerminalReviewMergeRequests(state, shouldContinue);',
     'function reconcileTerminalReviewMergeRequests(state: KronosState, shouldContinue: () => boolean = () => true): Promise<void>',
@@ -11350,8 +11381,8 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'updateTicketMergeRequestStatus({ ticketKey: candidate.ticketKey, status })',
     'const decision = decideReviewMonitorAction(candidate.ticketKey, update)',
     "decision.kind === 'deploy_monitor'",
-    'const result = await startDeployMonitorForMergedTicket(state, candidate.ticketKey, update.ticket)',
-    'if (reviewDeployMonitorActionHandled(result))',
+    'const deployResult = await startDeployMonitorForMergedTicket(state, candidate.ticketKey, update.ticket)',
+    'if (reviewDeployMonitorActionHandled(deployResult))',
     "decision.kind === 'blocked'",
     'notifyReviewMonitorDecision(decision)',
     'const notificationKey = reviewMergeRequestNotificationKey(candidate.ticketKey, update)',
@@ -11985,7 +12016,7 @@ test('extension run recovery helpers use typed run records', () => {
   const runActionEnd = source.indexOf('function findRunById');
   assert.ok(runActionStart >= 0 && runActionEnd > runActionStart, 'run action helper block should be present');
   for (const marker of [
-    "import { unknownErrorCode, unknownErrorMessage } from './services/errorUtils'",
+    "import { unknownErrorMessage } from './services/errorUtils'",
     "import type { DiscoveredProject, QueueItem, Ticket } from './state/types'",
     'function openExternalHttpUrl(url: string): void',
     "console.warn(unknownErrorMessage(e, 'Invalid external URL.'))",
@@ -12411,8 +12442,8 @@ test('extension command handlers normalize remaining unknown errors', () => {
     "unknownErrorMessage(e, 'Failed to update scan dirs.')",
     "unknownErrorMessage(e, 'Failed to restore backup.')",
     "unknownErrorMessage(e, 'Failed to snapshot integration manifest.')",
-    'unknownErrorMessage(e, `Could not load Kronos env file ${envPath}.`)',
-    "import { unknownErrorCode, unknownErrorMessage } from './services/errorUtils'",
+    "appendKronosLog('Kronos extension activated.')",
+    "import { unknownErrorMessage } from './services/errorUtils'",
     "unknownErrorMessage(e, 'Could not inspect project remotes for setup.')",
     "unknownErrorMessage(e, 'Failed to get next queue item.')",
     "warnUnexpectedPanelIntegrationError(e, 'Could not load comments')",
@@ -12463,7 +12494,8 @@ test('extension Sonar commands normalize webview and issue payloads', () => {
     "vscode.commands.registerCommand('kronos.fixSonarIssues', async (item: unknown)",
     "vscode.commands.registerCommand('kronos.fixFinding', async (args: unknown)",
     "vscode.commands.registerCommand('kronos.verifyDevelop', async (item: unknown)",
-    "const branch = mode.value === 'new' ? (stringFromUnknown(commandArg['branch']) || baseBranch) : '';",
+    "const branch = mode.value === 'new'",
+    'currentGitRef(projectPath) || baseBranch',
     "const sourceBranch = stringFromUnknown(commandArg['sourceBranch']) || '';",
     "projectName = await pickProjectName(state, 'Run SonarQube scan for which project?');",
     "projectName = await pickProjectName(state, 'Open SonarQube report for which project?');",
@@ -12474,7 +12506,8 @@ test('extension Sonar commands normalize webview and issue payloads', () => {
     'let projectName = resolveProjectName(state, item);',
     'panel.webview.onDidReceiveMessage(async (msg: unknown) =>',
     'const commandArg = recordFromUnknown(item)',
-    'const branchStrategy = buildSonarFixBranchStrategy(projectName, sourceBranch)',
+    'const sonarSourceBranch = sourceBranch || getProjectBaseBranch(state, projectName)',
+    'const branchStrategy = buildSonarFixBranchStrategy(projectName, sonarSourceBranch)',
     'const instructionBlock = buildSonarFixInstructionBlock({',
   ]) {
     assert.ok(source.includes(marker), marker);

@@ -7,7 +7,6 @@ import { TaskTreeProvider } from './views/TaskTreeProvider';
 import { ReviewTreeProvider, type ReviewSeenKeysStore } from './views/ReviewTreeProvider';
 import { TicketTreeProvider } from './views/TicketTreeProvider';
 import * as path from 'path';
-import * as os from 'os';
 import * as fs from 'fs';
 import type { DiscoveredProject, QueueItem, Ticket } from './state/types';
 import type { KronosState as KronosStateSnapshot } from './state/types';
@@ -26,7 +25,7 @@ import {
 } from './services/queueDispatchPlan';
 import { actionDisplayLabel as actionToLabel } from './services/actionCatalog';
 import { isCodeAction } from './services/actionSemantics';
-import { formatDateTimeLabel } from './services/dateLabels';
+import { formatDateTimeLabel, formatTimeLabel } from './services/dateLabels';
 import { writeEvidenceExport } from './services/evidenceStore';
 import { evidenceAcceptanceCriteria, evidenceChecked, evidenceString } from './services/evidenceData';
 import { EvidenceHandoffPlan, buildEvidenceHandoffPlan } from './services/evidenceHandoff';
@@ -90,7 +89,7 @@ import { computeAttentionBadge } from './services/attentionBadge';
 import { configIntervalMs, configIntervalSeconds, configIntervalSecondsMs, parsePositiveNumberInput, positiveConfigNumber } from './services/intervalConfig';
 import { buildNextActionContext, buildNextActionStartDecision, skillForAction } from './services/nextActionContext';
 import { mergeRequestReviewStatusLabel } from './services/mergeRequestLabels';
-import { createWorkspaceDiffArtifact, firstRemoteBranchMatching, originProjectPath } from './services/gitWorkspace';
+import { createWorkspaceDiffArtifact, currentGitRef, firstRemoteBranchMatching, originProjectPath } from './services/gitWorkspace';
 import { signalProcessTree, stopProcessTree, supportsProcessTreeSuspend } from './services/processTree';
 import { createWebviewReadyMonitor } from './services/webviewDiagnostics';
 import { WEBVIEW_ACTION_PANEL_SCRIPT, WEBVIEW_JIRA_BOARD_SCRIPT, createWebviewNonce, webviewScriptCspOptions, withWebviewCsp } from './services/webviewSecurity';
@@ -121,7 +120,7 @@ import {
 } from './services/webviewCommandRegistry';
 import { isTicketOperatorCommand, resolveOperatorCommandRoute } from './services/operatorCommandRouting';
 import { kronosTerminalOptions } from './services/terminalProfiles';
-import { unknownErrorCode, unknownErrorMessage } from './services/errorUtils';
+import { unknownErrorMessage } from './services/errorUtils';
 import { isKronosScriptMissingError } from './services/scriptClient';
 import { activeRunStatusBarSummary } from './services/activeRunDisplay';
 import { isFreshActiveRun } from './services/runStatus';
@@ -172,8 +171,18 @@ import { buildSpecBeanstalkHtml } from './services/specBeanstalkPanelView';
 import { DEFAULT_SPEC_BEANSTALK_OUTPUT_DIR, buildSpecBeanstalkPrompt, inspectSpecBeanstalkProject, runSpecBeanstalkGeneration, type SpecBeanstalkProjectStatus, type SpecBeanstalkSummary } from './services/specBeanstalk';
 
 let statusBarItem: vscode.StatusBarItem;
+let kronosOutputChannel: vscode.OutputChannel | undefined;
+let reviewPollStatusEmitter: vscode.EventEmitter<void> | undefined;
 interface BadgeTarget {
   badge?: vscode.ViewBadge | undefined;
+}
+
+interface ReviewPollResult {
+  startedAt: string;
+  endedAt: string;
+  checked: number;
+  changed: number;
+  failed: number;
 }
 const REQUIRED_PROMPTS = [
   'implement-system',
@@ -194,6 +203,8 @@ const reviewMergeRequestNotifications = new Set<string>();
 const reviewTerminalMergeRequestActions = new Set<string>();
 const OPTIONAL_SCRIPT_PANEL_WARNING = 'Kronos integration scripts are not installed. Run Kronos: Doctor for setup details.';
 let lastSpecBeanstalkResult: SpecBeanstalkSummary | undefined;
+let lastReviewPollAt: string | undefined;
+let lastReviewPollDetail = 'MR polling has not run yet.';
 
 function panelIntegrationErrorMessage(error: unknown, fallback: string): string {
   return isKronosScriptMissingError(error) ? OPTIONAL_SCRIPT_PANEL_WARNING : unknownErrorMessage(error, fallback);
@@ -205,6 +216,53 @@ function warnUnexpectedPanelIntegrationError(error: unknown, fallback: string): 
     console.warn(detail);
   }
   return detail;
+}
+
+function appendKronosLog(message: string, detail?: string): void {
+  const line = `[${new Date().toISOString()}] ${message}`;
+  if (!kronosOutputChannel) {
+    console.info(detail ? `${line}\n${detail}` : line);
+    return;
+  }
+  kronosOutputChannel.appendLine(line);
+  if (detail) {
+    kronosOutputChannel.appendLine(detail);
+  }
+}
+
+function describeKronosState(state: KronosState): string {
+  const projects = Object.keys(state.state?.projects || {}).length;
+  const tickets = Object.keys(state.state?.tickets || {}).length;
+  const queue = state.queue?.items?.length || 0;
+  return `${countLabel(projects, 'project')}, ${countLabel(tickets, 'ticket')}, ${countLabel(queue, 'queue item')}`;
+}
+
+function reviewPollTreeMessage(): string {
+  if (!lastReviewPollAt) {
+    return lastReviewPollDetail;
+  }
+  return `Last MR poll ${formatTimeLabel(lastReviewPollAt)} - ${lastReviewPollDetail}`;
+}
+
+function recordReviewPollStatus(result: ReviewPollResult): void {
+  lastReviewPollAt = result.endedAt;
+  lastReviewPollDetail = `${countLabel(result.checked, 'MR')} checked, ${countLabel(result.changed, 'state update')}, ${countLabel(result.failed, 'failure')}`;
+  appendKronosLog('Review MR polling finished.', lastReviewPollDetail);
+  reviewPollStatusEmitter?.fire();
+}
+
+function ensureInitialIntegrationManifest(): void {
+  const status = readIntegrationManifest();
+  if (status.present) {
+    appendKronosLog('Integration manifest found.', status.path);
+    return;
+  }
+  try {
+    const result = writeIntegrationManifestSnapshot();
+    appendKronosLog('Generated initial integration manifest.', `${result.path}\n${result.audit.summary}`);
+  } catch (e: unknown) {
+    appendKronosLog('Failed to generate initial integration manifest.', unknownErrorMessage(e, 'Unknown manifest snapshot failure.'));
+  }
 }
 
 async function runWebviewPanelAction(action: () => Promise<void> | void, fallback: string): Promise<void> {
@@ -1225,30 +1283,16 @@ function loadPromptForDispatch(
   };
 }
 
-function loadEnvFile(): void {
-  const envPath = path.join(os.homedir(), '.claude', '.env');
-  try {
-    const lines = fs.readFileSync(envPath, 'utf-8').split('\n');
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (trimmed && !trimmed.startsWith('#') && trimmed.includes('=')) {
-        const [k, ...rest] = trimmed.split('=');
-        const key = k?.trim();
-        if (!key) { continue; }
-        const val = rest.join('=').trim().replace(/^["']|["']$/g, '');
-        if (!process.env[key]) { process.env[key] = val; }
-      }
-    }
-  } catch (e: unknown) {
-    if (unknownErrorCode(e) !== 'ENOENT') {
-      console.warn(unknownErrorMessage(e, `Could not load Kronos env file ${envPath}.`));
-    }
-  }
+function withGoalPrompt(goal: string, prompt: string): string {
+  return [`/goal "${goal}"`, prompt.trim()].filter(Boolean).join('\n\n');
 }
 
 export function activate(context: vscode.ExtensionContext) {
   smokeOpenedPanels.splice(0, smokeOpenedPanels.length);
-  loadEnvFile();
+  kronosOutputChannel = vscode.window.createOutputChannel('Kronos');
+  reviewPollStatusEmitter = new vscode.EventEmitter<void>();
+  context.subscriptions.push(kronosOutputChannel, reviewPollStatusEmitter);
+  appendKronosLog('Kronos extension activated.');
   const state = new KronosState();
 
   const projectTree = new ProjectTreeProvider(state);
@@ -1313,7 +1357,11 @@ export function activate(context: vscode.ExtensionContext) {
         : undefined;
     };
     if (id === 'kronosReview') {
+      view.message = reviewPollTreeMessage();
       updateReviewBadge();
+      context.subscriptions.push(reviewPollStatusEmitter.event(() => {
+        view.message = reviewPollTreeMessage();
+      }));
       context.subscriptions.push(reviewTree.onDidChangeNewReviewCount(updateReviewBadge));
       context.subscriptions.push(reviewTree.onDidChangeNewReviewCount(() => notifyNewReviewItems(reviewTree, notifiedReviewKeys)));
       if (view.visible) {
@@ -1332,8 +1380,14 @@ export function activate(context: vscode.ExtensionContext) {
   }
   updateAttentionBadge();
   context.subscriptions.push(
-    state.onDidChange(updateAttentionBadge),
-    state.onDidSessionChange(updateAttentionBadge),
+    state.onDidChange(() => {
+      appendKronosLog('Kronos state changed.', describeKronosState(state));
+      updateAttentionBadge();
+    }),
+    state.onDidSessionChange(() => {
+      appendKronosLog('Kronos session state changed.', `${countLabel(state.sessions.length, 'active session')}`);
+      updateAttentionBadge();
+    }),
     reviewTree.onDidChangeNewReviewCount(updateAttentionBadge),
   );
 
@@ -1378,6 +1432,7 @@ export function activate(context: vscode.ExtensionContext) {
   };
   const runStartupSideEffects = () => {
     startRuntimePolling();
+    ensureInitialIntegrationManifest();
     try {
       notifyStateLoadIssues();
     } catch (e: unknown) {
@@ -1436,10 +1491,27 @@ export function activate(context: vscode.ExtensionContext) {
       await runCommandProgress(
         { location: vscode.ProgressLocation.Notification, title: 'Kronos: Refreshing all projects...' },
         async () => {
+          appendKronosLog('Manual Jira/state refresh started.');
           await state.refresh();
           lastRefreshTime = Date.now();
+          appendKronosLog('Manual Jira/state refresh finished.', describeKronosState(state));
         },
         'Failed to refresh Kronos projects.'
+      );
+    }),
+
+    vscode.commands.registerCommand('kronos.pollReviewMergeRequests', async () => {
+      if (!getActiveProfile().providers.gitlab) {
+        vscode.window.showInformationMessage('MR polling is disabled for the active Kronos profile.');
+        return;
+      }
+      await runCommandProgress(
+        { location: vscode.ProgressLocation.Notification, title: 'Kronos: Polling merge requests...' },
+        async () => {
+          const result = await pollReviewMergeRequests(state);
+          recordReviewPollStatus(result);
+        },
+        'Failed to poll Kronos merge requests.'
       );
     }),
 
@@ -1450,8 +1522,10 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('kronos.refreshProject', async (item: unknown) => {
       const projectName = resolveProjectName(state, item) || await pickProjectName(state, 'Refresh which Kronos project?');
       if (projectName) {
+        appendKronosLog(`Manual project refresh started for ${projectName}.`);
         await state.refresh(projectName);
         lastRefreshTime = Date.now();
+        appendKronosLog(`Manual project refresh finished for ${projectName}.`, describeKronosState(state));
       }
     }),
 
@@ -2646,14 +2720,16 @@ export function activate(context: vscode.ExtensionContext) {
       const mode = await vscode.window.showQuickPick(
         [
           { label: `New scan (${baseBranch})`, description: `Checkout ${baseBranch}, pull latest, scan`, value: 'new' },
-          { label: 'Pull latest & rescan', description: 'Pull latest on current branch, rescan', value: 'pull' },
+          { label: 'Pull latest & rescan', description: 'Use an isolated worktree for the current branch, pull latest, rescan', value: 'pull' },
         ],
         { placeHolder: 'SonarQube scan mode' }
       );
       if (!mode) { return; }
 
       const commandArg = recordFromUnknown(item);
-      const branch = mode.value === 'new' ? (stringFromUnknown(commandArg['branch']) || baseBranch) : '';
+      const branch = mode.value === 'new'
+        ? (stringFromUnknown(commandArg['branch']) || baseBranch)
+        : (currentGitRef(projectPath) || baseBranch);
       const scanPrompt = loadPromptForDispatch(state, 'sonar-scan', { PROJECT_NAME: projectName, SONAR_KEY: sonarKey, BRANCH: branch }, projectPath);
 
       await startClaudeDispatch(projectPath, 'sonar-scan', undefined, {
@@ -2669,6 +2745,9 @@ export function activate(context: vscode.ExtensionContext) {
         },
         customPrompt: scanPrompt.text,
         promptMetadata: scanPrompt.metadata,
+        parallel: true,
+        worktreeBranch: remoteBranchRef(branch),
+        worktreeCheckout: 'ref',
       });
     }),
 
@@ -2756,8 +2835,9 @@ export function activate(context: vscode.ExtensionContext) {
 
       const commandArg = recordFromUnknown(item);
       const sourceBranch = stringFromUnknown(commandArg['sourceBranch']) || '';
+      const sonarSourceBranch = sourceBranch || getProjectBaseBranch(state, projectName);
       const isProtected = !sourceBranch || sourceBranch === 'develop' || sourceBranch === 'main' || sourceBranch === 'master';
-      const branchStrategy = buildSonarFixBranchStrategy(projectName, sourceBranch);
+      const branchStrategy = buildSonarFixBranchStrategy(projectName, sonarSourceBranch);
       const instructionBlock = buildSonarFixInstructionBlock({
         customInstructions,
         branchStrategy,
@@ -2771,7 +2851,7 @@ export function activate(context: vscode.ExtensionContext) {
         risks: ['repo-write', 'external-publish'],
         changes: [
           isProtected
-            ? `Create a new bugfix/sonar-${projectName.toLowerCase()} branch from ${sourceBranch || 'develop'}.`
+            ? `Create a new bugfix/sonar-${projectName.toLowerCase()} branch from ${sonarSourceBranch}.`
             : `Modify the existing source branch ${sourceBranch}.`,
           'Apply source changes for SonarQube findings.',
           'May push changes and create or update a merge request through the agent prompt.',
@@ -2786,9 +2866,12 @@ export function activate(context: vscode.ExtensionContext) {
 
       await startClaudeDispatch(projectPath, 'fix-sonar', undefined, {
         onComplete: refreshAfterDispatch(state, projectName),
-        customPrompt: fixPrompt.text,
+        customPrompt: withGoalPrompt('SonarQube quality gate passes', fixPrompt.text),
         promptMetadata: fixPrompt.metadata,
         appendSystemPrompt: getImplementPrompt(state),
+        parallel: true,
+        worktreeBranch: remoteBranchRef(sonarSourceBranch),
+        worktreeCheckout: isProtected ? 'ref' : 'branch',
       });
     }),
 
@@ -2850,9 +2933,10 @@ export function activate(context: vscode.ExtensionContext) {
 
         const dispatchOptions: DispatchOptions = {
           onComplete: refreshAfterDispatch(state, projectName, ticket.key),
-          customPrompt: prompt.text,
+          customPrompt: withGoalPrompt('SonarQube quality gate passes', prompt.text),
           promptMetadata: prompt.metadata,
           parallel: true,
+          worktreeCheckout: 'branch',
         };
         if (remoteBranch) { dispatchOptions.worktreeBranch = remoteBranch; }
         await startClaudeDispatch(projectPath, 'sonar-fix', ticket.key, dispatchOptions);
@@ -3769,6 +3853,13 @@ function openRecoveryPanel(state: KronosState, initialInventory: RecoveryInvento
     }
     if (request.command === 'refreshPanel') {
       await runWebviewPanelAction(() => render(true), 'Kronos recovery action failed.');
+      return;
+    }
+    if (request.command === 'archiveFinishedRuns') {
+      await runWebviewPanelAction(async () => {
+        await archiveFinishedRuns();
+        render(true);
+      }, 'Kronos recovery archive action failed.');
       return;
     }
     const item = currentInventory.items.find(candidate => candidate.id === request.itemId);
@@ -4777,6 +4868,11 @@ function sanitizeBranchName(branch: string): string {
   return sanitizeProfileBranch(branch) || 'develop';
 }
 
+function remoteBranchRef(branch: string): string {
+  const safeBranch = sanitizeBranchName(branch.replace(/^origin\//, ''));
+  return `origin/${safeBranch}`;
+}
+
 async function pickTicketProjectNameForDispatch(
   state: KronosState,
   item: unknown,
@@ -4853,9 +4949,10 @@ function startReviewAutomation(state: KronosState): vscode.Disposable {
     running = true;
     try {
       if (disposed) { return; }
-      await pollReviewMergeRequests(state, () => !disposed);
+      const result = await pollReviewMergeRequests(state, () => !disposed);
+      recordReviewPollStatus(result);
     } catch (e: unknown) {
-      console.warn(unknownErrorMessage(e, 'Review MR polling failed.'));
+      appendKronosLog('Review MR polling failed.', unknownErrorMessage(e, 'Review MR polling failed.'));
     } finally {
       running = false;
     }
@@ -4870,46 +4967,64 @@ function startReviewAutomation(state: KronosState): vscode.Disposable {
   };
 }
 
-async function pollReviewMergeRequests(state: KronosState, shouldContinue: () => boolean = () => true): Promise<void> {
-  if (!shouldContinue()) { return; }
+async function pollReviewMergeRequests(state: KronosState, shouldContinue: () => boolean = () => true): Promise<ReviewPollResult> {
+  const startedAt = new Date().toISOString();
+  const result: ReviewPollResult = {
+    startedAt,
+    endedAt: startedAt,
+    checked: 0,
+    changed: 0,
+    failed: 0,
+  };
+  appendKronosLog('Review MR polling started.');
+  if (!shouldContinue()) { return finishReviewPollResult(result); }
   state.reloadAndNotify();
-  if (!shouldContinue()) { return; }
+  if (!shouldContinue()) { return finishReviewPollResult(result); }
   await reconcileTerminalReviewMergeRequests(state, shouldContinue);
-  if (!shouldContinue()) { return; }
+  if (!shouldContinue()) { return finishReviewPollResult(result); }
   for (const candidate of reviewMergeRequestCandidates(state)) {
-    if (!shouldContinue()) { return; }
+    if (!shouldContinue()) { return finishReviewPollResult(result); }
+    result.checked += 1;
     try {
       const status = await gitlabAdapter.mergeRequestStatus(state, candidate.ticketKey, { timeout: LIVE_MR_DIFF_TIMEOUT_MS });
-      if (!shouldContinue()) { return; }
+      if (!shouldContinue()) { return finishReviewPollResult(result); }
       const update = updateTicketMergeRequestStatus({ ticketKey: candidate.ticketKey, status });
-      if (!shouldContinue()) { return; }
+      if (!shouldContinue()) { return finishReviewPollResult(result); }
       if (update.changed) {
+        result.changed += 1;
+        appendKronosLog(`MR state changed for ${candidate.ticketKey}.`, `${status.state || 'unknown'} / ${status.review_status || 'unknown'}`);
         state.reloadAndNotify();
       }
-      if (!shouldContinue()) { return; }
+      if (!shouldContinue()) { return finishReviewPollResult(result); }
       const decision = decideReviewMonitorAction(candidate.ticketKey, update);
       if (decision.kind === 'deploy_monitor') {
-        if (!shouldContinue()) { return; }
-        const result = await startDeployMonitorForMergedTicket(state, candidate.ticketKey, update.ticket);
-        if (reviewDeployMonitorActionHandled(result)) {
+        if (!shouldContinue()) { return finishReviewPollResult(result); }
+        const deployResult = await startDeployMonitorForMergedTicket(state, candidate.ticketKey, update.ticket);
+        if (reviewDeployMonitorActionHandled(deployResult)) {
           rememberReviewTerminalMergeRequestAction(candidate.ticketKey, update.ticket, 'deploy_monitor');
         }
       } else if (decision.kind === 'blocked') {
-        if (!shouldContinue()) { return; }
+        if (!shouldContinue()) { return finishReviewPollResult(result); }
         notifyReviewMonitorDecision(decision);
       } else if (decision.kind === 'notify') {
-        if (!shouldContinue()) { return; }
+        if (!shouldContinue()) { return finishReviewPollResult(result); }
         const notificationKey = reviewMergeRequestNotificationKey(candidate.ticketKey, update);
         if (reviewMergeRequestNotifications.has(notificationKey)) { continue; }
         reviewMergeRequestNotifications.add(notificationKey);
         notifyReviewMonitorDecision(decision);
       }
     } catch (e: unknown) {
-      if (!shouldContinue()) { return; }
-      console.warn(unknownErrorMessage(e, `Failed to poll MR status for ${candidate.ticketKey}.`));
+      if (!shouldContinue()) { return finishReviewPollResult(result); }
+      result.failed += 1;
+      appendKronosLog(`Failed to poll MR status for ${candidate.ticketKey}.`, unknownErrorMessage(e, 'unknown error'));
       notifyReviewMergeRequestPollFailure(candidate.ticketKey, e);
     }
   }
+  return finishReviewPollResult(result);
+}
+
+function finishReviewPollResult(result: ReviewPollResult): ReviewPollResult {
+  return { ...result, endedAt: new Date().toISOString() };
 }
 
 async function reconcileTerminalReviewMergeRequests(state: KronosState, shouldContinue: () => boolean = () => true): Promise<void> {

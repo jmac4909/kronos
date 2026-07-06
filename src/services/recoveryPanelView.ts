@@ -65,6 +65,7 @@ export function buildRecoveryHtml(inventory: RecoveryInventory, nonce?: string, 
   const empty = inventory.items.length === 0 ? '<div class="empty">No active recovery items.</div>' : '';
   const actions = operatorCommandRow([
     actionButton('refreshPanel', 'Refresh'),
+    actionButton('archiveFinishedRuns', 'Archive Finished'),
   ]);
 
   return `<!DOCTYPE html>

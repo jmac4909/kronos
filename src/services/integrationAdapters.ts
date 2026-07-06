@@ -1,14 +1,16 @@
 import { ScriptRunOptions, runGitlabJson, runPipelineJson } from './scriptClient';
-import { MergeRequest, MergeRequestChangedFile, MergeRequestComment } from '../state/types';
+import { KronosState as KronosStateSnapshot, MergeRequest, MergeRequestChangedFile, MergeRequestComment } from '../state/types';
 import { normalizeChangedFiles } from './changedFiles';
 import { unknownErrorMessage } from './errorUtils';
 import { parseJsonWithLabel } from './jsonFiles';
 import { arrayFromUnknown, isRecord, optionalFiniteNumberFromUnknown, optionalTrimmedStringFromUnknown, recordsFromUnknown } from './records';
 import { sortMergeRequestCommentsByCreated } from './mergeRequestComments';
 import { toValidDate } from './dateValues';
+import { ticketStringArray } from './ticketFields';
 
 interface KronosScriptRunner {
   runScript(args: string[], options?: ScriptRunOptions): Promise<string>;
+  state?: KronosStateSnapshot | null;
 }
 
 export interface MergeRequestDiffResult {
@@ -82,7 +84,10 @@ export const jiraAdapter = {
 
 export const gitlabAdapter = {
   async mergeRequestDiff(runner: KronosScriptRunner, ticketKey: string, options: ScriptRunOptions = {}): Promise<MergeRequestDiffResult> {
-    const parsed = parseJsonWithLabel(await runner.runScript(['--mr-diff', ticketKey], options), `MR diff for ${ticketKey}`);
+    const parsed = parseJsonWithLabel(
+      await runMergeRequestCommand(runner, '--mr-diff', ticketKey, options),
+      `MR diff for ${ticketKey}`,
+    );
     const data = isRecord(parsed) ? parsed : {};
     if (data['error']) {
       throw new Error(String(data['error']));
@@ -95,7 +100,7 @@ export const gitlabAdapter = {
   },
 
   async mergeRequestBranch(runner: KronosScriptRunner, ticketKey: string): Promise<string> {
-    const parsed = parseJsonWithLabel(await runner.runScript(['--mr-branch', ticketKey]), `MR branch for ${ticketKey}`);
+    const parsed = parseJsonWithLabel(await runMergeRequestCommand(runner, '--mr-branch', ticketKey), `MR branch for ${ticketKey}`);
     const data = isRecord(parsed) ? parsed : {};
     return typeof data['branch'] === 'string' && data['branch'].trim() ? data['branch'].trim() : ticketKey;
   },
@@ -269,7 +274,7 @@ export function normalizeMergeRequestStatus(value: unknown): MergeRequestStatusR
 
 async function runMergeRequestStatusJson(runner: KronosScriptRunner, ticketKey: string, options: ScriptRunOptions): Promise<unknown> {
   try {
-    const raw = await runner.runScript(['--mr-status', ticketKey], options);
+    const raw = await runMergeRequestCommand(runner, '--mr-status', ticketKey, options);
     const trimmed = raw.trim();
     if (trimmed && !/^[{\[]/.test(trimmed) && isUnsupportedMergeRequestStatusText(trimmed)) {
       throw new Error(trimmed);
@@ -280,7 +285,46 @@ async function runMergeRequestStatusJson(runner: KronosScriptRunner, ticketKey: 
       throw e;
     }
   }
-  return parseJsonWithLabel(await runner.runScript(['--mr-diff', ticketKey], options), `MR status fallback for ${ticketKey}`);
+  return parseJsonWithLabel(await runMergeRequestCommand(runner, '--mr-diff', ticketKey, options), `MR status fallback for ${ticketKey}`);
+}
+
+async function runMergeRequestCommand(
+  runner: KronosScriptRunner,
+  command: '--mr-status' | '--mr-diff' | '--mr-branch',
+  ticketKey: string,
+  options: ScriptRunOptions = {},
+): Promise<string> {
+  const target = mergeRequestScriptTarget(runner, ticketKey);
+  const primaryArgs = target ? [command, String(target.projectId), String(target.iid)] : [command, ticketKey];
+  try {
+    return await runner.runScript(primaryArgs, options);
+  } catch (e: unknown) {
+    if (!target || !isUnsupportedProjectMergeRequestCommand(e)) {
+      throw e;
+    }
+  }
+  return runner.runScript([command, ticketKey], options);
+}
+
+function mergeRequestScriptTarget(runner: KronosScriptRunner, ticketKey: string): { projectId: number; iid: number } | null {
+  const state = runner.state;
+  const ticket = state?.tickets?.[ticketKey];
+  if (!ticket) { return null; }
+  const iid = typeof ticket?.mr?.iid === 'number' && Number.isFinite(ticket.mr.iid) ? ticket.mr.iid : undefined;
+  if (iid === undefined) { return null; }
+  for (const projectName of ticketStringArray(ticket.projects)) {
+    const projectId = state?.projects?.[projectName]?.config?.gitlab_project_id;
+    if (typeof projectId === 'number' && Number.isFinite(projectId) && projectId > 0) {
+      return { projectId, iid };
+    }
+  }
+  return null;
+}
+
+function isUnsupportedProjectMergeRequestCommand(error: unknown): boolean {
+  const message = unknownErrorMessage(error, '').toLowerCase();
+  return message.includes('--mr-')
+    && /(unrecognized|unknown|unsupported|not implemented|no such option|invalid choice|too many arguments|expected)/.test(message);
 }
 
 function isUnsupportedMergeRequestStatusCommand(error: unknown): boolean {

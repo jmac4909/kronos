@@ -359,24 +359,35 @@ function addReviewPollingPrerequisiteCheck(
   }
 
   const issues: string[] = [];
-  const kronosStateScript = scripts.find(script => script.name === 'kronos_state.py');
-  if (!kronosStateScript?.present) {
-    issues.push('missing kronos_state.py');
+  const gitlabScript = scripts.find(script => script.name === 'gitlab_api.py');
+  if (!gitlabScript?.present) {
+    issues.push('missing gitlab_api.py');
   }
   if (!env['GITLAB_TOKEN']) {
     issues.push('missing GITLAB_TOKEN');
   }
+  let smokeTarget: { ticketKey: string; projectId: number; iid: number } | undefined;
   for (const [ticketKey, ticket] of openReviewTickets) {
-    for (const projectName of ticketStringArray(ticket.projects)) {
+    const iid = typeof ticket.mr?.iid === 'number' && Number.isFinite(ticket.mr.iid) ? ticket.mr.iid : undefined;
+    if (iid === undefined) {
+      issues.push(`${ticketKey}: missing merge request IID`);
+    }
+    const projectNames = ticketStringArray(ticket.projects);
+    if (projectNames.length === 0) {
+      issues.push(`${ticketKey}: not linked to a project`);
+    }
+    for (const projectName of projectNames) {
       const project = state.projects?.[projectName];
-      if (!project?.config?.gitlab_project_id) {
+      const projectId = project?.config?.gitlab_project_id;
+      if (typeof projectId !== 'number' || !Number.isFinite(projectId) || projectId <= 0) {
         issues.push(`${ticketKey}/${projectName}: missing gitlab_project_id`);
+      } else if (iid !== undefined && !smokeTarget) {
+        smokeTarget = { ticketKey, projectId, iid };
       }
     }
   }
-  const smokeTicketKey = openReviewTickets[0]?.[0];
-  if (issues.length === 0 && smokeTicketKey && kronosStateScript) {
-    const smokeIssue = reviewMergeRequestStatusContractIssue(commandRunner, kronosStateScript.path, smokeTicketKey);
+  if (issues.length === 0 && smokeTarget && gitlabScript) {
+    const smokeIssue = reviewMergeRequestStatusContractIssue(commandRunner, gitlabScript.path, smokeTarget);
     if (smokeIssue) { issues.push(smokeIssue); }
   }
 
@@ -384,7 +395,7 @@ function addReviewPollingPrerequisiteCheck(
     name: 'Review MR polling prerequisites',
     status: issues.length === 0 ? 'pass' : 'warn',
     detail: issues.length === 0
-      ? `${countLabel(openReviewTickets.length, 'open review MR')} ready for background polling; --mr-status contract OK for ${smokeTicketKey}.`
+      ? `${countLabel(openReviewTickets.length, 'open review MR')} ready for background polling; --mr-status contract OK for ${smokeTarget?.ticketKey}.`
       : `${countLabel(openReviewTickets.length, 'open review MR')}; ${issues.slice(0, 6).join('; ')}${issues.length > 6 ? `; and ${issues.length - 6} more` : ''}`,
   });
 }
@@ -392,19 +403,20 @@ function addReviewPollingPrerequisiteCheck(
 function reviewMergeRequestStatusContractIssue(
   commandRunner: DoctorCommandRunner,
   scriptPath: string,
-  ticketKey: string,
+  target: { ticketKey: string; projectId: number; iid: number },
 ): string | undefined {
   try {
-    const raw = commandRunner('python', [scriptPath, '--mr-status', ticketKey], { timeoutMs: REVIEW_STATUS_SMOKE_TIMEOUT_MS });
-    const status = normalizeMergeRequestStatus(parseJsonWithLabel(raw, `MR status for ${ticketKey}`));
+    const args = [scriptPath, '--mr-status', String(target.projectId), String(target.iid)];
+    const raw = commandRunner('python', args, { timeoutMs: REVIEW_STATUS_SMOKE_TIMEOUT_MS });
+    const status = normalizeMergeRequestStatus(parseJsonWithLabel(raw, `MR status for ${target.ticketKey}`));
     const missing: string[] = [];
     if (!status.state) { missing.push('state'); }
     if (!status.review_status) { missing.push('review_status or approved flag'); }
     if (!hasMergeRequestCommentSignal(status)) { missing.push('comment metadata'); }
     if (!hasMergeRequestDiscussionSignal(status)) { missing.push('discussion metadata'); }
-    return missing.length > 0 ? `--mr-status ${ticketKey} missing ${missing.join(', ')}` : undefined;
+    return missing.length > 0 ? `--mr-status ${target.projectId} ${target.iid} missing ${missing.join(', ')}` : undefined;
   } catch (e: unknown) {
-    return `--mr-status ${ticketKey} failed: ${unknownErrorMessage(e, 'MR status smoke failed')}`;
+    return `--mr-status ${target.projectId} ${target.iid} failed: ${unknownErrorMessage(e, 'MR status smoke failed')}`;
   }
 }
 

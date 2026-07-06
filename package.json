@@ -73,6 +73,11 @@
         "icon": "$(refresh)"
       },
       {
+        "command": "kronos.pollReviewMergeRequests",
+        "title": "Kronos: Poll MRs Now",
+        "icon": "$(refresh)"
+      },
+      {
         "command": "kronos.refreshProject",
         "title": "Kronos: Refresh Project",
         "icon": "$(refresh)"
@@ -730,7 +735,7 @@
           "group": "navigation"
         },
         {
-          "command": "kronos.refresh",
+          "command": "kronos.pollReviewMergeRequests",
           "when": "view == kronosReview",
           "group": "navigation"
         },

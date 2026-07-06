@@ -63,6 +63,7 @@ const CLAUDE_ALLOWED_TOOL_PATTERNS = [
   'PowerShell(Get-Process *)',
 ];
 const CLAUDE_ALLOWED_TOOLS = CLAUDE_ALLOWED_TOOL_PATTERNS.join(' ');
+const RUN_LOOP_REPEAT_LIMIT = 8;
 
 const RUN_CENTER_MESSAGE_COMMANDS = new Set([
   'refreshPanel',
@@ -474,6 +475,7 @@ export interface DispatchOptions {
   parallel?: boolean;
   appendSystemPrompt?: string;
   worktreeBranch?: string;
+  worktreeCheckout?: 'branch' | 'ref';
   extraDirs?: string[];
   workspaceCwd?: string;
   projectNameOverride?: string;
@@ -828,9 +830,9 @@ export async function dispatchClaudeSession(
       events.push(event);
       addRunEvent(run, event);
       renderProgressPanel(panel, projectName, skill, ticket || '', events, run);
-      // For feature branches: use local name so worktree gets a real branch checkout
-      // For base branches: use origin/ ref so the main checkout is not mutated
-      const isFeatureBranch = Boolean(opts.worktreeBranch);
+      // Branch checkout is for workflows that need to push to an existing branch.
+      // Ref checkout keeps read-only scans detached on origin/<branch>.
+      const isFeatureBranch = Boolean(opts.worktreeBranch) && opts.worktreeCheckout !== 'ref';
       const registry = loadActiveWorktreeRegistry();
       if (registry.issue) {
         throw new Error(`Active worktree registry needs manual review before creating a worktree: ${registry.issue}`);
@@ -965,16 +967,40 @@ export async function dispatchClaudeSession(
   if (worktreePath) { launchPatch.worktreePath = worktreePath; }
   updateRun(run, launchPatch);
 
+  let runTempDir: string | undefined;
+  let tempDirCleaned = false;
+  const cleanupRunTempDir = (): void => {
+    if (!runTempDir || tempDirCleaned) { return; }
+    tempDirCleaned = true;
+    try {
+      fs.rmSync(runTempDir, { recursive: true, force: true });
+    } catch (e: unknown) {
+      const warning = unknownErrorMessage(e, `Could not remove temporary run directory ${runTempDir}.`);
+      updateRunBestEffort(run, {
+        warnings: appendRunWarnings(run.warnings, [warning]),
+      }, 'Failed to persist run temporary directory cleanup warning.');
+    }
+  };
+  try {
+    runTempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'kronos-run-'));
+  } catch (e: unknown) {
+    const warning = unknownErrorMessage(e, 'Could not create isolated temporary directory for run.');
+    updateRunBestEffort(run, {
+      warnings: appendRunWarnings(run.warnings, [warning]),
+    }, 'Failed to persist temporary directory warning.');
+  }
+
   let proc: ClaudeProcess;
   try {
     proc = spawn(CLAUDE_PATH, claudeArgs, {
       cwd,
-      env: { ...process.env },
+      env: runTempDir ? { ...process.env, TMPDIR: runTempDir, TMP: runTempDir, TEMP: runTempDir } : { ...process.env },
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true,
       detached: process.platform !== 'win32',
     }) as ClaudeProcess;
   } catch (e: unknown) {
+    cleanupRunTempDir();
     const failureDetail = unknownErrorMessage(e, 'Failed to launch Claude CLI.');
     const failureReason = failureDetail.startsWith('Failed to launch Claude CLI')
       ? failureDetail
@@ -997,6 +1023,27 @@ export async function dispatchClaudeSession(
   let buffer = '';
   let processClosed = false;
   let spawnErrorHandled = false;
+  let runLoopHandled = false;
+  const runLoopDetector = createRunLoopDetector();
+  const recordProgressEvent = (pe: ProgressEvent): void => {
+    events.push(pe);
+    addRunEvent(run, pe);
+    const loopSignal = runLoopDetector.observe(pe);
+    if (loopSignal && !runLoopHandled) {
+      runLoopHandled = true;
+      const loopEvent = { type: 'error' as const, label: 'Possible tool loop detected', detail: loopSignal, timestamp: new Date() };
+      events.push(loopEvent);
+      addRunEventBestEffort(run, loopEvent, 'Failed to persist run loop detection event.');
+      updateRunBestEffort(run, {
+        status: 'needs_human',
+        endedAt: new Date().toISOString(),
+        failureReason: loopSignal,
+        failureKind: classifyRunFailure({ ...run, status: 'needs_human', failureReason: loopSignal, events: run.events }),
+      }, 'Failed to persist run loop detection status.');
+      stopProcessTree(proc.pid);
+    }
+    renderProgressPanel(panel, projectName, skill, ticket || '', events, run);
+  };
   const runningPatch: Partial<KronosRun> = { status: 'running', cwd };
   if (proc.pid !== undefined) { runningPatch.processPid = proc.pid; }
   try {
@@ -1005,6 +1052,7 @@ export async function dispatchClaudeSession(
     spawnErrorHandled = true;
     processClosed = true;
     stopProcessTree(proc.pid);
+    cleanupRunTempDir();
     const failureDetail = unknownErrorMessage(e, 'Failed to persist launched Claude process.');
     const failureReason = failureDetail.startsWith('Failed to persist launched Claude process')
       ? failureDetail
@@ -1039,6 +1087,7 @@ export async function dispatchClaudeSession(
   proc.on('error', async (error: Error) => {
     spawnErrorHandled = true;
     processClosed = true;
+    cleanupRunTempDir();
     const message = `Failed to launch Claude CLI: ${error.message}`;
     const event = { type: 'error' as const, label: message, detail: '', timestamp: new Date() };
     events.push(event);
@@ -1066,9 +1115,7 @@ export async function dispatchClaudeSession(
       if (!trimmed || !trimmed.startsWith('{')) { continue; }
       try {
         for (const pe of parseStreamEvents(JSON.parse(trimmed))) {
-          events.push(pe);
-          addRunEvent(run, pe);
-          renderProgressPanel(panel, projectName, skill, ticket || '', events, run);
+          recordProgressEvent(pe);
         }
       } catch (e: unknown) {
         const detail = unknownErrorMessage(e, 'Failed to parse Claude stream event.');
@@ -1078,9 +1125,7 @@ export async function dispatchClaudeSession(
           detail,
           timestamp: new Date(),
         };
-        events.push(event);
-        addRunEvent(run, event);
-        renderProgressPanel(panel, projectName, skill, ticket || '', events, run);
+        recordProgressEvent(event);
       }
     }
   });
@@ -1090,15 +1135,14 @@ export async function dispatchClaudeSession(
     appendRunLog(run, data.toString());
     if (text && !text.includes('npm') && !text.includes('WARN')) {
       const event = { type: 'error' as const, label: text.substring(0, 200), detail: '', timestamp: new Date() };
-      events.push(event);
-      addRunEvent(run, event);
-      renderProgressPanel(panel, projectName, skill, ticket || '', events, run);
+      recordProgressEvent(event);
     }
   });
 
   proc.on('close', async (code) => {
     if (spawnErrorHandled) { return; }
     processClosed = true;
+    cleanupRunTempDir();
     const persisted = readRunRecord(run.id) as KronosRun | null;
     const preservedTerminalStatus = preservedTerminalRunStatus(persisted);
     if (preservedTerminalStatus && persisted) {
@@ -1168,6 +1212,7 @@ export async function dispatchClaudeSession(
       stopProcessTree(proc.pid);
       const cancelled = markRunCancelled(run.id, 'Progress panel disposed by user');
       Object.assign(run, cancelled);
+      cleanupRunTempDir();
       if (managedWorktreePath) {
         setTimeout(() => {
           const warning = removeWorktreeSafely(projectPath, managedWorktreePath!, { onRemoved: () => untrackWorktree(managedWorktreePath!) });
@@ -1215,6 +1260,43 @@ interface ProgressEvent {
   label: string;
   detail: string;
   timestamp: Date;
+}
+
+interface RunLoopDetector {
+  observe(event: ProgressEvent): string | undefined;
+}
+
+function createRunLoopDetector(limit = RUN_LOOP_REPEAT_LIMIT): RunLoopDetector {
+  const counts = new Map<string, number>();
+  return {
+    observe(event: ProgressEvent): string | undefined {
+      const key = runLoopEventKey(event);
+      if (!key) { return undefined; }
+      const count = (counts.get(key) || 0) + 1;
+      counts.set(key, count);
+      if (count < limit) { return undefined; }
+      return `Stopped after ${count} repeated ${event.type} events: ${event.label}. This usually means a permission/tool loop or a command retry loop; review the saved prompt/log and resume after adjusting permissions or instructions.`;
+    },
+  };
+}
+
+function runLoopEventKey(event: ProgressEvent): string | undefined {
+  if (event.type === 'tool' && /^(Running:|PowerShell|Bash)/i.test(event.label)) {
+    return `tool:${normalizeLoopText(event.label)}`;
+  }
+  if (event.type === 'error' && /(permission|not allowed|denied|needs approval|unauthorized|forbidden|command failed)/i.test(`${event.label}\n${event.detail}`)) {
+    return `error:${normalizeLoopText(event.label)}`;
+  }
+  return undefined;
+}
+
+function normalizeLoopText(value: string): string {
+  return value
+    .replace(/\b\d{2,}\b/g, '<n>')
+    .replace(/[A-Fa-f0-9]{8,}/g, '<hex>')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
 }
 
 type ClaudeProcess = ReturnType<typeof spawn> & {
