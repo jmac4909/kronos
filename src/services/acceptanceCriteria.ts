@@ -36,13 +36,13 @@ export function extractCriterionTexts(description: string): string[] {
   };
 
   for (const rawLine of lines) {
-    const line = rawLine.trim();
+    const line = cleanCriteriaLine(rawLine);
     if (!line) {
       flushGwt();
       continue;
     }
 
-    if (/^(acceptance criteria|acceptance|criteria)\s*:?\s*$/i.test(line)) {
+    if (isAcceptanceHeading(line)) {
       flushGwt();
       inAcceptanceSection = true;
       continue;
@@ -63,6 +63,11 @@ export function extractCriterionTexts(description: string): string[] {
     }
 
     if (inAcceptanceSection) {
+      if (isSectionHeading(rawLine, line)) {
+        flushGwt();
+        inAcceptanceSection = false;
+        continue;
+      }
       const bullet = line.match(/^(?:[-*]|\d+[.)])\s+(.+)$/);
       const bulletText = matchCapture(bullet);
       if (bulletText) {
@@ -70,8 +75,11 @@ export function extractCriterionTexts(description: string): string[] {
         found.push(bulletText);
         continue;
       }
-      if (/^[A-Z][A-Za-z ]{2,}:$/.test(line)) {
-        inAcceptanceSection = false;
+      const paragraphText = plainAcceptanceParagraph(line);
+      if (paragraphText) {
+        flushGwt();
+        found.push(paragraphText);
+        continue;
       }
     }
 
@@ -80,6 +88,34 @@ export function extractCriterionTexts(description: string): string[] {
 
   flushGwt();
   return dedupe(found.map(cleanCriterionText).filter(Boolean));
+}
+
+function cleanCriteriaLine(rawLine: string): string {
+  return rawLine
+    .trim()
+    .replace(/^h[1-6]\.\s*/i, '')
+    .replace(/^#{1,6}\s+/, '')
+    .replace(/\*\*/g, '')
+    .replace(/__/g, '')
+    .trim();
+}
+
+function isAcceptanceHeading(line: string): boolean {
+  return /^(acceptance criteria|acceptance|criteria)\s*:?\s*$/i.test(line);
+}
+
+function isSectionHeading(rawLine: string, line: string): boolean {
+  if (isAcceptanceHeading(line)) { return false; }
+  const raw = rawLine.trim();
+  if (/^h[1-6]\.\s+/i.test(raw) || /^#{1,6}\s+/.test(raw)) { return true; }
+  return /^[A-Z][A-Za-z0-9 /&()-]{2,}:$/.test(line);
+}
+
+function plainAcceptanceParagraph(line: string): string {
+  if (/^(?:Given|When|Then|And|But)\b/i.test(line)) { return ''; }
+  if (/^(?:[-*]|\d+[.)])\s+/.test(line)) { return ''; }
+  if (isAcceptanceHeading(line) || /^[A-Z][A-Za-z0-9 /&()-]{2,}:$/.test(line)) { return ''; }
+  return line;
 }
 
 export function setAcceptanceCriteriaChecked(criteria: TicketAcceptanceCriterion[], checkedIds: string[]): TicketAcceptanceCriterion[] {

@@ -31,7 +31,7 @@ ${kronosWebviewBaseCss()}
   <div class="kronos-header">
     <div>
       <h1 class="kronos-title">Kronos Integration Contracts</h1>
-      <div class="kronos-subtitle">Local harness for the script command shapes used by Jira, GitLab, and Sonar flows</div>
+      <div class="kronos-subtitle">Local harness for the script and native REST shapes used by Jira, GitLab, Jenkins, and Sonar flows</div>
     </div>
   </div>
   ${actions}

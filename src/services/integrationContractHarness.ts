@@ -69,6 +69,22 @@ export const INTEGRATION_CONTRACT_EXPECTATIONS: IntegrationContractExpectation[]
     requiredText: ['GET /api/v4/projects/<namespace%2Fproject>', 'id'],
   },
   {
+    id: 'jenkins-rest-build-status',
+    script: 'native Jenkins REST',
+    requiresScript: false,
+    command: 'GET <jenkins_job_url>/api/json',
+    purpose: 'Poll Jenkins build state for review and deployment readiness.',
+    requiredText: ['GET <jenkins_job_url>/api/json', 'lastBuild', 'lastCompletedBuild'],
+  },
+  {
+    id: 'jenkins-rest-build-trigger',
+    script: 'native Jenkins REST',
+    requiresScript: false,
+    command: 'POST <jenkins_job_url>/build or /buildWithParameters',
+    purpose: 'Trigger Jenkins jobs without routing provider credentials through Python scripts.',
+    requiredText: ['POST <jenkins_job_url>/build', 'POST <jenkins_job_url>/buildWithParameters'],
+  },
+  {
     id: 'sonar-project-key',
     script: 'pipeline_monitor.py',
     command: 'pipeline_monitor.py --find-sonar-key <project_name>',

@@ -45,6 +45,18 @@ GET /api/v4/projects/<namespace%2Fproject>
 
 The response should include numeric `id`.
 
+## Jenkins Build API
+
+Jenkins build polling and trigger calls use native REST calls. Registered projects should define `config.jenkins_url` with the job URL Kronos should poll or trigger. `JENKINS_URL` may provide the Jenkins base URL for relative job paths. `JENKINS_USER` or `JENKINS_USERNAME` plus `JENKINS_API_TOKEN` or `JENKINS_TOKEN` are used for Basic auth when present; a token without a user is sent as a bearer token. Credential values must stay in the inherited environment and must not be written to state, logs, or command arguments.
+
+```text
+GET <jenkins_job_url>/api/json?tree=lastBuild[number,result,building,url,timestamp,duration],lastCompletedBuild[number,result,building,url,timestamp,duration],number,result,building,url,timestamp,duration
+POST <jenkins_job_url>/build
+POST <jenkins_job_url>/buildWithParameters
+```
+
+Build status polling normalizes the latest Jenkins build into ticket `build.number`, `build.status`, and `build.url`. Trigger calls should return the Jenkins queue location when Jenkins provides it.
+
 ## SonarQube Commands
 
 Kronos routes SonarQube lookup and report data through `pipeline_monitor.py`:

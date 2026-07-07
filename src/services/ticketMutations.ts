@@ -72,6 +72,11 @@ interface MergeRequestStatusInput {
   now?: Date;
 }
 
+interface BuildStatusInput {
+  ticketKey: string;
+  build: Ticket['build'];
+}
+
 interface AcceptanceCriteriaExtractionOptions {
   replaceExisting?: boolean;
   now?: Date;
@@ -99,6 +104,12 @@ export interface MergeRequestStatusUpdate {
   mergedNow: boolean;
   closedNow: boolean;
   previousMr: MergeRequest | null;
+}
+
+export interface TicketBuildStatusUpdate {
+  state: KronosState;
+  ticket: Ticket;
+  changed: boolean;
 }
 
 interface TerminalMergeRequestReconciliation {
@@ -288,6 +299,25 @@ export function updateTicketMergeRequestStatus(input: MergeRequestStatusInput): 
     mergedNow,
     closedNow,
     previousMr,
+  };
+}
+
+export function updateTicketBuildStatus(input: BuildStatusInput): TicketBuildStatusUpdate {
+  const state = readStateFile();
+  if (!state) {
+    throw new Error('No readable Kronos state found.');
+  }
+  validateStateFileShape(state);
+  const ticket = requireTicket(state, input.ticketKey);
+  const changed = setTicketBuildStatus(ticket, input.build);
+  validateStateFileShape(state);
+  if (changed) {
+    writeJsonFileAtomic(STATE_FILE, state, 'update-ticket-build-status');
+  }
+  return {
+    state,
+    ticket: cloneTicket(ticket),
+    changed,
   };
 }
 
@@ -540,6 +570,24 @@ function mergeRequestStatus(target: MergeRequest, status: Partial<MergeRequest>)
   changed = setMergeRequestString(target, 'last_discussion_at', status.last_discussion_at) || changed;
   changed = setMergeRequestBoolean(target, 'discussions_resolved', status.discussions_resolved) || changed;
   return changed;
+}
+
+function setTicketBuildStatus(ticket: Ticket, build: Ticket['build']): boolean {
+  const normalized = normalizeTicketBuildStatus(build);
+  if (JSON.stringify(ticket.build) === JSON.stringify(normalized)) {
+    return false;
+  }
+  ticket.build = normalized;
+  return true;
+}
+
+function normalizeTicketBuildStatus(build: Ticket['build']): Ticket['build'] {
+  if (!build) { return null; }
+  return {
+    number: Math.floor(build.number),
+    status: build.status,
+    url: build.url,
+  };
 }
 
 function setMergeRequestField<K extends keyof MergeRequest>(target: MergeRequest, key: K, value: MergeRequest[K] | undefined): boolean {

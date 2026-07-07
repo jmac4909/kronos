@@ -43,7 +43,7 @@ import {
 import { RUNS_DIR, archiveRun, listRunStoreIssues, markRunCancelled, markRunContinued, markRunNeedsHuman, markRunPaused, readArchivedRuns, runRecordPath, writeRunRecord } from './services/runStore';
 import { RecoveryInventory, RecoveryItem, buildRecoveryInventory, resolveRecoveryActionForRequest, type RecoveryInventoryInput } from './services/recoveryCenter';
 import { DispatchCollision, detectDispatchCollisions, type DispatchCollisionInput } from './services/collisionDetector';
-import { gitlabAdapter, jiraAdapter, sonarAdapter } from './services/integrationAdapters';
+import { gitlabAdapter, jenkinsAdapter, jiraAdapter, sonarAdapter } from './services/integrationAdapters';
 import { buildRunCompletionEvidenceCheck, buildRunCompletionEvidenceText, evaluatePostRunReadiness, postRunReadinessRunPatch, resolvePostRunTicket, shouldRecordRunCompletionEvidence } from './services/postRunReadiness';
 import { existingAcceptanceCriterion, extractAcceptanceCriteria } from './services/acceptanceCriteria';
 import type { ExistingAcceptanceCriterion } from './services/acceptanceCriteria';
@@ -68,7 +68,7 @@ import {
   ticketFilterPromptFields,
 } from './services/ticketFilters';
 import { buildRunResumePrompt, readRunLogTail } from './services/runRecovery';
-import { addTicketEvidenceCheck, addTicketEvidenceNote, addTicketRunCompletionEvidence, extractTicketAcceptanceCriteria, linkMergeRequestToTicket, previewLinkMergeRequestToTicket, reconcileTerminalMergeRequestState, recordTicketEnvironmentResult, updateTicketAcceptanceCriteria, updateTicketMergeRequestStatus } from './services/ticketMutations';
+import { addTicketEvidenceCheck, addTicketEvidenceNote, addTicketRunCompletionEvidence, extractTicketAcceptanceCriteria, linkMergeRequestToTicket, previewLinkMergeRequestToTicket, reconcileTerminalMergeRequestState, recordTicketEnvironmentResult, updateTicketAcceptanceCriteria, updateTicketBuildStatus, updateTicketMergeRequestStatus } from './services/ticketMutations';
 import { addPlanToQueue as addPlanToQueueState, addTicketToQueue, linkTicketToProject, recordPlanQueueDecision, removeTicketFromQueue as removeTicketFromQueueState, reorderQueueItem, selectNextQueueItem, unlinkTicketFromProject } from './services/queueMutations';
 import { removeProject as removeProjectFromState, setProjectConfigValue, setProjectIntegrationConfig, setScanDirs, writeProjectSetupConfig } from './services/projectMutations';
 import { DoctorCheck, runDoctorChecks as collectDoctorChecks, runDoctorReachabilityChecks as collectDoctorReachabilityChecks } from './services/doctorChecks';
@@ -5335,6 +5335,8 @@ async function pollReviewMergeRequests(state: KronosState, shouldContinue: () =>
         state.reloadAndNotify();
       }
       if (!shouldContinue()) { return finishReviewPollResult(result); }
+      await pollReviewBuildStatus(state, candidate.ticketKey, result, shouldContinue);
+      if (!shouldContinue()) { return finishReviewPollResult(result); }
       const decision = decideReviewMonitorAction(candidate.ticketKey, update);
       if (decision.kind === 'deploy_monitor') {
         if (!shouldContinue()) { return finishReviewPollResult(result); }
@@ -5360,6 +5362,28 @@ async function pollReviewMergeRequests(state: KronosState, shouldContinue: () =>
     }
   }
   return finishReviewPollResult(result);
+}
+
+async function pollReviewBuildStatus(
+  state: KronosState,
+  ticketKey: string,
+  result: ReviewPollResult,
+  shouldContinue: () => boolean,
+): Promise<void> {
+  try {
+    const build = await jenkinsAdapter.buildStatus(state, ticketKey, { timeout: LIVE_MR_DIFF_TIMEOUT_MS });
+    if (!shouldContinue() || !build) { return; }
+    const update = updateTicketBuildStatus({ ticketKey, build });
+    if (update.changed) {
+      result.changed += 1;
+      appendKronosLog(`Jenkins build state changed for ${ticketKey}.`, `${build.status} #${build.number}`);
+      state.reloadAndNotify();
+    }
+  } catch (e: unknown) {
+    if (!shouldContinue()) { return; }
+    result.failed += 1;
+    appendKronosLog(`Failed to poll Jenkins build status for ${ticketKey}.`, unknownErrorMessage(e, 'unknown error'));
+  }
 }
 
 function finishReviewPollResult(result: ReviewPollResult): ReviewPollResult {

@@ -3,7 +3,7 @@ import { isHandoffAction } from './actionSemantics';
 import { isPassingBuildStatus } from './buildStatus';
 import { normalizeChangedFiles } from './changedFiles';
 import { EvidenceGateResult, evaluateEvidenceGate } from './evidenceGate';
-import { evidenceChecks, evidenceNotes, evidenceString } from './evidenceData';
+import { evidenceChecks, evidenceEnvironmentResults, evidenceNotes, evidenceString } from './evidenceData';
 import { runProgressSummary } from './runProgress';
 import { isSuccessfulRunStatus, terminalRunOutcome } from './runStatus';
 import { escapeRegExp } from './regexp';
@@ -250,6 +250,19 @@ export function evaluatePostRunReadiness(input: {
     warnings,
   };
 
+  const deploymentPendingSummary = fixMergedAwaitingDeploymentSummary(inputRun, input.ticket);
+  if (deploymentPendingSummary) {
+    return {
+      evaluatedAt: now.toISOString(),
+      ticketKey: input.ticketKey,
+      status: 'needs_human',
+      summary: deploymentPendingSummary,
+      nextAction: 'deploy_monitor',
+      evidenceGate: gateSummary,
+      failureKind,
+    };
+  }
+
   if (!isSuccessfulRunStatus(runStatus)) {
     return {
       evaluatedAt: now.toISOString(),
@@ -424,6 +437,47 @@ function runEventDetails(value: unknown): unknown[] {
     const record = recordFromUnknown(event);
     return [record['label'], record['detail']];
   });
+}
+
+function fixMergedAwaitingDeploymentSummary(record: Record<string, unknown>, ticket: Ticket): string | undefined {
+  if (runString(record['skill']) !== 'verify-local') { return undefined; }
+  const metadata = recordFromUnknown(record['promptMetadata']);
+  if (runString(metadata['verifyMode']) !== 'confirm-fix-works') { return undefined; }
+  if (!verifyTargetIsTest(metadata, ticket)) { return undefined; }
+  if (!fixAppearsMergedInDevelop(metadata, ticket)) { return undefined; }
+  if (!testStillShowsOldBehavior(record, ticket) && ticket.next_action !== 'deploy_monitor') { return undefined; }
+  return 'Verify-local found the fix on develop, but TEST still appears to be running the old behavior; fix is merged and awaiting deployment to TEST.';
+}
+
+function verifyTargetIsTest(metadata: Record<string, unknown>, ticket: Ticket): boolean {
+  const environment = runString(metadata['verifyEnvironment']).toLowerCase();
+  const environmentUrl = runString(metadata['verifyEnvironmentUrl']).toLowerCase();
+  if (environment === 'test' || /\btest\b/.test(environmentUrl)) { return true; }
+  return evidenceEnvironmentResults(ticket).some(result => evidenceString(result, 'environment').toLowerCase() === 'test');
+}
+
+function fixAppearsMergedInDevelop(metadata: Record<string, unknown>, ticket: Ticket): boolean {
+  const branch = runString(metadata['verifyBranch']).replace(/^origin\//, '').toLowerCase();
+  return branch === 'develop' || ticket.mr?.state === 'merged' || ticket.next_action === 'deploy_monitor';
+}
+
+function testStillShowsOldBehavior(record: Record<string, unknown>, ticket: Ticket): boolean {
+  const text = [
+    record['failureReason'],
+    record['error'],
+    ...runEventDetails(record['events']),
+    ...evidenceEnvironmentResults(ticket).flatMap(result => [
+      evidenceString(result, 'environment'),
+      evidenceString(result, 'status'),
+      evidenceString(result, 'detail'),
+    ]),
+    ...evidenceChecks(ticket).flatMap(check => [
+      evidenceString(check, 'name'),
+      evidenceString(check, 'result'),
+      evidenceString(check, 'summary'),
+    ]),
+  ].map(runText).filter((line): line is string => Boolean(line)).join('\n').toLowerCase();
+  return /old behavior|still reproduc|still fail|not deployed|awaiting deploy|deployment pending|test.*(?:old|not updated|stale)|environment.*(?:old|stale)/.test(text);
 }
 
 function resolveTicketFromRunRecord(tickets: Record<string, Ticket>, run: unknown): PostRunTicketResolution | undefined {

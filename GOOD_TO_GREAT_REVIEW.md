@@ -60,7 +60,7 @@ Historical concern: Jira, GitLab, Jenkins, Sonar, GCP, Claude CLI, scripts, and 
 
 Current status: Doctor and Integration Manifest make these dependencies inspectable, and provider/script failures should surface as operator-readable checks.
 
-Remaining gap: the integration layer is still script-backed. Installation, repair, and provider contract validation need continued hardening against real enterprise environments.
+Remaining gap: Jira and Sonar still depend on script-backed contracts, while GitLab MR and Jenkins build paths use native REST. Installation, repair, and provider contract validation need continued hardening against real enterprise environments.
 
 ### 6. Operator UI
 

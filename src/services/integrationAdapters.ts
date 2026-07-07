@@ -1,7 +1,8 @@
 import { ScriptRunOptions, runPipelineJson } from './scriptClient';
-import { KronosState as KronosStateSnapshot, MergeRequest, MergeRequestChangedFile, MergeRequestComment } from '../state/types';
+import { KronosState as KronosStateSnapshot, MergeRequest, MergeRequestChangedFile, MergeRequestComment, Ticket } from '../state/types';
 import { normalizeChangedFiles } from './changedFiles';
 import { GitLabHttpTransport, GitLabRestRequestOptions, createGitLabRestClient, gitLabProjectPathFromMergeRequestUrl, gitlabRestClient } from './gitlabRestClient';
+import { JenkinsHttpTransport, JenkinsRestRequestOptions, createJenkinsRestClient, jenkinsRestClient } from './jenkinsRestClient';
 import { parseJsonWithLabel } from './jsonFiles';
 import { arrayFromUnknown, isRecord, optionalFiniteNumberFromUnknown, optionalTrimmedStringFromUnknown, recordsFromUnknown } from './records';
 import { sortMergeRequestCommentsByCreated } from './mergeRequestComments';
@@ -13,6 +14,7 @@ interface KronosScriptRunner {
   state?: KronosStateSnapshot | null;
   env?: NodeJS.ProcessEnv;
   gitlabTransport?: GitLabHttpTransport;
+  jenkinsTransport?: JenkinsHttpTransport;
 }
 
 export interface MergeRequestDiffResult {
@@ -165,9 +167,59 @@ export const legacyGitlabAdapter = {
   normalizeChangedFiles,
 };
 
+export const jenkinsAdapter = {
+  async buildStatus(runner: KronosScriptRunner, ticketKey: string, options: ScriptRunOptions = {}): Promise<Ticket['build'] | null> {
+    const jobUrl = jenkinsJobUrlForTicket(runner, ticketKey);
+    if (!jobUrl) { return null; }
+    const build = await jenkinsClient(runner).buildStatus(jobUrl, jenkinsRequestOptions(options));
+    return build ? { number: build.number, status: build.status, url: build.url } : null;
+  },
+
+  async triggerBuild(
+    runner: KronosScriptRunner,
+    projectName: string,
+    parameters: Record<string, string | number | boolean> = {},
+    options: ScriptRunOptions = {},
+  ) {
+    const jobUrl = jenkinsJobUrlForProject(runner, projectName);
+    if (!jobUrl) {
+      throw new Error(`${projectName}: missing jenkins_url for native Jenkins build trigger.`);
+    }
+    return jenkinsClient(runner).triggerBuild(jobUrl, parameters, jenkinsRequestOptions(options));
+  },
+};
+
+function jenkinsClient(runner: KronosScriptRunner) {
+  if (!runner.env && !runner.jenkinsTransport) { return jenkinsRestClient; }
+  const options: { env?: NodeJS.ProcessEnv; transport?: JenkinsHttpTransport } = {};
+  if (runner.env) { options.env = runner.env; }
+  if (runner.jenkinsTransport) { options.transport = runner.jenkinsTransport; }
+  return createJenkinsRestClient(options);
+}
+
+function jenkinsRequestOptions(options: ScriptRunOptions): JenkinsRestRequestOptions {
+  const requestOptions: JenkinsRestRequestOptions = {};
+  if (options.timeout !== undefined) { requestOptions.timeoutMs = options.timeout; }
+  return requestOptions;
+}
+
+function jenkinsJobUrlForTicket(runner: KronosScriptRunner, ticketKey: string): string | undefined {
+  const ticket = runner.state?.tickets?.[ticketKey];
+  for (const projectName of ticketStringArray(ticket?.projects)) {
+    const jobUrl = jenkinsJobUrlForProject(runner, projectName);
+    if (jobUrl) { return jobUrl; }
+  }
+  return undefined;
+}
+
+function jenkinsJobUrlForProject(runner: KronosScriptRunner, projectName: string): string | undefined {
+  return optionalTrimmedStringFromUnknown(runner.state?.projects?.[projectName]?.config?.jenkins_url);
+}
+
 /*
- * GitLab MR operations intentionally use native REST above. Jira ticket comments
- * and SonarQube checks still route through their existing script contracts.
+ * GitLab MR and Jenkins build operations intentionally use native REST above.
+ * Jira ticket comments and SonarQube checks still route through their existing
+ * script contracts.
  */
 
 export const sonarAdapter = {

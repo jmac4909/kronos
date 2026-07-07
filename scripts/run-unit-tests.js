@@ -193,6 +193,7 @@ const mergeRequestFileHints = require('../out/services/mergeRequestFileHints.js'
 const scriptClient = require('../out/services/scriptClient.js');
 const integrationAdapters = require('../out/services/integrationAdapters.js');
 const gitlabRestClient = require('../out/services/gitlabRestClient.js');
+const jenkinsRestClient = require('../out/services/jenkinsRestClient.js');
 const acceptanceCriteria = require('../out/services/acceptanceCriteria.js');
 const humanReviewInbox = require('../out/services/humanReviewInbox.js');
 const evidenceGate = require('../out/services/evidenceGate.js');
@@ -1569,6 +1570,16 @@ test('ticket mutation helpers centralize evidence, acceptance, and MR state writ
   assert.equal(noChange.changed, false);
   assert.equal(noChange.mergedNow, false);
   assert.equal(noChange.closedNow, false);
+  const buildUpdate = ticketMutations.updateTicketBuildStatus({
+    ticketKey: 'K-5',
+    build: { number: 44, status: 'SUCCESS', url: 'https://jenkins.example/job/app/44/' },
+  });
+  assert.equal(buildUpdate.changed, true);
+  assert.deepEqual(buildUpdate.ticket.build, { number: 44, status: 'SUCCESS', url: 'https://jenkins.example/job/app/44/' });
+  assert.equal(ticketMutations.updateTicketBuildStatus({
+    ticketKey: 'K-5',
+    build: { number: 44, status: 'SUCCESS', url: 'https://jenkins.example/job/app/44/' },
+  }).changed, false);
   const closedUpdate = ticketMutations.updateTicketMergeRequestStatus({
     ticketKey: 'K-6',
     status: {
@@ -9195,7 +9206,7 @@ test('state script adapter keeps raw JSON payloads unknown until normalized', ()
   }
 });
 
-test('integration adapters wrap selected Jira and Sonar scripts plus native GitLab REST', async () => {
+test('integration adapters wrap selected Jira and Sonar scripts plus native GitLab and Jenkins REST', async () => {
   const calls = [];
   const gitlabRequests = [];
   const runner = {
@@ -9568,6 +9579,34 @@ test('integration adapters wrap selected Jira and Sonar scripts plus native GitL
     state: { projects: { app: { config: { gitlab_project_id: 808 } } }, tickets: { 'K-8': { projects: ['app'], mr: { iid: 8 } } } },
     gitlabTransport: async () => gitlabResponse(null),
   }, 'K-8'), 'K-8');
+  const jenkinsAdapterRunner = {
+    env: { JENKINS_URL: 'https://jenkins.example', JENKINS_TOKEN: 'bearer-token' },
+    state: {
+      projects: { app: { config: { jenkins_url: '/job/app' } } },
+      tickets: { 'K-JENKINS': { projects: ['app'] } },
+    },
+    async jenkinsTransport(request) {
+      const url = new URL(request.url);
+      if (request.method === 'GET') {
+        assert.equal(url.pathname, '/job/app/api/json');
+        assert.match(request.headers.Authorization, /^Bearer /);
+        return jenkinsResponse({ lastCompletedBuild: { number: 77, result: 'UNSTABLE', url: 'https://jenkins.example/job/app/77/' } });
+      }
+      assert.equal(request.method, 'POST');
+      assert.equal(url.pathname, '/job/app/build');
+      return { statusCode: 302, body: '', headers: { location: 'https://jenkins.example/queue/item/10/' } };
+    },
+  };
+  assert.deepEqual(await integrationAdapters.jenkinsAdapter.buildStatus(jenkinsAdapterRunner, 'K-JENKINS'), {
+    number: 77,
+    status: 'UNSTABLE',
+    url: 'https://jenkins.example/job/app/77/',
+  });
+  assert.deepEqual(await integrationAdapters.jenkinsAdapter.triggerBuild(jenkinsAdapterRunner, 'app'), {
+    queued: true,
+    statusCode: 302,
+    queueUrl: 'https://jenkins.example/queue/item/10/',
+  });
   const originalRunPipelineJson = scriptClient.runPipelineJson;
   try {
     scriptClient.runPipelineJson = async () => ({
@@ -9618,6 +9657,59 @@ test('integration adapters wrap selected Jira and Sonar scripts plus native GitL
 });
 
 function gitlabResponse(value, headers = {}) {
+  return {
+    statusCode: 200,
+    body: JSON.stringify(value),
+    headers,
+  };
+}
+
+test('jenkins REST client normalizes build status and trigger responses', async () => {
+  const requests = [];
+  const client = jenkinsRestClient.createJenkinsRestClient({
+    env: {
+      JENKINS_URL: 'https://jenkins.example',
+      JENKINS_USER: 'builder',
+      JENKINS_API_TOKEN: 'secret-token',
+    },
+    async transport(request) {
+      requests.push(request);
+      const url = new URL(request.url);
+      if (request.method === 'GET') {
+        assert.equal(url.pathname, '/job/app/api/json');
+        assert.ok(url.searchParams.get('tree').includes('lastBuild'));
+        assert.match(request.headers.Authorization, /^Basic /);
+        return jenkinsResponse({
+          lastBuild: {
+            number: '42',
+            result: 'SUCCESS',
+            building: false,
+            url: 'https://jenkins.example/job/app/42/',
+          },
+        });
+      }
+      assert.equal(request.method, 'POST');
+      assert.equal(url.pathname, '/job/app/buildWithParameters');
+      assert.equal(url.searchParams.get('BRANCH'), 'feature/K-42');
+      return { statusCode: 201, body: '', headers: { location: 'https://jenkins.example/queue/item/9/' } };
+    },
+  });
+
+  assert.equal(jenkinsRestClient.normalizeJenkinsJobUrl('/job/app', 'https://jenkins.example/root'), 'https://jenkins.example/job/app');
+  assert.deepEqual(await client.buildStatus('/job/app'), {
+    number: 42,
+    status: 'SUCCESS',
+    url: 'https://jenkins.example/job/app/42/',
+  });
+  assert.deepEqual(await client.triggerBuild('https://jenkins.example/job/app', { BRANCH: 'feature/K-42' }), {
+    queued: true,
+    statusCode: 201,
+    queueUrl: 'https://jenkins.example/queue/item/9/',
+  });
+  assert.equal(requests.length, 2);
+});
+
+function jenkinsResponse(value, headers = {}) {
   return {
     statusCode: 200,
     body: JSON.stringify(value),
@@ -10391,6 +10483,20 @@ Then the request is accepted`;
   assert.equal(updated[0].checked, false);
   assert.equal(updated[1].checked, true);
   assert.equal(updated[3].checked, true);
+
+  const jiraFormatted = acceptanceCriteria.extractCriterionTexts(`h3. **Acceptance criteria**
+User can save a draft without losing edits.
+The audit event includes the request id.
+h3. Notes
+This should not be treated as acceptance criteria.
+
+## **Criteria:**
+Plain paragraph criterion from markdown heading`);
+  assert.deepEqual(jiraFormatted, [
+    'User can save a draft without losing edits.',
+    'The audit event includes the request id.',
+    'Plain paragraph criterion from markdown heading',
+  ]);
 });
 
 test('ticket mutations auto-extract acceptance criteria and record no-found status', () => {
@@ -11096,6 +11202,39 @@ test('post-run readiness distinguishes process completion from handoff readiness
   assert.equal(notReady.status, 'not_ready');
   assert.match(notReady.summary, /still implement/);
 
+  const awaitingDeployment = postRunReadiness.evaluatePostRunReadiness({
+    run: {
+      status: 'completed',
+      skill: 'verify-local',
+      promptMetadata: {
+        verifyMode: 'confirm-fix-works',
+        verifyBranch: 'develop',
+        verifyEnvironment: 'TEST',
+      },
+      events: [{ label: 'TEST replay', detail: 'TEST still reproduces the old behavior.' }],
+    },
+    ticketKey: 'K-DEPLOY',
+    ticket: ticket({
+      next_action: 'verify',
+      projects: ['app'],
+      mr: { iid: 12, state: 'merged', review_status: 'approved', url: 'https://gitlab.example/mr/12' },
+      evidence: {
+        environment_results: {
+          TEST: {
+            environment: 'TEST',
+            status: 'fail',
+            checked_at: '2026-07-01T00:00:00.000Z',
+            detail: 'TEST still shows old behavior.',
+          },
+        },
+      },
+    }),
+    now: new Date('2026-07-01T00:00:00.000Z'),
+  });
+  assert.equal(awaitingDeployment.status, 'needs_human');
+  assert.equal(awaitingDeployment.nextAction, 'deploy_monitor');
+  assert.match(awaitingDeployment.summary, /fix is merged and awaiting deployment to TEST/);
+
   const blocked = postRunReadiness.evaluatePostRunReadiness({
     run: { status: 'failed', failureReason: 'Jenkins build failed' },
     ticketKey: 'K-3',
@@ -11126,7 +11265,7 @@ test('post-run readiness distinguishes process completion from handoff readiness
     "import { runProgressSummary } from './runProgress'",
     "import { isSuccessfulRunStatus, terminalRunOutcome } from './runStatus'",
     "import { normalizeChangedFiles } from './changedFiles'",
-    "import { evidenceChecks, evidenceNotes, evidenceString } from './evidenceData'",
+    "import { evidenceChecks, evidenceEnvironmentResults, evidenceNotes, evidenceString } from './evidenceData'",
     "import { arrayFromUnknown, optionalFiniteNumberFromUnknown, optionalTrimmedStringFromUnknown, recordFromUnknown } from './records'",
     'export function shouldRecordRunCompletionEvidence',
     'export function resolvePostRunTicket',
@@ -11174,6 +11313,8 @@ test('post-run readiness distinguishes process completion from handoff readiness
     'function runFailureReason(record: Record<string, unknown>): string',
     'function failureSummaryDetail(kind: RunFailureKind, reason: string): string',
     'function runEventDetails(value: unknown): unknown[]',
+    'function fixMergedAwaitingDeploymentSummary(record: Record<string, unknown>, ticket: Ticket): string | undefined',
+    'function testStillShowsOldBehavior(record: Record<string, unknown>, ticket: Ticket): boolean',
     'arrayFromUnknown(value).flatMap',
     'function mergeRequestChangedFileCount(ticket?: Ticket): number | undefined',
     'function firstStringField(record: Record<string, unknown>, keys: string[]): string | undefined',
@@ -11583,7 +11724,7 @@ test('setup wizard, MR autopilot, and integration contract panels render actiona
   assert.ok(blockedAutopilotPlan.candidates[0].blockers.includes('No linked project has gitlab_project_id.'));
 
   const contractReport = integrationContractHarness.buildIntegrationContractReport({
-    contractDocText: '--ticket-comments comments GET /api/v4/projects/<project_id>/merge_requests/<mr_iid> GET /api/v4/projects/<project_id>/merge_requests/<mr_iid>/diffs GET /api/v4/projects/<namespace%2Fproject> notes discussions files source_branch target_branch id',
+    contractDocText: '--ticket-comments comments GET /api/v4/projects/<project_id>/merge_requests/<mr_iid> GET /api/v4/projects/<project_id>/merge_requests/<mr_iid>/diffs GET /api/v4/projects/<namespace%2Fproject> notes discussions files source_branch target_branch id GET <jenkins_job_url>/api/json lastBuild lastCompletedBuild POST <jenkins_job_url>/build POST <jenkins_job_url>/buildWithParameters',
     scripts: [
       { name: 'kronos_state.py', path: '/scripts/kronos_state.py', present: true },
       { name: 'pipeline_monitor.py', path: '/scripts/pipeline_monitor.py', present: false },
@@ -11594,6 +11735,7 @@ test('setup wizard, MR autopilot, and integration contract panels render actiona
   const contractHtml = integrationContractPanelView.buildIntegrationContractHtml(contractReport, 'nonce-contract', ACTION_SCRIPT_URI);
   assert.match(contractHtml, /Kronos Integration Contracts/);
   assert.match(contractHtml, /native GitLab REST/);
+  assert.match(contractHtml, /native Jenkins REST/);
   assert.match(contractHtml, /GET \/api\/v4\/projects\/&lt;project_id&gt;\/merge_requests\/&lt;mr_iid&gt;/);
   assert.match(contractHtml, /pipeline_monitor.py --sonar-issues/);
   assert.match(contractHtml, /data-action="snapshotIntegrationManifest"/);

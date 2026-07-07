@@ -124,4 +124,4 @@ Tickets are top-level (not nested under projects). Each ticket has `projects: st
 
 - Claude Code CLI must be available for dispatched sessions.
 - GCloud auth is required when using Vertex-backed Claude profiles.
-- Jira and Sonar integrations are script-backed; GitLab MR polling uses native REST with inherited environment credentials. Missing providers should surface through Kronos Doctor instead of crashing UI panels.
+- Jira and Sonar integrations are script-backed; GitLab MR polling and Jenkins build polling/trigger helpers use native REST with inherited environment credentials. Missing providers should surface through Kronos Doctor instead of crashing UI panels.
