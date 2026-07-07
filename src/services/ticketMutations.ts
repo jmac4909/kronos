@@ -142,7 +142,7 @@ export function addTicketRunCompletionEvidence(ticketKey: string, input: TicketR
     const evidence = ensureEvidence(ticket);
     const fallbackNow = input.note.now || input.check.now || new Date();
     appendEvidenceNote(evidence, input.note, fallbackNow);
-    appendEvidenceCheck(evidence, input.check, fallbackNow);
+    replaceRunCompletionEvidenceCheck(evidence, input.check, fallbackNow);
   });
 }
 
@@ -546,6 +546,22 @@ function appendEvidenceCheck(evidence: TicketEvidence, input: TicketEvidenceChec
   if (artifactPath) { check.artifact_path = artifactPath; }
   evidence.checks.push(check);
   evidence.updated_at = at;
+}
+
+function replaceRunCompletionEvidenceCheck(evidence: TicketEvidence, input: TicketEvidenceCheckInput, fallbackNow?: Date): void {
+  if (!Array.isArray(evidence.checks)) {
+    evidence.checks = [];
+  }
+  evidence.checks = evidence.checks.filter(check => !sameRunCompletionEvidenceCheck(check, input));
+  appendEvidenceCheck(evidence, input, fallbackNow);
+}
+
+function sameRunCompletionEvidenceCheck(check: TicketEvidenceCheck, input: TicketEvidenceCheckInput): boolean {
+  return isKronosRunCompletionCheckName(check.name) && check.name === input.name.trim();
+}
+
+function isKronosRunCompletionCheckName(name: string): boolean {
+  return /^Kronos (?:verify-local result|implement completion)$/.test(name.trim());
 }
 
 function mergeRequestStatus(target: MergeRequest, status: Partial<MergeRequest>): boolean {

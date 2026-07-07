@@ -1425,6 +1425,22 @@ test('ticket mutation helpers centralize evidence, acceptance, and MR state writ
       now: new Date('2026-07-01T01:07:00.000Z'),
     },
   });
+  ticketMutations.addTicketRunCompletionEvidence('K-RUN', {
+    note: {
+      kind: 'note',
+      text: 'Kronos implement run run-atomic-2 completed.',
+      now: new Date('2026-07-01T01:08:00.000Z'),
+    },
+    check: {
+      name: 'Kronos implement completion',
+      result: 'pass',
+      environment: 'kronos',
+      command: 'kronos run run-atomic-2',
+      summary: 'latest run report replaces old completion check',
+      confidence: 'high',
+      now: new Date('2026-07-01T01:08:00.000Z'),
+    },
+  });
   ticketMutations.recordTicketEnvironmentResult('K-1', {
     environment: 'test',
     status: 'warn',
@@ -1483,8 +1499,10 @@ test('ticket mutation helpers centralize evidence, acceptance, and MR state writ
   assert.equal(persisted.tickets['orphan-99'], undefined);
   assert.equal(persisted.tickets['K-RUN'].evidence.notes[0].text, 'Kronos implement run run-atomic completed.');
   assert.equal(persisted.tickets['K-RUN'].evidence.checks[0].name, 'Kronos implement completion');
-  assert.equal(persisted.tickets['K-RUN'].evidence.checks[0].command, 'kronos run run-atomic');
-  assert.equal(persisted.tickets['K-RUN'].evidence.updated_at, '2026-07-01T01:07:00.000Z');
+  assert.equal(persisted.tickets['K-RUN'].evidence.checks.length, 1);
+  assert.equal(persisted.tickets['K-RUN'].evidence.checks[0].command, 'kronos run run-atomic-2');
+  assert.equal(persisted.tickets['K-RUN'].evidence.checks[0].summary, 'latest run report replaces old completion check');
+  assert.equal(persisted.tickets['K-RUN'].evidence.updated_at, '2026-07-01T01:08:00.000Z');
 
   const failingPreview = ticketMutations.previewLinkMergeRequestToTicket(baseState({
     'K-2': ticket({ projects: ['app'] }),
@@ -4768,6 +4786,9 @@ test('record guard helper centralizes unknown object narrowing', () => {
   assert.equal(ticketMutationsSource.includes('function optionalTrim(value: string | undefined): string | undefined'), false, 'ticketMutations should use shared optional trimmed string helper');
   assert.ok(ticketMutationsSource.includes("import { ticketStringArray } from './ticketFields'"));
   assert.ok(ticketMutationsSource.includes("import { mergeRequestCommentsFromRecord, sortMergeRequestCommentsByCreated } from './mergeRequestComments'"));
+  assert.ok(ticketMutationsSource.includes('function replaceRunCompletionEvidenceCheck(evidence: TicketEvidence, input: TicketEvidenceCheckInput, fallbackNow?: Date): void'));
+  assert.ok(ticketMutationsSource.includes('function sameRunCompletionEvidenceCheck(check: TicketEvidenceCheck, input: TicketEvidenceCheckInput): boolean'));
+  assert.ok(ticketMutationsSource.includes('function isKronosRunCompletionCheckName(name: string): boolean'));
   assert.ok(ticketMutationsSource.includes('for (const project of ticketStringArray(orphan.projects))'));
   assert.ok(ticketMutationsSource.includes('JSON.stringify(mergeRequestCommentsFromRecord(target)) === JSON.stringify(comments)'));
   assert.ok(ticketMutationsSource.includes('if (!isRecord(evidence.environment_results))'));
@@ -6473,6 +6494,37 @@ test('dispatcher listRuns backfills terminal run readiness from current ticket s
 });
 
 test('post-run evidence captures verify-local results with targeting metadata', () => {
+  fs.mkdirSync(runStore.RUNS_DIR, { recursive: true });
+  const trackingId = '550e8400-e29b-41d4-a716-446655440000';
+  const verifyReport = [
+    '## Final Verification Report',
+    '| Area | Finding |',
+    '| Root cause | missing account status guard |',
+    '| Curl result | HTTP 200 with corrected response |',
+    `| X-TrackingId | ${trackingId} |`,
+    'Verdict: FIX VERIFIED IN CODE, AWAITING DEPLOYMENT',
+  ].join('\n');
+  const logPath = path.join(runStore.RUNS_DIR, 'run-verify-local.log');
+  fs.writeFileSync(logPath, [
+    JSON.stringify({
+      type: 'assistant',
+      message: {
+        content: [{
+          type: 'tool_use',
+          name: 'Bash',
+          input: {
+            command: `curl -i -H 'X-TrackingId: ${trackingId}' https://test.example/replay`,
+            description: 'Replay TEST request',
+          },
+        }],
+      },
+    }),
+    JSON.stringify({
+      type: 'assistant',
+      message: { content: [{ type: 'text', text: verifyReport }] },
+    }),
+    JSON.stringify({ type: 'result', result: verifyReport, duration_ms: 1000 }),
+  ].join('\n'));
   const run = {
     id: 'run-verify-local',
     project: 'app',
@@ -6480,11 +6532,12 @@ test('post-run evidence captures verify-local results with targeting metadata', 
     ticket: 'K-VERIFY',
     status: 'completed',
     exitCode: 0,
+    logPath,
     promptMetadata: {
       verifyBranch: 'feature/K-VERIFY',
       verifyEnvironment: 'local (mock)',
       verifyMode: 'confirm-fix-works',
-      verifyTrackingHints: '- REQ-4567 (from ticket description)\n- corr-9999 (from ticket description)\n- REQ-4567 (from ticket labels)',
+      verifyTrackingHints: '- Replay payment failure (from ticket summary)\n- checkout (from ticket description)',
     },
     events: [
       { type: 'text', label: 'Verification report', detail: 'Defect no longer reproduces', timestamp: '2026-07-07T12:00:00.000Z' },
@@ -6498,7 +6551,12 @@ test('post-run evidence captures verify-local results with targeting metadata', 
   assert.match(note, /Verification branch: feature\/K-VERIFY/);
   assert.match(note, /Verification environment: local \(mock\)/);
   assert.match(note, /Verification mode: confirm-fix-works/);
-  assert.match(note, /Tracking IDs used: REQ-4567, corr-9999/);
+  assert.match(note, /Session report:/);
+  assert.match(note, /Root cause \| missing account status guard/);
+  assert.match(note, /Curl result \| HTTP 200/);
+  assert.match(note, /FIX VERIFIED IN CODE, AWAITING DEPLOYMENT/);
+  assert.match(note, new RegExp(`Tracking IDs used: ${trackingId}`));
+  assert.doesNotMatch(note, /Replay payment failure/);
 
   const check = postRunReadiness.buildRunCompletionEvidenceCheck(run, currentTicket);
   assert.equal(check.name, 'Kronos verify-local result');
@@ -6506,7 +6564,9 @@ test('post-run evidence captures verify-local results with targeting metadata', 
   assert.equal(check.environment, 'local (mock)');
   assert.match(check.summary, /branch feature\/K-VERIFY/);
   assert.match(check.summary, /mode confirm-fix-works/);
-  assert.match(check.summary, /tracking IDs REQ-4567, corr-9999/);
+  assert.match(check.summary, new RegExp(`tracking IDs ${trackingId}`));
+  assert.match(check.summary, /report: .*FIX VERIFIED IN CODE, AWAITING DEPLOYMENT/);
+  assert.equal(check.confidence, 'high');
 
   const duplicateTicket = ticket({
     next_action: 'verify',
@@ -11392,7 +11452,10 @@ test('post-run readiness distinguishes process completion from handoff readiness
   const source = readSourceFixture('src', 'services', 'postRunReadiness.ts');
   for (const marker of [
     'run: unknown',
+    "import * as fs from 'fs'",
     "import { runProgressSummary } from './runProgress'",
+    "import { isExistingRealPathInside } from './pathUtils'",
+    "import { RUNS_DIR } from './runStore'",
     "import { isSuccessfulRunStatus, terminalRunOutcome } from './runStatus'",
     "import { normalizeChangedFiles } from './changedFiles'",
     "import { evidenceChecks, evidenceEnvironmentResults, evidenceNotes, evidenceString } from './evidenceData'",
@@ -11432,7 +11495,20 @@ test('post-run readiness distinguishes process completion from handoff readiness
     'function runCompletionEvidenceTrackingLines(context: RunCompletionEvidenceContext): string[]',
     'function runCompletionEvidenceTrackingSummaryParts(context: RunCompletionEvidenceContext): string[]',
     'function runCompletionEvidenceTrackingIds(context: RunCompletionEvidenceContext): string[]',
+    'function runCompletionSessionReport(record: Record<string, unknown>, logText: string): string | undefined',
+    'function finalReportFromEvents(value: unknown): string | undefined',
+    'function finalReportFromClaudeLog(logText: string): string | undefined',
+    'function finalReportFromText(text: string): string | undefined',
+    'function looksLikeFinalReport(text: string): boolean',
+    'function compactEvidenceReport(text: string | undefined, maxLength = 6000): string | undefined',
+    'function runCompletionEvidenceReportSummary(report: string | undefined): string | undefined',
+    'function trackingIdsFromText(text: string): string[]',
+    'function normalizeTrackingId(value: string | undefined): string',
+    'function isUsefulTrackingId(value: string): boolean',
+    'function readRunCompletionLogText(record: Record<string, unknown>): string',
+    'isExistingRealPathInside(logPath, RUNS_DIR)',
     "context.promptMetadata['verifyTrackingHints']",
+    'context.sessionReport',
     'interface RunCompletionEvidenceCheck',
     'function mergeRequestChangedFileCount(ticket?: Ticket): number | undefined',
     'normalizeChangedFiles(files).length',

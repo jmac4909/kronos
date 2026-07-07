@@ -1,10 +1,14 @@
+import * as fs from 'fs';
+
 import { Ticket } from '../state/types';
 import { isHandoffAction } from './actionSemantics';
 import { isPassingBuildStatus } from './buildStatus';
 import { normalizeChangedFiles } from './changedFiles';
 import { EvidenceGateResult, evaluateEvidenceGate } from './evidenceGate';
 import { evidenceChecks, evidenceEnvironmentResults, evidenceNotes, evidenceString } from './evidenceData';
+import { isExistingRealPathInside } from './pathUtils';
 import { runProgressSummary } from './runProgress';
+import { RUNS_DIR } from './runStore';
 import { isSuccessfulRunStatus, terminalRunOutcome } from './runStatus';
 import { escapeRegExp } from './regexp';
 import { arrayFromUnknown, optionalFiniteNumberFromUnknown, optionalTrimmedStringFromUnknown, recordFromUnknown } from './records';
@@ -56,6 +60,8 @@ interface RunCompletionEvidenceContext {
   mrChangedFiles: number | undefined;
   sonarStatus: string | undefined;
   testCount: number | undefined;
+  logText: string;
+  sessionReport: string | undefined;
 }
 
 interface PostRunTicketResolution {
@@ -133,6 +139,8 @@ export function buildRunCompletionEvidenceText(run: unknown, ticket?: Ticket): s
   const lines = [
     `Kronos ${workflow} run ${context.runId} completed.`,
     `Run result: ${context.status}${exitCode}.`,
+    ...(context.sessionReport ? ['Session report:', context.sessionReport] : []),
+    '',
     `Progress: ${context.progress.label}.`,
     ...runCompletionEvidenceTargetLines(context),
     ...runCompletionEvidenceTrackingLines(context),
@@ -150,10 +158,12 @@ export function buildRunCompletionEvidenceCheck(run: unknown, ticket?: Ticket): 
   const strongSignal = positiveTestCount(context.testCount) || isPassingBuildStatus(context.build?.status) || isPassingSonar(context.sonarStatus);
   const cleanRun = runCleanForEvidence(context.record, context.exitCode);
   const isVerifyLocal = context.skill === 'verify-local';
+  const reportSummary = runCompletionEvidenceReportSummary(context.sessionReport);
   const summaryParts = [
     `run ${context.runId} ${context.status}${context.exitCode === undefined ? '' : ` exit ${context.exitCode}`}`,
     ...runCompletionEvidenceTargetSummaryParts(context),
     ...runCompletionEvidenceTrackingSummaryParts(context),
+    ...(reportSummary ? [`report: ${reportSummary}`] : []),
     `${context.progress.filesChanged} changed file${context.progress.filesChanged === 1 ? '' : 's'} from run events`,
     context.testCount === undefined ? 'test count not captured' : `${context.testCount} test${context.testCount === 1 ? '' : 's'}`,
     context.sonarStatus ? `SonarQube ${context.sonarStatus}` : 'SonarQube not captured',
@@ -165,7 +175,7 @@ export function buildRunCompletionEvidenceCheck(run: unknown, ticket?: Ticket): 
     result: isVerifyLocal ? (cleanRun ? 'warn' : 'fail') : cleanRun && strongSignal ? 'pass' : 'warn',
     environment: runCompletionEvidenceEnvironment(context),
     command: runCompletionEvidenceCommand(context.runId),
-    confidence: strongSignal || (isVerifyLocal && cleanRun) ? 'high' : 'medium',
+    confidence: strongSignal || (isVerifyLocal && cleanRun) || Boolean(context.sessionReport) ? 'high' : 'medium',
     summary: summaryParts.join('; '),
   };
 }
@@ -174,6 +184,8 @@ function runCompletionEvidenceContext(run: unknown, ticket?: Ticket): RunComplet
   const record = recordFromUnknown(run);
   const exitCode = Number(record['exitCode']);
   const skill = runString(record['skill']);
+  const logText = readRunCompletionLogText(record);
+  const sessionReport = runCompletionSessionReport(record, logText);
   return {
     record,
     runId: runString(record['id']) || 'unknown run',
@@ -187,6 +199,8 @@ function runCompletionEvidenceContext(run: unknown, ticket?: Ticket): RunComplet
     mrChangedFiles: mergeRequestChangedFileCount(ticket),
     sonarStatus: ticketSonarStatus(ticket),
     testCount: firstNumberField(record, ['testCount', 'tests', 'testsPassed', 'passedTests']),
+    logText,
+    sessionReport,
   };
 }
 
@@ -233,14 +247,186 @@ function runCompletionEvidenceTrackingSummaryParts(context: RunCompletionEvidenc
 
 function runCompletionEvidenceTrackingIds(context: RunCompletionEvidenceContext): string[] {
   if (context.skill !== 'verify-local') { return []; }
+  const verifiedIds = trackingIdsFromText([
+    context.sessionReport,
+    context.logText,
+    runEventDetails(context.record['events']).join('\n'),
+  ].filter(Boolean).join('\n'));
+  if (verifiedIds.length) {
+    return verifiedIds.slice(0, 12);
+  }
   const hints = runString(context.promptMetadata['verifyTrackingHints']);
   if (!hints || /^No explicit tracking/i.test(hints)) { return []; }
   const ids = hints
     .split(/\r?\n/)
     .map(line => line.replace(/^\s*[-*]\s*/, '').trim())
     .map(line => line.replace(/\s+\([^)]*\)\s*$/, '').trim())
+    .flatMap(line => trackingIdsFromText(line))
     .filter(Boolean);
   return [...new Set(ids)].slice(0, 12);
+}
+
+function runCompletionSessionReport(record: Record<string, unknown>, logText: string): string | undefined {
+  return compactEvidenceReport(
+    finalReportFromClaudeLog(logText)
+    || finalReportFromText(logText)
+    || finalReportFromEvents(record['events'])
+  );
+}
+
+function finalReportFromEvents(value: unknown): string | undefined {
+  const events = arrayFromUnknown(value).map(recordFromUnknown);
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    if (!event) { continue; }
+    const label = runString(event['label']);
+    const detail = runString(event['detail']);
+    const type = runString(event['type']);
+    const combined = [label, detail].filter(Boolean).join('\n').trim();
+    if (detail && (type === 'done' || looksLikeFinalReport(detail))) {
+      return detail;
+    }
+    if (combined && looksLikeFinalReport(combined)) {
+      return combined;
+    }
+  }
+  return undefined;
+}
+
+function finalReportFromClaudeLog(logText: string): string | undefined {
+  if (!logText.trim()) { return undefined; }
+  const reports: string[] = [];
+  for (const line of logText.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith('{')) { continue; }
+    try {
+      const payload = recordFromUnknown(JSON.parse(trimmed));
+      if (payload['type'] === 'result') {
+        const result = runString(payload['result']);
+        if (result) { reports.push(result); }
+      } else if (payload['type'] === 'assistant') {
+        const message = recordFromUnknown(payload['message']);
+        for (const block of arrayFromUnknown(message['content'])) {
+          const blockRecord = recordFromUnknown(block);
+          if (blockRecord['type'] === 'text') {
+            const text = runString(blockRecord['text']);
+            if (text) { reports.push(text); }
+          }
+        }
+      }
+    } catch {
+      // Ignore non-JSON log lines; stdout is a mixed stream on some Claude versions.
+    }
+  }
+  for (let index = reports.length - 1; index >= 0; index -= 1) {
+    const report = reports[index];
+    if (report && looksLikeFinalReport(report)) {
+      return report;
+    }
+  }
+  for (let index = reports.length - 1; index >= 0; index -= 1) {
+    const report = reports[index];
+    if (report && report.trim().length > 120) {
+      return report;
+    }
+  }
+  return undefined;
+}
+
+function finalReportFromText(text: string): string | undefined {
+  const trimmed = text.trim();
+  if (!trimmed) { return undefined; }
+  const markers = [
+    /(?:^|\n)\s*#{1,4}\s*(?:final\s+)?(?:verification\s+)?(?:summary|report|result|findings)\b/i,
+    /(?:^|\n)\s*(?:final\s+)?(?:verification\s+)?(?:summary|report|result|findings)\s*:/i,
+    /(?:^|\n)\s*verdict\s*:/i,
+  ];
+  for (const marker of markers) {
+    const match = marker.exec(trimmed);
+    if (match?.index !== undefined && match.index >= 0) {
+      return trimmed.slice(match.index).trim();
+    }
+  }
+  return undefined;
+}
+
+function looksLikeFinalReport(text: string): boolean {
+  return /final (summary|report)|verification (summary|report|result)|verdict|root cause|test results?|curl|x-tracking-?id|fix analysis|defect no longer reproduces|awaiting deployment/i.test(text);
+}
+
+function compactEvidenceReport(text: string | undefined, maxLength = 6000): string | undefined {
+  const trimmed = text?.trim();
+  if (!trimmed) { return undefined; }
+  if (trimmed.length <= maxLength) { return trimmed; }
+  return `${trimmed.slice(0, maxLength - 80).trimEnd()}\n\n[report truncated to ${maxLength} characters; see run log for full output]`;
+}
+
+function runCompletionEvidenceReportSummary(report: string | undefined): string | undefined {
+  const lines = report?.split(/\r?\n/)
+    .map(line => line.replace(/^\s*[#>*|:-]+\s*/, '').trim())
+    .filter(line => line && !/^[-:|]+$/.test(line));
+  if (!lines?.length) { return undefined; }
+  const preferred = lines.find(line => /verdict/i.test(line))
+    || lines.find(line => /fix|defect|pass|fail|success|awaiting deployment/i.test(line))
+    || lines.find(line => /root cause/i.test(line))
+    || lines[0];
+  return preferred ? compactSingleLine(preferred, 300) : undefined;
+}
+
+function trackingIdsFromText(text: string): string[] {
+  const ids: string[] = [];
+  const patterns = [
+    /\bX-Tracking-?Id\b["']?\s*[:=]\s*["']?([A-Za-z0-9][A-Za-z0-9._:-]{7,})/gi,
+    /\btracking[-_\s]?id\b["']?\s*[:=]\s*["']?([A-Za-z0-9][A-Za-z0-9._:-]{7,})/gi,
+  ];
+  for (const pattern of patterns) {
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(text)) !== null) {
+      const candidate = normalizeTrackingId(match[1]);
+      if (candidate && isUsefulTrackingId(candidate)) {
+        ids.push(candidate);
+      }
+    }
+  }
+  return [...new Set(ids)];
+}
+
+function normalizeTrackingId(value: string | undefined): string {
+  return String(value || '').replace(/^[<("{']+|[>)."',;]+$/g, '').trim();
+}
+
+function isUsefulTrackingId(value: string): boolean {
+  if (value.length < 8) { return false; }
+  if (/^[A-Za-z]+$/.test(value)) { return false; }
+  return /^[A-Za-z0-9][A-Za-z0-9._:-]+$/.test(value);
+}
+
+function readRunCompletionLogText(record: Record<string, unknown>): string {
+  const logPath = runString(record['logPath']);
+  if (!logPath) { return ''; }
+  try {
+    if (!fs.existsSync(logPath) || !isExistingRealPathInside(logPath, RUNS_DIR) || !fs.statSync(logPath).isFile()) {
+      return '';
+    }
+    const stat = fs.statSync(logPath);
+    const maxBytes = 128 * 1024;
+    const start = Math.max(0, stat.size - maxBytes);
+    const fd = fs.openSync(logPath, 'r');
+    try {
+      const buffer = Buffer.alloc(stat.size - start);
+      fs.readSync(fd, buffer, 0, buffer.length, start);
+      return buffer.toString('utf8');
+    } finally {
+      fs.closeSync(fd);
+    }
+  } catch {
+    return '';
+  }
+}
+
+function compactSingleLine(value: string, maxLength: number): string {
+  const singleLine = value.replace(/\s+/g, ' ').trim();
+  return singleLine.length <= maxLength ? singleLine : `${singleLine.slice(0, maxLength - 3)}...`;
 }
 
 export function evaluatePostRunReadiness(input: {
