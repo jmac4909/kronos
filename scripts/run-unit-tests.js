@@ -164,6 +164,8 @@ async function withPatchedModuleLoad(resolveReplacement, callback) {
 
 const promptManager = require('../out/services/promptManager.js');
 const promptWorkspaceModel = require('../out/services/promptWorkspaceModel.js');
+const verifyLocalPlan = require('../out/services/verifyLocalPlan.js');
+const claudeEnv = require('../out/services/claudeEnv.js');
 const stateStore = require('../out/services/stateStore.js');
 const queuePlanner = require('../out/services/queuePlanner.js');
 const queueDispatchPlan = require('../out/services/queueDispatchPlan.js');
@@ -797,6 +799,96 @@ test('prompt manager repairs missing required prompt templates without overwriti
   const second = promptManager.repairRequiredPromptTemplates(['verify-local', 'sonar-scan'], { promptDir });
   assert.deepEqual(second.created, []);
   assert.deepEqual(second.existing.sort(), ['sonar-scan', 'verify-local']);
+});
+
+test('verify-local prompt targeting preserves operator branch, environment, mode, and replay requirements', () => {
+  const t = ticket({
+    summary: 'Replay payment failure',
+    description: 'Customer saw request id REQ-4567 and correlation id corr-9999 fail on checkout.',
+    labels: ['incident-1234'],
+    jira_url: 'https://jira.example/K-VERIFY',
+    mr: {
+      iid: 44,
+      state: 'opened',
+      review_status: 'pending_review',
+      url: 'https://gitlab.example/mr/44',
+      source_branch: 'feature/K-VERIFY-fix',
+    },
+  });
+  const branches = verifyLocalPlan.buildVerifyLocalBranchTargets({
+    ticketKey: 'K-VERIFY',
+    ticket: t,
+    defaultBranch: 'develop',
+    currentBranch: 'bugfix/current-local',
+  });
+  assert.deepEqual(branches.map(branch => branch.branch), [
+    'bugfix/current-local',
+    'develop',
+    'feature/K-VERIFY-fix',
+    'feature/K-VERIFY',
+    'bugfix/K-VERIFY',
+  ]);
+  assert.equal(branches[0].checkout, 'current');
+  assert.equal(branches[1].ref, 'origin/develop');
+  assert.equal(verifyLocalPlan.buildCustomVerifyLocalBranchTarget('feature/OK-1').ref, 'origin/feature/OK-1');
+  assert.equal(verifyLocalPlan.buildCustomVerifyLocalBranchTarget('../bad'), undefined);
+
+  const environment = verifyLocalPlan.buildVerifyLocalEnvironmentTarget('DEV', {
+    projectName: 'pay-api',
+    env: { PAY_API_DEV_URL: 'https://dev.example/pay' },
+  });
+  assert.equal(environment.url, 'https://dev.example/pay');
+  const customEnvironment = verifyLocalPlan.buildVerifyLocalEnvironmentTarget('custom', { customUrl: 'https://custom.example/base' });
+  assert.equal(customEnvironment.url, 'https://custom.example/base');
+  assert.equal(verifyLocalPlan.normalizeHttpUrl('file:///tmp/nope'), undefined);
+
+  const mode = verifyLocalPlan.VERIFY_LOCAL_MODE_TARGETS.find(item => item.mode === 'confirm-fix-works');
+  const target = {
+    ticketKey: 'K-VERIFY',
+    projectName: 'pay-api',
+    branch: branches[2],
+    environment,
+    mode,
+    ticket: t,
+  };
+  const vars = verifyLocalPlan.buildVerifyLocalPromptVars(target);
+  assert.equal(vars.VERIFY_BRANCH, 'feature/K-VERIFY-fix');
+  assert.equal(vars.VERIFY_ENVIRONMENT_URL, 'https://dev.example/pay');
+  assert.match(vars.VERIFY_TRACKING_HINTS, /REQ-4567/);
+  assert.match(vars.VERIFY_TRACKING_HINTS, /corr-9999/);
+  assert.match(vars.VERIFY_REPLAY_STEPS, /Find the original request/);
+  assert.match(vars.VERIFY_REPLAY_STEPS, /reported failure no longer occurs/);
+  const promptText = verifyLocalPlan.buildVerifyLocalPromptText('Base prompt', vars);
+  assert.match(promptText, /Kronos verify-local targeting/);
+  assert.match(promptText, /before\/after evidence/);
+  assert.match(verifyLocalPlan.verifyLocalTargetSummary(target), /confirm fix works/);
+});
+
+test('verify-local repaired starter prompt includes branch, environment, mode, and replay variables', () => {
+  const promptDir = path.join(process.env.KRONOS_DIR, 'verify-local-repair-prompts');
+  const result = promptManager.repairRequiredPromptTemplates(['verify-local'], {
+    promptDir,
+    now: new Date('2026-07-07T12:00:00.000Z'),
+  });
+  assert.deepEqual(result.created, ['verify-local']);
+  const promptText = fs.readFileSync(path.join(promptDir, 'verify-local.md'), 'utf8');
+  for (const marker of [
+    '{{TICKET_KEY}}',
+    '{{VERIFY_PROJECT_NAME}}',
+    '{{VERIFY_BRANCH}}',
+    '{{VERIFY_BRANCH_REF}}',
+    '{{VERIFY_ENVIRONMENT}}',
+    '{{VERIFY_ENVIRONMENT_URL}}',
+    '{{VERIFY_MODE}}',
+    '{{VERIFY_TRACKING_HINTS}}',
+    '{{VERIFY_TICKET_CONTEXT}}',
+    '{{VERIFY_REPLAY_STEPS}}',
+    'First find the original request/tracking ID',
+    'Replay the original request against the chosen environment.',
+    'Compare before/after behavior',
+  ]) {
+    assert.ok(promptText.includes(marker), marker);
+  }
 });
 
 test('state store validates queue and ticket evidence shapes', () => {
@@ -9629,6 +9721,44 @@ test('provider reachability keeps request and URL errors unknown', () => {
   }
 });
 
+test('Claude env loader parses ~/.claude/.env without overwriting existing process values', () => {
+  const parsed = claudeEnv.parseClaudeDotEnv(`
+    # comment
+    export JIRA_API_TOKEN="token\\nline"
+    GITLAB_TOKEN=gitlab-secret # inline comment
+    SONAR_HOST_URL='https://sonar.example'
+    BAD-NAME=value
+    EMPTY=
+  `);
+  assert.equal(parsed.values.JIRA_API_TOKEN, 'token\nline');
+  assert.equal(parsed.values.GITLAB_TOKEN, 'gitlab-secret');
+  assert.equal(parsed.values.SONAR_HOST_URL, 'https://sonar.example');
+  assert.equal(parsed.values.EMPTY, '');
+  assert.equal(parsed.invalid, 1);
+
+  const env = { GITLAB_TOKEN: 'from-os' };
+  const result = claudeEnv.loadClaudeDotEnv({
+    filePath: '/home/test/.claude/.env',
+    env,
+    exists: filePath => filePath === '/home/test/.claude/.env',
+    readFile: () => 'GITLAB_TOKEN=from-file\nJIRA_API_TOKEN=from-file\n',
+  });
+  assert.equal(result.present, true);
+  assert.equal(result.parsed, 2);
+  assert.equal(result.loaded, 1);
+  assert.equal(result.skippedExisting, 1);
+  assert.equal(env.GITLAB_TOKEN, 'from-os');
+  assert.equal(env.JIRA_API_TOKEN, 'from-file');
+
+  const missing = claudeEnv.loadClaudeDotEnv({
+    filePath: '/home/test/.claude/missing.env',
+    env: {},
+    exists: () => false,
+  });
+  assert.equal(missing.present, false);
+  assert.equal(missing.loaded, 0);
+});
+
 test('doctor checks centralize command, credential, project config, and reachability inputs', async () => {
   fs.writeFileSync(path.join(process.env.KRONOS_SCRIPTS_DIR, 'kronos_state.py'), 'print("{}")\n');
   fs.writeFileSync(path.join(process.env.KRONOS_SCRIPTS_DIR, 'gitlab_api.py'), 'print("{}")\n');
@@ -12150,6 +12280,10 @@ test('extension activation tracks long-lived disposables', () => {
     'const hasActiveRuns = listRuns().some(run => isFreshActiveRun(run))',
     'if (hasActiveRuns || hadActiveRuns)',
     'return { dispose: () => clearInterval(timer) }',
+    "import { loadClaudeDotEnv } from './services/claudeEnv'",
+    'const envLoad = loadClaudeDotEnv();',
+    'envLoad.loaded',
+    'envLoad.skippedExisting',
   ]) {
     assert.ok(source.includes(marker), marker);
   }
@@ -12518,6 +12652,15 @@ test('extension queue command handlers normalize payloads before use', () => {
     "vscode.commands.registerCommand('kronos.openMrDiff', async (treeItem: unknown)",
     "vscode.commands.registerCommand('kronos.verifyLocal', async (treeItem: unknown)",
     'const ticketKey = resolveTicketKey(treeItem);',
+    'const projectName = await pickTicketProjectNameForDispatch(state, treeItem, ticketKey,',
+    'const branch = await pickVerifyLocalBranchTarget(state, ticketKey, ticket, projectName, projectPath);',
+    'const environment = await pickVerifyLocalEnvironmentTarget(projectName);',
+    'const mode = await pickVerifyLocalModeTarget();',
+    'const target: VerifyLocalPromptTarget = { ticketKey, projectName, branch, environment, mode, ticket };',
+    'const verifyVars = buildVerifyLocalPromptVars(target);',
+    "const verifyPrompt = loadPromptForDispatch(state, 'verify-local', verifyVars, projectPath);",
+    'customPrompt: buildVerifyLocalPromptText(verifyPrompt.text, verifyVars)',
+    "dispatchOptions.worktreeCheckout = 'ref';",
     'const queueData = resolveQueueCommandItem(treeItemOrData);',
     'pathProject: getProjectNameForPath(state.state?.projects, queueData.projectPath),',
     'const projs = dispatchPlan.projects;',
@@ -12556,6 +12699,8 @@ test('extension queue command handlers normalize payloads before use', () => {
     "vscode.commands.registerCommand('kronos.verifyLocal', async (treeItem: any)",
     'const ticketKey = treeItem?.ticketKey;',
     'const ticketKey = (treeItem?.item || treeItem)?.ticket;',
+    'const verifyPrompt = loadPromptForDispatch(state, \'verify-local\', { TICKET_KEY: ticketKey }, projectPath);',
+    'Will build, start app, replay the defect, and compare local vs test env.',
     'const queueData = treeItemOrData?.item || treeItemOrData;',
     'const idx = treeItem?.index;',
     'const mr = treeItem?.ticket?.mr;',

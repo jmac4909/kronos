@@ -259,6 +259,10 @@ export interface PromptRunMetadata {
   retryOfRunId?: string;
   handoff?: string;
   mergeRequestIid?: number;
+  verifyBranch?: string;
+  verifyEnvironment?: string;
+  verifyEnvironmentUrl?: string;
+  verifyMode?: string;
 }
 
 interface WorktreeCleanupResult {

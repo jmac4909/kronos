@@ -1,6 +1,6 @@
 # Kronos Integration Script Contract
 
-Kronos does not ship provider credentials. Runtime scripts are discovered from `KRONOS_SCRIPTS_DIR` or `~/.claude/scripts`, and sessions inherit the VS Code extension process environment. Kronos does not read `~/.claude/.env` or pass credential values on command lines.
+Kronos does not ship provider credentials. Runtime scripts are discovered from `KRONOS_SCRIPTS_DIR` or `~/.claude/scripts`, and sessions inherit the VS Code extension process environment. On activation the extension reads `~/.claude/.env` and merges values that are not already present in `process.env`, so Doctor checks, MR polling, and integration adapters can see the same credential file used by dispatched sessions. Kronos does not pass credential values on command lines.
 
 Required scripts:
 
@@ -70,4 +70,4 @@ pipeline_monitor.py --sonar-issues <sonar_project_key> --branch <branch>
 
 ## Dispatch Environment
 
-Dispatched Claude sessions inherit the VS Code extension process environment. Kronos sets a run-scoped temporary directory with `TMPDIR`, `TMP`, and `TEMP` so generated helper scripts can be cleaned up after the run. Operators should provide provider tokens through the parent VS Code environment or OS credential setup, not through `~/.claude/.env`.
+Dispatched Claude sessions inherit the VS Code extension process environment. Kronos sets a run-scoped temporary directory with `TMPDIR`, `TMP`, and `TEMP` so generated helper scripts can be cleaned up after the run. Operators may provide provider tokens through the parent VS Code environment, OS credential setup, or `~/.claude/.env`; existing parent environment values take precedence over values from the file.

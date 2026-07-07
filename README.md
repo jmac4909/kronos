@@ -6,7 +6,7 @@ Kronos is a VS Code extension for coordinating multi-project Claude Code work. I
 
 This build is ready for local human feedback, not marketplace release. The core extension compiles, packages, and has regression coverage for state validation, prompt governance, evidence gates, queue planning, run recovery, Spec Beanstalk workbook conversion, webview escaping, webview DOM interactions, and integration wrappers.
 
-The extension expects local operator state under `~/.claude/kronos` and optional integration scripts under `~/.claude/scripts`. Missing integrations should be surfaced through Kronos Doctor instead of crashing the UI. Human feedback mutation steps require an explicitly safe scratch ticket in that local state; the VSIX does not bundle sample tickets.
+The extension expects local operator state under `~/.claude/kronos` and optional integration scripts under `~/.claude/scripts`. On activation it reads `~/.claude/.env` into the extension process for provider credentials, preserving values already supplied by the OS or VS Code launcher. Missing integrations should be surfaced through Kronos Doctor instead of crashing the UI. Human feedback mutation steps require an explicitly safe scratch ticket in that local state; the VSIX does not bundle sample tickets.
 
 Recent Windows webview smoke evidence covers Jira Board, Run Center, Evidence Gate, and Human Review Inbox script readiness and click handling. Keep snapshot-specific lab details in `WINDOWS_FEEDBACK_2026-07-02.md`; the human feedback checklist remains the operator UX gate for the target review environment.
 
@@ -32,6 +32,7 @@ For extension-host testing from this repo, open the folder in VS Code and run th
 - Setup Wizard, Integration Contracts, and MR Autopilot: first-run readiness, script command contract checks, and a guarded review-loop control surface with pass-plan and preflight blockers.
 - Jira Board and Ticket Detail: filtering, modal actions, timeline, evidence ledger, links, builds, MRs, and acceptance criteria.
 - Run Center and Recovery Center: active/failed runs, archived records, logs, retry/resume/cancel paths, and unsafe worktree recovery.
+- Verify Local: operator-guided branch, environment, and mode targeting for before-fix reproduction and after-fix verification.
 - Evidence workflow: add notes/checks, evaluate gates, export markdown, handoff packet, and publish plan.
 - Planning workflow: queue planner, backlog triage, project batch plan, release batch plan, collision report, next two hours, and overnight candidates.
 - Spec Beanstalk: convert `.xlsx` API specs into Markdown plus JSON trace artifacts inside a Java repo, then start or continue Claude implementation against that generated source of truth.
