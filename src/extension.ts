@@ -330,13 +330,34 @@ function runNotificationCommandAction(
   });
 }
 
-async function openReviewView(): Promise<void> {
+async function openReviewView(revealReviewView?: () => Promise<boolean>): Promise<void> {
+  const errors: string[] = [];
   try {
     await vscode.commands.executeCommand('workbench.view.extension.kronos');
   } catch (e: unknown) {
-    console.warn(unknownErrorMessage(e, 'Could not reveal Kronos activity view.'));
+    errors.push(unknownErrorMessage(e, 'Could not reveal Kronos activity view.'));
   }
-  await vscode.commands.executeCommand('kronosReview.focus');
+  try {
+    await vscode.commands.executeCommand('kronosReview.focus');
+    return;
+  } catch (e: unknown) {
+    errors.push(unknownErrorMessage(e, 'Could not focus Kronos Review.'));
+  }
+  if (revealReviewView) {
+    try {
+      if (await revealReviewView()) { return; }
+    } catch (e: unknown) {
+      errors.push(unknownErrorMessage(e, 'Could not reveal first Kronos Review item.'));
+    }
+  }
+  try {
+    await vscode.commands.executeCommand('workbench.action.focusSideBar');
+    return;
+  } catch (e: unknown) {
+    errors.push(unknownErrorMessage(e, 'Could not focus VS Code sidebar.'));
+  }
+  console.warn(`Could not focus Kronos Review view. ${errors.join(' ')}`);
+  throw new Error(errors[errors.length - 1] || 'Could not focus Kronos Review view.');
 }
 
 function notifyNewReviewItems(reviewTree: ReviewTreeProvider, notifiedReviewKeys: Set<string>): void {
@@ -507,6 +528,8 @@ async function startTargetedTicketVerification(
     verifyMode: mode.mode,
   };
   if (environment.url) { promptMetadata.verifyEnvironmentUrl = environment.url; }
+  const trackingHints = verifyVars.VERIFY_TRACKING_HINTS;
+  if (trackingHints?.trim()) { promptMetadata.verifyTrackingHints = trackingHints; }
   const dispatchOptions: DispatchOptions = {
     onComplete: refreshAfterDispatch(state, projectName, ticketKey),
     customPrompt: buildVerifyLocalPromptText(verifyPrompt.text, verifyVars),
@@ -1414,6 +1437,7 @@ export function activate(context: vscode.ExtensionContext) {
   const sessionTree = new SessionTreeProvider(state);
   const taskTree = new TaskTreeProvider(state);
   const reviewTree = new ReviewTreeProvider(state, reviewSeenKeysStore(context.globalState));
+  let revealReviewView: (() => Promise<boolean>) | undefined;
   const notifiedReviewKeys = new Set<string>();
   const ticketTree = new TicketTreeProvider(state);
 
@@ -1471,6 +1495,13 @@ export function activate(context: vscode.ExtensionContext) {
         : undefined;
     };
     if (id === 'kronosReview') {
+      revealReviewView = async () => {
+        const first = (reviewTree.getChildren() as Array<vscode.TreeItem & { ticketKey?: string }>)
+          .find(item => Boolean(item.ticketKey));
+        if (!first) { return false; }
+        await (view as vscode.TreeView<vscode.TreeItem>).reveal(first, { select: true, focus: true });
+        return true;
+      };
       view.message = reviewPollTreeMessage();
       updateReviewBadge();
       context.subscriptions.push(reviewPollStatusEmitter.event(() => {
@@ -1630,7 +1661,7 @@ export function activate(context: vscode.ExtensionContext) {
     }),
 
     vscode.commands.registerCommand('kronos.openReview', async () => {
-      await openReviewView();
+      await openReviewView(revealReviewView);
     }),
 
     vscode.commands.registerCommand('kronos.openExternalUrl', async (url: string) => {

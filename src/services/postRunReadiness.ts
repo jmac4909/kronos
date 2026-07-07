@@ -132,6 +132,7 @@ export function buildRunCompletionEvidenceText(run: unknown, ticket?: Ticket): s
     `Run result: ${context.status}${exitCode}.`,
     `Progress: ${context.progress.label}.`,
     ...runCompletionEvidenceTargetLines(context),
+    ...runCompletionEvidenceTrackingLines(context),
     `Files changed: ${context.progress.filesChanged} from run events; ${context.mrChangedFiles === undefined ? 'MR file list not captured' : `${context.mrChangedFiles} in MR`}.`,
     `Test count: ${context.testCount === undefined ? 'not captured in run metadata' : context.testCount}.`,
     `SonarQube: ${context.sonarStatus || 'not captured in ticket state'}.`,
@@ -149,6 +150,7 @@ export function buildRunCompletionEvidenceCheck(run: unknown, ticket?: Ticket): 
   const summaryParts = [
     `run ${context.runId} ${context.status}${context.exitCode === undefined ? '' : ` exit ${context.exitCode}`}`,
     ...runCompletionEvidenceTargetSummaryParts(context),
+    ...runCompletionEvidenceTrackingSummaryParts(context),
     `${context.progress.filesChanged} changed file${context.progress.filesChanged === 1 ? '' : 's'} from run events`,
     context.testCount === undefined ? 'test count not captured' : `${context.testCount} test${context.testCount === 1 ? '' : 's'}`,
     context.sonarStatus ? `SonarQube ${context.sonarStatus}` : 'SonarQube not captured',
@@ -214,6 +216,28 @@ function runCompletionEvidenceTargetSummaryParts(context: RunCompletionEvidenceC
     `environment ${runCompletionEvidenceEnvironment(context)}`,
     `mode ${runString(context.promptMetadata['verifyMode']) || 'not captured'}`,
   ];
+}
+
+function runCompletionEvidenceTrackingLines(context: RunCompletionEvidenceContext): string[] {
+  const ids = runCompletionEvidenceTrackingIds(context);
+  return ids.length ? [`Tracking IDs used: ${ids.join(', ')}.`] : [];
+}
+
+function runCompletionEvidenceTrackingSummaryParts(context: RunCompletionEvidenceContext): string[] {
+  const ids = runCompletionEvidenceTrackingIds(context);
+  return ids.length ? [`tracking IDs ${ids.join(', ')}`] : [];
+}
+
+function runCompletionEvidenceTrackingIds(context: RunCompletionEvidenceContext): string[] {
+  if (context.skill !== 'verify-local') { return []; }
+  const hints = runString(context.promptMetadata['verifyTrackingHints']);
+  if (!hints || /^No explicit tracking/i.test(hints)) { return []; }
+  const ids = hints
+    .split(/\r?\n/)
+    .map(line => line.replace(/^\s*[-*]\s*/, '').trim())
+    .map(line => line.replace(/\s+\([^)]*\)\s*$/, '').trim())
+    .filter(Boolean);
+  return [...new Set(ids)].slice(0, 12);
 }
 
 export function evaluatePostRunReadiness(input: {

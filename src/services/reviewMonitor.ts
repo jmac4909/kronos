@@ -50,17 +50,16 @@ export function reviewTerminalMergeRequestActionKey(
 
 export function reviewMergeRequestNotificationKey(ticketKey: string, update: MergeRequestStatusUpdate): string {
   const mr = update.ticket.mr;
-  if (!mr) { return `${ticketKey}:mr:notify`; }
+  const notification = describeMergeRequestStatusChange(ticketKey, update);
+  const notificationKey = notification ? notification.message : 'notify';
+  if (!mr) { return `${ticketKey}:mr:notify:${notificationKey}`; }
   return [
     ticketKey,
     normalizedMergeRequestKey(mr.iid),
     'notify',
     mr.state,
     mr.review_status,
-    notificationValueKey(mr.comment_count),
-    mr.last_comment_at || '',
-    notificationValueKey(mr.unresolved_discussion_count),
-    mr.last_discussion_at || '',
+    notificationKey,
   ].join(':');
 }
 
@@ -72,8 +71,4 @@ function normalizedMergeRequestKey(value: number | string | undefined): string {
   if (typeof value === 'number' && Number.isFinite(value)) { return String(Math.trunc(value)); }
   if (typeof value === 'string' && value.trim()) { return value.trim(); }
   return 'mr';
-}
-
-function notificationValueKey(value: unknown): string {
-  return typeof value === 'number' && Number.isFinite(value) ? String(Math.floor(value)) : '';
 }

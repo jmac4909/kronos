@@ -1858,9 +1858,24 @@ test('review monitor decisions route merged, closed, comment, and no-op MR polls
   assert.notEqual(reviewMonitor.reviewMergeRequestNotificationKey('K-8', {
     ...notificationUpdate,
     ticket: ticket({
-      mr: { iid: 8, state: 'opened', review_status: 'pending_review', url: 'https://gitlab.example/8', comment_count: 3 },
+      mr: { iid: 8, state: 'opened', review_status: 'approved', url: 'https://gitlab.example/8', comment_count: 2 },
     }),
   }), notificationKey);
+  const discussionNotificationUpdate = {
+    ...baseUpdate,
+    previousMr: { iid: 9, state: 'opened', review_status: 'pending_review', url: 'https://gitlab.example/9', last_discussion_at: '2026-07-02T01:00:00.000Z' },
+    ticket: ticket({
+      mr: { iid: 9, state: 'opened', review_status: 'pending_review', url: 'https://gitlab.example/9', last_discussion_at: '2026-07-02T02:00:00.000Z' },
+    }),
+  };
+  const discussionNotificationKey = reviewMonitor.reviewMergeRequestNotificationKey('K-9', discussionNotificationUpdate);
+  assert.equal(reviewMonitor.reviewMergeRequestNotificationKey('K-9', {
+    ...discussionNotificationUpdate,
+    previousMr: { iid: 9, state: 'opened', review_status: 'pending_review', url: 'https://gitlab.example/9', last_discussion_at: '2026-07-02T02:00:00.000Z' },
+    ticket: ticket({
+      mr: { iid: 9, state: 'opened', review_status: 'pending_review', url: 'https://gitlab.example/9', last_discussion_at: '2026-07-02T03:00:00.000Z' },
+    }),
+  }), discussionNotificationKey);
 });
 
 test('deploy monitor handoff resolves projects and only suppresses handled runs', () => {
@@ -6451,6 +6466,7 @@ test('post-run evidence captures verify-local results with targeting metadata', 
       verifyBranch: 'feature/K-VERIFY',
       verifyEnvironment: 'local (mock)',
       verifyMode: 'confirm-fix-works',
+      verifyTrackingHints: '- REQ-4567 (from ticket description)\n- corr-9999 (from ticket description)\n- REQ-4567 (from ticket labels)',
     },
     events: [
       { type: 'text', label: 'Verification report', detail: 'Defect no longer reproduces', timestamp: '2026-07-07T12:00:00.000Z' },
@@ -6464,6 +6480,7 @@ test('post-run evidence captures verify-local results with targeting metadata', 
   assert.match(note, /Verification branch: feature\/K-VERIFY/);
   assert.match(note, /Verification environment: local \(mock\)/);
   assert.match(note, /Verification mode: confirm-fix-works/);
+  assert.match(note, /Tracking IDs used: REQ-4567, corr-9999/);
 
   const check = postRunReadiness.buildRunCompletionEvidenceCheck(run, currentTicket);
   assert.equal(check.name, 'Kronos verify-local result');
@@ -6471,6 +6488,7 @@ test('post-run evidence captures verify-local results with targeting metadata', 
   assert.equal(check.environment, 'local (mock)');
   assert.match(check.summary, /branch feature\/K-VERIFY/);
   assert.match(check.summary, /mode confirm-fix-works/);
+  assert.match(check.summary, /tracking IDs REQ-4567, corr-9999/);
 
   const duplicateTicket = ticket({
     next_action: 'verify',
@@ -7137,10 +7155,12 @@ test('dispatcher records branch and permission metadata for persisted runs', () 
     "'Bash(git commit *)'",
     "'Bash(mvn *)'",
     "'Bash(./mvnw *)'",
+    "'PowerShell(mvn *)'",
     'const RUN_LOOP_REPEAT_LIMIT = 4',
     'KRONOS_SESSION_GUARDRAILS',
     'Use inherited environment variables for provider credentials',
     'Do not read, grep, cat, print, source, or parse .env files',
+    'Always use Bash, never PowerShell.',
     '$KRONOS_RUN_TMPDIR or $TMPDIR',
     'function buildSessionAppendSystemPrompt',
     'const appendSystemPrompt = buildSessionAppendSystemPrompt(opts.appendSystemPrompt)',
@@ -11347,6 +11367,10 @@ test('post-run readiness distinguishes process completion from handoff readiness
     'function runCompletionEvidenceCheckName(skill: string): string',
     'function runCompletionEvidenceTargetLines(context: RunCompletionEvidenceContext): string[]',
     'function runCompletionEvidenceTargetSummaryParts(context: RunCompletionEvidenceContext): string[]',
+    'function runCompletionEvidenceTrackingLines(context: RunCompletionEvidenceContext): string[]',
+    'function runCompletionEvidenceTrackingSummaryParts(context: RunCompletionEvidenceContext): string[]',
+    'function runCompletionEvidenceTrackingIds(context: RunCompletionEvidenceContext): string[]',
+    "context.promptMetadata['verifyTrackingHints']",
     'interface RunCompletionEvidenceCheck',
     'function mergeRequestChangedFileCount(ticket?: Ticket): number | undefined',
     'normalizeChangedFiles(files).length',
@@ -12053,14 +12077,18 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'function reviewSeenKeysStore(globalState: vscode.Memento): ReviewSeenKeysStore',
     'new ReviewTreeProvider(state, reviewSeenKeysStore(context.globalState))',
     'reviewTree.getNewReviewCount()',
+    'let revealReviewView: (() => Promise<boolean>) | undefined',
     'view.badge = count > 0',
+    'await (view as vscode.TreeView<vscode.TreeItem>).reveal(first, { select: true, focus: true })',
     'reviewTree.onDidChangeNewReviewCount(updateReviewBadge)',
     'reviewTree.onDidChangeNewReviewCount(() => notifyNewReviewItems(reviewTree, notifiedReviewKeys))',
     'reviewTree.markVisibleReviewItemsSeen()',
     'function runNotificationCommandAction',
-    'async function openReviewView(): Promise<void>',
+    'async function openReviewView(revealReviewView?: () => Promise<boolean>): Promise<void>',
     "'workbench.view.extension.kronos'",
+    "'workbench.action.focusSideBar'",
     "vscode.commands.registerCommand('kronos.openReview'",
+    'await openReviewView(revealReviewView)',
     'function notifyNewReviewItems(reviewTree: ReviewTreeProvider, notifiedReviewKeys: Set<string>): void',
     'planNewReviewNotification(reviewTree.getNewReviewItems(), notifiedReviewKeys)',
     'notifiedReviewKeys.clear()',
@@ -13069,6 +13097,8 @@ test('extension queue command handlers normalize payloads before use', () => {
     'const verifyVars = buildVerifyLocalPromptVars(target);',
     "const verifyPrompt = loadPromptForDispatch(state, 'verify-local', verifyVars, projectPath);",
     'verifySurface: surface,',
+    'const trackingHints = verifyVars.VERIFY_TRACKING_HINTS',
+    'promptMetadata.verifyTrackingHints = trackingHints',
     'customPrompt: buildVerifyLocalPromptText(verifyPrompt.text, verifyVars)',
     "dispatchOptions.worktreeCheckout = 'ref';",
     'const queueData = resolveQueueCommandItem(treeItemOrData);',

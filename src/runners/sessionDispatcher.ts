@@ -47,6 +47,7 @@ const CLAUDE_ALLOWED_TOOL_PATTERNS = [
   'Bash(mvn *)',
   'Bash(mvnw *)',
   'Bash(./mvnw *)',
+  'PowerShell(mvn *)',
   'Bash(python *)',
   'Bash(python3 *)',
   'Bash(py *)',
@@ -75,6 +76,7 @@ const KRONOS_SESSION_GUARDRAILS = [
   'Kronos session guardrails:',
   '- Use inherited environment variables for provider credentials. Do not read, grep, cat, print, source, or parse .env files, and never pass token values in command arguments or logs.',
   '- Put throwaway helper scripts and scratch files under $KRONOS_RUN_TMPDIR or $TMPDIR, and remove them before finishing when practical.',
+  '- Always use Bash, never PowerShell.',
   '- If a tool permission, approval, or command retry loop repeats, stop and report the blocker instead of retrying the same command.',
   '- Maven and git commit flows are allowed when required by the task; run focused checks before reporting completion.',
 ].join('\n');
@@ -278,6 +280,7 @@ export interface PromptRunMetadata {
   verifyEnvironment?: string;
   verifyEnvironmentUrl?: string;
   verifyMode?: string;
+  verifyTrackingHints?: string;
 }
 
 interface WorktreeCleanupResult {
