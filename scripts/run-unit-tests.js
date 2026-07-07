@@ -7155,9 +7155,15 @@ test('dispatcher treats post-completion errors as attention outcomes', async () 
       statusColor: '#4caf50',
       statusText: 'Complete',
     });
-    assert.equal(dispatcher.progressPanelTitle('app', 'verify-local', errorThenDone), '$(check) Kronos: app (verify-local)');
-    assert.equal(dispatcher.progressPanelTitle('app', 'implement', [{ type: 'text', label: 'Starting', detail: '', timestamp: new Date() }]), '$(sync~spin) Kronos: app (implement)');
-    assert.equal(dispatcher.progressPanelTitle('app', 'verify-local', doneThenError), '$(error) Kronos: app (verify-local)');
+    assert.equal(dispatcher.progressPanelTitle('app', 'verify-local', errorThenDone), '[DONE] Kronos: app (verify-local)');
+    assert.equal(dispatcher.progressPanelTitle('app', 'implement', [{ type: 'text', label: 'Starting', detail: '', timestamp: new Date() }]), '[RUNNING] Kronos: app (implement)');
+    assert.equal(dispatcher.progressPanelTitle('app', 'verify-local', doneThenError), '[FAIL] Kronos: app (verify-local)');
+    assert.equal(dispatcher.stderrProgressEvent('Sandbox disabled on Windows by enterprise policy'), undefined);
+    assert.equal(dispatcher.stderrProgressEvent('Warning: Sandbox disabled'), undefined);
+    assert.equal(dispatcher.stderrProgressEvent('npm WARN using fallback'), undefined);
+    const stderrError = dispatcher.stderrProgressEvent('fatal claude failure', new Date('2026-07-01T10:00:04.000Z'));
+    assert.equal(stderrError.type, 'error');
+    assert.equal(stderrError.label, 'fatal claude failure');
   });
 });
 
@@ -7288,9 +7294,12 @@ test('dispatcher records branch and permission metadata for persisted runs', () 
     "export function progressStatusPresentation(events: ProgressEvent[], run?: Pick<KronosRun, 'status'>)",
     "export function progressPanelTitle(project: string, skill: string, events: ProgressEvent[], run?: Pick<KronosRun, 'status'>): string",
     "panel.title = progressPanelTitle(project, skill, events, run)",
-    "'$(sync~spin)'",
-    "'$(check)'",
-    "'$(error)'",
+    "'[RUNNING]'",
+    "'[DONE]'",
+    "'[FAIL]'",
+    'export function stderrProgressEvent(text: string, now = new Date()): ProgressEvent | undefined',
+    'function isNonErrorClaudeStderr(text: string): boolean',
+    'sandbox(?:ing)?\\s+disabled',
     'const statusPresentation = progressStatusPresentation(events, run)',
     "statusText: 'Needs Attention'",
     'const sessionStart = progressDateOr(session.startedAt, new Date())',

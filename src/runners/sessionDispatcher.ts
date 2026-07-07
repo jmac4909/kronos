@@ -365,12 +365,12 @@ function renderProgressPanel(panel: vscode.WebviewPanel, project: string, skill:
 
 export function progressPanelTitle(project: string, skill: string, events: ProgressEvent[], run?: Pick<KronosRun, 'status'>): string {
   const statusPresentation = progressStatusPresentation(events, run);
-  const icon = statusPresentation.statusText === 'Complete'
-    ? '$(check)'
+  const prefix = statusPresentation.statusText === 'Complete'
+    ? '[DONE]'
     : statusPresentation.statusText === 'Working...'
-    ? '$(sync~spin)'
-    : '$(error)';
-  return `${icon} Kronos: ${project} (${skill})`;
+    ? '[RUNNING]'
+    : '[FAIL]';
+  return `${prefix} Kronos: ${project} (${skill})`;
 }
 
 function createRun(project: string, projectPath: string, skill: string, ticket: string, model: string, prompt: string, cwd: string, promptMetadata?: PromptRunMetadata): KronosRun {
@@ -1170,8 +1170,8 @@ export async function dispatchClaudeSession(
   proc.stderr.on('data', (data: Buffer) => {
     const text = data.toString().trim();
     appendRunLog(run, data.toString());
-    if (text && !text.includes('npm') && !text.includes('WARN')) {
-      const event = { type: 'error' as const, label: text.substring(0, 200), detail: '', timestamp: new Date() };
+    const event = stderrProgressEvent(text);
+    if (event) {
       recordProgressEvent(event);
     }
   });
@@ -1388,6 +1388,20 @@ export function parseStreamEvents(event: unknown): ProgressEvent[] {
     return [{ type: 'done', label: `Complete — ${duration}`, detail: result, timestamp: now }];
   }
   return [];
+}
+
+export function stderrProgressEvent(text: string, now = new Date()): ProgressEvent | undefined {
+  const trimmed = text.trim();
+  if (!trimmed || isNonErrorClaudeStderr(trimmed)) {
+    return undefined;
+  }
+  return { type: 'error', label: trimmed.substring(0, 200), detail: '', timestamp: now };
+}
+
+function isNonErrorClaudeStderr(text: string): boolean {
+  return text.includes('npm')
+    || /\bWARN(?:ING)?\b/i.test(text)
+    || /sandbox(?:ing)?\s+disabled/i.test(text);
 }
 
 function parseAssistantContentBlock(rawBlock: unknown, now: Date): ProgressEvent | null {
