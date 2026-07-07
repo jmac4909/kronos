@@ -68,7 +68,7 @@ Edit TypeScript -> `npm run compile` -> package -> install -> reload. Or open th
 ### Prompts (`~/.claude/kronos/prompts/`)
 All dispatched Claude sessions use prompt templates from `.md` files with `{{VARIABLE}}` substitution:
 - `implement-system.md` — rules for implement sessions (build, test, sonar, app startup)
-- `verify-local.md` — single ticket local verification
+- `verify-local.md` — single ticket verification for local branch-targeted and remote deployed-environment checks
 - `verify-develop.md` — verify all merged tickets on develop
 - `verify-combined.md` — verify branches merged together
 - `sonar-scan.md`, `sonar-fix.md`, `sonar-fix-branch.md` — SonarQube scan and fix
@@ -90,7 +90,7 @@ All dispatched Claude sessions use prompt templates from `.md` files with `{{VAR
 All actions dispatch via `dispatchClaudeSession()` which:
 1. Opens progress WebView panel immediately
 2. Checks GCP auth via `ensureAuth()`
-3. Creates worktree if `parallel: true` (feature branches use local name, develop uses `origin/develop`)
+3. Creates worktree if `parallel: true` (feature branches use local name, read-only scan/verify flows use `origin/<branch>` refs)
 4. Spawns `claude -p` with `--output-format stream-json --verbose`
 5. Parses stream events into progress panel in real time
 6. Persists a run record with prompt, log, branch/worktree, status, and recovery metadata
@@ -100,6 +100,7 @@ All actions dispatch via `dispatchClaudeSession()` which:
 ### Worktree Strategy
 - Managed sessions fetch `origin`, create a worktree with `git worktree add`, and do not switch branches in the main worktree.
 - Feature-branch sessions strip the `origin/` prefix before checkout so `git push` can work from the worktree.
+- Sonar scan/fix and broader verify flows run in managed worktrees; targeted Verify Remote does not choose or checkout a branch and hits the selected deployed environment as-is.
 - After creating a worktree, Kronos attempts `git pull --ff-only`.
 - Cleanup only removes tracked worktrees that are clean and have no unpushed branch state. Dirty worktrees or branches without matching remotes are sent to Recovery Center for manual review.
 
@@ -123,4 +124,4 @@ Tickets are top-level (not nested under projects). Each ticket has `projects: st
 
 - Claude Code CLI must be available for dispatched sessions.
 - GCloud auth is required when using Vertex-backed Claude profiles.
-- Jira, GitLab, Jenkins, and Sonar integrations are optional script-backed providers. Missing providers should surface through Kronos Doctor instead of crashing UI panels.
+- Jira and Sonar integrations are script-backed; GitLab MR polling uses native REST with inherited environment credentials. Missing providers should surface through Kronos Doctor instead of crashing UI panels.

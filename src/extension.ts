@@ -186,6 +186,7 @@ import {
   buildVerifyLocalEnvironmentTarget,
   buildVerifyLocalPromptText,
   buildVerifyLocalPromptVars,
+  buildVerifyRemoteDeploymentTarget,
   normalizeHttpUrl,
   verifyLocalTargetSummary,
   type VerifyLocalBranchTarget,
@@ -441,6 +442,75 @@ async function startClaudeDispatch(
     vscode.window.showErrorMessage(unknownErrorMessage(e, `Failed to start ${skill} session.`));
     return false;
   }
+}
+
+type TargetedVerificationSurface = 'local' | 'remote';
+
+async function startTargetedTicketVerification(
+  state: KronosState,
+  treeItem: unknown,
+  surface: TargetedVerificationSurface,
+): Promise<void> {
+  const ticketKey = resolveTicketKey(treeItem);
+  if (!ticketKey || !state.state) {
+    vscode.window.showErrorMessage('No ticket selected.');
+    return;
+  }
+  const ticket = state.state.tickets[ticketKey];
+  const projectName = await pickTicketProjectNameForDispatch(
+    state,
+    treeItem,
+    ticketKey,
+    surface === 'remote' ? `Verify ${ticketKey} against which remote project?` : `Verify ${ticketKey} locally in which project?`,
+  );
+  if (!projectName) { return; }
+  const projectPath = getProjectPath(state.state?.projects, projectName);
+  if (!projectPath) { return; }
+
+  let branch: VerifyLocalBranchTarget | undefined;
+  let environment: VerifyLocalEnvironmentTarget | undefined;
+  if (surface === 'remote') {
+    environment = await pickVerifyLocalEnvironmentTarget(projectName, { remoteOnly: true });
+    if (!environment) { return; }
+    branch = buildVerifyRemoteDeploymentTarget(environment);
+  } else {
+    branch = await pickVerifyLocalBranchTarget(state, ticketKey, ticket, projectName, projectPath);
+    if (!branch) { return; }
+    environment = await pickVerifyLocalEnvironmentTarget(projectName);
+    if (!environment) { return; }
+  }
+  const mode = await pickVerifyLocalModeTarget();
+  if (!mode) { return; }
+  const target: VerifyLocalPromptTarget = { ticketKey, projectName, branch, environment, mode, ticket };
+  const confirm = await vscode.window.showInformationMessage(
+    `Start targeted ${surface === 'remote' ? 'verify-remote' : 'verify-local'} for ${verifyLocalTargetSummary(target)}`,
+    'Start Verification', 'Cancel'
+  );
+  if (confirm !== 'Start Verification') { return; }
+
+  const verifyVars = buildVerifyLocalPromptVars(target);
+  const verifyPrompt = loadPromptForDispatch(state, 'verify-local', verifyVars, projectPath);
+  const promptMetadata: PromptRunMetadata = {
+    ...verifyPrompt.metadata,
+    verifySurface: surface,
+    verifyBranch: branch.branch,
+    verifyEnvironment: environment.promptValue,
+    verifyMode: mode.mode,
+  };
+  if (environment.url) { promptMetadata.verifyEnvironmentUrl = environment.url; }
+  const dispatchOptions: DispatchOptions = {
+    onComplete: refreshAfterDispatch(state, projectName, ticketKey),
+    customPrompt: buildVerifyLocalPromptText(verifyPrompt.text, verifyVars),
+    promptMetadata,
+    projectNameOverride: projectName,
+  };
+  if (branch.checkout === 'ref') {
+    dispatchOptions.parallel = true;
+    dispatchOptions.worktreeBranch = branch.ref;
+    dispatchOptions.worktreeCheckout = 'ref';
+  }
+
+  await startClaudeDispatch(projectPath, 'verify-local', ticketKey, dispatchOptions);
 }
 
 function agingThresholdsFromConfig(): Partial<AgingThresholds> {
@@ -2710,52 +2780,11 @@ export function activate(context: vscode.ExtensionContext) {
     }),
 
     vscode.commands.registerCommand('kronos.verifyLocal', async (treeItem: unknown) => {
-      const ticketKey = resolveTicketKey(treeItem);
-      if (!ticketKey || !state.state) {
-        vscode.window.showErrorMessage('No ticket selected.');
-        return;
-      }
-      const ticket = state.state.tickets[ticketKey];
-      const projectName = await pickTicketProjectNameForDispatch(state, treeItem, ticketKey, `Verify ${ticketKey} in which project?`);
-      if (!projectName) { return; }
-      const projectPath = getProjectPath(state.state?.projects, projectName);
-      if (!projectPath) { return; }
+      await startTargetedTicketVerification(state, treeItem, 'local');
+    }),
 
-      const branch = await pickVerifyLocalBranchTarget(state, ticketKey, ticket, projectName, projectPath);
-      if (!branch) { return; }
-      const environment = await pickVerifyLocalEnvironmentTarget(projectName);
-      if (!environment) { return; }
-      const mode = await pickVerifyLocalModeTarget();
-      if (!mode) { return; }
-      const target: VerifyLocalPromptTarget = { ticketKey, projectName, branch, environment, mode, ticket };
-      const confirm = await vscode.window.showInformationMessage(
-        `Start targeted verify-local for ${verifyLocalTargetSummary(target)}`,
-        'Start Verification', 'Cancel'
-      );
-      if (confirm !== 'Start Verification') { return; }
-
-      const verifyVars = buildVerifyLocalPromptVars(target);
-      const verifyPrompt = loadPromptForDispatch(state, 'verify-local', verifyVars, projectPath);
-      const promptMetadata: PromptRunMetadata = {
-        ...verifyPrompt.metadata,
-        verifyBranch: branch.branch,
-        verifyEnvironment: environment.promptValue,
-        verifyMode: mode.mode,
-      };
-      if (environment.url) { promptMetadata.verifyEnvironmentUrl = environment.url; }
-      const dispatchOptions: DispatchOptions = {
-        onComplete: refreshAfterDispatch(state, projectName, ticketKey),
-        customPrompt: buildVerifyLocalPromptText(verifyPrompt.text, verifyVars),
-        promptMetadata,
-        projectNameOverride: projectName,
-      };
-      if (branch.checkout === 'ref') {
-        dispatchOptions.parallel = true;
-        dispatchOptions.worktreeBranch = branch.ref;
-        dispatchOptions.worktreeCheckout = 'ref';
-      }
-
-      await startClaudeDispatch(projectPath, 'verify-local', ticketKey, dispatchOptions);
+    vscode.commands.registerCommand('kronos.verifyRemote', async (treeItem: unknown) => {
+      await startTargetedTicketVerification(state, treeItem, 'remote');
     }),
 
     vscode.commands.registerCommand('kronos.sonarScan', async (item: unknown) => {
@@ -3100,6 +3129,9 @@ export function activate(context: vscode.ExtensionContext) {
         },
         customPrompt: prompt.text,
         promptMetadata: prompt.metadata,
+        parallel: true,
+        worktreeBranch: remoteBranchRef(getProjectBaseBranch(state, projectName)),
+        worktreeCheckout: 'ref',
       });
     }),
 
@@ -3138,6 +3170,9 @@ export function activate(context: vscode.ExtensionContext) {
         onComplete: refreshAfterDispatch(state, projectName),
         customPrompt: prompt.text,
         promptMetadata: prompt.metadata,
+        parallel: true,
+        worktreeBranch: remoteBranchRef(getProjectBaseBranch(state, projectName)),
+        worktreeCheckout: 'ref',
       });
     }),
 
@@ -3233,6 +3268,9 @@ export function activate(context: vscode.ExtensionContext) {
         onComplete: refreshAfterDispatch(state, projectName),
         customPrompt: combinedPrompt.text,
         promptMetadata: combinedPrompt.metadata,
+        parallel: true,
+        worktreeBranch: remoteBranchRef(getProjectBaseBranch(state, projectName)),
+        worktreeCheckout: 'ref',
       });
     }),
 
@@ -5119,14 +5157,28 @@ interface VerifyLocalEnvironmentQuickPickItem extends vscode.QuickPickItem {
   targetEnvironment: VerifyLocalEnvironmentKind;
 }
 
-async function pickVerifyLocalEnvironmentTarget(projectName: string): Promise<VerifyLocalEnvironmentTarget | undefined> {
-  const items: VerifyLocalEnvironmentQuickPickItem[] = [
+interface VerifyLocalEnvironmentPickOptions {
+  remoteOnly?: boolean;
+}
+
+async function pickVerifyLocalEnvironmentTarget(
+  projectName: string,
+  options: VerifyLocalEnvironmentPickOptions = {},
+): Promise<VerifyLocalEnvironmentTarget | undefined> {
+  const allItems: VerifyLocalEnvironmentQuickPickItem[] = [
     { label: 'local (mock)', description: 'Replay against local app plus mocks', targetEnvironment: 'local' },
     { label: 'DEV', description: 'Replay against DEV environment', targetEnvironment: 'DEV' },
     { label: 'TEST', description: 'Replay against TEST environment', targetEnvironment: 'TEST' },
     { label: 'Custom URL...', description: 'Replay against an operator-provided HTTP(S) endpoint', targetEnvironment: 'custom' },
   ];
-  const picked = await vscode.window.showQuickPick(items, { placeHolder: 'Select verification environment' });
+  const items = options.remoteOnly
+    ? allItems.filter(item => item.targetEnvironment !== 'local')
+    : allItems;
+  const picked = await vscode.window.showQuickPick(items, {
+    placeHolder: options.remoteOnly
+      ? 'Select remote verification environment'
+      : 'Select verification environment',
+  });
   if (!picked) { return undefined; }
   if (picked.targetEnvironment === 'custom') {
     const url = await vscode.window.showInputBox({

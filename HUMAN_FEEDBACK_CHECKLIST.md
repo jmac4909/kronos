@@ -47,7 +47,7 @@ For mutation steps, use a scratch ticket that already exists in the reviewer's l
 7. Open Queue Planner, Backlog Triage, Next Best Action, Plan Next 2 Hours, and Overnight Candidates. Check whether each recommendation explains why it is next.
 8. Open Setup Wizard, Integration Contracts, and MR Autopilot. Confirm setup blockers, script command contracts, guarded MR polling, pass-plan counts, preflight blockers, and next-action flow are understandable.
 9. Open Spec Beanstalk. Confirm the panel makes the two modes clear: generate `.xlsx` spec artifacts into a Java repo, or start/continue Claude implementation from the generated spec, and that traceability from workbook formatting to Markdown/JSON artifacts is inspectable.
-10. Run Verify Local on a safe scratch ticket if available. Confirm it asks for project, branch, environment, and before-fix vs after-fix mode before dispatching.
+10. Run Verify Local and Verify Remote on a safe scratch ticket if available. Confirm local asks for project, branch, environment, and before-fix vs after-fix mode; confirm remote asks for project, remote environment, and mode without offering a branch picker.
 11. Open Run Center. Inspect saved runs, logs, status labels, recovery actions, retry/resume affordances, and archive behavior.
 12. Open Recovery Center and Human Review Inbox. Confirm the highest-risk item is easy to identify.
 13. Open Kronos Doctor, Integration Manifest, Profile Manager, Prompt Manager, Prompt Smoke Tests, Prompt History, Trend Metrics, Agent Quality, and Aging Report. Confirm Agent Quality explains recurring failure themes, not just the numeric score.
@@ -82,6 +82,7 @@ This build is ready for broader feedback when:
 - `npm run feedback:smoke` opens and checks rendered fixture content/action wiring for the dashboard, board, ticket detail, evidence gate, evidence handoff, run center, recovery center, human review inbox, doctor, prompt manager, queue planner, backlog triage, and Spec Beanstalk.
 - Dashboard, Board, Ticket Detail, Run Center, Evidence Gate, Recovery Center, Doctor, and Prompt Manager all open without runtime errors.
 - Setup Wizard, Integration Contracts, and MR Autopilot all open without runtime errors and explain whether automation is safe to continue.
-- Verify Local prompts for branch, environment, and reproduction/fix-confirmation mode before dispatch.
+- Verify Local prompts for branch, environment, and reproduction/fix-confirmation mode before dispatch. Verify Remote prompts for remote environment and mode only; the branch is whatever is deployed in that environment.
+- Sonar scan/fix, Verify Develop, Verify TEST, and Verify Combined create managed worktrees rather than switching the main checkout.
 - Spec Beanstalk opens without runtime errors and clearly separates generate-only from start/continue Claude implementation.
 - A human reviewer can complete the smoke flow and provide feedback without reading implementation files.

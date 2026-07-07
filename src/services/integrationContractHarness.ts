@@ -7,6 +7,7 @@ export type IntegrationContractCheckStatus = 'pass' | 'warn' | 'fail';
 export interface IntegrationContractExpectation {
   id: string;
   script: string;
+  requiresScript?: boolean;
   command: string;
   purpose: string;
   requiredText: string[];
@@ -36,32 +37,36 @@ export const INTEGRATION_CONTRACT_EXPECTATIONS: IntegrationContractExpectation[]
     requiredText: ['--ticket-comments', 'comments'],
   },
   {
-    id: 'gitlab-mr-status',
-    script: 'gitlab_api.py',
-    command: 'gitlab_api.py --mr-status <gitlab_project_id> <mr_iid>',
+    id: 'gitlab-rest-mr-status',
+    script: 'native GitLab REST',
+    requiresScript: false,
+    command: 'GET /api/v4/projects/<project_id>/merge_requests/<mr_iid> plus notes, discussions, and approvals',
     purpose: 'Poll MR state, review status, comments, and discussions.',
-    requiredText: ['--mr-status', '<gitlab_project_id>', '<mr_iid>'],
+    requiredText: ['GET /api/v4/projects/<project_id>/merge_requests/<mr_iid>', 'notes', 'discussions'],
   },
   {
-    id: 'gitlab-mr-diff',
-    script: 'gitlab_api.py',
-    command: 'gitlab_api.py --mr-diff <gitlab_project_id> <mr_iid>',
+    id: 'gitlab-rest-mr-diff',
+    script: 'native GitLab REST',
+    requiresScript: false,
+    command: 'GET /api/v4/projects/<project_id>/merge_requests/<mr_iid>/diffs',
     purpose: 'Fetch changed files for review hints and diff panels.',
-    requiredText: ['--mr-diff', 'files'],
+    requiredText: ['GET /api/v4/projects/<project_id>/merge_requests/<mr_iid>/diffs', 'files'],
   },
   {
-    id: 'gitlab-mr-branch',
-    script: 'gitlab_api.py',
-    command: 'gitlab_api.py --mr-branch <gitlab_project_id> <mr_iid>',
+    id: 'gitlab-rest-mr-branch',
+    script: 'native GitLab REST',
+    requiresScript: false,
+    command: 'GET /api/v4/projects/<project_id>/merge_requests/<mr_iid>',
     purpose: 'Resolve the source branch for verify/fix flows.',
-    requiredText: ['--mr-branch', 'branch'],
+    requiredText: ['source_branch', 'target_branch'],
   },
   {
-    id: 'gitlab-project-id',
-    script: 'gitlab_api.py',
-    command: 'gitlab_api.py --project-id <namespace/project>',
+    id: 'gitlab-rest-project-id',
+    script: 'native GitLab REST',
+    requiresScript: false,
+    command: 'GET /api/v4/projects/<namespace%2Fproject>',
     purpose: 'Resolve stable GitLab numeric project IDs for registered repos.',
-    requiredText: ['--project-id', 'id'],
+    requiredText: ['GET /api/v4/projects/<namespace%2Fproject>', 'id'],
   },
   {
     id: 'sonar-project-key',
@@ -108,15 +113,19 @@ export function buildIntegrationContractReport(input: {
   const scripts = input.scripts || requiredScripts();
   const scriptByName = new Map(scripts.map(script => [script.name, script]));
   const checks = INTEGRATION_CONTRACT_EXPECTATIONS.map(expectation => {
-    const script = scriptByName.get(expectation.script as ScriptHealth['name']);
     const missingText = expectation.requiredText.filter(text => !docText.includes(text));
-    if (!script?.present) {
-      return contractCheck(expectation, 'fail', `${expectation.script} is missing from the script bundle.`);
+    if (expectation.requiresScript !== false) {
+      const script = scriptByName.get(expectation.script as ScriptHealth['name']);
+      if (!script?.present) {
+        return contractCheck(expectation, 'fail', `${expectation.script} is missing from the script bundle.`);
+      }
     }
     if (missingText.length > 0) {
       return contractCheck(expectation, 'warn', `Contract docs are missing: ${missingText.join(', ')}.`);
     }
-    return contractCheck(expectation, 'pass', 'Script is present and contract text is documented.');
+    return contractCheck(expectation, 'pass', expectation.requiresScript === false
+      ? 'Native REST contract text is documented.'
+      : 'Script is present and contract text is documented.');
   });
   const failures = checks.filter(check => check.status === 'fail').length;
   const warnings = checks.filter(check => check.status === 'warn').length;

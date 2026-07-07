@@ -9,7 +9,7 @@ import { definedValues, isRecord } from './records';
 const SCRIPTS_DIR = process.env['KRONOS_SCRIPTS_DIR'] || path.join(os.homedir(), '.claude', 'scripts');
 const PYTHON = findPython();
 
-export type RequiredScriptName = 'kronos_state.py' | 'pipeline_monitor.py' | 'gitlab_api.py';
+export type RequiredScriptName = 'kronos_state.py' | 'pipeline_monitor.py';
 
 export interface ScriptRunOptions {
   timeout?: number;
@@ -48,7 +48,7 @@ export function isKronosScriptMissingError(error: unknown): boolean {
 
 const DEFAULT_TIMEOUT = 60000;
 const DEFAULT_BUFFER = 10 * 1024 * 1024;
-const REQUIRED_SCRIPT_NAMES = new Set<RequiredScriptName>(['kronos_state.py', 'pipeline_monitor.py', 'gitlab_api.py']);
+const REQUIRED_SCRIPT_NAMES = new Set<RequiredScriptName>(['kronos_state.py', 'pipeline_monitor.py']);
 const MISSING_SCRIPT_MESSAGE_PREFIX = 'Kronos integration script unavailable: ';
 const MISSING_SCRIPT_MESSAGE_SUFFIX = '. Run Kronos: Doctor for setup details.';
 
@@ -119,10 +119,6 @@ async function runJsonScript<T = unknown>(scriptName: RequiredScriptName, args: 
 
 export function runKronosStateScript(args: string[], options: ScriptRunOptions = {}): string {
   return runPythonScriptSync('kronos_state.py', args, options);
-}
-
-export function runGitlabJson<T = unknown>(args: string[], options: ScriptRunOptions = {}): Promise<T> {
-  return runJsonScript<T>('gitlab_api.py', args, options);
 }
 
 export function runPipelineJson<T = unknown>(args: string[], options: ScriptRunOptions = {}): Promise<T> {

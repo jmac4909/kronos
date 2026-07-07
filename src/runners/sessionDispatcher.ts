@@ -39,7 +39,14 @@ const CLAUDE_PATH = process.env['CLAUDE_PATH'] || 'claude';
 const CLAUDE_PERMISSION_MODE = 'acceptEdits';
 const CLAUDE_ALLOWED_TOOL_PATTERNS = [
   'Bash(git *)',
+  'Bash(git status *)',
+  'Bash(git diff *)',
+  'Bash(git add *)',
+  'Bash(git commit *)',
+  'Bash(git push *)',
   'Bash(mvn *)',
+  'Bash(mvnw *)',
+  'Bash(./mvnw *)',
   'Bash(python *)',
   'Bash(python3 *)',
   'Bash(py *)',
@@ -63,7 +70,14 @@ const CLAUDE_ALLOWED_TOOL_PATTERNS = [
   'PowerShell(Get-Process *)',
 ];
 const CLAUDE_ALLOWED_TOOLS = CLAUDE_ALLOWED_TOOL_PATTERNS.join(' ');
-const RUN_LOOP_REPEAT_LIMIT = 8;
+const RUN_LOOP_REPEAT_LIMIT = 4;
+const KRONOS_SESSION_GUARDRAILS = [
+  'Kronos session guardrails:',
+  '- Use inherited environment variables for provider credentials. Do not read, grep, cat, print, source, or parse .env files, and never pass token values in command arguments or logs.',
+  '- Put throwaway helper scripts and scratch files under $KRONOS_RUN_TMPDIR or $TMPDIR, and remove them before finishing when practical.',
+  '- If a tool permission, approval, or command retry loop repeats, stop and report the blocker instead of retrying the same command.',
+  '- Maven and git commit flows are allowed when required by the task; run focused checks before reporting completion.',
+].join('\n');
 
 const RUN_CENTER_MESSAGE_COMMANDS = new Set([
   'refreshPanel',
@@ -259,6 +273,7 @@ export interface PromptRunMetadata {
   retryOfRunId?: string;
   handoff?: string;
   mergeRequestIid?: number;
+  verifySurface?: 'local' | 'remote';
   verifyBranch?: string;
   verifyEnvironment?: string;
   verifyEnvironmentUrl?: string;
@@ -558,6 +573,11 @@ function buildRunPermissionMetadata(addDirs: string[]): RunPermissionMetadata {
   };
 }
 
+function buildSessionAppendSystemPrompt(customAppendSystemPrompt: string | undefined): string {
+  const custom = customAppendSystemPrompt?.trim();
+  return custom ? `${KRONOS_SESSION_GUARDRAILS}\n\n${custom}` : KRONOS_SESSION_GUARDRAILS;
+}
+
 function buildRunBranchMetadata(input: {
   cwd: string;
   projectBaseRef?: string | undefined;
@@ -771,9 +791,8 @@ export async function dispatchClaudeSession(
   const promptMetadata: PromptRunMetadata = opts.promptMetadata
     ? { ...opts.promptMetadata }
     : { source: opts.customPrompt ? 'custom' : 'slash' };
-  if (opts.appendSystemPrompt) {
-    promptMetadata.appendSystemPromptHash = hashText(opts.appendSystemPrompt);
-  }
+  const appendSystemPrompt = buildSessionAppendSystemPrompt(opts.appendSystemPrompt);
+  promptMetadata.appendSystemPromptHash = hashText(appendSystemPrompt);
   const run = createRun(projectName, projectPath, skill, ticket || '', model, prompt, cwd, promptMetadata);
   const initialPatch: Partial<KronosRun> = {
     cwd,
@@ -954,7 +973,7 @@ export async function dispatchClaudeSession(
     addRunEvent(run, event);
     renderProgressPanel(panel, projectName, skill, ticket || '', events, run);
   }
-  const claudeArgs = buildClaudeArgs(prompt, model, opts.appendSystemPrompt, addDirs);
+  const claudeArgs = buildClaudeArgs(prompt, model, appendSystemPrompt, addDirs);
   const permissions = buildRunPermissionMetadata(addDirs);
   const branch = buildRunBranchMetadata({
     cwd,
@@ -998,7 +1017,7 @@ export async function dispatchClaudeSession(
   try {
     proc = spawn(CLAUDE_PATH, claudeArgs, {
       cwd,
-      env: runTempDir ? { ...process.env, TMPDIR: runTempDir, TMP: runTempDir, TEMP: runTempDir } : { ...process.env },
+      env: runTempDir ? { ...process.env, KRONOS_RUN_TMPDIR: runTempDir, TMPDIR: runTempDir, TMP: runTempDir, TEMP: runTempDir } : { ...process.env },
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true,
       detached: process.platform !== 'win32',

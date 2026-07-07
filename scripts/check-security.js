@@ -108,6 +108,7 @@ const dashboardWorklist = readSource('src/services/dashboardWorklist.ts');
 const ticketTimeline = readSource('src/services/ticketTimeline.ts');
 const ticketPanelView = readSource('src/services/ticketPanelView.ts');
 const integrationAdapters = readSource('src/services/integrationAdapters.ts');
+const gitlabRestClient = readSource('src/services/gitlabRestClient.ts');
 const mergeRequestComments = readSource('src/services/mergeRequestComments.ts');
 const mergeRequestNotifications = readSource('src/services/mergeRequestNotifications.ts');
 const postRunReadiness = readSource('src/services/postRunReadiness.ts');
@@ -347,7 +348,7 @@ for (const forbidden of ['--refresh-all', '--refresh', '--discover', '--register
     fail(`KronosState must use stateScriptAdapter instead of raw script flag ${forbidden}.`);
   }
 }
-for (const forbidden of ['--ticket-comments', '--mr-diff', '--mr-branch', '--sonar-branches', '--sonar-gate', '--sonar-measures', '--sonar-issues', '--find-sonar-key', '--project-id']) {
+for (const forbidden of ['--ticket-comments', '--sonar-branches', '--sonar-gate', '--sonar-measures', '--sonar-issues', '--find-sonar-key']) {
   if (extension.includes(forbidden)) {
     fail(`Extension must use integrationAdapters instead of raw script flag ${forbidden}.`);
   }
@@ -1698,6 +1699,12 @@ if (sonarCommandStart < 0 || sonarCommandEnd <= sonarCommandStart) {
   fail('Missing Sonar command handler block.');
 }
 const sonarCommandSource = extension.slice(sonarCommandStart, sonarCommandEnd);
+if ((extension.match(/worktreeBranch: remoteBranchRef\(getProjectBaseBranch\(state, projectName\)\)/g) || []).length < 3) {
+  fail('Verify commands must run in isolated worktrees using the project base ref.');
+}
+if ((extension.match(/worktreeCheckout: 'ref'/g) || []).length < 4) {
+  fail('Read-only scan/verify commands must use ref checkouts to avoid mutating the main workspace.');
+}
 for (const forbidden of [
   "vscode.commands.registerCommand('kronos.sonarScan', async (item: any)",
   "vscode.commands.registerCommand('kronos.sonarReport', async (item: any)",
@@ -2226,7 +2233,17 @@ for (const marker of [
   'const CLAUDE_PATH',
   'CLAUDE_PERMISSION_MODE',
   'CLAUDE_ALLOWED_TOOL_PATTERNS',
+  "'Bash(git add *)'",
+  "'Bash(git commit *)'",
+  "'Bash(mvn *)'",
+  "'Bash(./mvnw *)'",
+  'const RUN_LOOP_REPEAT_LIMIT = 4',
+  'KRONOS_SESSION_GUARDRAILS',
+  'Use inherited environment variables for provider credentials',
+  'Do not read, grep, cat, print, source, or parse .env files',
+  '$KRONOS_RUN_TMPDIR or $TMPDIR',
   'function buildClaudeArgs',
+  'function buildSessionAppendSystemPrompt',
   'function buildRunPermissionMetadata',
   'function buildRunBranchMetadata',
   "from '../services/gitWorkspace'",
@@ -2236,6 +2253,10 @@ for (const marker of [
   'if (currentCommit) { metadata.currentCommit = currentCommit; }',
   'function resolveCliPath',
   'spawn(CLAUDE_PATH, claudeArgs',
+  'const appendSystemPrompt = buildSessionAppendSystemPrompt(opts.appendSystemPrompt)',
+  'promptMetadata.appendSystemPromptHash = hashText(appendSystemPrompt)',
+  'const claudeArgs = buildClaudeArgs(prompt, model, appendSystemPrompt, addDirs)',
+  'KRONOS_RUN_TMPDIR: runTempDir',
   "permissions: buildRunPermissionMetadata(['~/.claude'])",
   'const permissions = buildRunPermissionMetadata(addDirs)',
   'const branch = buildRunBranchMetadata({',
@@ -2691,7 +2712,6 @@ for (const marker of [
   'class KronosScriptMissingError extends Error',
   'export function isKronosScriptMissingError(error: unknown): boolean',
   'export function runKronosStateScript',
-  'export function runGitlabJson',
   'export function runPipelineJson',
   'export function requiredScripts',
   'function pythonCandidateAvailable(candidate: string): boolean',
@@ -3046,7 +3066,7 @@ for (const [name, source] of [
   ['src/services/scriptClient.ts', scriptClient],
   ['src/services/stateScriptAdapter.ts', stateScriptAdapter],
   ['src/services/integrationAdapters.ts', integrationAdapters],
-  ['src/services/doctorChecks.ts', doctorChecks],
+  ['src/services/gitlabRestClient.ts', gitlabRestClient],
 ]) {
   if (!source.includes("import { parseJsonWithLabel } from './jsonFiles'")) {
     fail(`${name} must import the shared labeled JSON parser.`);
@@ -4186,19 +4206,15 @@ for (const marker of [
   "unknownErrorMessage(e, 'Provider reachability checks failed.')",
   "unknownErrorMessage(e, `${command} unavailable`)",
   "unknownErrorMessage(e, 'claude unavailable')",
-  "import { normalizeMergeRequestStatus } from './integrationAdapters'",
-  "import { parseJsonWithLabel } from './jsonFiles'",
+  "import { gitLabProjectPathFromMergeRequestUrl, normalizeGitLabApiBaseUrl } from './gitlabRestClient'",
   "import { recordEntriesFromUnknown, recordFromUnknown, recordKeysFromUnknown } from './records'",
   "import { ticketStringArray } from './ticketFields'",
   'Values are not displayed',
   'DoctorCommandRunner',
-  'function reviewMergeRequestStatusContractIssue',
-  "const args = [scriptPath, '--mr-status', String(target.projectId), String(target.iid)]",
-  "commandRunner('python', args",
-  'function hasMergeRequestCommentSignal',
-  'function hasMergeRequestDiscussionSignal',
-  'parseJsonWithLabel(raw, `MR status for ${target.ticketKey}`)',
-  'REVIEW_STATUS_SMOKE_TIMEOUT_MS',
+  'function addReviewPollingPrerequisiteCheck',
+  'normalizeGitLabApiBaseUrl(firstConfiguredUrl',
+  'gitLabProjectPathFromMergeRequestUrl(ticket.mr?.url)',
+  'background polling via native GitLab REST',
   "countLabel(templates.length, 'template')",
   "countLabel(projectCount, 'project')",
   "countLabel(input.queue.items?.length || 0, 'queue item')",
@@ -5635,18 +5651,17 @@ for (const marker of [
   'function normalizeMergeRequestComments',
   'function mergeRequestCommentInputs',
   "const notes = arrayFromUnknown(item['notes'])",
-  'async function runMergeRequestStatusJson',
-  'async function runMergeRequestCommand',
-  'function mergeRequestScriptTarget',
-  'const primaryArgs = target ? [command, String(target.projectId), String(target.iid)] : [command, ticketKey]',
-  'return runner.runScript([command, ticketKey], options)',
-  'function isUnsupportedMergeRequestStatusCommand',
-  'function isUnsupportedMergeRequestStatusText',
+  "import { GitLabHttpTransport, GitLabRestRequestOptions, createGitLabRestClient, gitLabProjectPathFromMergeRequestUrl, gitlabRestClient } from './gitlabRestClient'",
+  'gitlabTransport?: GitLabHttpTransport',
+  'return createGitLabRestClient(options)',
+  'function gitlabRequestOptions(options: ScriptRunOptions): GitLabRestRequestOptions',
+  'function mergeRequestRestTarget',
+  'gitLabProjectPathFromMergeRequestUrl(ticket?.mr?.url)',
   'function normalizeJiraComment',
   'function normalizeMergeRequestComment',
   'mergeRequestDiff',
   'mergeRequestStatus',
-  "normalizeChangedFiles(data['files'])",
+  'files: normalizeChangedFiles(files)',
   "isRecord(data['mr'])",
   'last_comment_at',
   'status.comment_count = providedCommentCount ?? comments.length',
@@ -5667,6 +5682,24 @@ for (const marker of [
 ]) {
   if (!integrationAdapters.includes(marker)) {
     fail(`Missing integration adapter marker: ${marker}`);
+  }
+}
+for (const marker of [
+  'export class GitLabRestClient',
+  'export function createGitLabRestClient',
+  'export function normalizeGitLabApiBaseUrl',
+  'export function gitLabProjectPathFromMergeRequestUrl',
+  'async mergeRequestStatus',
+  '/approvals',
+  '/diffs',
+  '/changes',
+  "'PRIVATE-TOKEN': config.token",
+  'parseJsonWithLabel(response.body, label, { includePreview: true })',
+  'function defaultGitLabTransport',
+  "import { unknownErrorMessage } from './errorUtils'",
+]) {
+  if (!gitlabRestClient.includes(marker)) {
+    fail(`Missing GitLab REST client marker: ${marker}`);
   }
 }
 if (integrationAdapters.includes("Array.isArray(value) ? value : isRecord(value) ? arrayFromUnknown(value['comments']) : []")) {

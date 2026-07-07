@@ -339,8 +339,13 @@
       },
       {
         "command": "kronos.verifyLocal",
-        "title": "Kronos: Verify Fix Locally",
+        "title": "Kronos: Verify Ticket Locally",
         "icon": "$(beaker)"
+      },
+      {
+        "command": "kronos.verifyRemote",
+        "title": "Kronos: Verify Ticket Remotely",
+        "icon": "$(cloud)"
       },
       {
         "command": "kronos.jiraBoard",
@@ -665,6 +670,10 @@
         },
         {
           "command": "kronos.verifyLocal",
+          "when": "false"
+        },
+        {
+          "command": "kronos.verifyRemote",
           "when": "false"
         }
       ],
@@ -1007,6 +1016,11 @@
           "group": "inline"
         },
         {
+          "command": "kronos.verifyRemote",
+          "when": "viewItem == review_item",
+          "group": "inline"
+        },
+        {
           "command": "kronos.deployMonitor",
           "when": "viewItem == review_item"
         },
@@ -1028,7 +1042,11 @@
         },
         {
           "command": "kronos.verifyLocal",
-          "when": "viewItem == ticket_implement || viewItem == ticket_verify || viewItem == ticket"
+          "when": "viewItem == ticket_implement || viewItem == ticket_verify || viewItem == ticket_review || viewItem == ticket"
+        },
+        {
+          "command": "kronos.verifyRemote",
+          "when": "viewItem == ticket_implement || viewItem == ticket_verify || viewItem == ticket_review || viewItem == ticket"
         },
         {
           "command": "kronos.addEvidence",

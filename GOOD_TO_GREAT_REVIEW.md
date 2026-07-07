@@ -10,7 +10,7 @@ Keep this review for the design rationale: Kronos should be a safe, explainable 
 
 ## Current Implemented State
 
-- Run lifecycle: dispatches create saved run/session records, progress webviews, prompt/log artifacts, status notifications, and Run Center actions for retry, resume, archive, cancel, and opening related context. Verify Local now requires operator-selected branch, environment, and before-fix/after-fix mode before dispatch.
+- Run lifecycle: dispatches create saved run/session records, progress webviews, prompt/log artifacts, status notifications, and Run Center actions for retry, resume, archive, cancel, and opening related context. Verify Local now requires operator-selected branch, environment, and before-fix/after-fix mode; Verify Remote targets the selected deployed environment without a branch picker. Scan and broader verify commands run in managed worktrees, and dispatched agents get inherited-env/temp-dir guardrails.
 - Safety and recovery: commands are routed through safety gates where risk is known, restricted workspace behavior is explicit, state backups/audit entries exist, worktree cleanup is reviewed through recovery paths, and risky items surface in Recovery Center or Human Review Inbox.
 - Planning: Queue Planner, Backlog Triage, Next Best Action, project/release batch plans, Collision Report, Plan Next 2 Hours, Overnight Candidates, Aging Report, Trend Metrics, and Agent Quality views are present; Agent Quality now rolls recurring run failures into actionable themes.
 - Evidence: ticket detail includes timeline and evidence sections; evidence notes/checks, gate evaluation, export, handoff, and safety-gated publish surfaces exist.

@@ -6,11 +6,10 @@ Required scripts:
 
 - `kronos_state.py`
 - `pipeline_monitor.py`
-- `gitlab_api.py`
 
-All commands must print JSON to stdout and write diagnostics to stderr. Non-zero exits should include a concise stderr message. Credential values must come from inherited environment variables and must never be echoed, embedded in argv, or written to Kronos state files.
+Script commands must print JSON to stdout and write diagnostics to stderr. Non-zero exits should include a concise stderr message. Credential values must come from inherited environment variables and must never be echoed, embedded in argv, or written to Kronos state files.
 
-Kronos: Integration Contracts runs a local contract harness over this file and the required script bundle. It checks that the documented command shapes match the extension calls and that required scripts are installed; it does not call enterprise providers or require credentials.
+Kronos: Integration Contracts runs a local contract harness over this file and the required script bundle. It checks that the documented command/API shapes match the extension calls and that required scripts are installed; it does not call enterprise providers or require credentials.
 
 ## Jira and State Commands
 
@@ -24,35 +23,27 @@ The output may be either an array of comments or an object with `comments`. Each
 
 `kronos_state.py` also owns state refresh, project discovery, queue operations, and morning brief commands through `src/services/stateScriptAdapter.ts`. Keep those commands compatible with that adapter rather than calling script flags directly from the extension.
 
-## GitLab Merge Request Commands
+## GitLab Merge Request API
 
-GitLab merge request polling uses registered project metadata and the ticket MR IID:
-
-```text
-gitlab_api.py --mr-status <gitlab_project_id> <mr_iid>
-gitlab_api.py --mr-diff <gitlab_project_id> <mr_iid>
-gitlab_api.py --mr-branch <gitlab_project_id> <mr_iid>
-```
-
-`--mr-status` should include MR state, review status or approval data, comment metadata, and discussion metadata when available. `--mr-diff` should include `mr` and `files` fields. `--mr-branch` should include `branch`.
-
-Legacy ticket-key calls may still be attempted only as a compatibility fallback when project metadata is absent or an older script rejects the project-ID form:
+GitLab merge request polling uses native REST calls with `GITLAB_TOKEN` and `GITLAB_API_BASE_URL` or `GITLAB_BASE_URL`. Registered projects should define `config.gitlab_project_id`; if absent, Kronos can derive the encoded project path from a parseable GitLab MR URL. Review tickets should include `mr.iid` and at least one linked project.
 
 ```text
-gitlab_api.py --mr-status <ticket_key>
-gitlab_api.py --mr-diff <ticket_key>
-gitlab_api.py --mr-branch <ticket_key>
+GET /api/v4/projects/<project_id>/merge_requests/<mr_iid>
+GET /api/v4/projects/<project_id>/merge_requests/<mr_iid>/notes
+GET /api/v4/projects/<project_id>/merge_requests/<mr_iid>/discussions
+GET /api/v4/projects/<project_id>/merge_requests/<mr_iid>/approvals
+GET /api/v4/projects/<project_id>/merge_requests/<mr_iid>/diffs
 ```
 
-Registered projects should define `config.gitlab_project_id`; review tickets should include `mr.iid` and at least one linked project.
+MR status reads should include MR state, review status or approval data, comment metadata from notes, and discussion metadata when available. Diff reads normalize GitLab `diffs` or legacy `changes` into `files`. Branch resolution uses `source_branch` and `target_branch` from the merge request record.
 
 Project setup may resolve project IDs with:
 
 ```text
-gitlab_api.py --project-id <namespace/project>
+GET /api/v4/projects/<namespace%2Fproject>
 ```
 
-The output should include numeric `id`.
+The response should include numeric `id`.
 
 ## SonarQube Commands
 
@@ -70,4 +61,4 @@ pipeline_monitor.py --sonar-issues <sonar_project_key> --branch <branch>
 
 ## Dispatch Environment
 
-Dispatched Claude sessions inherit the VS Code extension process environment. Kronos sets a run-scoped temporary directory with `TMPDIR`, `TMP`, and `TEMP` so generated helper scripts can be cleaned up after the run. Operators may provide provider tokens through the parent VS Code environment, OS credential setup, or `~/.claude/.env`; existing parent environment values take precedence over values from the file.
+Dispatched Claude sessions inherit the VS Code extension process environment. Kronos sets a run-scoped temporary directory with `KRONOS_RUN_TMPDIR`, `TMPDIR`, `TMP`, and `TEMP` so generated helper scripts can stay isolated and be cleaned up after the run. Operators may provide provider tokens through the parent VS Code environment, OS credential setup, or `~/.claude/.env`; existing parent environment values take precedence over values from the file. Agent sessions should use inherited environment variables and must not read, grep, print, or pass credential values through command arguments.

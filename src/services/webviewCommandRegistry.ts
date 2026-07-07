@@ -13,6 +13,8 @@ export const BOARD_MESSAGE_COMMANDS = new Set([
   'exportEvidence',
   'evidenceHandoff',
   'publishEvidence',
+  'verifyLocal',
+  'verifyRemote',
 ]);
 
 export const EVIDENCE_GATE_MESSAGE_COMMANDS = new Set([
@@ -133,6 +135,8 @@ export const TICKET_DETAIL_MESSAGE_COMMANDS = new Set([
   'exportEvidence',
   'evidenceHandoff',
   'publishEvidence',
+  'verifyLocal',
+  'verifyRemote',
   'openJira',
   'openMr',
   'openBuild',
@@ -178,6 +182,8 @@ export const OPERATOR_COMMAND_TO_VSCODE_COMMAND = new Map<string, string>([
   ['exportEvidence', 'kronos.exportEvidence'],
   ['evidenceHandoff', 'kronos.evidenceHandoff'],
   ['publishEvidence', 'kronos.publishEvidence'],
+  ['verifyLocal', 'kronos.verifyLocal'],
+  ['verifyRemote', 'kronos.verifyRemote'],
   ['agentQualityScore', 'kronos.agentQualityScore'],
   ['trendMetrics', 'kronos.trendMetrics'],
   ['agingReport', 'kronos.agingReport'],
@@ -306,4 +312,6 @@ export const TICKET_SCOPED_OPERATOR_COMMANDS = new Set([
   'exportEvidence',
   'evidenceHandoff',
   'publishEvidence',
+  'verifyLocal',
+  'verifyRemote',
 ]);

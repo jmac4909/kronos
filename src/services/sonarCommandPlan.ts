@@ -69,7 +69,7 @@ export function buildSonarFixBranchStrategy(projectName: string, sourceBranch: s
   const baseBranch = sourceBranch || 'develop';
   const isProtected = !sourceBranch || sourceBranch === 'develop' || sourceBranch === 'main' || sourceBranch === 'master';
   return isProtected
-    ? `You are fixing issues from the ${baseBranch} branch. Create a NEW branch: bugfix/sonar-${projectName.toLowerCase()} from ${baseBranch}. After fixing and pushing, create a GitLab MR from your branch into ${baseBranch} using: python ~/.claude/scripts/gitlab_api.py --create-mr`
+    ? `You are fixing issues from the ${baseBranch} branch. Create a NEW branch: bugfix/sonar-${projectName.toLowerCase()} from ${baseBranch}. After fixing and pushing, create a GitLab MR from your branch into ${baseBranch} using the repository's approved GitLab workflow or documented project tooling.`
     : `You are fixing issues on branch ${sourceBranch}. Stay on this branch — push directly, it already has an open MR.`;
 }
 

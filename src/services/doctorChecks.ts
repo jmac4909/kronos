@@ -9,8 +9,7 @@ import { requiredScripts } from './scriptClient';
 import { KRONOS_DIR } from './stateStore';
 import { defaultCliProbeCommandRunner, readableGoogleApplicationCredentials, resolveGcloudCommandStatus } from './cliProbes';
 import { unknownErrorMessage } from './errorUtils';
-import { normalizeMergeRequestStatus } from './integrationAdapters';
-import { parseJsonWithLabel } from './jsonFiles';
+import { gitLabProjectPathFromMergeRequestUrl, normalizeGitLabApiBaseUrl } from './gitlabRestClient';
 import { countLabel } from './countLabels';
 import { recordEntriesFromUnknown, recordFromUnknown, recordKeysFromUnknown } from './records';
 import { ticketStringArray } from './ticketFields';
@@ -53,7 +52,6 @@ interface DoctorReachabilityOptions extends ProviderReachabilityOptions {
 
 const COMMAND_TIMEOUT_MS = 5000;
 const TOKEN_TIMEOUT_MS = 10000;
-const REVIEW_STATUS_SMOKE_TIMEOUT_MS = 10000;
 const MAX_COMMAND_BUFFER = 1024 * 1024;
 
 export function runDoctorChecks(input: DoctorChecksInput): DoctorCheck[] {
@@ -126,7 +124,7 @@ export function runDoctorChecks(input: DoctorChecksInput): DoctorCheck[] {
   credentialCheck(checks, env, 'Jenkins credentials', input.profile.providers.jenkins, ['JENKINS_URL']);
   credentialCheck(checks, env, 'SonarQube credentials', input.profile.providers.sonar, ['SONAR_HOST_URL', 'SONAR_TOKEN']);
   credentialAnyCheck(checks, env, 'GitHub Actions credentials', input.profile.providers.githubActions, ['GITHUB_TOKEN', 'GH_TOKEN']);
-  addReviewPollingPrerequisiteCheck(checks, input.state, input.profile, env, scripts, commandRunner);
+  addReviewPollingPrerequisiteCheck(checks, input.state, input.profile, env);
 
   if (readableGacFile) {
     add('GCP application default auth', 'pass', 'GOOGLE_APPLICATION_CREDENTIALS file is readable; skipped gcloud token command.');
@@ -268,7 +266,7 @@ export async function runDoctorReachabilityChecks(input: DoctorChecksInput, opti
 function projectConfigGaps(state: KronosState | null, profile: KronosProfile): string[] {
   const gaps: string[] = [];
   for (const [name, project] of recordEntriesFromUnknown(state?.projects)) {
-    const config = project.config || {};
+    const config = recordFromUnknown(project.config);
     if (!config.base_branch && !config.default_branch) {
       gaps.push(`${name}: missing base/default branch`);
     }
@@ -340,8 +338,6 @@ function addReviewPollingPrerequisiteCheck(
   state: KronosState | null,
   profile: KronosProfile,
   env: Record<string, string | undefined>,
-  scripts: ReturnType<typeof requiredScripts>,
-  commandRunner: DoctorCommandRunner,
 ): void {
   if (!profile.providers.gitlab) {
     checks.push({ name: 'Review MR polling prerequisites', status: 'pass', detail: 'GitLab provider disabled by active profile.' });
@@ -359,14 +355,13 @@ function addReviewPollingPrerequisiteCheck(
   }
 
   const issues: string[] = [];
-  const gitlabScript = scripts.find(script => script.name === 'gitlab_api.py');
-  if (!gitlabScript?.present) {
-    issues.push('missing gitlab_api.py');
-  }
   if (!env['GITLAB_TOKEN']) {
     issues.push('missing GITLAB_TOKEN');
   }
-  let smokeTarget: { ticketKey: string; projectId: number; iid: number } | undefined;
+  if (!normalizeGitLabApiBaseUrl(firstConfiguredUrl(env['GITLAB_API_BASE_URL'], env['GITLAB_BASE_URL'], env['GITLAB_URL'], env['GITLAB_HOST']))) {
+    issues.push('missing GITLAB_BASE_URL or GITLAB_API_BASE_URL');
+  }
+  let readyTarget: { ticketKey: string; projectIdOrPath: string; iid: number } | undefined;
   for (const [ticketKey, ticket] of openReviewTickets) {
     const iid = typeof ticket.mr?.iid === 'number' && Number.isFinite(ticket.mr.iid) ? ticket.mr.iid : undefined;
     if (iid === undefined) {
@@ -376,60 +371,29 @@ function addReviewPollingPrerequisiteCheck(
     if (projectNames.length === 0) {
       issues.push(`${ticketKey}: not linked to a project`);
     }
+    let ticketTarget: string | undefined;
     for (const projectName of projectNames) {
       const project = state.projects?.[projectName];
       const projectId = project?.config?.gitlab_project_id;
-      if (typeof projectId !== 'number' || !Number.isFinite(projectId) || projectId <= 0) {
-        issues.push(`${ticketKey}/${projectName}: missing gitlab_project_id`);
-      } else if (iid !== undefined && !smokeTarget) {
-        smokeTarget = { ticketKey, projectId, iid };
+      if (typeof projectId === 'number' && Number.isFinite(projectId) && projectId > 0) {
+        ticketTarget = String(Math.floor(projectId));
       }
     }
-  }
-  if (issues.length === 0 && smokeTarget && gitlabScript) {
-    const smokeIssue = reviewMergeRequestStatusContractIssue(commandRunner, gitlabScript.path, smokeTarget);
-    if (smokeIssue) { issues.push(smokeIssue); }
+    ticketTarget = ticketTarget || gitLabProjectPathFromMergeRequestUrl(ticket.mr?.url);
+    if (!ticketTarget) {
+      issues.push(`${ticketKey}: missing gitlab_project_id or parseable merge request URL`);
+    } else if (iid !== undefined && !readyTarget) {
+      readyTarget = { ticketKey, projectIdOrPath: ticketTarget, iid };
+    }
   }
 
   checks.push({
     name: 'Review MR polling prerequisites',
     status: issues.length === 0 ? 'pass' : 'warn',
     detail: issues.length === 0
-      ? `${countLabel(openReviewTickets.length, 'open review MR')} ready for background polling; --mr-status contract OK for ${smokeTarget?.ticketKey}.`
+      ? `${countLabel(openReviewTickets.length, 'open review MR')} ready for background polling via native GitLab REST for ${readyTarget?.ticketKey}.`
       : `${countLabel(openReviewTickets.length, 'open review MR')}; ${issues.slice(0, 6).join('; ')}${issues.length > 6 ? `; and ${issues.length - 6} more` : ''}`,
   });
-}
-
-function reviewMergeRequestStatusContractIssue(
-  commandRunner: DoctorCommandRunner,
-  scriptPath: string,
-  target: { ticketKey: string; projectId: number; iid: number },
-): string | undefined {
-  try {
-    const args = [scriptPath, '--mr-status', String(target.projectId), String(target.iid)];
-    const raw = commandRunner('python', args, { timeoutMs: REVIEW_STATUS_SMOKE_TIMEOUT_MS });
-    const status = normalizeMergeRequestStatus(parseJsonWithLabel(raw, `MR status for ${target.ticketKey}`));
-    const missing: string[] = [];
-    if (!status.state) { missing.push('state'); }
-    if (!status.review_status) { missing.push('review_status or approved flag'); }
-    if (!hasMergeRequestCommentSignal(status)) { missing.push('comment metadata'); }
-    if (!hasMergeRequestDiscussionSignal(status)) { missing.push('discussion metadata'); }
-    return missing.length > 0 ? `--mr-status ${target.projectId} ${target.iid} missing ${missing.join(', ')}` : undefined;
-  } catch (e: unknown) {
-    return `--mr-status ${target.projectId} ${target.iid} failed: ${unknownErrorMessage(e, 'MR status smoke failed')}`;
-  }
-}
-
-function hasMergeRequestCommentSignal(status: ReturnType<typeof normalizeMergeRequestStatus>): boolean {
-  return status.comment_count !== undefined || status.last_comment_at !== undefined || status.comments !== undefined;
-}
-
-function hasMergeRequestDiscussionSignal(status: ReturnType<typeof normalizeMergeRequestStatus>): boolean {
-  return status.discussion_count !== undefined
-    || status.unresolved_discussion_count !== undefined
-    || status.resolved_discussion_count !== undefined
-    || status.last_discussion_at !== undefined
-    || status.discussions_resolved !== undefined;
 }
 
 function firstConfiguredUrl(...values: Array<string | undefined>): string | undefined {

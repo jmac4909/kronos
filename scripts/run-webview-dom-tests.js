@@ -240,6 +240,8 @@ test('jira board filters cards, opens ticket modal, renders comments, and posts 
   assert.match(document.getElementById('modal-mr').textContent, /MR !41 - pending review/);
   assert.equal(document.getElementById('modal-build').textContent, 'Build #142 - SUCCESS');
   assert.equal(document.getElementById('modal-attachments').textContent, 'evidence.md (2KB)');
+  assert.ok([...document.querySelectorAll('#modal-actions button')].some(button => button.textContent === 'Verify Local'));
+  assert.ok([...document.querySelectorAll('#modal-actions button')].some(button => button.textContent === 'Verify Remote'));
   assert.ok(env.messages.some(message => message.command === 'getComments' && message.ticket === 'KRONOS-FB-1'));
 
   env.dom.window.dispatchEvent(new env.dom.window.MessageEvent('message', {
@@ -262,6 +264,8 @@ test('jira board filters cards, opens ticket modal, renders comments, and posts 
   assert.equal(document.getElementById('modal-projects').textContent, 'Not linked');
   assert.match(document.getElementById('modal-actions').textContent, /Link to a project first to start or queue\./);
   assert.equal([...document.querySelectorAll('#modal-actions button')].some(button => button.textContent === 'Start Work'), false);
+  assert.ok([...document.querySelectorAll('#modal-actions button')].some(button => button.textContent === 'Verify Local'));
+  assert.ok([...document.querySelectorAll('#modal-actions button')].some(button => button.textContent === 'Verify Remote'));
   assert.ok([...document.querySelectorAll('#modal-actions button')].some(button => button.textContent === 'Add Evidence'));
   assert.ok(env.messages.some(message => message.command === 'getComments' && message.ticket === 'KRONOS-FB-3'));
   assert.deepEqual(env.errors, []);

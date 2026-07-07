@@ -3,7 +3,7 @@ import { sanitizeBranch } from './profileManager';
 import { recordFromUnknown, recordString } from './records';
 import { ticketStringArray } from './ticketFields';
 
-export type VerifyLocalBranchCheckout = 'current' | 'ref';
+export type VerifyLocalBranchCheckout = 'current' | 'ref' | 'remote';
 export type VerifyLocalEnvironmentKind = 'local' | 'DEV' | 'TEST' | 'custom';
 export type VerifyLocalMode = 'confirm-defect-exists' | 'confirm-fix-works';
 
@@ -94,6 +94,17 @@ export function buildCustomVerifyLocalBranchTarget(branch: string): VerifyLocalB
   };
 }
 
+export function buildVerifyRemoteDeploymentTarget(environment: VerifyLocalEnvironmentTarget): VerifyLocalBranchTarget {
+  const environmentLabel = environment.kind === 'custom' ? 'remote custom URL' : `${environment.kind} deployment`;
+  return {
+    label: environmentLabel,
+    description: 'Remote environment deployed version',
+    branch: environmentLabel,
+    ref: environment.url || environment.promptValue,
+    checkout: 'remote',
+  };
+}
+
 export function buildVerifyLocalEnvironmentTarget(
   kind: VerifyLocalEnvironmentKind,
   input: { customUrl?: string | undefined; projectName?: string | undefined; env?: NodeJS.ProcessEnv } = {},
@@ -142,9 +153,7 @@ export function buildVerifyLocalPromptVars(target: VerifyLocalPromptTarget): Rec
     VERIFY_PROJECT_NAME: target.projectName,
     VERIFY_BRANCH: target.branch.branch,
     VERIFY_BRANCH_REF: target.branch.ref,
-    VERIFY_BRANCH_CHECKOUT: target.branch.checkout === 'current'
-      ? 'Use the current worktree exactly as-is; do not switch branches unless the operator explicitly asks.'
-      : `Use the managed verification worktree checked out at ${target.branch.ref}.`,
+    VERIFY_BRANCH_CHECKOUT: verifyBranchCheckoutInstruction(target.branch),
     VERIFY_ENVIRONMENT: target.environment.promptValue,
     VERIFY_ENVIRONMENT_URL: target.environment.url || 'not provided',
     VERIFY_MODE: target.mode.promptValue,
@@ -195,6 +204,15 @@ function addBranchTarget(targets: VerifyLocalBranchTarget[], branch: string | un
     ref: `origin/${sanitized}`,
     checkout: 'ref',
   });
+}
+
+function verifyBranchCheckoutInstruction(branch: VerifyLocalBranchTarget): string {
+  if (branch.checkout === 'remote') {
+    return 'Remote verification only: do not choose, checkout, or infer a source branch. Hit the selected remote environment exactly as deployed.';
+  }
+  return branch.checkout === 'current'
+    ? 'Use the current worktree exactly as-is; do not switch branches unless the operator explicitly asks.'
+    : `Use the managed verification worktree checked out at ${branch.ref}.`;
 }
 
 function dedupeBranchTargets(targets: VerifyLocalBranchTarget[]): VerifyLocalBranchTarget[] {

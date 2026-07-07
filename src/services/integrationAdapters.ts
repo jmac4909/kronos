@@ -1,7 +1,7 @@
-import { ScriptRunOptions, runGitlabJson, runPipelineJson } from './scriptClient';
+import { ScriptRunOptions, runPipelineJson } from './scriptClient';
 import { KronosState as KronosStateSnapshot, MergeRequest, MergeRequestChangedFile, MergeRequestComment } from '../state/types';
 import { normalizeChangedFiles } from './changedFiles';
-import { unknownErrorMessage } from './errorUtils';
+import { GitLabHttpTransport, GitLabRestRequestOptions, createGitLabRestClient, gitLabProjectPathFromMergeRequestUrl, gitlabRestClient } from './gitlabRestClient';
 import { parseJsonWithLabel } from './jsonFiles';
 import { arrayFromUnknown, isRecord, optionalFiniteNumberFromUnknown, optionalTrimmedStringFromUnknown, recordsFromUnknown } from './records';
 import { sortMergeRequestCommentsByCreated } from './mergeRequestComments';
@@ -11,6 +11,8 @@ import { ticketStringArray } from './ticketFields';
 interface KronosScriptRunner {
   runScript(args: string[], options?: ScriptRunOptions): Promise<string>;
   state?: KronosStateSnapshot | null;
+  env?: NodeJS.ProcessEnv;
+  gitlabTransport?: GitLabHttpTransport;
 }
 
 export interface MergeRequestDiffResult {
@@ -84,42 +86,89 @@ export const jiraAdapter = {
 
 export const gitlabAdapter = {
   async mergeRequestDiff(runner: KronosScriptRunner, ticketKey: string, options: ScriptRunOptions = {}): Promise<MergeRequestDiffResult> {
-    const parsed = parseJsonWithLabel(
-      await runMergeRequestCommand(runner, '--mr-diff', ticketKey, options),
-      `MR diff for ${ticketKey}`,
+    const data = await gitlabClient(runner).mergeRequestDiff(
+      mergeRequestRestTarget(runner, ticketKey),
+      gitlabRequestOptions(options),
     );
-    const data = isRecord(parsed) ? parsed : {};
-    if (data['error']) {
-      throw new Error(String(data['error']));
+    const record = isRecord(data) ? data : {};
+    if (record['error']) {
+      throw new Error(String(record['error']));
     }
+    const files = firstDefined(record['files'], record['changes']);
     return {
-      ...data,
-      mr: isRecord(data['mr']) ? data['mr'] : {},
-      files: normalizeChangedFiles(data['files']),
+      ...record,
+      mr: isRecord(record['mr']) ? record['mr'] : {},
+      files: normalizeChangedFiles(files),
     };
   },
 
-  async mergeRequestBranch(runner: KronosScriptRunner, ticketKey: string): Promise<string> {
-    const parsed = parseJsonWithLabel(await runMergeRequestCommand(runner, '--mr-branch', ticketKey), `MR branch for ${ticketKey}`);
-    const data = isRecord(parsed) ? parsed : {};
-    return typeof data['branch'] === 'string' && data['branch'].trim() ? data['branch'].trim() : ticketKey;
+  async mergeRequestBranch(runner: KronosScriptRunner, ticketKey: string, options: ScriptRunOptions = {}): Promise<string> {
+    const data = await gitlabClient(runner).mergeRequest(
+      mergeRequestRestTarget(runner, ticketKey),
+      gitlabRequestOptions(options),
+    );
+    const status = normalizeMergeRequestStatus({ mr: data });
+    return status.source_branch || status.sourceBranch || status.branch || status.head_branch || ticketKey;
   },
 
   async mergeRequestStatus(runner: KronosScriptRunner, ticketKey: string, options: ScriptRunOptions = {}): Promise<MergeRequestStatusResult> {
-    const parsed = await runMergeRequestStatusJson(runner, ticketKey, options);
-    const data = isRecord(parsed) ? parsed : {};
-    if (data['error']) {
-      throw new Error(String(data['error']));
+    const data = await gitlabClient(runner).mergeRequestStatus(
+      mergeRequestRestTarget(runner, ticketKey),
+      gitlabRequestOptions(options),
+    );
+    const record = isRecord(data) ? data : {};
+    if (record['error']) {
+      throw new Error(String(record['error']));
     }
-    return normalizeMergeRequestStatus(data);
+    return normalizeMergeRequestStatus(record);
   },
 
   async projectId(gitlabPath: string): Promise<number | null> {
-    const parsed = await runGitlabJson<unknown>(['--project-id', gitlabPath], { timeout: 15000 });
-    const data = isRecord(parsed) ? parsed : {};
-    return typeof data['id'] === 'number' ? data['id'] : null;
+    return gitlabRestClient.projectId(gitlabPath, { timeoutMs: 15000 });
   },
 };
+
+function gitlabClient(runner: KronosScriptRunner) {
+  const options: { env?: NodeJS.ProcessEnv; transport?: GitLabHttpTransport } = {};
+  if (runner.env) { options.env = runner.env; }
+  if (runner.gitlabTransport) { options.transport = runner.gitlabTransport; }
+  return createGitLabRestClient(options);
+}
+
+function gitlabRequestOptions(options: ScriptRunOptions): GitLabRestRequestOptions {
+  const requestOptions: GitLabRestRequestOptions = {};
+  if (options.timeout !== undefined) { requestOptions.timeoutMs = options.timeout; }
+  return requestOptions;
+}
+
+function mergeRequestRestTarget(runner: KronosScriptRunner, ticketKey: string): { projectIdOrPath: string; iid: number } {
+  const ticket = runner.state?.tickets?.[ticketKey];
+  const iid = optionalFiniteNumberFromUnknown(ticket?.mr?.iid);
+  if (iid === undefined) {
+    throw new Error(`${ticketKey}: missing merge request IID for native GitLab polling.`);
+  }
+  for (const projectName of ticketStringArray(ticket?.projects)) {
+    const projectId = optionalFiniteNumberFromUnknown(runner.state?.projects?.[projectName]?.config?.gitlab_project_id);
+    if (projectId !== undefined && projectId > 0) {
+      return { projectIdOrPath: String(Math.floor(projectId)), iid: Math.floor(iid) };
+    }
+  }
+  const projectPath = gitLabProjectPathFromMergeRequestUrl(ticket?.mr?.url);
+  if (projectPath) {
+    return { projectIdOrPath: projectPath, iid: Math.floor(iid) };
+  }
+  throw new Error(`${ticketKey}: missing gitlab_project_id or parseable merge request URL for native GitLab polling.`);
+}
+
+export const legacyGitlabAdapter = {
+  normalizeMergeRequestStatus,
+  normalizeChangedFiles,
+};
+
+/*
+ * GitLab MR operations intentionally use native REST above. Jira ticket comments
+ * and SonarQube checks still route through their existing script contracts.
+ */
 
 export const sonarAdapter = {
   async projectKey(projectName: string): Promise<string | null> {
@@ -221,6 +270,7 @@ export function normalizeMergeRequestStatus(value: unknown): MergeRequestStatusR
     mr['approved'],
     data['approved'],
     isRecord(mr['approvals']) ? mr['approvals']['approved'] : undefined,
+    isRecord(data['approvals']) ? data['approvals']['approved'] : undefined,
   ));
   if (reviewStatus) { status.review_status = reviewStatus; }
   copyString(status, 'url', firstDefined(mr['url'], data['url'], mr['web_url'], data['web_url']));
@@ -270,71 +320,6 @@ export function normalizeMergeRequestStatus(value: unknown): MergeRequestStatusR
     }
   }
   return status;
-}
-
-async function runMergeRequestStatusJson(runner: KronosScriptRunner, ticketKey: string, options: ScriptRunOptions): Promise<unknown> {
-  try {
-    const raw = await runMergeRequestCommand(runner, '--mr-status', ticketKey, options);
-    const trimmed = raw.trim();
-    if (trimmed && !/^[{\[]/.test(trimmed) && isUnsupportedMergeRequestStatusText(trimmed)) {
-      throw new Error(trimmed);
-    }
-    return parseJsonWithLabel(raw, `MR status for ${ticketKey}`);
-  } catch (e: unknown) {
-    if (!isUnsupportedMergeRequestStatusCommand(e)) {
-      throw e;
-    }
-  }
-  return parseJsonWithLabel(await runMergeRequestCommand(runner, '--mr-diff', ticketKey, options), `MR status fallback for ${ticketKey}`);
-}
-
-async function runMergeRequestCommand(
-  runner: KronosScriptRunner,
-  command: '--mr-status' | '--mr-diff' | '--mr-branch',
-  ticketKey: string,
-  options: ScriptRunOptions = {},
-): Promise<string> {
-  const target = mergeRequestScriptTarget(runner, ticketKey);
-  const primaryArgs = target ? [command, String(target.projectId), String(target.iid)] : [command, ticketKey];
-  try {
-    return await runner.runScript(primaryArgs, options);
-  } catch (e: unknown) {
-    if (!target || !isUnsupportedProjectMergeRequestCommand(e)) {
-      throw e;
-    }
-  }
-  return runner.runScript([command, ticketKey], options);
-}
-
-function mergeRequestScriptTarget(runner: KronosScriptRunner, ticketKey: string): { projectId: number; iid: number } | null {
-  const state = runner.state;
-  const ticket = state?.tickets?.[ticketKey];
-  if (!ticket) { return null; }
-  const iid = typeof ticket?.mr?.iid === 'number' && Number.isFinite(ticket.mr.iid) ? ticket.mr.iid : undefined;
-  if (iid === undefined) { return null; }
-  for (const projectName of ticketStringArray(ticket.projects)) {
-    const projectId = state?.projects?.[projectName]?.config?.gitlab_project_id;
-    if (typeof projectId === 'number' && Number.isFinite(projectId) && projectId > 0) {
-      return { projectId, iid };
-    }
-  }
-  return null;
-}
-
-function isUnsupportedProjectMergeRequestCommand(error: unknown): boolean {
-  const message = unknownErrorMessage(error, '').toLowerCase();
-  return message.includes('--mr-')
-    && /(unrecognized|unknown|unsupported|not implemented|no such option|invalid choice|too many arguments|expected)/.test(message);
-}
-
-function isUnsupportedMergeRequestStatusCommand(error: unknown): boolean {
-  return isUnsupportedMergeRequestStatusText(unknownErrorMessage(error, ''));
-}
-
-function isUnsupportedMergeRequestStatusText(value: string): boolean {
-  const message = value.toLowerCase();
-  return message.includes('--mr-status')
-    && /(unrecognized|unknown|unsupported|not implemented|no such option|invalid choice)/.test(message);
 }
 
 function normalizeMergeRequestComments(value: unknown): MergeRequestComment[] {

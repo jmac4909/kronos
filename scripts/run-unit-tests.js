@@ -191,6 +191,7 @@ const collisionDetector = require('../out/services/collisionDetector.js');
 const mergeRequestFileHints = require('../out/services/mergeRequestFileHints.js');
 const scriptClient = require('../out/services/scriptClient.js');
 const integrationAdapters = require('../out/services/integrationAdapters.js');
+const gitlabRestClient = require('../out/services/gitlabRestClient.js');
 const acceptanceCriteria = require('../out/services/acceptanceCriteria.js');
 const humanReviewInbox = require('../out/services/humanReviewInbox.js');
 const evidenceGate = require('../out/services/evidenceGate.js');
@@ -838,6 +839,9 @@ test('verify-local prompt targeting preserves operator branch, environment, mode
     env: { PAY_API_DEV_URL: 'https://dev.example/pay' },
   });
   assert.equal(environment.url, 'https://dev.example/pay');
+  const remoteDeployment = verifyLocalPlan.buildVerifyRemoteDeploymentTarget(environment);
+  assert.equal(remoteDeployment.checkout, 'remote');
+  assert.match(remoteDeployment.description, /Remote environment deployed version/);
   const customEnvironment = verifyLocalPlan.buildVerifyLocalEnvironmentTarget('custom', { customUrl: 'https://custom.example/base' });
   assert.equal(customEnvironment.url, 'https://custom.example/base');
   assert.equal(verifyLocalPlan.normalizeHttpUrl('file:///tmp/nope'), undefined);
@@ -862,6 +866,12 @@ test('verify-local prompt targeting preserves operator branch, environment, mode
   assert.match(promptText, /Kronos verify-local targeting/);
   assert.match(promptText, /before\/after evidence/);
   assert.match(verifyLocalPlan.verifyLocalTargetSummary(target), /confirm fix works/);
+  const remoteVars = verifyLocalPlan.buildVerifyLocalPromptVars({
+    ...target,
+    branch: remoteDeployment,
+    environment,
+  });
+  assert.match(remoteVars.VERIFY_BRANCH_CHECKOUT, /do not choose, checkout, or infer a source branch/);
 });
 
 test('verify-local repaired starter prompt includes branch, environment, mode, and replay variables', () => {
@@ -5190,7 +5200,7 @@ test('json file helper centralizes labeled script output parsing', () => {
     ['scriptClient.ts', "import { parseJsonWithLabel } from './jsonFiles'"],
     ['stateScriptAdapter.ts', "import { parseJsonWithLabel } from './jsonFiles'"],
     ['integrationAdapters.ts', "import { parseJsonWithLabel } from './jsonFiles'"],
-    ['doctorChecks.ts', "import { parseJsonWithLabel } from './jsonFiles'"],
+    ['gitlabRestClient.ts', "import { parseJsonWithLabel } from './jsonFiles'"],
   ]) {
     const source = readSourceFixture('src', 'services', file);
     assert.ok(source.includes(marker), `${file} should import shared labeled JSON parsing`);
@@ -7012,6 +7022,20 @@ test('dispatcher records branch and permission metadata for persisted runs', () 
     'projectBaseSource?: string',
     'projectBaseWarning?: string',
     'function buildRunPermissionMetadata',
+    "'Bash(git add *)'",
+    "'Bash(git commit *)'",
+    "'Bash(mvn *)'",
+    "'Bash(./mvnw *)'",
+    'const RUN_LOOP_REPEAT_LIMIT = 4',
+    'KRONOS_SESSION_GUARDRAILS',
+    'Use inherited environment variables for provider credentials',
+    'Do not read, grep, cat, print, source, or parse .env files',
+    '$KRONOS_RUN_TMPDIR or $TMPDIR',
+    'function buildSessionAppendSystemPrompt',
+    'const appendSystemPrompt = buildSessionAppendSystemPrompt(opts.appendSystemPrompt)',
+    'promptMetadata.appendSystemPromptHash = hashText(appendSystemPrompt)',
+    'const claudeArgs = buildClaudeArgs(prompt, model, appendSystemPrompt, addDirs)',
+    'KRONOS_RUN_TMPDIR: runTempDir',
     'function buildRunBranchMetadata',
     'permissions: buildRunPermissionMetadata([\'~/.claude\'])',
     'const permissions = buildRunPermissionMetadata(addDirs)',
@@ -8882,7 +8906,7 @@ test('script client reports required scripts and wraps Python JSON contracts', a
   const health = scriptClient.requiredScripts();
   assert.equal(health.find(s => s.name === 'kronos_state.py').present, true);
   assert.equal(health.find(s => s.name === 'pipeline_monitor.py').present, true);
-  assert.equal(health.find(s => s.name === 'gitlab_api.py').present, false);
+  assert.deepEqual(health.map(s => s.name), ['kronos_state.py', 'pipeline_monitor.py']);
 
   assert.equal(scriptClient.runKronosStateScript(['--next']).trim(), 'state:--next');
   const parsed = await scriptClient.runPipelineJson(['--sonar-gate', 'app']);
@@ -8895,16 +8919,6 @@ test('script client reports required scripts and wraps Python JSON contracts', a
   await assert.rejects(
     () => scriptClient.runPipelineJson(['--bad-json']),
     /Invalid JSON from pipeline_monitor\.py/
-  );
-  await assert.rejects(
-    () => scriptClient.runGitlabJson(['--project-id', 'app']),
-    error => {
-      assert.equal(scriptClient.isKronosScriptMissingError(error), true);
-      assert.equal(error.name, 'KronosScriptMissingError');
-      assert.equal(error.scriptName, 'gitlab_api.py');
-      assert.match(error.message, /Kronos integration script unavailable: gitlab_api\.py/);
-      return true;
-    }
   );
   assert.equal(scriptClient.isKronosScriptMissingError({
     name: 'KronosScriptMissingError',
@@ -8931,7 +8945,7 @@ test('script client keeps raw JSON and process errors unknown by default', () =>
     'class KronosScriptMissingError extends Error',
     'Object.setPrototypeOf(this, KronosScriptMissingError.prototype)',
     'export function isKronosScriptMissingError(error: unknown): boolean',
-    "const REQUIRED_SCRIPT_NAMES = new Set<RequiredScriptName>(['kronos_state.py', 'pipeline_monitor.py', 'gitlab_api.py'])",
+    "const REQUIRED_SCRIPT_NAMES = new Set<RequiredScriptName>(['kronos_state.py', 'pipeline_monitor.py'])",
     "const MISSING_SCRIPT_MESSAGE_PREFIX = 'Kronos integration script unavailable: '",
     'function isRequiredScriptName(value: unknown): value is RequiredScriptName',
     'function isKronosScriptMissingMessage(value: unknown): boolean',
@@ -8939,7 +8953,6 @@ test('script client keeps raw JSON and process errors unknown by default', () =>
     "value.startsWith('Kronos script missing: ')",
     'throw new KronosScriptMissingError(scriptName, filePath)',
     'async function runJsonScript<T = unknown>',
-    'export function runGitlabJson<T = unknown>',
     'export function runPipelineJson<T = unknown>',
     'function parseScriptJson<T = unknown>',
     'function scriptError(scriptName: RequiredScriptName, args: string[], error: unknown)',
@@ -9131,13 +9144,21 @@ test('state script adapter keeps raw JSON payloads unknown until normalized', ()
   }
 });
 
-test('integration adapters wrap selected Jira, GitLab, and Sonar script contracts', async () => {
+test('integration adapters wrap selected Jira and Sonar scripts plus native GitLab REST', async () => {
   const calls = [];
+  const gitlabRequests = [];
   const runner = {
+    env: {
+      GITLAB_TOKEN: 'gitlab-token',
+      GITLAB_BASE_URL: 'https://gitlab.example',
+    },
     state: {
       projects: { app: { config: { gitlab_project_id: 123 } } },
       tickets: {
-        'K-7': { projects: ['app'], mr: { iid: 7 } },
+        'K-7': {
+          projects: ['app'],
+          mr: { iid: 7, url: 'https://gitlab.example/group/app/-/merge_requests/7' },
+        },
       },
     },
     async runScript(args) {
@@ -9145,31 +9166,40 @@ test('integration adapters wrap selected Jira, GitLab, and Sonar script contract
       if (args[0] === '--ticket-comments') {
         return '\ufeff[{"body":"ok"}]';
       }
-      if (args[0] === '--mr-diff' || args[0] === '--mr-status') {
-        return `\ufeff${JSON.stringify({
-          mr: {
-            title: 'Fix it',
-            iid: 7,
-            state: 'merged',
-            review_status: 'approved',
-            web_url: 'https://gitlab.example/mr/7',
-            source_branch: 'feature/K-7',
-          },
-          comments: [
-            { id: 1, body: 'approved', created_at: '2026-07-02T01:00:00.000Z', author: { username: 'ada' } },
-            { id: '2', note: 'merged', created_at: '2026-07-02T02:00:00.000Z' },
-          ],
-          discussions: [
-            { id: 'd1', notes: [{ body: 'fixed', created_at: '2026-07-02T02:30:00.000Z', resolvable: true, resolved: true }] },
-            { id: 'd2', notes: [{ body: 'still failing', created_at: '2026-07-02T03:00:00.000Z', resolvable: true, resolved: false }] },
-          ],
-          files: [{ path: 'src/app.ts' }],
-        })}`;
-      }
-      if (args[0] === '--mr-branch') {
-        return '\ufeff' + JSON.stringify({ branch: 'feature/K-7' });
-      }
       return '{}';
+    },
+    async gitlabTransport(request) {
+      gitlabRequests.push(request);
+      const url = new URL(request.url);
+      if (url.pathname === '/api/v4/projects/123/merge_requests/7') {
+        return gitlabResponse({
+          title: 'Fix it',
+          iid: 7,
+          state: 'merged',
+          web_url: 'https://gitlab.example/mr/7',
+          source_branch: 'feature/K-7',
+          target_branch: 'develop',
+        });
+      }
+      if (url.pathname === '/api/v4/projects/123/merge_requests/7/notes') {
+        return gitlabResponse([
+          { id: 1, body: 'approved', created_at: '2026-07-02T01:00:00.000Z', author: { username: 'ada' } },
+          { id: '2', note: 'merged', created_at: '2026-07-02T02:00:00.000Z' },
+        ]);
+      }
+      if (url.pathname === '/api/v4/projects/123/merge_requests/7/discussions') {
+        return gitlabResponse([
+          { id: 'd1', notes: [{ body: 'fixed', created_at: '2026-07-02T02:30:00.000Z', resolvable: true, resolved: true }] },
+          { id: 'd2', notes: [{ body: 'still failing', created_at: '2026-07-02T03:00:00.000Z', resolvable: true, resolved: false }] },
+        ]);
+      }
+      if (url.pathname === '/api/v4/projects/123/merge_requests/7/approvals') {
+        return gitlabResponse({ approved: true });
+      }
+      if (url.pathname === '/api/v4/projects/123/merge_requests/7/diffs') {
+        return gitlabResponse([{ path: 'src/app.ts' }]);
+      }
+      throw new Error(`unexpected GitLab URL ${request.url}`);
     },
   };
 
@@ -9183,6 +9213,7 @@ test('integration adapters wrap selected Jira, GitLab, and Sonar script contract
   assert.equal(status.review_status, 'approved');
   assert.equal(status.url, 'https://gitlab.example/mr/7');
   assert.equal(status.source_branch, 'feature/K-7');
+  assert.equal(status.target_branch, 'develop');
   assert.equal(status.comment_count, 2);
   assert.equal(status.last_comment_at, '2026-07-02T02:00:00.000Z');
   assert.equal(status.discussion_count, 2);
@@ -9191,6 +9222,11 @@ test('integration adapters wrap selected Jira, GitLab, and Sonar script contract
   assert.equal(status.last_discussion_at, '2026-07-02T03:00:00.000Z');
   assert.equal(status.discussions_resolved, false);
   assert.deepEqual(status.comments.map(comment => comment.id), ['1', '2']);
+  assert.deepEqual(calls, [['--ticket-comments', 'K-7']]);
+  assert.equal(gitlabRequests.every(request => request.headers['PRIVATE-TOKEN'] === 'gitlab-token'), true);
+  assert.ok(gitlabRequests.some(request => new URL(request.url).pathname === '/api/v4/projects/123/merge_requests/7/diffs'));
+  assert.ok(gitlabRequests.some(request => new URL(request.url).pathname === '/api/v4/projects/123/merge_requests/7/approvals'));
+
   const discussionOnlyStatus = integrationAdapters.normalizeMergeRequestStatus({
     mr: {
       title: 'Thread only',
@@ -9208,72 +9244,96 @@ test('integration adapters wrap selected Jira, GitLab, and Sonar script contract
   assert.equal(discussionOnlyStatus.discussion_count, 1);
   assert.equal(discussionOnlyStatus.unresolved_discussion_count, 1);
   assert.equal(discussionOnlyStatus.last_discussion_at, '2026-07-02T03:30:00.000Z');
-  assert.deepEqual(calls, [
-    ['--ticket-comments', 'K-7'],
-    ['--mr-diff', '123', '7'],
-    ['--mr-branch', '123', '7'],
-    ['--mr-status', '123', '7'],
-  ]);
-  const fallbackCalls = [];
+  assert.equal(integrationAdapters.normalizeMergeRequestStatus({
+    mr: { state: 'opened' },
+    approvals: { approved: true },
+  }).review_status, 'approved');
+
+  const pathFallbackRequests = [];
   const fallbackStatus = await integrationAdapters.gitlabAdapter.mergeRequestStatus({
+    env: runner.env,
     state: {
-      projects: { app: { config: { gitlab_project_id: 456 } } },
+      projects: { app: { config: {} } },
       tickets: {
-        'K-8': { projects: ['app'], mr: { iid: 8 } },
+        'K-8': {
+          projects: ['app'],
+          mr: { iid: 8, url: 'https://gitlab.example/group/app/-/merge_requests/8' },
+        },
       },
     },
-    async runScript(args) {
-      fallbackCalls.push(args);
-      if (args[0] === '--mr-status' && args.length === 3) {
-        throw new Error('gitlab_api.py --mr-status 456 8 failed: unrecognized arguments: --mr-status 456 8');
+    async gitlabTransport(request) {
+      pathFallbackRequests.push(request);
+      const pathname = new URL(request.url).pathname;
+      if (pathname === '/api/v4/projects/group%2Fapp/merge_requests/8') {
+        return gitlabResponse({ state: 'closed', review_status: 'changes_requested', web_url: 'https://gitlab.example/mr/8' });
       }
-      return JSON.stringify({ mr: { state: 'closed', review_status: 'changes_requested', web_url: 'https://gitlab.example/mr/8' } });
+      if (pathname.endsWith('/notes') || pathname.endsWith('/discussions')) {
+        return gitlabResponse([]);
+      }
+      if (pathname.endsWith('/approvals')) {
+        return gitlabResponse({ approved: false });
+      }
+      throw new Error(`unexpected GitLab URL ${request.url}`);
     },
   }, 'K-8');
   assert.equal(fallbackStatus.state, 'closed');
   assert.equal(fallbackStatus.review_status, 'changes_requested');
-  assert.deepEqual(fallbackCalls, [
-    ['--mr-status', '456', '8'],
-    ['--mr-status', 'K-8'],
-  ]);
-  const stdoutFallbackCalls = [];
-  const stdoutFallbackStatus = await integrationAdapters.gitlabAdapter.mergeRequestStatus({
+  assert.ok(pathFallbackRequests.some(request => new URL(request.url).pathname === '/api/v4/projects/group%2Fapp/merge_requests/8'));
+
+  const changesFallbackRequests = [];
+  const changesFallbackDiff = await integrationAdapters.gitlabAdapter.mergeRequestDiff({
+    env: runner.env,
     state: {
       projects: { app: { config: { gitlab_project_id: 789 } } },
       tickets: {
         'K-9': { projects: ['app'], mr: { iid: 9 } },
       },
     },
-    async runScript(args) {
-      stdoutFallbackCalls.push(args);
-      if (args[0] === '--mr-status') {
-        return 'usage: gitlab_api.py [-h]\nerror: unrecognized arguments: --mr-status 789 9';
+    async gitlabTransport(request) {
+      changesFallbackRequests.push(request);
+      const pathname = new URL(request.url).pathname;
+      if (pathname === '/api/v4/projects/789/merge_requests/9') {
+        return gitlabResponse({ state: 'merged', source_branch: 'feature/K-9' });
       }
-      return JSON.stringify({ mr: { state: 'merged', approved: true } });
+      if (pathname === '/api/v4/projects/789/merge_requests/9/diffs') {
+        return { statusCode: 404, body: '{"message":"not found"}', headers: {} };
+      }
+      if (pathname === '/api/v4/projects/789/merge_requests/9/changes') {
+        return gitlabResponse({ changes: [{ path: 'src/fallback.ts' }] });
+      }
+      throw new Error(`unexpected GitLab URL ${request.url}`);
     },
   }, 'K-9');
-  assert.equal(stdoutFallbackStatus.state, 'merged');
-  assert.equal(stdoutFallbackStatus.review_status, 'approved');
-  assert.deepEqual(stdoutFallbackCalls, [
-    ['--mr-status', '789', '9'],
-    ['--mr-diff', '789', '9'],
-  ]);
+  assert.equal(changesFallbackDiff.files[0].path, 'src/fallback.ts');
+  assert.ok(changesFallbackRequests.some(request => new URL(request.url).pathname.endsWith('/diffs')));
+  assert.ok(changesFallbackRequests.some(request => new URL(request.url).pathname.endsWith('/changes')));
+
+  const projectLookupRequests = [];
+  const projectLookupClient = gitlabRestClient.createGitLabRestClient({
+    env: runner.env,
+    async transport(request) {
+      projectLookupRequests.push(request);
+      return gitlabResponse({ id: 321 });
+    },
+  });
+  assert.equal(await projectLookupClient.projectId('group/app'), 321);
+  assert.equal(new URL(projectLookupRequests[0].url).pathname, '/api/v4/projects/group%2Fapp');
+
   await assert.rejects(
     () => integrationAdapters.gitlabAdapter.mergeRequestStatus({
-      runScript: async () => JSON.stringify({ error: 'not found' }),
+      env: runner.env,
+      state: { projects: {}, tickets: { 'K-404': { projects: [], mr: { iid: 404 } } } },
+      gitlabTransport: async () => gitlabResponse({}),
     }, 'K-404'),
-    /not found/
+    /missing gitlab_project_id or parseable merge request URL/
   );
   await assert.rejects(
     () => integrationAdapters.gitlabAdapter.mergeRequestStatus({
-      async runScript(args) {
-        if (args[0] === '--mr-status') {
-          throw new Error('gitlab_api.py --mr-status K-500 failed: upstream timeout');
-        }
-        return JSON.stringify({ mr: { state: 'merged' } });
-      },
+      env: { GITLAB_BASE_URL: 'https://gitlab.example' },
+      state: { projects: { app: { config: { gitlab_project_id: 500 } } }, tickets: { 'K-500': { projects: ['app'], mr: { iid: 500 } } } },
+      gitlabTransport: async () => gitlabResponse({}),
     }, 'K-500'),
-    /upstream timeout/
+    /GITLAB_TOKEN/
   );
   assert.deepEqual(await integrationAdapters.jiraAdapter.ticketComments({
     runScript: async () => JSON.stringify({
@@ -9412,10 +9472,18 @@ test('integration adapters wrap selected Jira, GitLab, and Sonar script contract
   );
 
   const malformedDiff = await integrationAdapters.gitlabAdapter.mergeRequestDiff({
-    runScript: async () => JSON.stringify({
-      mr: 'not an object',
-      files: [null, 'src/raw.ts', { path: 42, diff: '@@ diff only @@' }, { path: './src/good.ts', diff: { bad: true }, deleted_file: true }],
-    }),
+    env: runner.env,
+    state: { projects: { app: { config: { gitlab_project_id: 909 } } }, tickets: { 'K-9': { projects: ['app'], mr: { iid: 9 } } } },
+    async gitlabTransport(request) {
+      const pathname = new URL(request.url).pathname;
+      if (pathname === '/api/v4/projects/909/merge_requests/9') {
+        return gitlabResponse('not an object');
+      }
+      if (pathname === '/api/v4/projects/909/merge_requests/9/diffs') {
+        return gitlabResponse([null, 'src/raw.ts', { path: 42, diff: '@@ diff only @@' }, { path: './src/good.ts', diff: { bad: true }, deleted_file: true }]);
+      }
+      throw new Error(`unexpected GitLab URL ${request.url}`);
+    },
   }, 'K-9');
   assert.deepEqual(malformedDiff.mr, {});
   assert.deepEqual(malformedDiff.files, [
@@ -9423,11 +9491,32 @@ test('integration adapters wrap selected Jira, GitLab, and Sonar script contract
     { diff: '@@ diff only @@' },
     { path: 'src/good.ts', deleted_file: true },
   ]);
-  const nullDiff = await integrationAdapters.gitlabAdapter.mergeRequestDiff({ runScript: async () => 'null' }, 'K-10');
+  const nullDiff = await integrationAdapters.gitlabAdapter.mergeRequestDiff({
+    env: runner.env,
+    state: { projects: { app: { config: { gitlab_project_id: 910 } } }, tickets: { 'K-10': { projects: ['app'], mr: { iid: 10 } } } },
+    async gitlabTransport(request) {
+      const pathname = new URL(request.url).pathname;
+      if (pathname === '/api/v4/projects/910/merge_requests/10') {
+        return gitlabResponse(null);
+      }
+      if (pathname === '/api/v4/projects/910/merge_requests/10/diffs') {
+        return gitlabResponse(null);
+      }
+      throw new Error(`unexpected GitLab URL ${request.url}`);
+    },
+  }, 'K-10');
   assert.deepEqual(nullDiff.mr, {});
   assert.deepEqual(nullDiff.files, []);
-  assert.equal(await integrationAdapters.gitlabAdapter.mergeRequestBranch({ runScript: async () => JSON.stringify({ branch: ' feature/K-8 ' }) }, 'K-8'), 'feature/K-8');
-  assert.equal(await integrationAdapters.gitlabAdapter.mergeRequestBranch({ runScript: async () => 'null' }, 'K-8'), 'K-8');
+  assert.equal(await integrationAdapters.gitlabAdapter.mergeRequestBranch({
+    env: runner.env,
+    state: { projects: { app: { config: { gitlab_project_id: 808 } } }, tickets: { 'K-8': { projects: ['app'], mr: { iid: 8 } } } },
+    gitlabTransport: async () => gitlabResponse({ branch: ' feature/K-8 ' }),
+  }, 'K-8'), 'feature/K-8');
+  assert.equal(await integrationAdapters.gitlabAdapter.mergeRequestBranch({
+    env: runner.env,
+    state: { projects: { app: { config: { gitlab_project_id: 808 } } }, tickets: { 'K-8': { projects: ['app'], mr: { iid: 8 } } } },
+    gitlabTransport: async () => gitlabResponse(null),
+  }, 'K-8'), 'K-8');
   const originalRunPipelineJson = scriptClient.runPipelineJson;
   try {
     scriptClient.runPipelineJson = async () => ({
@@ -9454,34 +9543,53 @@ test('integration adapters wrap selected Jira, GitLab, and Sonar script contract
   }
 
   await assert.rejects(
-    () => integrationAdapters.gitlabAdapter.mergeRequestDiff({ runScript: async () => '{"error":"not found"}' }, 'K-8'),
-    /not found/
+    () => integrationAdapters.gitlabAdapter.mergeRequestStatus({
+      env: runner.env,
+      state: { projects: { app: { config: { gitlab_project_id: 500 } } }, tickets: { 'K-500': { projects: ['app'], mr: { iid: 500 } } } },
+      gitlabTransport: async () => ({ statusCode: 500, body: '{"message":"upstream timeout"}', headers: {} }),
+    }, 'K-500'),
+    /HTTP 500/
   );
   await assert.rejects(
-    () => integrationAdapters.gitlabAdapter.mergeRequestDiff({ runScript: async () => 'not json' }, 'K-8'),
-    /Invalid JSON from MR diff/
+    () => integrationAdapters.gitlabAdapter.mergeRequestDiff({
+      env: runner.env,
+      state: { projects: { app: { config: { gitlab_project_id: 812 } } }, tickets: { 'K-8': { projects: ['app'], mr: { iid: 8 } } } },
+      async gitlabTransport(request) {
+        const pathname = new URL(request.url).pathname;
+        if (pathname === '/api/v4/projects/812/merge_requests/8') {
+          return gitlabResponse({ state: 'opened' });
+        }
+        return { statusCode: 200, body: 'not json', headers: {} };
+      },
+    }, 'K-8'),
+    /Invalid JSON from GitLab MR !8 diffs/
   );
 });
 
+function gitlabResponse(value, headers = {}) {
+  return {
+    statusCode: 200,
+    body: JSON.stringify(value),
+    headers,
+  };
+}
+
 test('integration adapters keep raw provider payloads unknown until normalized', () => {
   const source = readSourceFixture('src', 'services', 'integrationAdapters.ts');
+  const gitlabSource = readSourceFixture('src', 'services', 'gitlabRestClient.ts');
   for (const marker of [
     'gate(sonarKey: string, branch: string): Promise<unknown>',
     'measures(sonarKey: string, branch: string): Promise<unknown>',
     'issues(sonarKey: string, branch: string): Promise<unknown>',
     'return runPipelineJson<unknown>',
     "import { parseJsonWithLabel } from './jsonFiles'",
-    'parseJsonWithLabel(await runMergeRequestCommand',
-    'catch (e: unknown)',
+    "import { GitLabHttpTransport, GitLabRestRequestOptions, createGitLabRestClient, gitLabProjectPathFromMergeRequestUrl, gitlabRestClient } from './gitlabRestClient'",
+    'gitlabTransport?: GitLabHttpTransport',
+    'return createGitLabRestClient(options)',
+    'function gitlabRequestOptions(options: ScriptRunOptions): GitLabRestRequestOptions',
+    'function mergeRequestRestTarget',
+    'gitLabProjectPathFromMergeRequestUrl(ticket?.mr?.url)',
     "import { arrayFromUnknown, isRecord, optionalFiniteNumberFromUnknown, optionalTrimmedStringFromUnknown, recordsFromUnknown } from './records'",
-    "import { unknownErrorMessage } from './errorUtils'",
-    'async function runMergeRequestStatusJson',
-    'async function runMergeRequestCommand',
-    'function mergeRequestScriptTarget',
-    'const primaryArgs = target ? [command, String(target.projectId), String(target.iid)] : [command, ticketKey]',
-    'return runner.runScript([command, ticketKey], options)',
-    'function isUnsupportedMergeRequestStatusCommand',
-    'function isUnsupportedMergeRequestStatusText',
     'function normalizeSonarBranches',
     'for (const item of arrayFromUnknown(value))',
     'function mergeRequestCommentInputs',
@@ -9494,8 +9602,30 @@ test('integration adapters keep raw provider payloads unknown until normalized',
     assert.ok(source.includes(marker), marker);
   }
   for (const marker of [
+    'export class GitLabRestClient',
+    'export function createGitLabRestClient',
+    'export function normalizeGitLabApiBaseUrl',
+    'export function gitLabProjectPathFromMergeRequestUrl',
+    'async mergeRequestStatus',
+    '/approvals',
+    '/diffs',
+    '/changes',
+    "'PRIVATE-TOKEN': config.token",
+    'parseJsonWithLabel(response.body, label, { includePreview: true })',
+    'function defaultGitLabTransport',
+    "import { unknownErrorMessage } from './errorUtils'",
+  ]) {
+    assert.ok(gitlabSource.includes(marker), marker);
+  }
+  for (const marker of [
     'Promise<any>',
     'runPipelineJson<any>',
+    'runGitlabJson',
+    'runMergeRequestCommand',
+    'mergeRequestScriptTarget',
+    '--mr-status',
+    '--mr-diff',
+    '--mr-branch',
     'function parseJson(raw: string, label: string)',
     'catch (e: any)',
     'e?.message',
@@ -9522,7 +9652,6 @@ test('integration manifest reports missing, valid, and malformed manifests', () 
     scripts: {
       'kronos_state.py': { version: '1.0.0', required: true },
       'pipeline_monitor.py': { version: '1.0.0', required: true },
-      'gitlab_api.py': { version: '1.0.0', required: true },
     },
     prompts: {
       'implement-system': {
@@ -9593,7 +9722,6 @@ test('integration manifest audits script and prompt SHA-256 drift', () => {
   const scriptContents = {
     'kronos_state.py': 'print("state")\n',
     'pipeline_monitor.py': 'print("pipeline")\n',
-    'gitlab_api.py': 'print("gitlab")\n',
   };
   for (const [name, content] of Object.entries(scriptContents)) {
     fs.writeFileSync(path.join(scriptDir, name), content);
@@ -9615,15 +9743,15 @@ test('integration manifest audits script and prompt SHA-256 drift', () => {
   const status = integrationManifest.readIntegrationManifest(manifestPath);
   const audit = integrationManifest.auditIntegrationManifest(status, { promptDir });
   assert.equal(audit.status, 'pass');
-  assert.equal(audit.summary, '4 artifact hash checks passed, 0 warnings, 0 failures.');
-  assert.equal(audit.artifacts.filter(artifact => artifact.status === 'pass').length, 4);
+  assert.equal(audit.summary, '3 artifact hash checks passed, 0 warnings, 0 failures.');
+  assert.equal(audit.artifacts.filter(artifact => artifact.status === 'pass').length, 3);
 
-  fs.writeFileSync(path.join(scriptDir, 'gitlab_api.py'), 'print("changed")\n');
+  fs.writeFileSync(path.join(scriptDir, 'pipeline_monitor.py'), 'print("changed")\n');
   const drifted = integrationManifest.auditIntegrationManifest(status, { promptDir });
   assert.equal(drifted.status, 'fail');
   assert.ok(drifted.artifacts.some(artifact =>
     artifact.kind === 'script' &&
-    artifact.name === 'gitlab_api.py' &&
+    artifact.name === 'pipeline_monitor.py' &&
     artifact.status === 'fail' &&
     artifact.detail.includes('does not match')
   ));
@@ -9638,7 +9766,6 @@ test('integration manifest snapshot writes current script and prompt hashes', ()
   const scriptContents = {
     'kronos_state.py': 'print("snapshot-state")\n',
     'pipeline_monitor.py': 'print("snapshot-pipeline")\n',
-    'gitlab_api.py': 'print("snapshot-gitlab")\n',
   };
   for (const [name, content] of Object.entries(scriptContents)) {
     fs.writeFileSync(path.join(scriptDir, name), content);
@@ -9761,7 +9888,6 @@ test('Claude env loader parses ~/.claude/.env without overwriting existing proce
 
 test('doctor checks centralize command, credential, project config, and reachability inputs', async () => {
   fs.writeFileSync(path.join(process.env.KRONOS_SCRIPTS_DIR, 'kronos_state.py'), 'print("{}")\n');
-  fs.writeFileSync(path.join(process.env.KRONOS_SCRIPTS_DIR, 'gitlab_api.py'), 'print("{}")\n');
   const state = baseState({
     'K-1': ticket({ summary: 'Doctor ticket' }),
   });
@@ -9784,18 +9910,6 @@ test('doctor checks centralize command, credential, project config, and reachabi
   const commandRunner = (command, args) => {
     const joined = mockCommandLine(command, args);
     if (joined === 'python --version') { return 'Python 3.12.0\n'; }
-    if (command === 'python' && String(args[0]).endsWith('gitlab_api.py') && args[1] === '--mr-status' && args[2] === '42' && args[3] === '7') {
-      return JSON.stringify({
-        mr: {
-          state: 'opened',
-          review_status: 'pending_review',
-          comment_count: 0,
-          discussion_count: 0,
-          unresolved_discussion_count: 0,
-          discussions_resolved: true,
-        },
-      });
-    }
     if (joined === 'git --version') { return 'git version 2.45.0\n'; }
     if (joined === 'claude --version') { return 'claude 1.2.3\n'; }
     if (joined === 'gcloud --version') { return 'Google Cloud SDK 500.0.0\n'; }
@@ -9858,10 +9972,19 @@ test('doctor checks centralize command, credential, project config, and reachabi
   const reviewByName = Object.fromEntries(reviewChecks.map(check => [check.name, check]));
   assert.equal(reviewByName['Review MR polling prerequisites'].status, 'pass');
   assert.match(reviewByName['Review MR polling prerequisites'].detail, /1 open review MR ready/);
-  assert.match(reviewByName['Review MR polling prerequisites'].detail, /--mr-status contract OK for K-REVIEW/);
+  assert.match(reviewByName['Review MR polling prerequisites'].detail, /native GitLab REST for K-REVIEW/);
 
-  const staleContractChecks = doctorChecks.runDoctorChecks({
-    state: reviewState,
+  const parseableUrlState = baseState({
+    'K-URL': ticket({
+      summary: 'Review ticket with URL target',
+      next_action: 'await_review',
+      projects: ['app'],
+      mr: { iid: 9, state: 'opened', review_status: 'pending_review', url: 'https://gitlab.example/group/app/-/merge_requests/9' },
+    }),
+  });
+  parseableUrlState.projects.app.config = { default_branch: 'main' };
+  const parseableUrlChecks = doctorChecks.runDoctorChecks({
+    state: parseableUrlState,
     queue: null,
     profile,
     requiredPrompts: [],
@@ -9869,19 +9992,12 @@ test('doctor checks centralize command, credential, project config, and reachabi
     env,
     platform: 'win32',
     gcloudExistsSync: filePath => filePath === gcloudCmd,
-    commandRunner: (command, args, options) => {
-      if (command === 'python' && String(args[0]).endsWith('gitlab_api.py') && args[1] === '--mr-status' && args[2] === '42' && args[3] === '7') {
-        return JSON.stringify({ mr: { state: 'opened' } });
-      }
-      return commandRunner(command, args, options);
-    },
+    commandRunner,
     kronosDir: process.env.KRONOS_DIR,
   });
-  const staleContractByName = Object.fromEntries(staleContractChecks.map(check => [check.name, check]));
-  assert.equal(staleContractByName['Review MR polling prerequisites'].status, 'warn');
-  assert.match(staleContractByName['Review MR polling prerequisites'].detail, /--mr-status 42 7 missing review_status or approved flag/);
-  assert.match(staleContractByName['Review MR polling prerequisites'].detail, /comment metadata/);
-  assert.match(staleContractByName['Review MR polling prerequisites'].detail, /discussion metadata/);
+  const parseableUrlByName = Object.fromEntries(parseableUrlChecks.map(check => [check.name, check]));
+  assert.equal(parseableUrlByName['Review MR polling prerequisites'].status, 'pass');
+  assert.match(parseableUrlByName['Review MR polling prerequisites'].detail, /native GitLab REST for K-URL/);
 
   const blockedReviewState = baseState({
     'K-BLOCKED': ticket({
@@ -9907,7 +10023,7 @@ test('doctor checks centralize command, credential, project config, and reachabi
   const blockedReviewByName = Object.fromEntries(blockedReviewChecks.map(check => [check.name, check]));
   assert.equal(blockedReviewByName['Review MR polling prerequisites'].status, 'warn');
   assert.match(blockedReviewByName['Review MR polling prerequisites'].detail, /missing GITLAB_TOKEN/);
-  assert.match(blockedReviewByName['Review MR polling prerequisites'].detail, /K-BLOCKED\/app: missing gitlab_project_id/);
+  assert.match(blockedReviewByName['Review MR polling prerequisites'].detail, /K-BLOCKED: missing gitlab_project_id or parseable merge request URL/);
 
   let targets = [];
   const reachabilityChecks = await doctorChecks.runDoctorReachabilityChecks({
@@ -10077,19 +10193,15 @@ test('doctor checks centralize command, credential, project config, and reachabi
     "unknownErrorMessage(e, 'Provider reachability checks failed.')",
     "unknownErrorMessage(e, `${command} unavailable`)",
     "unknownErrorMessage(e, 'claude unavailable')",
-    "import { normalizeMergeRequestStatus } from './integrationAdapters'",
-    "import { parseJsonWithLabel } from './jsonFiles'",
+    "import { gitLabProjectPathFromMergeRequestUrl, normalizeGitLabApiBaseUrl } from './gitlabRestClient'",
     "import { recordEntriesFromUnknown, recordFromUnknown, recordKeysFromUnknown } from './records'",
     "import { ticketStringArray } from './ticketFields'",
     'function addReviewPollingPrerequisiteCheck',
-    'function reviewMergeRequestStatusContractIssue',
-    'function hasMergeRequestCommentSignal',
-    'function hasMergeRequestDiscussionSignal',
-    'parseJsonWithLabel(raw, `MR status for ${target.ticketKey}`)',
     "'Review MR polling prerequisites'",
+    'normalizeGitLabApiBaseUrl(firstConfiguredUrl',
+    'gitLabProjectPathFromMergeRequestUrl(ticket.mr?.url)',
+    'background polling via native GitLab REST',
     "ticket.next_action === 'await_review' && ticket.mr?.state === 'opened'",
-    "const args = [scriptPath, '--mr-status', String(target.projectId), String(target.iid)]",
-    "commandRunner('python', args",
     "countLabel(templates.length, 'template')",
     "countLabel(projectCount, 'project')",
     "countLabel(input.queue.items?.length || 0, 'queue item')",
@@ -11131,7 +11243,6 @@ test('dashboard panel view renders escaped command center data', () => {
     manifestAudit: { status: 'pass', summary: '1 artifact hash check passed, 0 warnings, 0 failures.', artifacts: [] },
     scripts: [
       { name: 'kronos_state.py', path: '/scripts/kronos_state.py', present: true },
-      { name: 'gitlab_api.py', path: '/scripts/gitlab_api.py', present: true },
       { name: 'pipeline_monitor.py', path: '/scripts/pipeline_monitor.py', present: true },
     ],
   });
@@ -11139,7 +11250,6 @@ test('dashboard panel view renders escaped command center data', () => {
     contractDocText: readSourceFixture('docs', 'integration-script-contract.md'),
     scripts: [
       { name: 'kronos_state.py', path: '/scripts/kronos_state.py', present: true },
-      { name: 'gitlab_api.py', path: '/scripts/gitlab_api.py', present: true },
       { name: 'pipeline_monitor.py', path: '/scripts/pipeline_monitor.py', present: true },
     ],
   });
@@ -11339,8 +11449,7 @@ test('setup wizard, MR autopilot, and integration contract panels render actiona
     manifestAudit: { status: 'warn', summary: 'manifest missing', artifacts: [] },
     scripts: [
       { name: 'kronos_state.py', path: '/scripts/kronos_state.py', present: true },
-      { name: 'gitlab_api.py', path: '/scripts/gitlab_api.py', present: false },
-      { name: 'pipeline_monitor.py', path: '/scripts/pipeline_monitor.py', present: true },
+      { name: 'pipeline_monitor.py', path: '/scripts/pipeline_monitor.py', present: false },
     ],
   });
   assert.equal(setupPlan.status, 'blocked');
@@ -11394,10 +11503,9 @@ test('setup wizard, MR autopilot, and integration contract panels render actiona
   assert.ok(blockedAutopilotPlan.candidates[0].blockers.includes('No linked project has gitlab_project_id.'));
 
   const contractReport = integrationContractHarness.buildIntegrationContractReport({
-    contractDocText: '--ticket-comments comments --mr-status <gitlab_project_id> <mr_iid>',
+    contractDocText: '--ticket-comments comments GET /api/v4/projects/<project_id>/merge_requests/<mr_iid> GET /api/v4/projects/<project_id>/merge_requests/<mr_iid>/diffs GET /api/v4/projects/<namespace%2Fproject> notes discussions files source_branch target_branch id',
     scripts: [
       { name: 'kronos_state.py', path: '/scripts/kronos_state.py', present: true },
-      { name: 'gitlab_api.py', path: '/scripts/gitlab_api.py', present: true },
       { name: 'pipeline_monitor.py', path: '/scripts/pipeline_monitor.py', present: false },
     ],
   });
@@ -11405,7 +11513,8 @@ test('setup wizard, MR autopilot, and integration contract panels render actiona
   assert.equal(contractReport.checks.some(check => check.command.includes('--sonar-issues') && check.status === 'fail'), true);
   const contractHtml = integrationContractPanelView.buildIntegrationContractHtml(contractReport, 'nonce-contract', ACTION_SCRIPT_URI);
   assert.match(contractHtml, /Kronos Integration Contracts/);
-  assert.match(contractHtml, /gitlab_api.py --mr-status/);
+  assert.match(contractHtml, /native GitLab REST/);
+  assert.match(contractHtml, /GET \/api\/v4\/projects\/&lt;project_id&gt;\/merge_requests\/&lt;mr_iid&gt;/);
   assert.match(contractHtml, /pipeline_monitor.py --sonar-issues/);
   assert.match(contractHtml, /data-action="snapshotIntegrationManifest"/);
 });
@@ -11419,6 +11528,15 @@ test('operator command routing preserves ticket, run, and item targets', () => {
   assert.deepEqual(operatorCommandRouting.resolveOperatorCommandRoute({ command: 'addEvidence', ticketKey: 'K-1' }), {
     kind: 'execute',
     commandId: 'kronos.addEvidence',
+    argument: { ticketKey: 'K-1' },
+  });
+  assert.deepEqual(operatorCommandRouting.resolveOperatorCommandRoute({ command: 'verifyRemote' }), {
+    kind: 'missingTicket',
+    commandId: 'kronos.verifyRemote',
+  });
+  assert.deepEqual(operatorCommandRouting.resolveOperatorCommandRoute({ command: 'verifyRemote', ticketKey: 'K-1' }), {
+    kind: 'execute',
+    commandId: 'kronos.verifyRemote',
     argument: { ticketKey: 'K-1' },
   });
   assert.deepEqual(operatorCommandRouting.resolveOperatorCommandRoute({ command: 'evidenceGate', ticketKey: 'K-1' }), {
@@ -11448,6 +11566,8 @@ test('operator command routing preserves ticket, run, and item targets', () => {
     commandId: 'kronos.integrationContractReport',
   });
   assert.equal(operatorCommandRouting.isTicketOperatorCommand('viewTicket'), true);
+  assert.equal(operatorCommandRouting.isTicketOperatorCommand('verifyLocal'), true);
+  assert.equal(operatorCommandRouting.isTicketOperatorCommand('verifyRemote'), true);
   assert.equal(operatorCommandRouting.isTicketOperatorCommand('runCenter'), false);
 });
 
@@ -11566,6 +11686,8 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     "empty.textContent = query ? 'No matching tickets.' : 'No tickets.'",
     'isQueued,',
     "makeButton(t.isQueued ? 'Remove from Queue' : 'Add to Queue'",
+    "makeButton('Verify Local'",
+    "makeButton('Verify Remote'",
     'function normalizeCommentsPayload',
     "console.warn('Kronos Jira Board could not parse comments payload', error)",
     "post(t.isQueued ? 'removeFromQueue' : 'addToQueue'",
@@ -11590,8 +11712,12 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'const TICKET_DETAIL_MESSAGE_COMMANDS = new Set',
     'const RECOVERY_MESSAGE_COMMANDS = new Set',
     'const OPERATOR_COMMAND_TO_VSCODE_COMMAND = new Map<string, string>',
+    "['verifyLocal', 'kronos.verifyLocal']",
+    "['verifyRemote', 'kronos.verifyRemote']",
     'const OPERATOR_COMMAND_MESSAGE_COMMANDS = new Set(OPERATOR_COMMAND_TO_VSCODE_COMMAND.keys())',
     'const TICKET_SCOPED_OPERATOR_COMMANDS = new Set',
+    "'verifyLocal',",
+    "'verifyRemote',",
     'const EVIDENCE_HANDOFF_OPERATOR_COMMANDS = operatorCommandSet([',
     'const DOCTOR_OPERATOR_COMMANDS = operatorCommandSet([',
     'function operatorCommandSet(commands: string[]): ReadonlySet<string>',
@@ -12651,14 +12777,23 @@ test('extension queue command handlers normalize payloads before use', () => {
     "vscode.commands.registerCommand('kronos.queuePinTop', async (treeItem: unknown)",
     "vscode.commands.registerCommand('kronos.openMrDiff', async (treeItem: unknown)",
     "vscode.commands.registerCommand('kronos.verifyLocal', async (treeItem: unknown)",
+    "vscode.commands.registerCommand('kronos.verifyRemote', async (treeItem: unknown)",
+    "await startTargetedTicketVerification(state, treeItem, 'local');",
+    "await startTargetedTicketVerification(state, treeItem, 'remote');",
     'const ticketKey = resolveTicketKey(treeItem);',
-    'const projectName = await pickTicketProjectNameForDispatch(state, treeItem, ticketKey,',
-    'const branch = await pickVerifyLocalBranchTarget(state, ticketKey, ticket, projectName, projectPath);',
-    'const environment = await pickVerifyLocalEnvironmentTarget(projectName);',
+    'const projectName = await pickTicketProjectNameForDispatch(',
+    "surface === 'remote' ? `Verify ${ticketKey} against which remote project?` : `Verify ${ticketKey} locally in which project?`,",
+    "type TargetedVerificationSurface = 'local' | 'remote';",
+    'async function startTargetedTicketVerification(',
+    'pickVerifyLocalEnvironmentTarget(projectName, { remoteOnly: true });',
+    'branch = buildVerifyRemoteDeploymentTarget(environment);',
+    'branch = await pickVerifyLocalBranchTarget(state, ticketKey, ticket, projectName, projectPath);',
+    'environment = await pickVerifyLocalEnvironmentTarget(projectName);',
     'const mode = await pickVerifyLocalModeTarget();',
     'const target: VerifyLocalPromptTarget = { ticketKey, projectName, branch, environment, mode, ticket };',
     'const verifyVars = buildVerifyLocalPromptVars(target);',
     "const verifyPrompt = loadPromptForDispatch(state, 'verify-local', verifyVars, projectPath);",
+    'verifySurface: surface,',
     'customPrompt: buildVerifyLocalPromptText(verifyPrompt.text, verifyVars)',
     "dispatchOptions.worktreeCheckout = 'ref';",
     'const queueData = resolveQueueCommandItem(treeItemOrData);',
@@ -12871,9 +13006,12 @@ test('extension Sonar commands normalize webview and issue payloads', () => {
     'const sonarSourceBranch = sourceBranch || getProjectBaseBranch(state, projectName)',
     'const branchStrategy = buildSonarFixBranchStrategy(projectName, sonarSourceBranch)',
     'const instructionBlock = buildSonarFixInstructionBlock({',
+    "worktreeBranch: remoteBranchRef(getProjectBaseBranch(state, projectName))",
   ]) {
     assert.ok(source.includes(marker), marker);
   }
+  assert.equal((source.match(/worktreeBranch: remoteBranchRef\(getProjectBaseBranch\(state, projectName\)\)/g) || []).length >= 3, true);
+  assert.equal((source.match(/worktreeCheckout: 'ref'/g) || []).length >= 4, true);
   for (const marker of [
     'function normalizeSonarIssueCommandValue(value: unknown): SonarIssue | null',
     "import { arrayFromUnknown, optionalTrimmedStringFromUnknown, recordFromUnknown } from './records'",
@@ -12940,6 +13078,8 @@ test('ticket detail rendering uses typed tickets and evidence records', () => {
     'runs?: TicketTimelineRuns',
     "import { mergeRequestCommentsFromRecord } from './mergeRequestComments'",
     "import { ticketStringArray, ticketStringField } from './ticketFields'",
+    "actionButton('verifyLocal', 'Verify Local'",
+    "actionButton('verifyRemote', 'Verify Remote'",
     'const mr = ticket.mr',
     'const build = ticket.build',
     'const comments = mergeRequestCommentsFromRecord(mr).slice(-5).reverse()',
@@ -13006,6 +13146,8 @@ test('ticket detail rendering uses typed tickets and evidence records', () => {
   assert.match(html, /Reviewer &lt;A&gt;/);
   assert.match(html, /Looks &lt;good&gt; &amp; safe/);
   assert.match(html, /Remove Queue/);
+  assert.match(html, /Verify Local/);
+  assert.match(html, /Verify Remote/);
   assert.match(html, /Agent Timeline/);
   assert.match(html, /Run completed: verify-local/);
   const longTimelineHtml = ticketPanelView.buildTicketTimelineHtml(Array.from({ length: 9 }, (_, idx) => ({
@@ -13092,7 +13234,7 @@ test('merge request diff rendering uses normalized adapter results', () => {
     assert.equal(`${extensionSource}\n${diffPanelViewSource}`.includes(marker), false, marker);
   }
   assert.ok(integrationAdapters.includes('export interface MergeRequestDiffResult'));
-  assert.ok(integrationAdapters.includes("files: normalizeChangedFiles(data['files'])"));
+  assert.ok(integrationAdapters.includes('files: normalizeChangedFiles(files)'));
   assert.ok(integrationAdapters.includes('[key: string]: unknown'));
 });
 

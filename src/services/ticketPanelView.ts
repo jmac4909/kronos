@@ -167,6 +167,8 @@ export function buildTicketHtml(key: string, ticket: Ticket, input: TicketPanelR
     projectList.length > 0
       ? actionButton('startTicket', 'Start Work', { ticket: key, primary: true })
       : actionButton('linkTicket', 'Link Project', { ticket: key, primary: true }),
+    actionButton('verifyLocal', 'Verify Local', { ticket: key }),
+    actionButton('verifyRemote', 'Verify Remote', { ticket: key }),
     isQueued
       ? actionButton('removeFromQueue', 'Remove Queue', { ticket: key })
       : actionButton('addToQueue', 'Add Queue', { ticket: key }),
