@@ -14,7 +14,7 @@ type RunAttentionSource =
   | 'failureKind'
   | 'status';
 
-interface RunAttentionSummary {
+export interface RunAttentionSummary {
   status: string;
   failureKind: RunFailureKind;
   label: string;
@@ -40,7 +40,7 @@ export function isAttentionRunStatus(status: unknown): boolean {
   return isFailedTerminalRunStatus(status);
 }
 
-function summarizeRunAttention(run: unknown): RunAttentionSummary {
+export function runAttentionSummary(run: unknown): RunAttentionSummary {
   const record = recordFromUnknown(run);
   const status = runText(record['status']) || 'unknown';
   const failureKind = coerceRunFailureKind(runText(record['failureKind'])) || classifyRunFailure(run);
@@ -81,7 +81,7 @@ function summarizeRunAttention(run: unknown): RunAttentionSummary {
 }
 
 export function runAttentionDetail(run: unknown): string {
-  return summarizeRunAttention(run).detail;
+  return runAttentionSummary(run).detail;
 }
 
 export function runAttentionLine(run: unknown, maxLength = 140): string {

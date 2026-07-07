@@ -46,6 +46,10 @@ export const HUMAN_REVIEW_MESSAGE_COMMANDS = new Set([
 export const DASHBOARD_MESSAGE_COMMANDS = new Set([
   'refreshPanel',
   'nextBestAction',
+  'setupWizard',
+  'mrAutopilot',
+  'integrationContractReport',
+  'agentQualityScore',
   'queuePlanner',
   'runCenter',
   'humanReviewInbox',
@@ -63,6 +67,38 @@ export const SPEC_BEANSTALK_MESSAGE_COMMANDS = new Set([
   'generateSpec',
   'startBeanstalk',
   'openGeneratedSpec',
+]);
+
+export const SETUP_WIZARD_MESSAGE_COMMANDS = new Set([
+  'refreshPanel',
+  'setup',
+  'settings',
+  'doctor',
+  'integrationManifest',
+  'integrationContractReport',
+  'snapshotIntegrationManifest',
+  'profiles',
+  'openDashboard',
+  'specBeanstalk',
+]);
+
+export const MR_AUTOPILOT_MESSAGE_COMMANDS = new Set([
+  'refreshPanel',
+  'runAutopilotPass',
+  'pollReviewMergeRequests',
+  'humanReviewInbox',
+  'queuePlanner',
+  'runCenter',
+  'evidenceGate',
+  'viewTicket',
+  'startTicket',
+]);
+
+export const INTEGRATION_CONTRACT_MESSAGE_COMMANDS = new Set([
+  'refreshPanel',
+  'doctor',
+  'integrationManifest',
+  'snapshotIntegrationManifest',
 ]);
 
 export const PLAN_MESSAGE_COMMANDS = new Set([
@@ -110,6 +146,7 @@ export const RECOVERY_MESSAGE_COMMANDS = new Set([
 
 export const OPERATOR_COMMAND_TO_VSCODE_COMMAND = new Map<string, string>([
   ['addToQueue', 'kronos.addToQueue'],
+  ['openDashboard', 'kronos.openDashboard'],
   ['addEvidence', 'kronos.addEvidence'],
   ['addEvidenceCheck', 'kronos.addEvidenceCheck'],
   ['linkTicket', 'kronos.linkTicket'],
@@ -117,8 +154,12 @@ export const OPERATOR_COMMAND_TO_VSCODE_COMMAND = new Map<string, string>([
   ['settings', 'kronos.settings'],
   ['doctor', 'kronos.doctor'],
   ['integrationManifest', 'kronos.integrationManifest'],
+  ['integrationContractReport', 'kronos.integrationContractReport'],
   ['snapshotIntegrationManifest', 'kronos.snapshotIntegrationManifest'],
   ['profiles', 'kronos.profiles'],
+  ['setupWizard', 'kronos.setupWizard'],
+  ['mrAutopilot', 'kronos.mrAutopilot'],
+  ['pollReviewMergeRequests', 'kronos.pollReviewMergeRequests'],
   ['queuePlanner', 'kronos.queuePlanner'],
   ['humanReviewInbox', 'kronos.humanReviewInbox'],
   ['promptManager', 'kronos.promptManager'],
@@ -221,20 +262,25 @@ export const TREND_METRICS_OPERATOR_COMMANDS = operatorCommandSet([
 export const INTEGRATION_MANIFEST_OPERATOR_COMMANDS = operatorCommandSet([
   'snapshotIntegrationManifest',
   'doctor',
+  'integrationContractReport',
+  'setupWizard',
   'profiles',
   'promptManager',
 ]);
 
 export const PROFILES_OPERATOR_COMMANDS = operatorCommandSet([
   'settings',
+  'setupWizard',
   'doctor',
   'integrationManifest',
 ]);
 
 export const DOCTOR_OPERATOR_COMMANDS = operatorCommandSet([
+  'setupWizard',
   'setup',
   'settings',
   'integrationManifest',
+  'integrationContractReport',
   'profiles',
   'recoveryCenter',
   'stateAuditLog',

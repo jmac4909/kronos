@@ -2,15 +2,20 @@ import type { KronosState as KronosStateSnapshot, QueueState } from '../state/ty
 import { actionDisplayLabel as actionToLabel } from './actionCatalog';
 import { type AgingThresholds, analyzeAging } from './agingAnalyzer';
 import { computeAgentQualityScore } from './agentQualityScore';
+import { countLabel } from './countLabels';
 import { type DashboardWorklistItem, type DashboardWorklistLane, buildDashboardWorklist } from './dashboardWorklist';
 import { evaluateEvidenceGates } from './evidenceGate';
 import { buildHumanReviewInbox } from './humanReviewInbox';
+import type { IntegrationContractReport } from './integrationContractHarness';
+import { buildMrAutopilotPlan, type MrAutopilotPlan } from './mrAutopilot';
 import { buildNextActionContext } from './nextActionContext';
 import { actionButton, actionRow, kronosActionPanelScript } from './operatorPanel';
 import type { PlannedAction } from './queuePlanner';
 import { arrayFromUnknown, finiteNumberFromUnknown, recordFromUnknown, recordString } from './records';
 import { runLikeRecordsFromUnknown } from './runRecords';
 import { isFailedOrCancelledRunStatus, isFreshActiveRun } from './runStatus';
+import type { SetupWizardPlan } from './setupWizard';
+import { buildSpecBeanstalkTraceabilityReport, type SpecBeanstalkProjectStatus } from './specBeanstalk';
 import { ticketStringArray } from './ticketFields';
 import { computeTrendMetrics } from './trendMetrics';
 import { escapeClass, escapeHtml, kronosWebviewBaseCss } from './webviewHtml';
@@ -23,6 +28,9 @@ export interface DashboardPanelInput {
   brief: unknown;
   trendWindowDays: number;
   agingThresholds: Partial<AgingThresholds>;
+  setupPlan?: SetupWizardPlan | undefined;
+  integrationContractReport?: IntegrationContractReport | undefined;
+  specProjects?: SpecBeanstalkProjectStatus[] | undefined;
   nonce?: string | undefined;
   loadWarning?: string | undefined;
   actionScriptUri?: string | undefined;
@@ -59,6 +67,7 @@ export function buildDashboardHtml(input: DashboardPanelInput): string {
   const evidenceGateFailures = evidenceGates.filter(gate => gate.status === 'fail').length;
   const evidenceGateWarnings = evidenceGates.filter(gate => gate.status === 'warn').length;
   const qualityScore = computeAgentQualityScore({ runs, tickets: allTickets });
+  const mrAutopilotPlan = buildMrAutopilotPlan({ state: input.state, queue: input.queue, runs });
   const agingReport = analyzeAging({ tickets: allTickets, thresholds: input.agingThresholds });
   const humanReviewInbox = buildHumanReviewInbox({ state: input.state, queue: input.queue, runs });
   const worklistLanes = buildDashboardWorklist({ runs, humanReviewInbox, evidenceGates, agingReport });
@@ -86,6 +95,8 @@ export function buildDashboardHtml(input: DashboardPanelInput): string {
   const dashboardActions = actionRow([
     actionButton('nextBestAction', 'Next Best Action', { primary: true }),
     actionButton('refreshPanel', 'Refresh'),
+    actionButton('setupWizard', 'Setup Wizard'),
+    actionButton('mrAutopilot', 'MR Autopilot'),
     actionButton('queuePlanner', 'Queue Planner'),
     actionButton('runCenter', 'Run Center'),
     actionButton('humanReviewInbox', 'Human Review'),
@@ -129,6 +140,13 @@ export function buildDashboardHtml(input: DashboardPanelInput): string {
       ${dashboardBriefFact('Evidence', operatorBrief.evidence)}
     </div>
   </div>`;
+  const workflowRailHtml = buildDashboardWorkflowRail({
+    setupPlan: input.setupPlan,
+    mrAutopilotPlan,
+    integrationContractReport: input.integrationContractReport,
+    specProjects: input.specProjects || [],
+    qualityScore,
+  });
   const projectCards = Object.entries(projects).map(([name, proj]) => {
     const healthColor = proj.health === 'green' ? 'var(--k-ok)' : proj.health === 'yellow' ? 'var(--k-warn)' : proj.health === 'red' ? 'var(--k-danger)' : 'var(--k-muted)';
     const linkedCount = Object.values(allTickets).filter(t => ticketStringArray(t.projects).includes(name)).length;
@@ -171,6 +189,14 @@ export function buildDashboardHtml(input: DashboardPanelInput): string {
   .dashboard-brief-fact { min-height: 74px; border: 1px solid var(--k-border); border-radius: var(--k-radius-sm); padding: 9px 10px; background: var(--k-surface); }
   .dashboard-brief-fact .fact-label { color: var(--k-muted); font-size: 10px; font-weight: 650; text-transform: uppercase; }
   .dashboard-brief-fact .fact-value { margin-top: 4px; font-size: 12px; line-height: 1.35; overflow-wrap: anywhere; }
+  .workflow-rail { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; margin: 12px 0 18px; }
+  .workflow-card { border: 1px solid var(--k-border); border-radius: var(--k-radius); padding: 12px; background: var(--k-surface); min-height: 142px; display: flex; flex-direction: column; justify-content: space-between; gap: 10px; }
+  .workflow-card.good, .workflow-card.ready { border-color: color-mix(in srgb, var(--k-ok) 32%, var(--k-border)); }
+  .workflow-card.warn, .workflow-card.attention { border-color: color-mix(in srgb, var(--k-warn) 42%, var(--k-border)); }
+  .workflow-card.bad, .workflow-card.blocked { border-color: color-mix(in srgb, var(--k-danger) 44%, var(--k-border)); }
+  .workflow-card .workflow-title { font-weight: 650; font-size: 13px; }
+  .workflow-card .workflow-metric { margin: 5px 0 2px; font-size: 20px; font-weight: 700; }
+  .workflow-card .workflow-detail { color: var(--k-muted); font-size: 12px; line-height: 1.35; }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; margin: 12px 0; }
   .cockpit { display: grid; grid-template-columns: repeat(auto-fit, minmax(136px, 1fr)); gap: 10px; margin: 12px 0 18px; }
   .metric, .next-action { border: 1px solid var(--k-border); border-radius: var(--k-radius); padding: 12px; background: var(--k-surface-soft); }
@@ -227,6 +253,7 @@ export function buildDashboardHtml(input: DashboardPanelInput): string {
   </div>
   ${warningHtml}
   ${operatorBriefHtml}
+  ${workflowRailHtml}
   ${cockpitHtml}
   ${briefHtml}
   ${worklistHtml}
@@ -243,6 +270,98 @@ function dashboardBriefFact(label: string, value: string): string {
   return `<div class="dashboard-brief-fact">
     <div class="fact-label">${escapeHtml(label)}</div>
     <div class="fact-value">${escapeHtml(value)}</div>
+  </div>`;
+}
+
+function buildDashboardWorkflowRail(input: {
+  setupPlan?: SetupWizardPlan | undefined;
+  mrAutopilotPlan: MrAutopilotPlan;
+  integrationContractReport?: IntegrationContractReport | undefined;
+  specProjects: SpecBeanstalkProjectStatus[];
+  qualityScore: ReturnType<typeof computeAgentQualityScore>;
+}): string {
+  const setupStatus = input.setupPlan?.status || 'warn';
+  const contractStatus = input.integrationContractReport?.status || 'warn';
+  const specReady = input.specProjects.filter(project => project.hasSpec).length;
+  const specWithWarnings = input.specProjects.filter(project => {
+    const report = buildSpecBeanstalkTraceabilityReport(project.summary);
+    return report.status === 'review';
+  }).length;
+  const latestSpec = input.specProjects.find(project => project.summary)?.summary;
+  const traceReport = buildSpecBeanstalkTraceabilityReport(latestSpec);
+  const topFailureTheme = input.qualityScore.failureThemes[0];
+  const qualityDetail = topFailureTheme
+    ? `${input.qualityScore.summary} Top theme: ${topFailureTheme.label} (${countLabel(topFailureTheme.count, 'run')}).`
+    : input.qualityScore.summary;
+  const cards = [
+    workflowCard({
+      title: 'Setup Wizard',
+      metric: setupStatus === 'blocked' ? 'Blocked' : setupStatus === 'done' ? 'Ready' : 'Review',
+      detail: input.setupPlan?.summary || 'Run setup readiness before relying on integrations.',
+      tone: setupStatus === 'blocked' ? 'bad' : setupStatus === 'done' ? 'good' : 'warn',
+      action: 'setupWizard',
+      actionLabel: 'Open Setup',
+      primary: setupStatus !== 'done',
+    }),
+    workflowCard({
+      title: 'MR Autopilot',
+      metric: input.mrAutopilotPlan.status === 'attention' ? 'Attention' : input.mrAutopilotPlan.status === 'ready' ? 'Ready' : input.mrAutopilotPlan.status === 'blocked' ? 'No MRs' : 'Idle',
+      detail: input.mrAutopilotPlan.summary,
+      tone: input.mrAutopilotPlan.status === 'attention' || input.mrAutopilotPlan.status === 'blocked' ? 'attention' : input.mrAutopilotPlan.status === 'ready' ? 'good' : 'warn',
+      action: 'mrAutopilot',
+      actionLabel: 'Open Autopilot',
+      primary: input.mrAutopilotPlan.status === 'attention' || input.mrAutopilotPlan.status === 'ready',
+    }),
+    workflowCard({
+      title: 'Spec Traceability',
+      metric: specReady > 0 ? `${specReady} ready` : 'No spec',
+      detail: latestSpec ? traceReport.summary : `${input.specProjects.length} registered Java repos; generate Excel-derived spec artifacts before beanstalking.`,
+      tone: specReady > 0 && specWithWarnings === 0 ? 'good' : specReady > 0 ? 'warn' : 'attention',
+      action: 'specBeanstalk',
+      actionLabel: 'Spec Beanstalk',
+      primary: specReady === 0,
+    }),
+    workflowCard({
+      title: 'Integration Contracts',
+      metric: contractStatus === 'fail' ? 'Failing' : contractStatus === 'pass' ? 'Passing' : 'Review',
+      detail: input.integrationContractReport?.summary || 'Check script command contracts for Jira, GitLab, and Sonar.',
+      tone: contractStatus === 'fail' ? 'bad' : contractStatus === 'pass' ? 'good' : 'warn',
+      action: 'integrationContractReport',
+      actionLabel: 'Contracts',
+      primary: contractStatus !== 'pass',
+    }),
+    workflowCard({
+      title: 'Agent Quality',
+      metric: `${input.qualityScore.score}/${input.qualityScore.grade}`,
+      detail: qualityDetail,
+      tone: input.qualityScore.score >= 80 ? 'good' : input.qualityScore.score >= 60 ? 'warn' : 'attention',
+      action: 'agentQualityScore',
+      actionLabel: 'Quality',
+      primary: input.qualityScore.score < 80,
+    }),
+  ];
+  return `<div class="section">
+    <h3 class="kronos-section-title">Operator Cockpit</h3>
+    <div class="workflow-rail">${cards.join('')}</div>
+  </div>`;
+}
+
+function workflowCard(input: {
+  title: string;
+  metric: string;
+  detail: string;
+  tone: string;
+  action: string;
+  actionLabel: string;
+  primary?: boolean | undefined;
+}): string {
+  return `<div class="workflow-card ${escapeClass(input.tone)}">
+    <div>
+      <div class="workflow-title">${escapeHtml(input.title)}</div>
+      <div class="workflow-metric">${escapeHtml(input.metric)}</div>
+      <div class="workflow-detail">${escapeHtml(input.detail)}</div>
+    </div>
+    ${actionRow([actionButton(input.action, input.actionLabel, { primary: Boolean(input.primary) })])}
   </div>`;
 }
 

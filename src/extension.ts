@@ -105,7 +105,9 @@ import {
   EVIDENCE_HANDOFF_OPERATOR_COMMANDS,
   EVIDENCE_PUBLISH_OPERATOR_COMMANDS,
   HUMAN_REVIEW_MESSAGE_COMMANDS,
+  INTEGRATION_CONTRACT_MESSAGE_COMMANDS,
   INTEGRATION_MANIFEST_OPERATOR_COMMANDS,
+  MR_AUTOPILOT_MESSAGE_COMMANDS,
   PLAN_MESSAGE_COMMANDS,
   PROFILES_OPERATOR_COMMANDS,
   PROMPT_HISTORY_OPERATOR_COMMANDS,
@@ -113,6 +115,7 @@ import {
   PROMPT_SMOKE_OPERATOR_COMMANDS,
   RECOVERY_MESSAGE_COMMANDS,
   SESSION_STATS_OPERATOR_COMMANDS,
+  SETUP_WIZARD_MESSAGE_COMMANDS,
   SPEC_BEANSTALK_MESSAGE_COMMANDS,
   STATE_AUDIT_OPERATOR_COMMANDS,
   TICKET_DETAIL_MESSAGE_COMMANDS,
@@ -121,7 +124,7 @@ import {
 import { isTicketOperatorCommand, resolveOperatorCommandRoute } from './services/operatorCommandRouting';
 import { kronosTerminalOptions } from './services/terminalProfiles';
 import { unknownErrorMessage } from './services/errorUtils';
-import { isKronosScriptMissingError } from './services/scriptClient';
+import { isKronosScriptMissingError, requiredScripts } from './services/scriptClient';
 import { activeRunStatusBarSummary } from './services/activeRunDisplay';
 import { isFreshActiveRun } from './services/runStatus';
 import { buildRunCompletionNotification } from './services/runCompletionNotification';
@@ -169,6 +172,12 @@ import { buildBacklogTriageHtml, buildCollisionReportHtml, buildProjectBatchPlan
 import { buildAgentQualityScoreHtml, buildDoctorHtml, buildIntegrationManifestHtml, buildProfilesHtml, buildSessionStatsHtml, buildTrendMetricsHtml } from './services/operationsReportPanelView';
 import { buildSpecBeanstalkHtml } from './services/specBeanstalkPanelView';
 import { DEFAULT_SPEC_BEANSTALK_OUTPUT_DIR, buildSpecBeanstalkPrompt, inspectSpecBeanstalkProject, runSpecBeanstalkGeneration, type SpecBeanstalkProjectStatus, type SpecBeanstalkSummary } from './services/specBeanstalk';
+import { buildSetupWizardPlan } from './services/setupWizard';
+import { buildSetupWizardHtml } from './services/setupWizardPanelView';
+import { buildMrAutopilotPlan } from './services/mrAutopilot';
+import { buildMrAutopilotHtml } from './services/mrAutopilotPanelView';
+import { buildIntegrationContractReport } from './services/integrationContractHarness';
+import { buildIntegrationContractHtml } from './services/integrationContractPanelView';
 
 let statusBarItem: vscode.StatusBarItem;
 let kronosOutputChannel: vscode.OutputChannel | undefined;
@@ -2573,6 +2582,9 @@ export function activate(context: vscode.ExtensionContext) {
             brief: data,
             trendWindowDays: trendWindowDaysFromConfig(),
             agingThresholds: agingThresholdsFromConfig(),
+            setupPlan: currentSetupWizardPlan(state),
+            integrationContractReport: currentIntegrationContractReport(),
+            specProjects: specBeanstalkProjectStatuses(state),
             nonce,
             loadWarning,
             actionScriptUri,
@@ -2600,6 +2612,14 @@ export function activate(context: vscode.ExtensionContext) {
       } catch (e: unknown) {
         vscode.window.showErrorMessage(unknownErrorMessage(e, 'Failed to generate dashboard.'));
       }
+    }),
+
+    vscode.commands.registerCommand('kronos.setupWizard', async () => {
+      openSetupWizardPanel(state, context.extensionUri);
+    }),
+
+    vscode.commands.registerCommand('kronos.mrAutopilot', async () => {
+      openMrAutopilotPanel(state, context.extensionUri);
     }),
 
     vscode.commands.registerCommand('kronos.specBeanstalk', async () => {
@@ -3501,6 +3521,10 @@ export function activate(context: vscode.ExtensionContext) {
 
     vscode.commands.registerCommand('kronos.integrationManifest', async () => {
       openIntegrationManifestPanel(context.extensionUri);
+    }),
+
+    vscode.commands.registerCommand('kronos.integrationContractReport', async () => {
+      openIntegrationContractPanel(context.extensionUri);
     }),
 
     vscode.commands.registerCommand('kronos.snapshotIntegrationManifest', async () => {
@@ -4553,6 +4577,91 @@ function openProfilesPanel(extensionUri?: vscode.Uri): void {
   attachOperatorCommandHandler(panel, 'Kronos Profiles', PROFILES_OPERATOR_COMMANDS);
 }
 
+function openSetupWizardPanel(state: KronosState, extensionUri?: vscode.Uri): void {
+  const { panel, nonce, actionScriptUri } = createKronosActionWebviewPanel('kronosSetupWizard', 'Kronos Setup Wizard', extensionUri);
+  const logReady = createWebviewReadyMonitor(panel, 'Kronos Setup Wizard');
+  const render = () => {
+    logReady.arm();
+    panel.webview.html = withWebviewCsp(
+      buildSetupWizardHtml(currentSetupWizardPlan(state), nonce, actionScriptUri),
+      webviewScriptCspOptions(panel.webview.cspSource, nonce),
+    );
+  };
+  panel.webview.onDidReceiveMessage(async msg => {
+    if (logReady(msg)) { return; }
+    const request = normalizeActionPanelMessage(msg, SETUP_WIZARD_MESSAGE_COMMANDS);
+    if (!request) {
+      vscode.window.showWarningMessage('Ignored invalid Kronos setup wizard action.');
+      return;
+    }
+    await runWebviewPanelAction(async () => {
+      if (request.command === 'refreshPanel') {
+        state.reloadAndNotify();
+        render();
+        return;
+      }
+      await executeOperatorCommandAction(request.command);
+      render();
+    }, 'Kronos setup wizard action failed.');
+  });
+  render();
+}
+
+function openMrAutopilotPanel(state: KronosState, extensionUri?: vscode.Uri): void {
+  const { panel, nonce, actionScriptUri } = createKronosActionWebviewPanel('kronosMrAutopilot', 'Kronos MR Autopilot', extensionUri);
+  const logReady = createWebviewReadyMonitor(panel, 'Kronos MR Autopilot');
+  const render = () => {
+    logReady.arm();
+    panel.webview.html = withWebviewCsp(
+      buildMrAutopilotHtml(buildMrAutopilotPlan({ state: state.state, queue: state.queue, runs: listRuns() }), nonce, actionScriptUri),
+      webviewScriptCspOptions(panel.webview.cspSource, nonce),
+    );
+  };
+  panel.webview.onDidReceiveMessage(async msg => {
+    if (logReady(msg)) { return; }
+    const request = normalizeActionPanelMessage(msg, MR_AUTOPILOT_MESSAGE_COMMANDS);
+    if (!request) {
+      vscode.window.showWarningMessage('Ignored invalid Kronos MR Autopilot action.');
+      return;
+    }
+    await runWebviewPanelAction(async () => {
+      await executeMrAutopilotAction(state, request, extensionUri);
+      render();
+    }, 'Kronos MR Autopilot action failed.');
+  });
+  render();
+  startActiveRunPanelRefresh(panel, state, render);
+}
+
+function openIntegrationContractPanel(extensionUri?: vscode.Uri): void {
+  const { panel, nonce, actionScriptUri } = createKronosActionWebviewPanel('kronosIntegrationContracts', 'Kronos Integration Contracts', extensionUri);
+  const logReady = createWebviewReadyMonitor(panel, 'Kronos Integration Contracts');
+  const render = () => {
+    logReady.arm();
+    panel.webview.html = withWebviewCsp(
+      buildIntegrationContractHtml(currentIntegrationContractReport(), nonce, actionScriptUri),
+      webviewScriptCspOptions(panel.webview.cspSource, nonce),
+    );
+  };
+  panel.webview.onDidReceiveMessage(async msg => {
+    if (logReady(msg)) { return; }
+    const request = normalizeActionPanelMessage(msg, INTEGRATION_CONTRACT_MESSAGE_COMMANDS);
+    if (!request) {
+      vscode.window.showWarningMessage('Ignored invalid Kronos integration contract action.');
+      return;
+    }
+    await runWebviewPanelAction(async () => {
+      if (request.command === 'refreshPanel') {
+        render();
+        return;
+      }
+      await executeOperatorCommandAction(request.command);
+      render();
+    }, 'Kronos integration contract action failed.');
+  });
+  render();
+}
+
 function openDoctorPanel(state: KronosState, extensionUri?: vscode.Uri): void {
   const checks = runDoctorChecks(state);
   const { panel, nonce, actionScriptUri } = createKronosActionWebviewPanel('kronosDoctor', 'Kronos Doctor', extensionUri);
@@ -4595,6 +4704,35 @@ function runDoctorChecks(state: KronosState): DoctorCheck[] {
 
 async function runDoctorReachabilityChecks(state: KronosState): Promise<DoctorCheck[]> {
   return collectDoctorReachabilityChecks(doctorChecksInput(state), { timeoutMs: 5000 });
+}
+
+function currentSetupWizardPlan(state: KronosState) {
+  const manifestStatus = readIntegrationManifest();
+  return buildSetupWizardPlan({
+    state: state.state,
+    queue: state.queue,
+    profile: getActiveProfile(),
+    doctorChecks: runDoctorChecks(state),
+    manifestStatus,
+    manifestAudit: auditIntegrationManifest(manifestStatus),
+    scripts: requiredScripts(),
+  });
+}
+
+function currentIntegrationContractReport() {
+  return buildIntegrationContractReport({
+    contractDocText: readPackagedIntegrationContract(),
+    scripts: requiredScripts(),
+  });
+}
+
+function readPackagedIntegrationContract(): string {
+  const contractPath = path.join(__dirname, '..', 'docs', 'integration-script-contract.md');
+  try {
+    return fs.readFileSync(contractPath, 'utf8');
+  } catch {
+    return '';
+  }
 }
 
 async function startPlannedAction(
@@ -5266,6 +5404,14 @@ async function executeDashboardAction(state: KronosState, request: ActionPanelMe
 
   if (command === 'nextBestAction') {
     await vscode.commands.executeCommand('kronos.nextBestAction');
+  } else if (command === 'setupWizard') {
+    await vscode.commands.executeCommand('kronos.setupWizard');
+  } else if (command === 'mrAutopilot') {
+    await vscode.commands.executeCommand('kronos.mrAutopilot');
+  } else if (command === 'integrationContractReport') {
+    await vscode.commands.executeCommand('kronos.integrationContractReport');
+  } else if (command === 'agentQualityScore') {
+    await vscode.commands.executeCommand('kronos.agentQualityScore');
   } else if (command === 'queuePlanner') {
     await vscode.commands.executeCommand('kronos.queuePlanner');
   } else if (command === 'runCenter') {
@@ -5289,6 +5435,42 @@ async function executeDashboardAction(state: KronosState, request: ActionPanelMe
   } else {
     vscode.window.showWarningMessage('Ignored Kronos dashboard action without a valid target.');
   }
+}
+
+async function executeMrAutopilotAction(state: KronosState, request: ActionPanelMessage, extensionUri?: vscode.Uri): Promise<void> {
+  const command = request.command;
+  const ticketKey = request.ticket;
+  const runId = request.runId;
+  if (ticketKey && !state.state?.tickets?.[ticketKey]) {
+    vscode.window.showWarningMessage(`${ticketKey} is no longer in Kronos state.`);
+    return;
+  }
+  if (command === 'refreshPanel') {
+    state.reloadAndNotify();
+    return;
+  }
+  if (command === 'runAutopilotPass' || command === 'pollReviewMergeRequests') {
+    await vscode.commands.executeCommand('kronos.pollReviewMergeRequests');
+    state.reloadAndNotify();
+    return;
+  }
+  if (command === 'startTicket' && ticketKey) {
+    await startTicketFromActionPanel(state, ticketKey);
+    return;
+  }
+  if ((command === 'viewTicket' || command === 'evidenceGate') && ticketKey) {
+    await tryExecuteTicketOperatorCommand(command, ticketKey);
+    return;
+  }
+  if (command === 'runCenter') {
+    openInteractiveRunCenter(state, extensionUri, runId || undefined);
+    return;
+  }
+  if (command === 'humanReviewInbox' || command === 'queuePlanner') {
+    await executeOperatorCommandAction(command);
+    return;
+  }
+  vscode.window.showWarningMessage('Ignored Kronos MR Autopilot action without a valid target.');
 }
 
 export function deactivate() {}

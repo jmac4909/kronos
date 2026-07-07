@@ -39,16 +39,17 @@ For mutation steps, use a scratch ticket that already exists in the reviewer's l
 ## Smoke Flow
 
 1. Confirm the Kronos activity bar appears and all six tree views load.
-2. Open Dashboard and check whether the command center makes the current day obvious: now, next, blocked, needs human, evidence, quality, and recovery.
+2. Open Dashboard and check whether the command center and Operator Cockpit make the current day obvious: setup readiness, MR autopilot, spec traceability, contracts, quality, now, next, blocked, needs human, evidence, and recovery.
 3. Open the Jira Board. Try search, filters, grouping, a ticket modal, and a ticket detail view.
 4. In Ticket Detail, inspect timeline, acceptance criteria, linked MR/build/project fields, evidence ledger, and evidence gate.
 5. On the approved scratch ticket only, add one evidence note and one evidence check.
 6. On the approved scratch ticket only, export evidence and open the evidence handoff panel. Confirm the comment is understandable and safe to paste manually.
 7. Open Queue Planner, Backlog Triage, Next Best Action, Plan Next 2 Hours, and Overnight Candidates. Check whether each recommendation explains why it is next.
-8. Open Spec Beanstalk. Confirm the panel makes the two modes clear: generate `.xlsx` spec artifacts into a Java repo, or start/continue Claude implementation from the generated spec.
-9. Open Run Center. Inspect saved runs, logs, status labels, recovery actions, retry/resume affordances, and archive behavior.
-10. Open Recovery Center and Human Review Inbox. Confirm the highest-risk item is easy to identify.
-11. Open Kronos Doctor, Integration Manifest, Profile Manager, Prompt Manager, Prompt Smoke Tests, Prompt History, Trend Metrics, Agent Quality, and Aging Report.
+8. Open Setup Wizard, Integration Contracts, and MR Autopilot. Confirm setup blockers, script command contracts, guarded MR polling, pass-plan counts, preflight blockers, and next-action flow are understandable.
+9. Open Spec Beanstalk. Confirm the panel makes the two modes clear: generate `.xlsx` spec artifacts into a Java repo, or start/continue Claude implementation from the generated spec, and that traceability from workbook formatting to Markdown/JSON artifacts is inspectable.
+10. Open Run Center. Inspect saved runs, logs, status labels, recovery actions, retry/resume affordances, and archive behavior.
+11. Open Recovery Center and Human Review Inbox. Confirm the highest-risk item is easy to identify.
+12. Open Kronos Doctor, Integration Manifest, Profile Manager, Prompt Manager, Prompt Smoke Tests, Prompt History, Trend Metrics, Agent Quality, and Aging Report. Confirm Agent Quality explains recurring failure themes, not just the numeric score.
 
 ## Feedback Questions
 
@@ -79,5 +80,6 @@ This build is ready for broader feedback when:
 - `npm test` includes the webview DOM behavior checks for Board filtering, modal actions, comments, and action-panel payloads.
 - `npm run feedback:smoke` opens and checks rendered fixture content/action wiring for the dashboard, board, ticket detail, evidence gate, evidence handoff, run center, recovery center, human review inbox, doctor, prompt manager, queue planner, backlog triage, and Spec Beanstalk.
 - Dashboard, Board, Ticket Detail, Run Center, Evidence Gate, Recovery Center, Doctor, and Prompt Manager all open without runtime errors.
+- Setup Wizard, Integration Contracts, and MR Autopilot all open without runtime errors and explain whether automation is safe to continue.
 - Spec Beanstalk opens without runtime errors and clearly separates generate-only from start/continue Claude implementation.
 - A human reviewer can complete the smoke flow and provide feedback without reading implementation files.

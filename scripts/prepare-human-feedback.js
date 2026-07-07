@@ -144,6 +144,9 @@ requireFile('scripts/run-webview-dom-tests.js', [
 requireFile('test/feedback-smoke/index.js', [
   'jmacke01.kronos',
   'kronos.openDashboard',
+  'kronosSetupWizard',
+  'kronosMrAutopilot',
+  'kronosIntegrationContracts',
   'kronosRecoveryCenter',
   'Review Paused Run',
   'kronosSpecBeanstalk',

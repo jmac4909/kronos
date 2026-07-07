@@ -100,6 +100,12 @@ export function buildAgentQualityScoreHtml(score: AgentQualityScore, nonce?: str
     <td>${escapeHtml(component.detail)}</td>
   </tr>`).join('');
   const metricRows = score.metrics.map(metric => `<div class="summary-card"><div class="num">${escapeHtml(metric.value)}</div><div class="lbl">${escapeHtml(metric.label)}</div></div>`).join('');
+  const failureRows = score.failureThemes.map(theme => `<tr class="${escapeClass(theme.severity)}">
+    <td><span class="kronos-pill ${escapeClass(theme.severity)}">${escapeHtml(theme.severity)}</span></td>
+    <td><strong>${escapeHtml(theme.label)}</strong></td>
+    <td>${escapeHtml(String(theme.count))}</td>
+    <td>${escapeHtml(theme.detail)}${theme.sampleRunId ? `<div class="kronos-detail">Sample run: ${escapeHtml(theme.sampleRunId)}</div>` : ''}</td>
+  </tr>`).join('');
   const actions = operatorCommandRow([
     actionButton('runCenter', 'Run Center'),
     actionButton('stats', 'Session Stats'),
@@ -123,6 +129,8 @@ export function buildAgentQualityScoreHtml(score: AgentQualityScore, nonce?: str
     <div>${escapeHtml(score.summary)}</div>
   </div>
   <div class="operator-summary">${metricRows}</div>
+  <div class="operator-section"><h2>Failure Themes</h2>
+  ${failureRows ? `<div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Severity</th><th>Theme</th><th>Runs</th><th>Detail</th></tr>${failureRows}</table></div>` : '<div class="kronos-empty compact">No recurring failure themes detected.</div>'}</div>
   <div class="table-wrap kronos-panel"><table class="kronos-table"><tr><th>Component</th><th>Score</th><th>Detail</th></tr>${componentRows}</table></div>
 </div>${nonce ? kronosActionPanelScript(nonce, 'Kronos Agent Quality Score', actionScriptUri) : ''}</body></html>`;
 }
@@ -215,6 +223,8 @@ export function buildIntegrationManifestHtml(status: IntegrationManifestStatus, 
   const actions = operatorCommandRow([
     actionButton('snapshotIntegrationManifest', 'Snapshot'),
     actionButton('doctor', 'Doctor'),
+    actionButton('integrationContractReport', 'Contracts'),
+    actionButton('setupWizard', 'Setup Wizard'),
     actionButton('profiles', 'Profiles'),
     actionButton('promptManager', 'Prompt Manager'),
   ]);
@@ -258,6 +268,7 @@ export function buildProfilesHtml(active: KronosProfile, nonce?: string, actionS
   }).join('');
   const actions = operatorCommandRow([
     actionButton('settings', 'Settings'),
+    actionButton('setupWizard', 'Setup Wizard'),
     actionButton('doctor', 'Doctor'),
     actionButton('integrationManifest', 'Manifest'),
   ]);
@@ -291,9 +302,11 @@ export function buildDoctorHtml(checks: DoctorCheck[], nonce?: string, actionScr
     <td>${escapeHtml(c.detail)}</td>
   </tr>`).join('');
   const actions = operatorCommandRow([
+    actionButton('setupWizard', 'Setup Wizard'),
     actionButton('setup', 'Auth Check'),
     actionButton('settings', 'Settings'),
     actionButton('integrationManifest', 'Manifest'),
+    actionButton('integrationContractReport', 'Contracts'),
     actionButton('profiles', 'Profiles'),
     actionButton('recoveryCenter', 'Recovery'),
     actionButton('stateAuditLog', 'Audit Log'),

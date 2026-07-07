@@ -10,6 +10,8 @@ Required scripts:
 
 All commands must print JSON to stdout and write diagnostics to stderr. Non-zero exits should include a concise stderr message. Credential values must come from inherited environment variables and must never be echoed, embedded in argv, or written to Kronos state files.
 
+Kronos: Integration Contracts runs a local contract harness over this file and the required script bundle. It checks that the documented command shapes match the extension calls and that required scripts are installed; it does not call enterprise providers or require credentials.
+
 ## Jira and State Commands
 
 Kronos routes Jira ticket comments through `kronos_state.py`:

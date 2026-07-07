@@ -5,6 +5,9 @@ const vscode = require('vscode');
 
 const REQUIRED_COMMANDS = [
   'kronos.openDashboard',
+  'kronos.setupWizard',
+  'kronos.mrAutopilot',
+  'kronos.integrationContractReport',
   'kronos.jiraBoard',
   'kronos.viewTicket',
   'kronos.evidenceGate',
@@ -23,6 +26,9 @@ const REQUIRED_COMMANDS = [
 
 const PANEL_SMOKE = [
   { command: 'kronos.openDashboard', viewType: 'kronosDashboard' },
+  { command: 'kronos.setupWizard', viewType: 'kronosSetupWizard' },
+  { command: 'kronos.mrAutopilot', viewType: 'kronosMrAutopilot' },
+  { command: 'kronos.integrationContractReport', viewType: 'kronosIntegrationContracts' },
   { command: 'kronos.jiraBoard', viewType: 'kronosJiraBoard' },
   { command: 'kronos.viewTicket', args: ['KRONOS-FB-1'], viewType: 'kronosTicket' },
   { command: 'kronos.evidenceGate', args: ['KRONOS-FB-1'], viewType: 'kronosEvidenceGate' },
@@ -92,15 +98,53 @@ function assertPanelHtml(extension, viewType) {
       assertHtmlContains(html, [
         'Kronos Dashboard',
         'Operator Brief',
+        'Operator Cockpit',
+        'Setup Wizard',
+        'MR Autopilot',
+        'Integration Contracts',
         'KRONOS-FB-2',
         'Intentional fixture failed build should be first.',
         'Evidence Gate',
         'Spec Beanstalk',
       ], viewType);
       assertAction(html, 'nextBestAction');
+      assertAction(html, 'setupWizard');
+      assertAction(html, 'mrAutopilot');
       assertAction(html, 'runCenter');
       assertAction(html, 'humanReviewInbox');
       assertAction(html, 'specBeanstalk');
+      break;
+    case 'kronosSetupWizard':
+      assertHtmlContains(html, [
+        'Kronos Setup Wizard',
+        'First-run readiness',
+        'Integration scripts',
+        'Safe operator state',
+        'Spec Beanstalk',
+      ], viewType);
+      assertAction(html, 'setup');
+      assertAction(html, 'doctor');
+      assertAction(html, 'integrationContractReport');
+      break;
+    case 'kronosMrAutopilot':
+      assertHtmlContains(html, [
+        'Kronos MR Autopilot',
+        'Safe Pass',
+        'Candidates',
+        'KRONOS-FB-1',
+      ], viewType);
+      assertAction(html, 'runAutopilotPass');
+      assertAction(html, 'pollReviewMergeRequests');
+      break;
+    case 'kronosIntegrationContracts':
+      assertHtmlContains(html, [
+        'Kronos Integration Contracts',
+        'Contract Harness',
+        'gitlab_api.py --mr-status',
+        'pipeline_monitor.py --sonar-issues',
+      ], viewType);
+      assertAction(html, 'doctor');
+      assertAction(html, 'integrationManifest');
       break;
     case 'kronosJiraBoard':
       assertHtmlContains(html, [

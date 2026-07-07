@@ -198,6 +198,16 @@
         "icon": "$(dashboard)"
       },
       {
+        "command": "kronos.setupWizard",
+        "title": "Kronos: Setup Wizard",
+        "icon": "$(checklist)"
+      },
+      {
+        "command": "kronos.mrAutopilot",
+        "title": "Kronos: MR Autopilot",
+        "icon": "$(run-all)"
+      },
+      {
         "command": "kronos.specBeanstalk",
         "title": "Kronos: Spec Beanstalk",
         "icon": "$(notebook)"
@@ -481,6 +491,11 @@
         "command": "kronos.integrationManifest",
         "title": "Kronos: Integration Manifest",
         "icon": "$(json)"
+      },
+      {
+        "command": "kronos.integrationContractReport",
+        "title": "Kronos: Integration Contracts",
+        "icon": "$(checklist)"
       },
       {
         "command": "kronos.snapshotIntegrationManifest",

@@ -29,12 +29,13 @@ For extension-host testing from this repo, open the folder in VS Code and run th
 
 - Activity bar tree views: Projects, Tickets, Work Queue, Review, Sessions, and Ad-hoc Tasks.
 - Dashboard: command center, worklist lanes, queue health, evidence readiness, quality trends, and next actions.
+- Setup Wizard, Integration Contracts, and MR Autopilot: first-run readiness, script command contract checks, and a guarded review-loop control surface with pass-plan and preflight blockers.
 - Jira Board and Ticket Detail: filtering, modal actions, timeline, evidence ledger, links, builds, MRs, and acceptance criteria.
 - Run Center and Recovery Center: active/failed runs, archived records, logs, retry/resume/cancel paths, and unsafe worktree recovery.
 - Evidence workflow: add notes/checks, evaluate gates, export markdown, handoff packet, and publish plan.
 - Planning workflow: queue planner, backlog triage, project batch plan, release batch plan, collision report, next two hours, and overnight candidates.
 - Spec Beanstalk: convert `.xlsx` API specs into Markdown plus JSON trace artifacts inside a Java repo, then start or continue Claude implementation against that generated source of truth.
-- Operations: Kronos Doctor, integration manifest, profile manager, prompt manager, prompt smoke tests, and prompt history.
+- Operations: Kronos Doctor, integration manifest, profile manager, prompt manager, prompt smoke tests, prompt history, and Agent Quality failure themes.
 
 ## Validation Commands
 

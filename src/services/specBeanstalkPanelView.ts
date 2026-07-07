@@ -1,5 +1,5 @@
 import { actionButton, actionRow, kronosActionPanelScript } from './operatorPanel';
-import type { SpecBeanstalkProjectStatus, SpecBeanstalkSummary } from './specBeanstalk';
+import { buildSpecBeanstalkTraceabilityReport, type SpecBeanstalkProjectStatus, type SpecBeanstalkSummary } from './specBeanstalk';
 import { escapeClass, escapeHtml, kronosWebviewBaseCss } from './webviewHtml';
 
 export interface SpecBeanstalkPanelInput {
@@ -38,6 +38,9 @@ ${kronosWebviewBaseCss()}
 .spec-current { margin-bottom: 18px; }
 .spec-current-grid { display: grid; grid-template-columns: minmax(180px, 0.8fr) minmax(0, 1.2fr); gap: 12px; align-items: start; }
 .spec-artifact-path { color: var(--k-muted); word-break: break-all; font-size: 12px; }
+.spec-trace { margin-bottom: 18px; }
+.spec-trace-grid { display: grid; grid-template-columns: minmax(220px, 0.7fr) minmax(0, 1.3fr); gap: 12px; align-items: start; }
+.spec-trace-summary { color: var(--k-muted); font-size: 12px; line-height: 1.4; }
 .spec-table .project-name { font-weight: 650; }
 .spec-table .path-cell { color: var(--k-muted); font-size: 11px; word-break: break-all; }
 .spec-table .signals { color: var(--k-muted); font-size: 12px; }
@@ -47,7 +50,8 @@ ${kronosWebviewBaseCss()}
   .spec-topline .kronos-action-row { justify-content: flex-start; margin-top: 12px; }
   .spec-status-strip,
   .spec-overview,
-  .spec-current-grid { grid-template-columns: 1fr; }
+  .spec-current-grid,
+  .spec-trace-grid { grid-template-columns: 1fr; }
 }
 </style>
 </head>
@@ -74,6 +78,7 @@ ${kronosWebviewBaseCss()}
   </div>
 
   ${lastResultHtml(lastResult)}
+  ${traceabilityHtml(lastResult)}
 
   <div class="kronos-section">
     <h2 class="kronos-section-title">Java Repos</h2>
@@ -115,6 +120,40 @@ function lastResultHtml(summary: SpecBeanstalkSummary | undefined): string {
         <div class="kronos-section-title">Artifacts</div>
         <div class="spec-artifact-path">${escapeHtml(summary.indexPath)}</div>
         <div class="spec-artifact-path">${escapeHtml(summary.tracePath)}</div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function traceabilityHtml(summary: SpecBeanstalkSummary | undefined): string {
+  const report = buildSpecBeanstalkTraceabilityReport(summary);
+  if (!summary) {
+    return `<div class="kronos-empty spec-trace">Generate a spec to inspect workbook-to-Markdown traceability.</div>`;
+  }
+  const rows = report.rows.slice(0, 8).map(row => `<tr>
+    <td>${escapeHtml(row.sheet)}</td>
+    <td>${escapeHtml(row.evidence)}</td>
+    <td>${escapeHtml(row.markdownPath)}</td>
+    <td>${escapeHtml(row.warningCount)}</td>
+  </tr>`).join('');
+  const extra = report.rows.length > 8
+    ? `<div class="spec-trace-summary">${escapeHtml(report.rows.length - 8)} additional sheet trace rows are in the JSON trace artifact.</div>`
+    : '';
+  return `<div class="kronos-panel pad spec-trace ${escapeClass(report.status)}">
+    <div class="spec-trace-grid">
+      <div>
+        <div class="kronos-section-title">Traceability</div>
+        <strong>${escapeHtml(report.status === 'ready' ? 'Ready for beanstalk' : report.status === 'review' ? 'Review warnings first' : 'Trace missing')}</strong>
+        <div class="spec-trace-summary">${escapeHtml(report.summary)}</div>
+      </div>
+      <div>
+        <div class="kronos-table-wrap">
+          <table class="kronos-table">
+            <thead><tr><th>Sheet</th><th>Evidence</th><th>Markdown</th><th>Warnings</th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+        ${extra}
       </div>
     </div>
   </div>`;

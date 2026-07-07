@@ -6,6 +6,7 @@ import { isActiveRun, isFailedOrCancelledRunStatus, isSuccessfulRunStatus } from
 import { definedValues, recordString } from './records';
 import { hasRetryMetadata, runLikeRecordsFromUnknown } from './runRecords';
 import { countLabel } from './countLabels';
+import { runAttentionLine, runAttentionSummary, type RunAttentionSummary } from './runAttention';
 
 interface QualityComponent {
   label: string;
@@ -19,12 +20,21 @@ interface QualityMetric {
   value: string;
 }
 
+export interface AgentQualityFailureTheme {
+  label: string;
+  count: number;
+  detail: string;
+  severity: 'critical' | 'warning' | 'info';
+  sampleRunId?: string | undefined;
+}
+
 export interface AgentQualityScore {
   score: number;
   grade: 'A' | 'B' | 'C' | 'D' | 'F';
   summary: string;
   components: QualityComponent[];
   metrics: QualityMetric[];
+  failureThemes: AgentQualityFailureTheme[];
 }
 
 export function computeAgentQualityScore(input: {
@@ -39,6 +49,7 @@ export function computeAgentQualityScore(input: {
   const needsHumanRuns = runs.filter(run => recordString(run, 'status') === 'needs_human').length;
   const retryRuns = runs.filter(hasRetryMetadata).length;
   const activeRuns = runs.filter(isActiveRun).length;
+  const failureThemes = buildFailureThemes(runs);
 
   const gates = evaluateEvidenceGates(tickets);
   const reviewRelevantGates = gates.filter(gate => {
@@ -114,7 +125,79 @@ export function computeAgentQualityScore(input: {
       { label: 'Failed builds', value: String(failedBuilds) },
       { label: 'Changes requested MRs', value: String(changesRequestedMrs) },
     ],
+    failureThemes,
   };
+}
+
+interface FailureThemeBucket extends AgentQualityFailureTheme {
+  severityRank: number;
+}
+
+function buildFailureThemes(runs: Array<Record<string, unknown>>): AgentQualityFailureTheme[] {
+  const buckets = new Map<string, FailureThemeBucket>();
+  for (const run of runs) {
+    const status = recordString(run, 'status');
+    const retry = hasRetryMetadata(run);
+    const attentionStatus = isFailedOrCancelledRunStatus(status) || status === 'needs_human';
+    if (!attentionStatus && !retry) { continue; }
+
+    const summary = runAttentionSummary(run);
+    const retryOnly = retry && !attentionStatus;
+    const label = retryOnly ? 'Retry pressure' : summary.label || 'Run needs review';
+    const detail = retryOnly
+      ? 'Run has retry metadata; review the upstream failure before normalizing a later pass.'
+      : runAttentionLine(run, 180);
+    const severity = failureThemeSeverity(summary, status, retryOnly);
+    const severityRank = failureThemeSeverityRank(severity);
+    const key = `${summary.failureKind}:${normalizeThemeLabel(label)}`;
+    const existing = buckets.get(key);
+    if (existing) {
+      existing.count += 1;
+      if (severityRank < existing.severityRank) {
+        existing.severity = severity;
+        existing.severityRank = severityRank;
+        existing.detail = detail;
+        existing.sampleRunId = recordString(run, 'id') || existing.sampleRunId;
+      }
+      continue;
+    }
+    buckets.set(key, {
+      label,
+      count: 1,
+      detail,
+      severity,
+      severityRank,
+      sampleRunId: recordString(run, 'id') || undefined,
+    });
+  }
+  return Array.from(buckets.values())
+    .sort((a, b) => a.severityRank - b.severityRank || b.count - a.count || a.label.localeCompare(b.label))
+    .slice(0, 6)
+    .map(bucket => ({
+      label: bucket.label,
+      count: bucket.count,
+      detail: bucket.detail,
+      severity: bucket.severity,
+      sampleRunId: bucket.sampleRunId,
+    }));
+}
+
+function failureThemeSeverity(summary: RunAttentionSummary, status: string, retryOnly: boolean): AgentQualityFailureTheme['severity'] {
+  if (retryOnly) { return 'warning'; }
+  if (status === 'needs_human') { return 'critical'; }
+  if (summary.failureKind === 'cancelled') { return 'warning'; }
+  if (summary.failureKind === 'unknown' || summary.failureKind === 'none') { return status === 'cancelled' ? 'warning' : 'info'; }
+  return 'critical';
+}
+
+function failureThemeSeverityRank(severity: AgentQualityFailureTheme['severity']): number {
+  if (severity === 'critical') { return 0; }
+  if (severity === 'warning') { return 1; }
+  return 2;
+}
+
+function normalizeThemeLabel(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 }
 
 function proportionalScore(value: number, total: number, max: number): number {

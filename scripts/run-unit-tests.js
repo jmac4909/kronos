@@ -196,6 +196,9 @@ const evidenceGatePolicy = require('../out/services/evidenceGatePolicy.js');
 const queueRemovalPolicy = require('../out/services/queueRemovalPolicy.js');
 const agentQualityScore = require('../out/services/agentQualityScore.js');
 const dashboardWorklist = require('../out/services/dashboardWorklist.js');
+const setupWizard = require('../out/services/setupWizard.js');
+const mrAutopilot = require('../out/services/mrAutopilot.js');
+const integrationContractHarness = require('../out/services/integrationContractHarness.js');
 const integrationManifest = require('../out/services/integrationManifest.js');
 const profileManager = require('../out/services/profileManager.js');
 const projectSelection = require('../out/services/projectSelection.js');
@@ -230,6 +233,9 @@ const evidencePanelView = require('../out/services/evidencePanelView.js');
 const queuePlannerPanelView = require('../out/services/queuePlannerPanelView.js');
 const operationsReportPanelView = require('../out/services/operationsReportPanelView.js');
 const dashboardPanelView = require('../out/services/dashboardPanelView.js');
+const setupWizardPanelView = require('../out/services/setupWizardPanelView.js');
+const mrAutopilotPanelView = require('../out/services/mrAutopilotPanelView.js');
+const integrationContractPanelView = require('../out/services/integrationContractPanelView.js');
 const diffPanelView = require('../out/services/diffPanelView.js');
 const jiraBoardPanelView = require('../out/services/jiraBoardPanelView.js');
 const runStatus = require('../out/services/runStatus.js');
@@ -486,6 +492,14 @@ test('spec beanstalk generator preserves xlsx formatting and trace metadata', ()
   assert.ok(prompt.includes('use Python to read the .xlsx'));
   assert.ok(prompt.includes('Do not invent a color legend'));
   assert.ok(prompt.includes(summary.tracePath));
+  assert.ok(prompt.includes('Traceability status:'));
+  assert.ok(prompt.includes('Maintain a traceability ledger'));
+
+  const traceability = specBeanstalk.buildSpecBeanstalkTraceabilityReport(summary);
+  assert.equal(traceability.status, 'ready');
+  assert.match(traceability.summary, /formatted cells/);
+  assert.deepEqual(traceability.rows.map(row => row.sheet), ['API']);
+  assert.equal(specBeanstalk.buildSpecBeanstalkTraceabilityReport(undefined).status, 'missing');
 });
 
 test('prompt manager renders project prompts with metadata and missing variables', () => {
@@ -5529,9 +5543,13 @@ test('operations report panel view renders escaped data and command actions', ()
     summary: 'Ready <ship> & review',
     components: [{ label: 'Run <completion>', score: 20, max: 25, detail: 'Good & improving' }],
     metrics: [{ label: 'Retries <low>', value: '1 & falling' }],
+    failureThemes: [{ label: 'Tests <failed>', count: 2, detail: 'Unit & smoke failed', severity: 'critical', sampleRunId: 'run-1' }],
   }, 'nonce-score', ACTION_SCRIPT_URI);
   assert.ok(scoreHtml.includes('Ready &lt;ship&gt; &amp; review'));
   assert.ok(scoreHtml.includes('Run &lt;completion&gt;'));
+  assert.ok(scoreHtml.includes('Failure Themes'));
+  assert.ok(scoreHtml.includes('Tests &lt;failed&gt;'));
+  assert.ok(scoreHtml.includes('Sample run: run-1'));
   assert.ok(scoreHtml.includes('data-action="trendMetrics"'));
   assert.ok(scoreHtml.includes('nonce="nonce-score"'));
 
@@ -10974,6 +10992,27 @@ test('webview html helpers centralize escaping and safe HTTP links', () => {
 
 test('dashboard panel view renders escaped command center data', () => {
   const startedAt = new Date().toISOString();
+  const setupPlan = setupWizard.buildSetupWizardPlan({
+    state: baseState({}),
+    queue: { items: [], last_computed: startedAt },
+    profile: { id: 'personal-local', label: 'Personal', description: 'Local', defaultBaseBranch: 'main', providers: { jira: false, gitlab: false, jenkins: false, sonar: false, github: true } },
+    doctorChecks: [{ name: 'Claude CLI', status: 'pass', detail: 'ok' }],
+    manifestStatus: { present: true, valid: true, path: '/tmp/manifest.json', manifest: {}, errors: [], warnings: [] },
+    manifestAudit: { status: 'pass', summary: '1 artifact hash check passed, 0 warnings, 0 failures.', artifacts: [] },
+    scripts: [
+      { name: 'kronos_state.py', path: '/scripts/kronos_state.py', present: true },
+      { name: 'gitlab_api.py', path: '/scripts/gitlab_api.py', present: true },
+      { name: 'pipeline_monitor.py', path: '/scripts/pipeline_monitor.py', present: true },
+    ],
+  });
+  const contractReport = integrationContractHarness.buildIntegrationContractReport({
+    contractDocText: readSourceFixture('docs', 'integration-script-contract.md'),
+    scripts: [
+      { name: 'kronos_state.py', path: '/scripts/kronos_state.py', present: true },
+      { name: 'gitlab_api.py', path: '/scripts/gitlab_api.py', present: true },
+      { name: 'pipeline_monitor.py', path: '/scripts/pipeline_monitor.py', present: true },
+    ],
+  });
   const html = dashboardPanelView.buildDashboardHtml({
     state: {
       projects: {
@@ -11013,6 +11052,32 @@ test('dashboard panel view renders escaped command center data', () => {
     brief: { overnight_actions: '2', vpn_drops: '1', completed: ['Done <one>'] },
     trendWindowDays: 14,
     agingThresholds: { ticketDays: 1 },
+    setupPlan,
+    integrationContractReport: contractReport,
+    specProjects: [{
+      projectName: 'web<script>',
+      projectPath: '/repo/web',
+      outputDir: 'docs/api-spec',
+      hasSpec: true,
+      summary: {
+        schema: 'kronos.spec-beanstalk.v1',
+        generatedAt: '2026-07-01T12:00:00.000Z',
+        sourceWorkbook: 'api.xlsx',
+        sourceWorkbookSha256: 'abcdef1234567890',
+        outputDir: 'docs/api-spec',
+        indexPath: 'docs/api-spec/spec-beanstalk.md',
+        tracePath: 'docs/api-spec/spec-beanstalk-trace.json',
+        summaryPath: 'docs/api-spec/spec-beanstalk-summary.json',
+        sheetCount: 1,
+        cellCount: 2,
+        formattedCellCount: 1,
+        sheets: [{ name: 'API', state: 'visible', cellCount: 2, formattedCellCount: 1, fillPalette: ['#FFF2CC'], markdownPath: 'API.md', warnings: [] }],
+        absoluteOutputDir: '/repo/web/docs/api-spec',
+        absoluteIndexPath: '/repo/web/docs/api-spec/spec-beanstalk.md',
+        absoluteTracePath: '/repo/web/docs/api-spec/spec-beanstalk-trace.json',
+        absoluteSummaryPath: '/repo/web/docs/api-spec/spec-beanstalk-summary.json',
+      },
+    }],
     nonce: 'nonce-dashboard',
     loadWarning: 'Brief <failed> & retry',
     actionScriptUri: ACTION_SCRIPT_URI,
@@ -11020,6 +11085,11 @@ test('dashboard panel view renders escaped command center data', () => {
 
   assert.match(html, /class="kronos-shell dashboard-shell"/);
   assert.match(html, /Operator Brief/);
+  assert.match(html, /Operator Cockpit/);
+  assert.match(html, /Setup Wizard/);
+  assert.match(html, /MR Autopilot/);
+  assert.match(html, /Integration Contracts/);
+  assert.match(html, /Spec Traceability/);
   assert.match(html, /dashboard-operator-brief/);
   assert.match(html, /1 run active right now/);
   assert.match(html, /Now/);
@@ -11034,6 +11104,9 @@ test('dashboard panel view renders escaped command center data', () => {
   assert.match(html, /Done &lt;one&gt;/);
   assert.match(html, /run&lt;script&gt;/);
   assert.match(html, /data-action="refreshPanel"/);
+  assert.match(html, /data-action="setupWizard"/);
+  assert.match(html, /data-action="mrAutopilot"/);
+  assert.match(html, /data-action="integrationContractReport"/);
   assert.match(html, /data-action="runCenter"/);
   assert.match(html, /data-kronos-ready-command="__kronosWebviewReady"/);
   assert.doesNotMatch(html, /Project <summary>/);
@@ -11106,6 +11179,107 @@ test('jira board panel view renders escaped ticket data and packaged script', ()
   assert.doesNotMatch(html, /trace <one>/);
 });
 
+test('setup wizard, MR autopilot, and integration contract panels render actionable models', () => {
+  const state = baseState({
+    'K-AUTO': ticket({
+      summary: 'Autopilot <ticket>',
+      projects: ['app'],
+      mr: {
+        iid: 12,
+        state: 'opened',
+        review_status: 'changes_requested',
+        url: 'https://gitlab.example/mr/12',
+        unresolved_discussion_count: 1,
+      },
+      build: { number: 99, status: 'FAILURE', url: 'https://jenkins.example/99' },
+      evidence: { checks: [{ id: 'check-1', at: '2026-07-01T12:00:00.000Z', name: 'unit', result: 'fail' }] },
+      next_action: 'await_review',
+    }),
+  });
+  state.projects.app.config.gitlab_project_id = 101;
+  const setupPlan = setupWizard.buildSetupWizardPlan({
+    state,
+    queue: { items: [{ id: 'q-auto', ticket: 'K-AUTO', projects: ['app'], project_path: '/repo/app', action: 'implement' }], last_computed: '2026-07-01T12:00:00.000Z' },
+    profile: { id: 'enterprise-gitlab-jira', label: 'Enterprise', description: 'Provider-backed', defaultBaseBranch: 'develop', providers: { jira: true, gitlab: true, jenkins: true, sonar: true, githubActions: false } },
+    doctorChecks: [
+      { name: 'Claude CLI', status: 'pass', detail: 'ok' },
+      { name: 'Provider network reachability', status: 'warn', detail: 'one provider slow' },
+    ],
+    manifestStatus: { present: false, valid: true, path: '/tmp/manifest.json', errors: [], warnings: ['missing'] },
+    manifestAudit: { status: 'warn', summary: 'manifest missing', artifacts: [] },
+    scripts: [
+      { name: 'kronos_state.py', path: '/scripts/kronos_state.py', present: true },
+      { name: 'gitlab_api.py', path: '/scripts/gitlab_api.py', present: false },
+      { name: 'pipeline_monitor.py', path: '/scripts/pipeline_monitor.py', present: true },
+    ],
+  });
+  assert.equal(setupPlan.status, 'blocked');
+  assert.equal(setupPlan.nextStep.id, 'scripts');
+  const setupHtml = setupWizardPanelView.buildSetupWizardHtml(setupPlan, 'nonce-setup', ACTION_SCRIPT_URI);
+  assert.match(setupHtml, /Kronos Setup Wizard/);
+  assert.match(setupHtml, /Integration scripts/);
+  assert.match(setupHtml, /data-action="integrationContractReport"/);
+  assert.doesNotMatch(setupHtml, /Autopilot <ticket>/);
+
+  const autopilotPlan = mrAutopilot.buildMrAutopilotPlan({
+    state,
+    queue: { items: [], last_computed: null },
+    runs: [{ id: 'active-run', ticket: 'K-RUN', status: 'running', startedAt: new Date().toISOString() }],
+  });
+  assert.equal(autopilotPlan.status, 'attention');
+  assert.equal(autopilotPlan.nextStep, 'Run Safe Pass to refresh open MR, review, discussion, branch, and build signals.');
+  assert.equal(autopilotPlan.pollEligibleCount, 1);
+  assert.equal(autopilotPlan.mutationBlockedCount, 0);
+  assert.equal(autopilotPlan.candidates[0].ticketKey, 'K-AUTO');
+  assert.equal(autopilotPlan.candidates[0].recommendedAction, 'evidenceGate');
+  assert.equal(autopilotPlan.candidates[0].pollEligible, true);
+  assert.deepEqual(autopilotPlan.candidates[0].blockers, []);
+  assert.ok(autopilotPlan.recommendedPass.some(step => step.label === 'Poll Review State' && step.status === 'ready'));
+  const autopilotHtml = mrAutopilotPanelView.buildMrAutopilotHtml(autopilotPlan, 'nonce-auto', ACTION_SCRIPT_URI);
+  assert.match(autopilotHtml, /Kronos MR Autopilot/);
+  assert.match(autopilotHtml, /Safe Pass/);
+  assert.match(autopilotHtml, /Autopilot Pass Plan/);
+  assert.match(autopilotHtml, /Poll Review State/);
+  assert.match(autopilotHtml, /Preflight/);
+  assert.match(autopilotHtml, /GitLab project ID available for app/);
+  assert.match(autopilotHtml, /poll eligible/);
+  assert.match(autopilotHtml, /Autopilot &lt;ticket&gt;/);
+  assert.match(autopilotHtml, /data-action="runAutopilotPass"/);
+  assert.match(autopilotHtml, /data-action="evidenceGate"/);
+  assert.doesNotMatch(autopilotHtml, /Autopilot <ticket>/);
+
+  const blockedAutopilotPlan = mrAutopilot.buildMrAutopilotPlan({
+    state: baseState({
+      'K-BLOCK': ticket({
+        summary: 'Missing project id',
+        projects: ['app'],
+        mr: { iid: 13, state: 'opened', review_status: 'pending_review', url: 'https://gitlab.example/mr/13' },
+      }),
+    }),
+    queue: { items: [], last_computed: null },
+    runs: [],
+  });
+  assert.equal(blockedAutopilotPlan.status, 'blocked');
+  assert.equal(blockedAutopilotPlan.candidates[0].recommendedAction, 'humanReview');
+  assert.ok(blockedAutopilotPlan.candidates[0].blockers.includes('No linked project has gitlab_project_id.'));
+
+  const contractReport = integrationContractHarness.buildIntegrationContractReport({
+    contractDocText: '--ticket-comments comments --mr-status <gitlab_project_id> <mr_iid>',
+    scripts: [
+      { name: 'kronos_state.py', path: '/scripts/kronos_state.py', present: true },
+      { name: 'gitlab_api.py', path: '/scripts/gitlab_api.py', present: true },
+      { name: 'pipeline_monitor.py', path: '/scripts/pipeline_monitor.py', present: false },
+    ],
+  });
+  assert.equal(contractReport.status, 'fail');
+  assert.equal(contractReport.checks.some(check => check.command.includes('--sonar-issues') && check.status === 'fail'), true);
+  const contractHtml = integrationContractPanelView.buildIntegrationContractHtml(contractReport, 'nonce-contract', ACTION_SCRIPT_URI);
+  assert.match(contractHtml, /Kronos Integration Contracts/);
+  assert.match(contractHtml, /gitlab_api.py --mr-status/);
+  assert.match(contractHtml, /pipeline_monitor.py --sonar-issues/);
+  assert.match(contractHtml, /data-action="snapshotIntegrationManifest"/);
+});
+
 test('operator command routing preserves ticket, run, and item targets', () => {
   assert.deepEqual(operatorCommandRouting.resolveOperatorCommandRoute({ command: 'missingCommand' }), { kind: 'unknown' });
   assert.deepEqual(operatorCommandRouting.resolveOperatorCommandRoute({ command: 'addEvidence' }), {
@@ -11131,6 +11305,18 @@ test('operator command routing preserves ticket, run, and item targets', () => {
     commandId: 'kronos.runCenter',
     argument: { runId: '', itemId: 'item-1' },
   });
+  assert.deepEqual(operatorCommandRouting.resolveOperatorCommandRoute({ command: 'setupWizard' }), {
+    kind: 'execute',
+    commandId: 'kronos.setupWizard',
+  });
+  assert.deepEqual(operatorCommandRouting.resolveOperatorCommandRoute({ command: 'mrAutopilot' }), {
+    kind: 'execute',
+    commandId: 'kronos.mrAutopilot',
+  });
+  assert.deepEqual(operatorCommandRouting.resolveOperatorCommandRoute({ command: 'integrationContractReport' }), {
+    kind: 'execute',
+    commandId: 'kronos.integrationContractReport',
+  });
   assert.equal(operatorCommandRouting.isTicketOperatorCommand('viewTicket'), true);
   assert.equal(operatorCommandRouting.isTicketOperatorCommand('runCenter'), false);
 });
@@ -11145,6 +11331,9 @@ test('extension webviews use shared UI shell and board filtering affordances', (
   const queuePlannerPanelViewSource = readSourceFixture('src', 'services', 'queuePlannerPanelView.ts');
   const operationsReportPanelViewSource = readSourceFixture('src', 'services', 'operationsReportPanelView.ts');
   const dashboardPanelViewSource = readSourceFixture('src', 'services', 'dashboardPanelView.ts');
+  const setupWizardPanelViewSource = readSourceFixture('src', 'services', 'setupWizardPanelView.ts');
+  const mrAutopilotPanelViewSource = readSourceFixture('src', 'services', 'mrAutopilotPanelView.ts');
+  const integrationContractPanelViewSource = readSourceFixture('src', 'services', 'integrationContractPanelView.ts');
   const diffPanelViewSource = readSourceFixture('src', 'services', 'diffPanelView.ts');
   const jiraBoardPanelViewSource = readSourceFixture('src', 'services', 'jiraBoardPanelView.ts');
   const ticketPanelViewSource = readSourceFixture('src', 'services', 'ticketPanelView.ts');
@@ -11155,7 +11344,7 @@ test('extension webviews use shared UI shell and board filtering affordances', (
   const collisionDetectorSource = readSourceFixture('src', 'services', 'collisionDetector.ts');
   const mergeRequestFileHintsSource = readSourceFixture('src', 'services', 'mergeRequestFileHints.ts');
   const jiraBoardSource = readSourceFixture('media', 'kronos-jira-board.js');
-  const uiSource = `${source}\n${queuePlannerPanelViewSource}\n${operationsReportPanelViewSource}\n${dashboardPanelViewSource}\n${diffPanelViewSource}\n${jiraBoardPanelViewSource}\n${ticketPanelViewSource}\n${webviewCommandRegistrySource}\n${operatorCommandRoutingSource}\n${runActionHelpersSource}\n${collisionDetectorSource}\n${mergeRequestFileHintsSource}\n${jiraBoardSource}`;
+  const uiSource = `${source}\n${queuePlannerPanelViewSource}\n${operationsReportPanelViewSource}\n${dashboardPanelViewSource}\n${setupWizardPanelViewSource}\n${mrAutopilotPanelViewSource}\n${integrationContractPanelViewSource}\n${diffPanelViewSource}\n${jiraBoardPanelViewSource}\n${ticketPanelViewSource}\n${webviewCommandRegistrySource}\n${operatorCommandRoutingSource}\n${runActionHelpersSource}\n${collisionDetectorSource}\n${mergeRequestFileHintsSource}\n${jiraBoardSource}`;
   const boardHandlerStart = source.indexOf('panel.webview.onDidReceiveMessage(async (msg) => {\n        if (logReady(msg)) { return; }\n        const request = normalizeBoardMessage(msg, BOARD_MESSAGE_COMMANDS);');
   const boardHandlerEnd = source.indexOf("    vscode.commands.registerCommand('kronos.viewTicket'", boardHandlerStart);
   assert.ok(boardHandlerStart >= 0 && boardHandlerEnd > boardHandlerStart, 'Jira board message handler should be present');
@@ -11168,6 +11357,9 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     "import { buildPromptHistoryHtml, buildPromptManagerHtml, buildPromptSmokeTestsHtml } from './services/promptPanelView'",
     "import { buildRecoveryHtml, buildStateAuditLogHtml } from './services/recoveryPanelView'",
     "import { buildHumanReviewInboxHtml } from './services/humanReviewPanelView'",
+    "import { buildSetupWizardHtml } from './services/setupWizardPanelView'",
+    "import { buildMrAutopilotHtml } from './services/mrAutopilotPanelView'",
+    "import { buildIntegrationContractHtml } from './services/integrationContractPanelView'",
     "import { decideReviewMonitorAction, reviewDeployMonitorActionHandled, reviewMergeRequestNotificationKey, reviewTerminalMergeRequestActionKey, type ReviewDeployMonitorResult, type ReviewMonitorDecision, type ReviewTerminalMergeRequestAction } from './services/reviewMonitor'",
     "import { buildEvidenceGateHtml, buildEvidenceHandoffHtml, buildEvidencePublishHtml } from './services/evidencePanelView'",
     "import { buildBacklogTriageHtml, buildCollisionReportHtml, buildProjectBatchPlanHtml, buildQueuePlanModeHtml, buildQueuePlannerHtml, buildReleaseBatchPlanHtml } from './services/queuePlannerPanelView'",
@@ -11178,14 +11370,32 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'kronosWebviewBaseCss',
     'class="kronos-shell dashboard-shell"',
     'dashboard-operator-brief',
+    'Operator Cockpit',
+    "actionButton('setupWizard', 'Setup Wizard')",
+    "actionButton('mrAutopilot', 'MR Autopilot')",
+    "actionButton('integrationContractReport', 'Contracts')",
     'function buildDashboardOperatorBrief',
+    'function buildDashboardWorkflowRail',
+    'function workflowCard',
     'function dashboardBriefFact',
     'let data: unknown = {}',
     'let loadWarning: string | undefined',
     "loadWarning = warnUnexpectedPanelIntegrationError(e, 'Morning brief unavailable.')",
     "createKronosActionWebviewPanel('kronosDashboard', 'Kronos Dashboard', context.extensionUri)",
     'buildDashboardHtml({',
+    'setupPlan: currentSetupWizardPlan(state)',
+    'integrationContractReport: currentIntegrationContractReport()',
+    'specProjects: specBeanstalkProjectStatuses(state)',
+    "vscode.commands.registerCommand('kronos.setupWizard'",
+    "vscode.commands.registerCommand('kronos.mrAutopilot'",
+    "vscode.commands.registerCommand('kronos.integrationContractReport'",
+    "createKronosActionWebviewPanel('kronosSetupWizard', 'Kronos Setup Wizard', extensionUri)",
+    "createKronosActionWebviewPanel('kronosMrAutopilot', 'Kronos MR Autopilot', extensionUri)",
+    "createKronosActionWebviewPanel('kronosIntegrationContracts', 'Kronos Integration Contracts', extensionUri)",
     "kronosActionPanelScript(input.nonce, 'Kronos Dashboard', input.actionScriptUri)",
+    "kronosActionPanelScript(nonce, 'Kronos Setup Wizard', actionScriptUri)",
+    "kronosActionPanelScript(nonce, 'Kronos MR Autopilot', actionScriptUri)",
+    "kronosActionPanelScript(nonce, 'Kronos Integration Contracts', actionScriptUri)",
     "function openAgingReportPanel(state: KronosState, extensionUri?: vscode.Uri)",
     "kronosActionPanelScript(nonce, 'Kronos Aging Report', actionScriptUri)",
     'Morning brief unavailable',
@@ -11239,6 +11449,9 @@ test('extension webviews use shared UI shell and board filtering affordances', (
     'const EVIDENCE_GATE_MESSAGE_COMMANDS = new Set',
     'const HUMAN_REVIEW_MESSAGE_COMMANDS = new Set',
     'const DASHBOARD_MESSAGE_COMMANDS = new Set',
+    'export const SETUP_WIZARD_MESSAGE_COMMANDS = new Set',
+    'export const MR_AUTOPILOT_MESSAGE_COMMANDS = new Set',
+    'export const INTEGRATION_CONTRACT_MESSAGE_COMMANDS = new Set',
     "'startTicket',",
     "'viewTicket',",
     'const AGING_REPORT_MESSAGE_COMMANDS = new Set',
@@ -12451,7 +12664,7 @@ test('extension command handlers normalize remaining unknown errors', () => {
     "unknownErrorMessage(e, 'Could not inspect project remotes for setup.')",
     "unknownErrorMessage(e, 'Failed to get next queue item.')",
     "warnUnexpectedPanelIntegrationError(e, 'Could not load comments')",
-    "import { isKronosScriptMissingError } from './services/scriptClient'",
+    "import { isKronosScriptMissingError, requiredScripts } from './services/scriptClient'",
     'const OPTIONAL_SCRIPT_PANEL_WARNING =',
     'function warnUnexpectedPanelIntegrationError(error: unknown, fallback: string): string',
     'if (!isKronosScriptMissingError(error))',
@@ -13247,7 +13460,7 @@ test('agent quality score combines run outcomes, evidence gates, builds, reviews
       null,
       'not-a-run',
       { id: 'r1', status: 'waiting_for_review', ticket: 'K-1' },
-      { id: 'r2', status: 'failed', ticket: 'K-2' },
+      { id: 'r2', status: 'failed', ticket: 'K-2', failureKind: 'test', failureReason: 'Unit tests failed' },
       { id: 'r3', status: 'needs_human', ticket: 'K-2', promptMetadata: { retryOfRunId: 'r2' } },
     ],
   });
@@ -13256,13 +13469,18 @@ test('agent quality score combines run outcomes, evidence gates, builds, reviews
   assert.ok(score.components.some(component => component.label === 'Run completion'));
   assert.ok(score.components.some(component => component.label === 'Evidence readiness' && component.detail.includes('failing evidence gate')));
   assert.ok(score.metrics.some(metric => metric.label === 'Retries' && metric.value === '1'));
+  assert.ok(score.failureThemes.some(theme => theme.label === 'Tests failed' && theme.sampleRunId === 'r2'));
+  assert.ok(score.failureThemes.some(theme => theme.label === 'Needs human review' && theme.severity === 'critical'));
   assert.match(score.summary, /needs-human run/);
 
   const source = readSourceFixture('src', 'services', 'agentQualityScore.ts');
   assert.ok(source.includes("import { isActiveRun, isFailedOrCancelledRunStatus, isSuccessfulRunStatus } from './runStatus'"));
   assert.ok(source.includes("import { hasRetryMetadata, runLikeRecordsFromUnknown } from './runRecords'"));
   assert.ok(source.includes("import { countLabel } from './countLabels'"));
+  assert.ok(source.includes("import { runAttentionLine, runAttentionSummary, type RunAttentionSummary } from './runAttention'"));
   assert.ok(source.includes("import { definedValues, recordString } from './records'"));
+  assert.ok(source.includes('failureThemes: AgentQualityFailureTheme[]'));
+  assert.ok(source.includes('function buildFailureThemes'));
   assert.ok(source.includes('runs: unknown[]'));
   assert.ok(source.includes('const runs = runLikeRecordsFromUnknown(input.runs)'));
   assert.ok(source.includes("isSuccessfulRunStatus(recordString(run, 'status'))"));

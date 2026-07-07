@@ -56,6 +56,19 @@ export interface SpecBeanstalkProjectStatus {
   issue?: string;
 }
 
+export interface SpecBeanstalkTraceabilityRow {
+  sheet: string;
+  evidence: string;
+  markdownPath: string;
+  warningCount: number;
+}
+
+export interface SpecBeanstalkTraceabilityReport {
+  status: 'ready' | 'review' | 'missing';
+  summary: string;
+  rows: SpecBeanstalkTraceabilityRow[];
+}
+
 interface PythonCandidate {
   command: string;
   prefixArgs: string[];
@@ -150,6 +163,7 @@ export function buildSpecBeanstalkPrompt(summary: SpecBeanstalkSummary, scope: s
   const scopeText = scope.trim()
     ? scope.trim()
     : 'Choose the next coherent API implementation slice from the generated spec and continue from there.';
+  const traceability = buildSpecBeanstalkTraceabilityReport(summary);
   const sheets = summary.sheets
     .map(sheet => `- ${sheet.name}: ${sheet.cellCount} parsed cells, ${sheet.formattedCellCount} formatted cells, colors ${sheet.fillPalette.join(', ') || 'none'}, Markdown ${sheet.markdownPath}`)
     .join('\n');
@@ -163,6 +177,7 @@ Generated spec artifacts:
 - Cell/style trace: ${summary.tracePath}
 - Source workbook: ${summary.sourceWorkbook}
 - Source workbook SHA-256: ${summary.sourceWorkbookSha256}
+- Traceability status: ${traceability.summary}
 
 Sheets:
 ${sheets || '- No sheets were parsed.'}
@@ -175,8 +190,35 @@ Rules:
 5. If you need to inspect the workbook directly and it is available in this workspace, use Python to read the .xlsx/package metadata. Do not rely on screenshots or lossy copy/paste extraction.
 6. Implement in small resumable increments. Update or add Java tests that prove the implemented spec behavior.
 7. Do not publish externally, commit, push, or delete unrelated files unless the operator explicitly asks.
-8. End with a concise beanstalk report: implemented cells/sections, tests run, assumptions, blockers, and next recommended slice.
+8. Maintain a traceability ledger while working: Excel sheet/cell/range, Markdown section, Java file/test touched, and verification result.
+9. End with a concise beanstalk report: implemented cells/sections, tests run, assumptions, blockers, and next recommended slice.
 `;
+}
+
+export function buildSpecBeanstalkTraceabilityReport(summary: SpecBeanstalkSummary | undefined): SpecBeanstalkTraceabilityReport {
+  if (!summary) {
+    return {
+      status: 'missing',
+      summary: 'No generated spec artifacts are selected.',
+      rows: [],
+    };
+  }
+  const warningCount = summary.sheets.reduce((total, sheet) => total + sheet.warnings.length, 0);
+  const colorCount = new Set(summary.sheets.flatMap(sheet => sheet.fillPalette)).size;
+  const rows = summary.sheets.map(sheet => ({
+    sheet: sheet.name,
+    evidence: `${sheet.cellCount} cells, ${sheet.formattedCellCount} formatted, ${sheet.fillPalette.length} colors`,
+    markdownPath: sheet.markdownPath,
+    warningCount: sheet.warnings.length,
+  }));
+  const status = summary.sheetCount > 0 && summary.cellCount > 0
+    ? warningCount > 0 ? 'review' : 'ready'
+    : 'missing';
+  return {
+    status,
+    summary: `${summary.sheetCount} sheets, ${summary.cellCount} cells, ${summary.formattedCellCount} formatted cells, ${colorCount} workbook colors, ${warningCount} warnings. Source ${summary.sourceWorkbookSha256 ? summary.sourceWorkbookSha256.substring(0, 12) : 'hash missing'}.`,
+    rows,
+  };
 }
 
 export function specBeanstalkSummaryFromUnknown(value: unknown, projectPath: string): SpecBeanstalkSummary {
