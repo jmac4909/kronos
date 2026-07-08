@@ -166,6 +166,7 @@ const promptManager = require('../out/services/promptManager.js');
 const promptWorkspaceModel = require('../out/services/promptWorkspaceModel.js');
 const verifyLocalPlan = require('../out/services/verifyLocalPlan.js');
 const claudeEnv = require('../out/services/claudeEnv.js');
+const sessionCredentialPrompt = require('../out/services/sessionCredentialPrompt.js');
 const stateStore = require('../out/services/stateStore.js');
 const queuePlanner = require('../out/services/queuePlanner.js');
 const queueDispatchPlan = require('../out/services/queueDispatchPlan.js');
@@ -7277,13 +7278,20 @@ test('dispatcher records branch and permission metadata for persisted runs', () 
     'const RUN_LOOP_REPEAT_LIMIT = 4',
     'KRONOS_SESSION_GUARDRAILS',
     'Use inherited environment variables for provider credentials',
+    'Kronos resolved credential command snippets injected below',
     'Do not read, grep, cat, print, source, or parse .env files',
+    'Do not print, inspect, transform, save, or include credential values',
     'Always use Bash, never PowerShell.',
     '$KRONOS_RUN_TMPDIR or $TMPDIR',
+    "import { buildSessionCredentialCommandPrompt, redactCredentialValues } from '../services/sessionCredentialPrompt'",
     'function buildSessionAppendSystemPrompt',
-    'const appendSystemPrompt = buildSessionAppendSystemPrompt(opts.appendSystemPrompt)',
+    'const credentialAppendPrompt = buildSessionCredentialCommandPrompt({ projectName, env: process.env })',
+    'const appendSystemPrompt = buildSessionAppendSystemPrompt(opts.appendSystemPrompt, credentialAppendPrompt)',
     'promptMetadata.appendSystemPromptHash = hashText(appendSystemPrompt)',
     'const claudeArgs = buildClaudeArgs(prompt, model, appendSystemPrompt, addDirs)',
+    'const redactCredentialText = (text: string): string => redactCredentialValues(text, process.env)',
+    'const chunk = redactCredentialText(data.toString())',
+    'const redacted = redactCredentialText(data.toString())',
     'KRONOS_RUN_TMPDIR: runTempDir',
     'function buildRunBranchMetadata',
     'permissions: buildRunPermissionMetadata([\'~/.claude\'])',
@@ -10222,6 +10230,36 @@ test('Claude env loader parses ~/.claude/.env without overwriting existing proce
   });
   assert.equal(missing.present, false);
   assert.equal(missing.loaded, 0);
+});
+
+test('session credential prompt injects resolved commands and redacts persisted output', () => {
+  const env = {
+    SONAR_HOST_URL: 'https://sonar.example',
+    SONAR_TOKEN: 'sonar-secret',
+    PAY_API_TEST_URL: 'https://test.example/pay',
+    PAY_API_TEST_BEARER_TOKEN: 'test-secret',
+    DEV_AUTH_HEADER: 'Authorization: Bearer dev-secret',
+    GITLAB_BASE_URL: 'https://gitlab.example',
+    GITLAB_TOKEN: 'gitlab-secret',
+  };
+  const prompt = sessionCredentialPrompt.buildSessionCredentialCommandPrompt({ projectName: 'pay-api', env });
+  assert.match(prompt, /Kronos resolved credential commands/);
+  assert.match(prompt, /mvn sonar:sonar -Dsonar\.host\.url='https:\/\/sonar\.example\/' -Dsonar\.token='sonar-secret'/);
+  assert.match(prompt, /DEV curl auth header:\n```bash\n-H 'Authorization: Bearer dev-secret'\n```/);
+  assert.match(prompt, /TEST replay curl command template:\n```bash\ncurl -i 'https:\/\/test\.example\/pay' \\\n  -H 'Authorization: Bearer test-secret'\n```/);
+  assert.match(prompt, /curl --request POST 'https:\/\/gitlab\.example\/api\/v4\/projects\/<project_id_or_urlencoded_path>\/merge_requests'/);
+  assert.match(prompt, /--header 'PRIVATE-TOKEN: gitlab-secret'/);
+  assert.doesNotMatch(prompt, /\$SONAR|\$\{SONAR|\$GITLAB|\$\{GITLAB|\$TEST|\$\{TEST/);
+
+  const redacted = sessionCredentialPrompt.redactCredentialValues(
+    "mvn sonar:sonar -Dsonar.token='sonar-secret'\n-H 'Authorization: Bearer test-secret'\n--header 'PRIVATE-TOKEN: gitlab-secret'\nretrying dev-secret",
+    env,
+  );
+  assert.doesNotMatch(redacted, /sonar-secret|test-secret|gitlab-secret|dev-secret/);
+  assert.match(redacted, /\[REDACTED_CREDENTIAL\]/);
+  assert.match(redacted, /https:\/\/sonar\.example|PRIVATE-TOKEN/);
+
+  assert.equal(sessionCredentialPrompt.buildSessionCredentialCommandPrompt({ env: {} }), undefined);
 });
 
 test('doctor checks centralize command, credential, project config, and reachability inputs', async () => {

@@ -29,6 +29,7 @@ import { appendRunRecoveryActions, appendRunWarnings, runEventRecords } from '..
 import { sortedRunCenterRuns } from '../services/runCenterSort';
 import { readJsonFile } from '../services/jsonFiles';
 import { arrayFromUnknown, isRecord, recordEntriesFromUnknown, recordFromUnknown, trimmedStringFromUnknown } from '../services/records';
+import { buildSessionCredentialCommandPrompt, redactCredentialValues } from '../services/sessionCredentialPrompt';
 import { toValidDate } from '../services/dateValues';
 import { formatDateTimeLabel, formatTimeLabel } from '../services/dateLabels';
 import type { KronosState as KronosStateFile } from '../state/types';
@@ -74,7 +75,8 @@ const CLAUDE_ALLOWED_TOOLS = CLAUDE_ALLOWED_TOOL_PATTERNS.join(' ');
 const RUN_LOOP_REPEAT_LIMIT = 4;
 const KRONOS_SESSION_GUARDRAILS = [
   'Kronos session guardrails:',
-  '- Use inherited environment variables for provider credentials. Do not read, grep, cat, print, source, or parse .env files, and never pass token values in command arguments or logs.',
+  '- Use inherited environment variables for provider credentials when command expansion works; otherwise use only the Kronos resolved credential command snippets injected below. Do not read, grep, cat, print, source, or parse .env files.',
+  '- Do not print, inspect, transform, save, or include credential values in reports, evidence, commits, merge request comments, tickets, or helper files.',
   '- Put throwaway helper scripts and scratch files under $KRONOS_RUN_TMPDIR or $TMPDIR, and remove them before finishing when practical.',
   '- Always use Bash, never PowerShell.',
   '- If a tool permission, approval, or command retry loop repeats, stop and report the blocker instead of retrying the same command.',
@@ -587,9 +589,13 @@ function buildRunPermissionMetadata(addDirs: string[]): RunPermissionMetadata {
   };
 }
 
-function buildSessionAppendSystemPrompt(customAppendSystemPrompt: string | undefined): string {
+function buildSessionAppendSystemPrompt(customAppendSystemPrompt: string | undefined, credentialAppendPrompt: string | undefined): string {
   const custom = customAppendSystemPrompt?.trim();
-  return custom ? `${KRONOS_SESSION_GUARDRAILS}\n\n${custom}` : KRONOS_SESSION_GUARDRAILS;
+  return [
+    KRONOS_SESSION_GUARDRAILS,
+    credentialAppendPrompt?.trim(),
+    custom,
+  ].filter(Boolean).join('\n\n');
 }
 
 function buildRunBranchMetadata(input: {
@@ -805,7 +811,8 @@ export async function dispatchClaudeSession(
   const promptMetadata: PromptRunMetadata = opts.promptMetadata
     ? { ...opts.promptMetadata }
     : { source: opts.customPrompt ? 'custom' : 'slash' };
-  const appendSystemPrompt = buildSessionAppendSystemPrompt(opts.appendSystemPrompt);
+  const credentialAppendPrompt = buildSessionCredentialCommandPrompt({ projectName, env: process.env });
+  const appendSystemPrompt = buildSessionAppendSystemPrompt(opts.appendSystemPrompt, credentialAppendPrompt);
   promptMetadata.appendSystemPromptHash = hashText(appendSystemPrompt);
   const run = createRun(projectName, projectPath, skill, ticket || '', model, prompt, cwd, promptMetadata);
   const initialPatch: Partial<KronosRun> = {
@@ -1062,6 +1069,7 @@ export async function dispatchClaudeSession(
   let spawnErrorHandled = false;
   let runLoopHandled = false;
   const runLoopDetector = createRunLoopDetector();
+  const redactCredentialText = (text: string): string => redactCredentialValues(text, process.env);
   const recordProgressEvent = (pe: ProgressEvent): void => {
     events.push(pe);
     addRunEvent(run, pe);
@@ -1142,7 +1150,7 @@ export async function dispatchClaudeSession(
   });
 
   proc.stdout.on('data', (data: Buffer) => {
-    const chunk = data.toString();
+    const chunk = redactCredentialText(data.toString());
     appendRunLog(run, chunk);
     buffer += chunk;
     const lines = buffer.split('\n');
@@ -1168,8 +1176,9 @@ export async function dispatchClaudeSession(
   });
 
   proc.stderr.on('data', (data: Buffer) => {
-    const text = data.toString().trim();
-    appendRunLog(run, data.toString());
+    const redacted = redactCredentialText(data.toString());
+    const text = redacted.trim();
+    appendRunLog(run, redacted);
     const event = stderrProgressEvent(text);
     if (event) {
       recordProgressEvent(event);

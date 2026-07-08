@@ -1,13 +1,13 @@
 # Kronos Integration Script Contract
 
-Kronos does not ship provider credentials. Runtime scripts are discovered from `KRONOS_SCRIPTS_DIR` or `~/.claude/scripts`, and sessions inherit the VS Code extension process environment. On activation the extension reads `~/.claude/.env` and merges values that are not already present in `process.env`, so Doctor checks, MR polling, and integration adapters can see the same credential file used by dispatched sessions. Kronos does not pass credential values on command lines.
+Kronos does not ship provider credentials. Runtime scripts are discovered from `KRONOS_SCRIPTS_DIR` or `~/.claude/scripts`, and sessions inherit the VS Code extension process environment. On activation the extension reads `~/.claude/.env` and merges values that are not already present in `process.env`, so Doctor checks, MR polling, integration adapters, and dispatched sessions can use the same credential source.
 
 Required scripts:
 
 - `kronos_state.py`
 - `pipeline_monitor.py`
 
-Script commands must print JSON to stdout and write diagnostics to stderr. Non-zero exits should include a concise stderr message. Credential values must come from inherited environment variables and must never be echoed, embedded in argv, or written to Kronos state files.
+Script commands must print JSON to stdout and write diagnostics to stderr. Non-zero exits should include a concise stderr message. Credential values must come from inherited environment variables and must never be echoed, embedded in script argv, or written to Kronos state files.
 
 Kronos: Integration Contracts runs a local contract harness over this file and the required script bundle. It checks that the documented command/API shapes match the extension calls and that required scripts are installed; it does not call enterprise providers or require credentials.
 
@@ -73,4 +73,6 @@ pipeline_monitor.py --sonar-issues <sonar_project_key> --branch <branch>
 
 ## Dispatch Environment
 
-Dispatched Claude sessions inherit the VS Code extension process environment. Kronos sets a run-scoped temporary directory with `KRONOS_RUN_TMPDIR`, `TMPDIR`, `TMP`, and `TEMP` so generated helper scripts can stay isolated and be cleaned up after the run. Operators may provide provider tokens through the parent VS Code environment, OS credential setup, or `~/.claude/.env`; existing parent environment values take precedence over values from the file. Agent sessions should use inherited environment variables and must not read, grep, print, or pass credential values through command arguments.
+Dispatched Claude sessions inherit the VS Code extension process environment. Kronos sets a run-scoped temporary directory with `KRONOS_RUN_TMPDIR`, `TMPDIR`, `TMP`, and `TEMP` so generated helper scripts can stay isolated and be cleaned up after the run. Operators may provide provider tokens through the parent VS Code environment, OS credential setup, or `~/.claude/.env`; existing parent environment values take precedence over values from the file.
+
+Because Claude CLI sessions cannot reliably expand values that Kronos loaded from `.env`, the extension also injects a controlled `--append-system-prompt` block with resolved credential command snippets when relevant credentials are present. Examples include a SonarQube `mvn sonar:sonar -Dsonar.host.url=... -Dsonar.token=...` command, DEV/TEST curl auth headers, and a GitLab merge-request creation curl template. Sessions must use only those Kronos-provided snippets when literal credentials are required, must not read `.env`, and must not print, transform, save, or include credential values in reports, evidence, commits, tickets, or comments. Kronos redacts known credential values before writing run stdout/stderr to persisted run logs.
