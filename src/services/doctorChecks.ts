@@ -9,7 +9,7 @@ import { requiredScripts } from './scriptClient';
 import { KRONOS_DIR } from './stateStore';
 import { defaultCliProbeCommandRunner, readableGoogleApplicationCredentials, resolveGcloudCommandStatus } from './cliProbes';
 import { unknownErrorMessage } from './errorUtils';
-import { gitLabProjectPathFromMergeRequestUrl, normalizeGitLabApiBaseUrl } from './gitlabRestClient';
+import { configuredGitLabProjectPathFromMergeRequestUrl, normalizeGitLabApiBaseUrl } from './gitlabRestClient';
 import { countLabel } from './countLabels';
 import { recordEntriesFromUnknown, recordFromUnknown, recordKeysFromUnknown } from './records';
 import { ticketStringArray } from './ticketFields';
@@ -379,7 +379,7 @@ function addReviewPollingPrerequisiteCheck(
         ticketTarget = String(Math.floor(projectId));
       }
     }
-    ticketTarget = ticketTarget || gitLabProjectPathFromMergeRequestUrl(ticket.mr?.url);
+    ticketTarget = ticketTarget || configuredGitLabProjectPathFromMergeRequestUrl(ticket.mr?.url, env);
     if (!ticketTarget) {
       issues.push(`${ticketKey}: missing gitlab_project_id or parseable merge request URL`);
     } else if (iid !== undefined && !readyTarget) {

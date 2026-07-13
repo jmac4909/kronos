@@ -1,5 +1,7 @@
+import * as crypto from 'crypto';
 import * as http from 'http';
 import * as https from 'https';
+import { TextDecoder } from 'util';
 import { unknownErrorCode } from './errorUtils';
 import { parseJsonWithLabel } from './jsonFiles';
 import { arrayFromUnknown, isRecord, optionalFiniteNumberFromUnknown } from './records';
@@ -14,11 +16,12 @@ export interface JiraHttpRequest {
   headers: Record<string, string>;
   timeoutMs: number;
   maxResponseBytes: number;
+  responseType?: 'text' | 'buffer';
 }
 
 export interface JiraHttpResponse {
   statusCode: number;
-  body: string;
+  body: string | Buffer;
   headers: Record<string, string | string[] | undefined>;
 }
 
@@ -42,13 +45,31 @@ export interface JiraRestConfig {
 export interface JiraTicketSnapshot {
   issue: unknown;
   comments: unknown[];
+  attachmentContents: JiraAttachmentContentSnapshot[];
   fetchedAt: string;
   issueUrl: string;
   commentsComplete: boolean;
   commentPageCount: number;
   commentResponseBytes: number;
+  attachmentFetchCount: number;
+  attachmentResponseBytes: number;
   commentTotal?: number;
   warnings: string[];
+}
+
+export type JiraAttachmentContentStatus = 'captured' | 'skipped' | 'failed';
+
+export interface JiraAttachmentContentSnapshot {
+  index: number;
+  status: JiraAttachmentContentStatus;
+  id?: string;
+  reason?: string;
+  declaredMimeType?: string;
+  responseMimeType?: string;
+  declaredBytes?: number;
+  responseBytes?: number;
+  sourceSha256?: string;
+  text?: string;
 }
 
 interface JiraCommentCollection {
@@ -60,11 +81,39 @@ interface JiraCommentCollection {
   warnings: string[];
 }
 
+interface JiraAttachmentCollection {
+  contents: JiraAttachmentContentSnapshot[];
+  fetchCount: number;
+  responseBytes: number;
+  warnings: string[];
+}
+
+interface JiraAttachmentFetchResult {
+  content: JiraAttachmentContentSnapshot;
+  budgetBytes: number;
+}
+
 const DEFAULT_TIMEOUT_MS = 15000;
 const DEFAULT_MAX_COMMENT_PAGES = 100;
 const DEFAULT_COMMENTS_PER_PAGE = 100;
 const DEFAULT_MAX_RESPONSE_BYTES = 5 * 1024 * 1024;
 const DEFAULT_MAX_TOTAL_COMMENT_BYTES = 20 * 1024 * 1024;
+const MAX_ATTACHMENT_FETCHES = 10;
+const MAX_ATTACHMENT_BYTES = 256 * 1024;
+const MAX_TOTAL_ATTACHMENT_BYTES = 1024 * 1024;
+const ALLOWED_ATTACHMENT_MIME_TYPES = new Set([
+  'application/json',
+  'application/xml',
+  'application/x-yaml',
+  'application/yaml',
+  'text/csv',
+  'text/markdown',
+  'text/plain',
+  'text/tab-separated-values',
+  'text/xml',
+  'text/yaml',
+]);
+const UNSAFE_TEXT_CONTROL_PATTERN = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/;
 
 export class JiraRestClient {
   private readonly env: NodeJS.ProcessEnv;
@@ -106,21 +155,178 @@ export class JiraRestClient {
       expand: 'names,schema',
     }, options)).value;
     const commentCollection = await this.paginatedComments(config, normalizedKey, options);
+    const attachmentCollection = await this.attachmentContents(config, issue, options);
     const resolvedIssueUrl = normalizeJiraIssueUrl(issueUrl) || `${config.baseUrl}/browse/${encodeURIComponent(normalizedKey)}`;
     const snapshot: JiraTicketSnapshot = {
       issue,
       comments: commentCollection.comments,
+      attachmentContents: attachmentCollection.contents,
       fetchedAt: new Date().toISOString(),
       issueUrl: resolvedIssueUrl,
       commentsComplete: commentCollection.complete,
       commentPageCount: commentCollection.pageCount,
       commentResponseBytes: commentCollection.responseBytes,
-      warnings: commentCollection.warnings,
+      attachmentFetchCount: attachmentCollection.fetchCount,
+      attachmentResponseBytes: attachmentCollection.responseBytes,
+      warnings: [...commentCollection.warnings, ...attachmentCollection.warnings],
     };
     if (commentCollection.total !== undefined) {
       snapshot.commentTotal = commentCollection.total;
     }
     return snapshot;
+  }
+
+  private async attachmentContents(
+    config: JiraRestConfig,
+    issueValue: unknown,
+    options: JiraRestRequestOptions,
+  ): Promise<JiraAttachmentCollection> {
+    const issue = isRecord(issueValue) ? issueValue : {};
+    const fields = isRecord(issue['fields']) ? issue['fields'] : {};
+    const attachments = arrayFromUnknown(fields['attachment']);
+    const contents: JiraAttachmentContentSnapshot[] = [];
+    let fetchCount = 0;
+    let responseBytes = 0;
+    let budgetBytes = 0;
+
+    for (let index = 0; index < attachments.length; index += 1) {
+      const attachmentValue = attachments[index];
+      const metadata: Record<string, unknown> = isRecord(attachmentValue) ? attachmentValue : {};
+      const id = normalizedAttachmentId(metadata['id']);
+      const declaredMimeType = normalizedMimeType(firstHeaderLikeString(metadata['mimeType'], metadata['mimetype']));
+      const declaredBytes = nonNegativeInteger(metadata['size']);
+      const base: JiraAttachmentContentSnapshot = { index, status: 'skipped' };
+      if (id) { base.id = id; }
+      if (declaredMimeType) { base.declaredMimeType = declaredMimeType; }
+      if (declaredBytes !== undefined) { base.declaredBytes = declaredBytes; }
+
+      if (!id) {
+        contents.push({ ...base, reason: 'invalid-id' });
+        continue;
+      }
+      if (!declaredMimeType || !ALLOWED_ATTACHMENT_MIME_TYPES.has(declaredMimeType)) {
+        contents.push({ ...base, reason: 'unsupported-mime' });
+        continue;
+      }
+      if (declaredBytes !== undefined && declaredBytes > MAX_ATTACHMENT_BYTES) {
+        contents.push({ ...base, reason: 'per-file-byte-limit' });
+        continue;
+      }
+      if (fetchCount >= MAX_ATTACHMENT_FETCHES) {
+        contents.push({ ...base, reason: 'fetch-count-limit' });
+        continue;
+      }
+      const remainingBytes = MAX_TOTAL_ATTACHMENT_BYTES - budgetBytes;
+      if (remainingBytes <= 0 || (declaredBytes !== undefined && declaredBytes > remainingBytes)) {
+        contents.push({ ...base, reason: 'total-byte-limit' });
+        continue;
+      }
+
+      fetchCount += 1;
+      const fetched = await this.requestAttachmentText(
+        config,
+        base,
+        Math.min(MAX_ATTACHMENT_BYTES, remainingBytes),
+        options,
+      );
+      budgetBytes += fetched.budgetBytes;
+      responseBytes += fetched.content.responseBytes || 0;
+      contents.push(fetched.content);
+    }
+
+    const captured = contents.filter(item => item.status === 'captured').length;
+    const skipped = contents.filter(item => item.status === 'skipped').length;
+    const failed = contents.filter(item => item.status === 'failed').length;
+    const warnings = skipped > 0 || failed > 0
+      ? [`Jira attachment content capture was partial: ${captured} captured, ${skipped} skipped, and ${failed} failed.`]
+      : [];
+    return { contents, fetchCount, responseBytes, warnings };
+  }
+
+  private async requestAttachmentText(
+    config: JiraRestConfig,
+    base: JiraAttachmentContentSnapshot,
+    maxResponseBytes: number,
+    options: JiraRestRequestOptions,
+  ): Promise<JiraAttachmentFetchResult> {
+    if (!base.id || !base.declaredMimeType) {
+      return {
+        content: { ...base, status: 'skipped', reason: 'invalid-metadata' },
+        budgetBytes: 0,
+      };
+    }
+    const requestUrl = buildCredentialedJiraUrl(
+      config.baseUrl,
+      `/rest/api/3/attachment/content/${encodeURIComponent(base.id)}`,
+      { redirect: 'false' },
+    );
+    const request: JiraHttpRequest = {
+      method: 'GET',
+      url: requestUrl,
+      headers: jiraHeaders(config, '*/*'),
+      timeoutMs: boundedInteger(options.timeoutMs, DEFAULT_TIMEOUT_MS, 250, 120000),
+      maxResponseBytes,
+      responseType: 'buffer',
+    };
+    let response: JiraHttpResponse;
+    try {
+      response = await this.transport(request);
+    } catch (error: unknown) {
+      return {
+        content: {
+          ...base,
+          status: 'failed',
+          reason: error instanceof JiraResponseLimitError ? 'response-byte-limit' : 'fetch-failed',
+        },
+        // The transport did not return a trustworthy byte count. Reserve the
+        // entire attempted allowance so repeated failures cannot reset the
+        // cumulative one MiB attachment budget.
+        budgetBytes: maxResponseBytes,
+      };
+    }
+
+    const body = responseBodyBuffer(response.body);
+    const responseMime = responseContentType(response.headers);
+    const result: JiraAttachmentContentSnapshot = { ...base, status: 'failed', responseBytes: body.length };
+    const completed = (): JiraAttachmentFetchResult => ({ content: result, budgetBytes: body.length });
+    if (responseMime.mimeType) { result.responseMimeType = responseMime.mimeType; }
+    if (body.length > maxResponseBytes) {
+      result.reason = 'response-byte-limit';
+      return completed();
+    }
+    if (response.statusCode >= 300 && response.statusCode < 400) {
+      result.reason = 'redirect-refused';
+      return completed();
+    }
+    if (response.statusCode !== 200) {
+      result.reason = `http-${response.statusCode || 0}`;
+      return completed();
+    }
+    if (!responseMime.mimeType || !ALLOWED_ATTACHMENT_MIME_TYPES.has(responseMime.mimeType)) {
+      result.reason = 'unsupported-response-mime';
+      return completed();
+    }
+    if (responseMime.charset && !isSupportedTextCharset(responseMime.charset)) {
+      result.reason = 'unsupported-charset';
+      return completed();
+    }
+
+    let text: string;
+    try {
+      text = new TextDecoder('utf-8', { fatal: true }).decode(body);
+    } catch {
+      result.reason = 'invalid-utf8';
+      return completed();
+    }
+    if (UNSAFE_TEXT_CONTROL_PATTERN.test(text)) {
+      result.reason = 'unsafe-control-characters';
+      return completed();
+    }
+    if (text.charCodeAt(0) === 0xFEFF) { text = text.slice(1); }
+    result.status = 'captured';
+    result.sourceSha256 = crypto.createHash('sha256').update(body).digest('hex');
+    result.text = text.replace(/\r\n?/g, '\n');
+    return completed();
   }
 
   private async paginatedComments(
@@ -202,10 +408,11 @@ export class JiraRestClient {
   ): Promise<{ value: unknown; headers: Record<string, string | string[] | undefined>; bodyBytes: number }> {
     const request: JiraHttpRequest = {
       method: 'GET',
-      url: buildJiraUrl(config.baseUrl, apiPath, query),
+      url: buildCredentialedJiraUrl(config.baseUrl, apiPath, query),
       headers: jiraHeaders(config),
       timeoutMs: boundedInteger(options.timeoutMs, DEFAULT_TIMEOUT_MS, 250, 120000),
       maxResponseBytes: this.maxResponseBytes,
+      responseType: 'text',
     };
     let response: JiraHttpResponse;
     try {
@@ -218,16 +425,17 @@ export class JiraRestClient {
         + 'Check connectivity and Jira configuration; credentials and response bodies are not displayed.',
       );
     }
-    if (Buffer.byteLength(response.body, 'utf8') > this.maxResponseBytes) {
+    const body = responseBodyBuffer(response.body);
+    if (body.length > this.maxResponseBytes) {
       throw new JiraRestError(`Jira REST ${label} exceeded the ${this.maxResponseBytes}-byte response safety limit.`);
     }
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw jiraHttpError(label, response.statusCode);
     }
     return {
-      value: parseJsonWithLabel(response.body, label),
+      value: parseJsonWithLabel(body.toString('utf8'), label),
       headers: response.headers,
-      bodyBytes: Buffer.byteLength(response.body, 'utf8'),
+      bodyBytes: body.length,
     };
   }
 }
@@ -300,6 +508,14 @@ export class JiraRestError extends Error {
   }
 }
 
+class JiraResponseLimitError extends JiraRestError {
+  constructor(message: string) {
+    super(message);
+    Object.setPrototypeOf(this, JiraResponseLimitError.prototype);
+    this.name = 'JiraResponseLimitError';
+  }
+}
+
 function normalizeJiraIssueUrl(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
   if (!trimmed) { return undefined; }
@@ -321,12 +537,25 @@ function isLoopbackHostname(hostname: string): boolean {
   return normalized === 'localhost' || normalized === '127.0.0.1' || normalized === '::1';
 }
 
-function jiraHeaders(config: JiraRestConfig): Record<string, string> {
+function jiraHeaders(config: JiraRestConfig, accept = 'application/json'): Record<string, string> {
   return {
-    Accept: 'application/json',
+    Accept: accept,
     Authorization: `Basic ${Buffer.from(`${config.email}:${config.apiToken}`).toString('base64')}`,
     'User-Agent': 'kronos-jira-rest',
   };
+}
+
+function buildCredentialedJiraUrl(
+  baseUrl: string,
+  apiPath: string,
+  query: Record<string, string | number>,
+): string {
+  const requestUrl = buildJiraUrl(baseUrl, apiPath, query);
+  const configuredOrigin = new URL(baseUrl).origin;
+  if (new URL(requestUrl).origin !== configuredOrigin) {
+    throw new JiraRestError('Refused to send Jira credentials outside the configured JIRA_BASE_URL origin.');
+  }
+  return requestUrl;
 }
 
 function buildJiraUrl(baseUrl: string, apiPath: string, query: Record<string, string | number>): string {
@@ -362,6 +591,58 @@ function boundedInteger(value: number | undefined, fallback: number, minimum: nu
   return Math.min(maximum, Math.max(minimum, Math.floor(value)));
 }
 
+function normalizedAttachmentId(value: unknown): string | undefined {
+  if (typeof value !== 'string' && typeof value !== 'number') { return undefined; }
+  const normalized = String(value).trim();
+  return /^[A-Za-z0-9_-]{1,128}$/.test(normalized) ? normalized : undefined;
+}
+
+function firstHeaderLikeString(...values: unknown[]): string | undefined {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) { return value.trim(); }
+  }
+  return undefined;
+}
+
+function normalizedMimeType(value: string | undefined): string | undefined {
+  const normalized = value?.split(';', 1)[0]?.trim().toLowerCase();
+  return normalized && /^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+$/.test(normalized)
+    ? normalized
+    : undefined;
+}
+
+function responseContentType(
+  headers: Record<string, string | string[] | undefined>,
+): { mimeType?: string; charset?: string } {
+  let rawValue: string | undefined;
+  for (const [key, value] of Object.entries(headers)) {
+    if (key.toLowerCase() !== 'content-type') { continue; }
+    rawValue = Array.isArray(value) ? value[0] : value;
+    break;
+  }
+  if (!rawValue) { return {}; }
+  const segments = rawValue.split(';').map(segment => segment.trim());
+  const mimeType = normalizedMimeType(segments[0]);
+  const charsetSegment = segments.slice(1).find(segment => /^charset\s*=/i.test(segment));
+  const charset = charsetSegment
+    ?.replace(/^charset\s*=\s*/i, '')
+    .replace(/^"|"$/g, '')
+    .trim()
+    .toLowerCase();
+  const result: { mimeType?: string; charset?: string } = {};
+  if (mimeType) { result.mimeType = mimeType; }
+  if (charset) { result.charset = charset; }
+  return result;
+}
+
+function isSupportedTextCharset(value: string): boolean {
+  return value === 'utf-8' || value === 'utf8' || value === 'us-ascii' || value === 'ascii';
+}
+
+function responseBodyBuffer(body: string | Buffer): Buffer {
+  return Buffer.isBuffer(body) ? body : Buffer.from(body, 'utf8');
+}
+
 function defaultJiraTransport(request: JiraHttpRequest): Promise<JiraHttpResponse> {
   return new Promise((resolve, reject) => {
     let parsed: URL;
@@ -381,6 +662,13 @@ function defaultJiraTransport(request: JiraHttpRequest): Promise<JiraHttpRespons
       timeout: request.timeoutMs,
       headers: request.headers,
     }, res => {
+      const declaredLength = firstHeaderLikeString(res.headers['content-length']);
+      if (declaredLength && /^\d+$/.test(declaredLength) && Number(declaredLength) > request.maxResponseBytes) {
+        res.destroy();
+        req.destroy();
+        reject(new JiraResponseLimitError(`Jira REST response exceeded the ${request.maxResponseBytes}-byte safety limit.`));
+        return;
+      }
       const chunks: Buffer[] = [];
       let receivedBytes = 0;
       res.on('data', chunk => {
@@ -389,15 +677,16 @@ function defaultJiraTransport(request: JiraHttpRequest): Promise<JiraHttpRespons
         if (receivedBytes > request.maxResponseBytes) {
           res.destroy();
           req.destroy();
-          reject(new JiraRestError(`Jira REST response exceeded the ${request.maxResponseBytes}-byte safety limit.`));
+          reject(new JiraResponseLimitError(`Jira REST response exceeded the ${request.maxResponseBytes}-byte safety limit.`));
           return;
         }
         chunks.push(buffer);
       });
       res.on('end', () => {
+        const body = Buffer.concat(chunks);
         resolve({
           statusCode: res.statusCode || 0,
-          body: Buffer.concat(chunks).toString('utf8'),
+          body: request.responseType === 'buffer' ? body : body.toString('utf8'),
           headers: res.headers,
         });
       });

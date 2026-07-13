@@ -26,7 +26,9 @@ For an active managed session, context is inserted only into its attached termin
 
 ### Jira: `[JIRA-123]`
 
-The Jira action fresh-fetches the issue through native Jira REST when configured. It normalizes the title, summary, description, all returned issue fields plus field names/schema, paginated comments, labels, components, versions, and attachment metadata. Attachment bodies are deliberately not downloaded; a ticket with attachments is marked partial and says that only metadata was retained. REST failure or unavailable credentials falls back to cached Kronos ticket data and marks the artifact partial.
+The Jira action fresh-fetches the issue through native Jira REST when configured. It normalizes the title, summary, description, every field visible and returned to the configured Jira account (including `customfield_*` ID, display name, schema, structured value, and readable text), paginated comments, labels, components, versions, and attachment metadata. Completeness identifies returned fields whose expanded name/schema is missing and fields truncated by normalization limits.
+
+For attachments, Kronos can capture only a bounded safe-text slice: up to 10 UTF-8 plain-text, Markdown, CSV/TSV, JSON, XML, or YAML files, with a 256 KiB per-file and 1 MiB cumulative limit. It derives a canonical configured-origin Jira REST URL from the attachment ID, refuses redirects, ignores provider download URLs, rejects binary/control-heavy or invalid UTF-8 data, redacts secrets, and records raw/sanitized hashes. Unsupported, oversized, redirected, or failed attachments retain metadata and an explicit skip/failure reason, making the artifact partial without losing the issue or comments. REST failure or unavailable credentials falls back to cached Kronos ticket data and marks the artifact partial.
 
 The Jira Board and Ticket Detail expose the ticket-scoped insert button, so a click prepares the artifact and inserts a line beginning with the ticket key into the intended terminal.
 
@@ -49,13 +51,15 @@ If one provider fails, the other provider's evidence can still be saved with an 
 
 Active work sessions automatically receive provider bindings from their ticket and project configuration. Monitoring starts with Kronos, repeats at `kronos.reviewPollIntervalSec`, and can be run immediately with **Kronos: Poll Managed Providers**. Polling is read-only and compares compact normalized digests; it does not keep full provider responses as monitoring baselines.
 
+A private, expiring cross-process lease prevents multiple VS Code windows sharing the same Kronos data directory from issuing the same provider poll and duplicate notifications at once. The active window renews the owner/inode-pinned lease during long polls; loss of renewal stops later session polls. A crashed owner expires; malformed or symlinked lease state fails closed and starts no provider request.
+
 The first successful observation establishes a baseline. Later polls record and notify only structural transitions:
 
 - GitLab: new pipeline, failed/canceled/succeeded/recovered pipeline, newly failed or recovered blocking jobs, and failed or recovered tests.
 - Jenkins: new build, failed/unstable, succeeded/recovered, newly failed or recovered tests, and newly failed or recovered stages.
 - SonarQube: quality-gate failure/recovery and unresolved-issue increases/decreases.
 
-A transition notification can open the relevant provider page, insert fresh MR or CI context, or be acknowledged. Notification display and acknowledgement are also auditable events. Provider errors do not create false recovery events: the last valid provider digest is retained while another provider is refreshed.
+A transition notification can open the relevant provider page, insert fresh MR or CI context, or be acknowledged. Notification display and acknowledgement are also auditable events. Provider errors or partial jobs/tests/stage/gate responses do not create false recovery events: the last complete component digest is retained until that component is fetched completely again.
 
 Each work session exposes monitoring readiness in the Sessions tree and audit view:
 
@@ -66,7 +70,7 @@ Each work session exposes monitoring readiness in the Sessions tree and audit vi
 
 The same views show the last attempt, last successful provider poll, summary, provider bindings, artifact count, and terminal attachment state.
 
-After an extension reload, Kronos restores a live terminal binding only when one existing terminal uniquely matches the saved name and process identity. It does not create a substitute terminal when no safe match exists.
+After an extension reload, durable work-session history remains, but live terminal bindings deliberately start detached. A terminal name and process ID are not durable identities and can be reused, so the operator must focus the intended terminal and explicitly choose **Reattach Active Terminal** before Kronos can insert into it again.
 
 ## Durable State and Audit
 
@@ -102,9 +106,9 @@ Context files are private and content-addressed as `context-<hash>.json` and `pr
 - Kronos never reads terminal input/output, captures scrollback, creates a replacement PTY for a managed work session, sends provider-supplied commands, or closes the operator's terminal.
 - Provider credentials, authorization headers, cookies, tokens, credentialed URLs, and signed secret query values are not written to artifacts or audit metadata.
 - Provider text is treated as untrusted input. It is normalized, control-stripped, secret-redacted, bounded, and wrapped in a unique prompt-injection boundary before it can be referenced from a terminal.
-- GitLab variables, GitLab job traces, Jenkins console/job logs, and Jira attachment bodies are not fetched for this workflow.
+- GitLab variables, GitLab job traces, and Jenkins console/job logs are not fetched. Jira attachment capture is restricted to the bounded safe-text allowlist above; binary and rich-document bodies are not fetched.
 - Credentialed provider requests are constrained to their configured origins; redirect or returned-URL behavior cannot silently move credentials to another host.
-- Truncation, unavailable endpoints, metadata-only attachments, and provider failures are visible as partial completeness/readiness, never silently represented as complete.
+- Truncation, missing custom-field metadata, skipped/failed attachment bodies, unavailable endpoints, partial provider components, and provider failures are visible as partial completeness/readiness, never silently represented as complete.
 - This workflow performs provider reads only. It does not merge, deploy, restart, clean up, mutate Jira/GitLab/Jenkins/SonarQube, or write to a database.
 
 ## Future Design: Custom Database Context Connector (Not Implemented)

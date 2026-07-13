@@ -35,7 +35,9 @@ export interface GitLabPipelineDigest {
   status: string;
   failedJobs: GitLabFailedJobDigest[];
   failedJobsTruncated: boolean;
+  jobsComplete: boolean;
   tests: GitLabPipelineTestDigest;
+  testsComplete: boolean;
   fetchedAt: string;
   fingerprint: string;
   projectIdOrPath?: string;
@@ -63,7 +65,9 @@ interface PipelineDigestMaterial {
   status: string;
   failedJobs: GitLabFailedJobDigest[];
   failedJobsTruncated: boolean;
+  jobsComplete: boolean;
   tests: GitLabPipelineTestDigest;
+  testsComplete: boolean;
   projectIdOrPath?: string;
   url?: string;
   ref?: string;
@@ -102,12 +106,38 @@ export function normalizeGitLabPipelineDigest(snapshot: unknown): GitLabPipeline
   if (!pipeline) { return null; }
 
   const tests = testDigestFromSnapshot(root);
+  const completeness = isRecord(root['completeness']) ? root['completeness'] : {};
   return buildPipelineDigest(
     pipeline,
     root['jobs'],
     tests,
     boundedString(root['fetchedAt'], MAX_FETCHED_AT_CHARS),
+    completeness['jobsComplete'] !== false,
+    completeness['testsComplete'] !== false,
   );
+}
+
+export function normalizeStoredGitLabPipelineDigest(value: unknown): GitLabPipelineDigest | null {
+  return normalizeExistingDigest(value);
+}
+
+export function mergeGitLabPipelineDigest(
+  previousValue: unknown,
+  currentValue: unknown,
+): GitLabPipelineDigest | null {
+  const previous = normalizeExistingDigest(previousValue);
+  const current = normalizeExistingDigest(currentValue);
+  if (!current) { return null; }
+  if (!previous || !samePipelineIdentity(previous, current)) { return current; }
+  const effective: GitLabPipelineDigest = {
+    ...current,
+    jobsComplete: current.jobsComplete || previous.jobsComplete,
+    failedJobs: current.jobsComplete ? current.failedJobs : previous.failedJobs,
+    failedJobsTruncated: current.jobsComplete ? current.failedJobsTruncated : previous.failedJobsTruncated,
+    testsComplete: current.testsComplete || previous.testsComplete,
+    tests: current.testsComplete ? current.tests : previous.tests,
+  };
+  return normalizeExistingDigest(effective);
 }
 
 export function compareGitLabPipelineDigests(previous: unknown, current: unknown): GitLabPipelineTransition[] {
@@ -174,6 +204,8 @@ function buildPipelineDigest(
   jobsValue: unknown,
   tests: GitLabPipelineTestDigest,
   fetchedAt: string,
+  jobsComplete = true,
+  testsComplete = true,
   failedJobsTruncatedOverride = false,
 ): GitLabPipelineDigest | null {
   const id = positiveInteger(pipeline['id']);
@@ -185,7 +217,9 @@ function buildPipelineDigest(
     status: normalizedStatus(firstDefined(pipeline['status'], pipeline['detailed_status'])),
     failedJobs: failedJobResult.jobs,
     failedJobsTruncated: failedJobResult.truncated || failedJobsTruncatedOverride,
+    jobsComplete,
     tests,
+    testsComplete,
   };
   assignString(material, 'projectIdOrPath', pipelineProjectIdOrPath(pipeline));
   assignString(material, 'url', safeProviderUrl(firstString(pipeline['web_url'], pipeline['url'])));
@@ -206,6 +240,8 @@ function normalizeExistingDigest(value: unknown): GitLabPipelineDigest | null {
     value['failedJobs'],
     tests,
     boundedString(value['fetchedAt'], MAX_FETCHED_AT_CHARS),
+    booleanValue(value['jobsComplete']) !== false,
+    booleanValue(value['testsComplete']) !== false,
     booleanValue(value['failedJobsTruncated']) === true,
   );
 }
@@ -270,7 +306,12 @@ function normalizeTestDigest(value: unknown): GitLabPipelineTestDigest {
   if (!isRecord(value)) { return emptyTestDigest(); }
   if (booleanValue(value['available']) === false) { return emptyTestDigest(); }
   const totalRecord = isRecord(value['total']) ? value['total'] : value;
-  let total = testCount(firstDefined(totalRecord['count'], totalRecord['total_count'], totalRecord['totalCount']));
+  let total = testCount(firstDefined(
+    totalRecord['count'],
+    totalRecord['total'],
+    totalRecord['total_count'],
+    totalRecord['totalCount'],
+  ));
   let failed = testCount(firstDefined(totalRecord['failed'], totalRecord['failed_count'], totalRecord['failedCount']));
   let error = testCount(firstDefined(totalRecord['error'], totalRecord['error_count'], totalRecord['errorCount']));
   let skipped = testCount(firstDefined(totalRecord['skipped'], totalRecord['skipped_count'], totalRecord['skippedCount']));
@@ -341,6 +382,7 @@ function appendBlockingJobTransitions(
   current: GitLabPipelineDigest,
   samePipeline: boolean,
 ): void {
+  if (!current.jobsComplete) { return; }
   const previousJobs = samePipeline ? new Map(previous.failedJobs.map(job => [job.id, job])) : new Map<number, GitLabFailedJobDigest>();
   const currentJobs = new Map(current.failedJobs.map(job => [job.id, job]));
   const newlyFailed = current.failedJobs.filter(job => !previousJobs.has(job.id));
@@ -358,7 +400,7 @@ function appendTestTransitions(
   previous: GitLabPipelineDigest,
   current: GitLabPipelineDigest,
 ): void {
-  if (!current.tests.available) { return; }
+  if (!current.testsComplete || !current.tests.available) { return; }
   const previousFailures = previous.tests.failed + previous.tests.error;
   const currentFailures = current.tests.failed + current.tests.error;
   if (currentFailures > 0 && (!previous.tests.available || previousFailures === 0)) {

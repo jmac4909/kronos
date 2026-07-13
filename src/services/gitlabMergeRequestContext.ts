@@ -236,6 +236,20 @@ const MAX_DIFF_CHARS = 256 * 1024;
 const MAX_DIFF_TOTAL_CHARS = 4 * 1024 * 1024;
 const MAX_TEST_OUTPUT_CHARS = 32 * 1024;
 const MAX_TEST_TOTAL_CHARS = 2 * 1024 * 1024;
+const MAX_NORMALIZED_CONTEXT_BYTES = 10 * 1024 * 1024;
+const GLOBAL_CONTEXT_BUDGET_WARNING = `GitLab context was truncated at the ${MAX_NORMALIZED_CONTEXT_BYTES}-byte global normalized-size safety limit.`;
+const GLOBAL_CONTEXT_CONTENT_KEYS: ReadonlyArray<keyof GitLabMergeRequestContext> = [
+  'mergeRequest',
+  'notes',
+  'discussions',
+  'diffs',
+  'pipelines',
+  'jobs',
+  'approvals',
+  'pipeline',
+  'testReportSummary',
+  'testReport',
+];
 
 export function normalizeGitLabContextTicketKey(value: string): string {
   const normalized = value.trim().toUpperCase();
@@ -377,6 +391,7 @@ export function normalizeGitLabMergeRequestContext(
   ]);
   context.completeness.complete = context.completeness.complete
     && context.completeness.warnings.length === 0;
+  enforceGlobalNormalizedContextBudget(context, tracker);
   return context;
 }
 
@@ -814,6 +829,224 @@ class CharacterBudget {
     this.warned = true;
     this.tracker.warnings.push(`${this.label} was truncated at its cumulative safety limit.`);
   }
+}
+
+interface GlobalStringCandidate {
+  parent: Record<string, unknown> | unknown[];
+  key: string | number;
+  value: string;
+  component?: GlobalCompletenessComponent;
+}
+
+interface GlobalArrayCandidate {
+  path: string;
+  value: unknown[];
+  serializedBytes: number;
+  component?: GlobalCompletenessComponent;
+}
+
+type GlobalCompletenessComponent = 'notes' | 'discussions' | 'diffs' | 'pipelines' | 'jobs' | 'tests';
+
+function enforceGlobalNormalizedContextBudget(
+  context: GitLabMergeRequestContext,
+  tracker: NormalizationTracker,
+): void {
+  let serializedBytes = normalizedContextSerializedBytes(context);
+  if (serializedBytes <= MAX_NORMALIZED_CONTEXT_BYTES) { return; }
+
+  tracker.warnings.push(GLOBAL_CONTEXT_BUDGET_WARNING);
+  context.completeness.warnings = uniqueStrings([
+    ...context.completeness.warnings,
+    ...tracker.warnings,
+  ]);
+  context.completeness.complete = false;
+  serializedBytes = normalizedContextSerializedBytes(context);
+  const truncatedComponents = new Set<GlobalCompletenessComponent>();
+
+  const strings = globalStringCandidates(context);
+  for (let index = strings.length - 1;
+    index >= 0 && serializedBytes > MAX_NORMALIZED_CONTEXT_BYTES;
+    index -= 1) {
+    const candidate = strings[index];
+    if (!candidate || !candidate.value) { continue; }
+    candidate.parent[candidate.key as never] = '' as never;
+    if (candidate.component) { truncatedComponents.add(candidate.component); }
+    serializedBytes -= Math.max(0, serializedJsonBytes(candidate.value) - serializedJsonBytes(''));
+  }
+
+  removeEmptyJobTags(context);
+  serializedBytes = normalizedContextSerializedBytes(context);
+  while (serializedBytes > MAX_NORMALIZED_CONTEXT_BYTES) {
+    const candidate = largestOutermostArrayCandidate(context);
+    if (!candidate) { break; }
+    candidate.value.splice(Math.floor(candidate.value.length / 2));
+    if (candidate.component) { truncatedComponents.add(candidate.component); }
+    serializedBytes = normalizedContextSerializedBytes(context);
+  }
+
+  if (serializedBytes > MAX_NORMALIZED_CONTEXT_BYTES) {
+    clearGlobalContextCollections(context);
+    for (const component of ['notes', 'discussions', 'diffs', 'pipelines', 'jobs', 'tests'] as const) {
+      truncatedComponents.add(component);
+    }
+  }
+  refreshGlobalBudgetCompleteness(context, truncatedComponents);
+  context.completeness.warnings = uniqueStrings([
+    ...context.completeness.warnings,
+    ...tracker.warnings,
+  ]);
+  context.completeness.complete = false;
+
+  if (normalizedContextSerializedBytes(context) > MAX_NORMALIZED_CONTEXT_BYTES) {
+    clearGlobalContextCollections(context);
+    for (const component of ['notes', 'discussions', 'diffs', 'pipelines', 'jobs', 'tests'] as const) {
+      truncatedComponents.add(component);
+    }
+    refreshGlobalBudgetCompleteness(context, truncatedComponents);
+  }
+}
+
+function globalStringCandidates(context: GitLabMergeRequestContext): GlobalStringCandidate[] {
+  const candidates: GlobalStringCandidate[] = [];
+  const record = context as unknown as Record<string, unknown>;
+  for (const key of GLOBAL_CONTEXT_CONTENT_KEYS) {
+    collectGlobalStringCandidates(record[key], candidates, globalCompletenessComponent(key));
+  }
+  return candidates;
+}
+
+function collectGlobalStringCandidates(
+  value: unknown,
+  candidates: GlobalStringCandidate[],
+  component: GlobalCompletenessComponent | undefined,
+): void {
+  if (Array.isArray(value)) {
+    for (let index = 0; index < value.length; index += 1) {
+      const child = value[index];
+      if (typeof child === 'string') {
+        const candidate: GlobalStringCandidate = { parent: value, key: index, value: child };
+        if (component) { candidate.component = component; }
+        candidates.push(candidate);
+      } else {
+        collectGlobalStringCandidates(child, candidates, component);
+      }
+    }
+    return;
+  }
+  if (!isRecord(value)) { return; }
+  for (const key of Object.keys(value).sort()) {
+    const child = value[key];
+    if (typeof child === 'string') {
+      const candidate: GlobalStringCandidate = { parent: value, key, value: child };
+      if (component) { candidate.component = component; }
+      candidates.push(candidate);
+    } else {
+      collectGlobalStringCandidates(child, candidates, component);
+    }
+  }
+}
+
+function largestOutermostArrayCandidate(context: GitLabMergeRequestContext): GlobalArrayCandidate | undefined {
+  const candidates: GlobalArrayCandidate[] = [];
+  const record = context as unknown as Record<string, unknown>;
+  for (const key of GLOBAL_CONTEXT_CONTENT_KEYS) {
+    collectOutermostArrayCandidates(
+      record[key],
+      String(key),
+      candidates,
+      globalCompletenessComponent(key),
+    );
+  }
+  return candidates.sort((left, right) => (
+    right.serializedBytes - left.serializedBytes || left.path.localeCompare(right.path)
+  ))[0];
+}
+
+function collectOutermostArrayCandidates(
+  value: unknown,
+  path: string,
+  candidates: GlobalArrayCandidate[],
+  component: GlobalCompletenessComponent | undefined,
+): void {
+  if (Array.isArray(value)) {
+    if (value.length > 0) {
+      const candidate: GlobalArrayCandidate = { path, value, serializedBytes: serializedJsonBytes(value) };
+      if (component) { candidate.component = component; }
+      candidates.push(candidate);
+    }
+    return;
+  }
+  if (!isRecord(value)) { return; }
+  for (const key of Object.keys(value).sort()) {
+    collectOutermostArrayCandidates(value[key], `${path}.${key}`, candidates, component);
+  }
+}
+
+function globalCompletenessComponent(
+  key: keyof GitLabMergeRequestContext,
+): GlobalCompletenessComponent | undefined {
+  if (key === 'notes' || key === 'discussions' || key === 'diffs' || key === 'jobs') { return key; }
+  if (key === 'pipelines' || key === 'pipeline') { return 'pipelines'; }
+  if (key === 'testReportSummary' || key === 'testReport') { return 'tests'; }
+  return undefined;
+}
+
+function removeEmptyJobTags(context: GitLabMergeRequestContext): void {
+  for (const job of context.jobs) {
+    job.tags = job.tags.filter(Boolean);
+  }
+}
+
+function clearGlobalContextCollections(context: GitLabMergeRequestContext): void {
+  context.notes = [];
+  context.discussions = [];
+  context.diffs = [];
+  context.pipelines = [];
+  context.jobs = [];
+  context.mergeRequest.description = '';
+  context.mergeRequest.reviewers = [];
+  context.mergeRequest.assignees = [];
+  delete context.approvals;
+  delete context.pipeline;
+  delete context.testReportSummary;
+  delete context.testReport;
+}
+
+function refreshGlobalBudgetCompleteness(
+  context: GitLabMergeRequestContext,
+  truncatedComponents: ReadonlySet<GlobalCompletenessComponent>,
+): void {
+  context.completeness.notes.included = context.notes.length;
+  context.completeness.discussions.included = context.discussions.length;
+  context.completeness.diffs.included = context.diffs.length;
+  context.completeness.pipelines.included = context.pipelines.length;
+  context.completeness.jobs.included = context.jobs.length;
+  if (truncatedComponents.has('notes') || context.completeness.notes.included < context.completeness.notes.source) {
+    context.completeness.notesComplete = false;
+  }
+  if (truncatedComponents.has('discussions')
+    || context.completeness.discussions.included < context.completeness.discussions.source) {
+    context.completeness.discussionsComplete = false;
+  }
+  if (truncatedComponents.has('diffs') || context.completeness.diffs.included < context.completeness.diffs.source) {
+    context.completeness.diffsComplete = false;
+  }
+  if (truncatedComponents.has('pipelines')
+    || context.completeness.pipelines.included < context.completeness.pipelines.source) {
+    context.completeness.pipelinesComplete = false;
+  }
+  if (truncatedComponents.has('jobs') || context.completeness.jobs.included < context.completeness.jobs.source) {
+    context.completeness.jobsComplete = false;
+  }
+  if (truncatedComponents.has('tests')) { context.completeness.testsComplete = false; }
+}
+
+function normalizedContextSerializedBytes(context: GitLabMergeRequestContext): number {
+  return Buffer.byteLength(`${JSON.stringify(context, null, 2)}\n`, 'utf8');
+}
+
+function serializedJsonBytes(value: unknown): number {
+  return Buffer.byteLength(JSON.stringify(value), 'utf8');
 }
 
 function boundedArray(

@@ -90,7 +90,7 @@ const SAFE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,179}$/;
 const CONTROL_PATTERN = /[\u0000-\u001f\u007f\u2028\u2029]/;
 const TICKET_KEY_PATTERN = /^[A-Z][A-Z0-9_]{0,127}-[1-9][0-9]*$/;
 const SENSITIVE_KEY_PATTERN = /(?:authorization|cookie|credential|password|passwd|secret|token|api[_-]?key|private[_-]?key|raw|body|trace|log)/i;
-const SENSITIVE_TEXT_PATTERN = /(?:authorization\s*:|private-token\s*:|(?:password|passwd|secret|token|api[_-]?key)\s*[=:]\s*\S+|https?:\/\/[^\s/@:]+:[^\s/@]+@)/i;
+const SENSITIVE_TEXT_PATTERN = /(?:authorization\s*:|private-token\s*:|(?:password|passwd|secret|token|api[_-]?key|credential)\s*[=:]\s*\S+|https?:\/\/[^\s/@:]+:[^\s/@]+@|\b(?:glpat-|sqp_|github_pat_|gh[pousr]_|sk-|xox[baprs]-)[A-Za-z0-9_-]{8,}\b|\bAKIA[0-9A-Z]{16}\b|\beyJ[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{6,}\b|-----BEGIN [^-\r\n]*(?:PRIVATE KEY|SECRET)[^-\r\n]*-----)/i;
 const NO_FOLLOW_VALUE = Reflect.get(fs.constants, 'O_NOFOLLOW');
 const NO_FOLLOW_FLAG = typeof NO_FOLLOW_VALUE === 'number' ? NO_FOLLOW_VALUE : 0;
 

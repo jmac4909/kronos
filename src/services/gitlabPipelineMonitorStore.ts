@@ -1,8 +1,7 @@
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
-import { isRecord } from './records';
-import { GitLabPipelineDigest, normalizeGitLabPipelineDigest } from './pipelineTransitions';
+import { GitLabPipelineDigest, normalizeStoredGitLabPipelineDigest } from './pipelineTransitions';
 import { WorkSessionStoreOptions, workSessionDirectory } from './workSessionStore';
 
 const FILE_MODE = 0o600;
@@ -25,24 +24,7 @@ export function readGitLabPipelineMonitorSnapshot(
   const filePath = gitLabPipelineMonitorSnapshotPath(sessionId, options);
   if (!assertSafeRegularFileIfPresent(filePath)) { return null; }
   const parsed = JSON.parse(readSafeRegularFile(filePath)) as unknown;
-  const record = isRecord(parsed) ? parsed : {};
-  const tests = isRecord(record['tests']) ? record['tests'] : {};
-  const snapshot: Record<string, unknown> = {
-    pipeline: record,
-    jobs: record['failedJobs'],
-    fetchedAt: record['fetchedAt'],
-  };
-  if (tests['available'] === true) {
-    snapshot['testReportSummary'] = {
-      total: {
-        count: tests['total'],
-        failed: tests['failed'],
-        error: tests['error'],
-        skipped: tests['skipped'],
-      },
-    };
-  }
-  return normalizeGitLabPipelineDigest(snapshot);
+  return normalizeStoredGitLabPipelineDigest(parsed);
 }
 
 export function writeGitLabPipelineMonitorSnapshot(

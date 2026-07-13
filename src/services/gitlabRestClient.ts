@@ -505,6 +505,26 @@ export function gitLabProjectPathFromMergeRequestUrl(value: string | undefined):
   }
 }
 
+export function configuredGitLabProjectPathFromMergeRequestUrl(
+  value: string | undefined,
+  env: NodeJS.ProcessEnv = process.env,
+): string | undefined {
+  const projectPath = gitLabProjectPathFromMergeRequestUrl(value);
+  if (!projectPath) { return undefined; }
+  let configuredOrigin: string;
+  try {
+    configuredOrigin = new URL(resolveGitLabRestConfig(env).apiBaseUrl).origin;
+  } catch {
+    return undefined;
+  }
+  try {
+    const candidate = new URL(value || '');
+    return candidate.origin === configuredOrigin ? projectPath : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function isGitLabRestConfigured(env: NodeJS.ProcessEnv = process.env): boolean {
   return Boolean(normalizeGitLabApiBaseUrl(firstNonEmpty(
     env['GITLAB_API_BASE_URL'],

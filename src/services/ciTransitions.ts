@@ -49,9 +49,11 @@ export interface SonarCiDigest {
   projectKey: string;
   branch: string;
   dashboardUrl: string;
+  gateAvailable: boolean;
   gateStatus: string;
   issueCountAvailable: boolean;
   unresolvedIssueCount: number;
+  metricsAvailable: boolean;
   metrics: SonarMetricDigest[];
   fingerprint: string;
 }
@@ -125,9 +127,11 @@ interface SonarDigestMaterial {
   projectKey: string;
   branch: string;
   dashboardUrl: string;
+  gateAvailable: boolean;
   gateStatus: string;
   issueCountAvailable: boolean;
   unresolvedIssueCount: number;
+  metricsAvailable: boolean;
   metrics: SonarMetricDigest[];
 }
 
@@ -196,7 +200,10 @@ export function jenkinsCiDigestFromContext(context: unknown): JenkinsCiDigest | 
     ? suppliedBuildUrl
     : jobOrBuildUrl;
   const tests = isRecord(context['tests']) ? context['tests'] : undefined;
-  const testsAvailable = Boolean(tests);
+  const completeness = isRecord(context['completeness']) ? context['completeness'] : {};
+  const testsAvailable = Boolean(tests)
+    && completeness['testReport'] === 'complete'
+    && tests?.['complete'] !== false;
   const failedTestCount = tests ? boundedCount(tests['failCount']) : 0;
   const stageResult = failedStagesFromContext(context['stages']);
   return createJenkinsDigest({
@@ -209,7 +216,7 @@ export function jenkinsCiDigestFromContext(context: unknown): JenkinsCiDigest | 
     building: build['building'] === true,
     testsAvailable,
     failedTestCount,
-    stagesAvailable: Array.isArray(context['stages']),
+    stagesAvailable: Array.isArray(context['stages']) && completeness['stages'] === 'complete',
     failedStageNames: stageResult.names,
     failedStageNamesTruncated: stageResult.truncated,
   });
@@ -236,9 +243,11 @@ export function sonarCiDigestFromContext(context: unknown): SonarCiDigest | null
     projectKey,
     branch,
     dashboardUrl,
+    gateAvailable: completeness['qualityGateComplete'] === true,
     gateStatus: normalizedStatus(context['qualityGate']['status']),
     issueCountAvailable,
     unresolvedIssueCount,
+    metricsAvailable: completeness['measuresComplete'] === true,
     metrics: metricsFromContext(context['measures']),
   });
 }
@@ -275,10 +284,10 @@ export function normalizeJenkinsCiDigest(value: unknown): JenkinsCiDigest | null
     status: normalizedStatus(value['status']),
     building: value['building'],
     testsAvailable: value['testsAvailable'],
-    failedTestCount: value['testsAvailable'] ? failedTestCount : 0,
+    failedTestCount,
     stagesAvailable: value['stagesAvailable'],
-    failedStageNames: value['stagesAvailable'] ? failedStageNames : [],
-    failedStageNamesTruncated: value['stagesAvailable'] && value['failedStageNamesTruncated'],
+    failedStageNames,
+    failedStageNamesTruncated: value['failedStageNamesTruncated'],
   });
 }
 
@@ -286,7 +295,9 @@ export function normalizeSonarCiDigest(value: unknown): SonarCiDigest | null {
   if (!isRecord(value)
     || value['schemaVersion'] !== 1
     || value['provider'] !== 'sonarqube'
-    || typeof value['issueCountAvailable'] !== 'boolean') {
+    || typeof value['gateAvailable'] !== 'boolean'
+    || typeof value['issueCountAvailable'] !== 'boolean'
+    || typeof value['metricsAvailable'] !== 'boolean') {
     return null;
   }
   const projectKey = boundedSingleLine(value['projectKey'], MAX_PROJECT_KEY_CHARS);
@@ -303,9 +314,11 @@ export function normalizeSonarCiDigest(value: unknown): SonarCiDigest | null {
     projectKey,
     branch,
     dashboardUrl,
+    gateAvailable: value['gateAvailable'],
     gateStatus: normalizedStatus(value['gateStatus']),
     issueCountAvailable: value['issueCountAvailable'],
     unresolvedIssueCount,
+    metricsAvailable: value['metricsAvailable'],
     metrics,
   });
 }
@@ -331,6 +344,46 @@ export function normalizeCiMonitorDigest(value: unknown): CiMonitorDigest | null
     return null;
   }
   return createCombinedDigest(jenkins, sonar);
+}
+
+export function mergeCiMonitorDigest(previousValue: unknown, currentValue: unknown): CiMonitorDigest | null {
+  const previous = normalizeCiMonitorDigest(previousValue);
+  const current = normalizeCiMonitorDigest(currentValue);
+  if (!current) { return null; }
+
+  let jenkins = current.jenkins;
+  if (jenkins && previous?.jenkins
+    && jenkinsResourceIdentity(jenkins.jobOrBuildUrl) === jenkinsResourceIdentity(previous.jenkins.jobOrBuildUrl)
+    && jenkins.buildNumber === previous.jenkins.buildNumber) {
+    jenkins = normalizeJenkinsCiDigest({
+      ...jenkins,
+      testsAvailable: jenkins.testsAvailable || previous.jenkins.testsAvailable,
+      failedTestCount: jenkins.testsAvailable ? jenkins.failedTestCount : previous.jenkins.failedTestCount,
+      stagesAvailable: jenkins.stagesAvailable || previous.jenkins.stagesAvailable,
+      failedStageNames: jenkins.stagesAvailable ? jenkins.failedStageNames : previous.jenkins.failedStageNames,
+      failedStageNamesTruncated: jenkins.stagesAvailable
+        ? jenkins.failedStageNamesTruncated
+        : previous.jenkins.failedStageNamesTruncated,
+    }) || jenkins;
+  }
+
+  let sonar = current.sonar;
+  if (sonar && previous?.sonar
+    && sonar.projectKey === previous.sonar.projectKey
+    && sonar.branch === previous.sonar.branch) {
+    sonar = normalizeSonarCiDigest({
+      ...sonar,
+      gateAvailable: sonar.gateAvailable || previous.sonar.gateAvailable,
+      gateStatus: sonar.gateAvailable ? sonar.gateStatus : previous.sonar.gateStatus,
+      issueCountAvailable: sonar.issueCountAvailable || previous.sonar.issueCountAvailable,
+      unresolvedIssueCount: sonar.issueCountAvailable
+        ? sonar.unresolvedIssueCount
+        : previous.sonar.unresolvedIssueCount,
+      metricsAvailable: sonar.metricsAvailable || previous.sonar.metricsAvailable,
+      metrics: sonar.metricsAvailable ? sonar.metrics : previous.sonar.metrics,
+    }) || sonar;
+  }
+  return createCombinedDigest(jenkins || null, sonar || null);
 }
 
 export function compareJenkinsCiDigests(previousValue: unknown, currentValue: unknown): JenkinsCiTransition[] {
@@ -364,12 +417,14 @@ export function compareSonarCiDigests(previousValue: unknown, currentValue: unkn
     return [];
   }
   const transitions: SonarCiTransition[] = [];
-  const previousGateFailed = sonarGateFailed(previous.gateStatus);
-  const currentGateFailed = sonarGateFailed(current.gateStatus);
-  if (currentGateFailed && !previousGateFailed) {
-    transitions.push(makeSonarTransition('sonar_gate_failed', previous, current));
-  } else if (previousGateFailed && sonarGateSucceeded(current.gateStatus)) {
-    transitions.push(makeSonarTransition('sonar_gate_recovered', previous, current));
+  if (current.gateAvailable) {
+    const previousGateFailed = sonarGateFailed(previous.gateStatus);
+    const currentGateFailed = sonarGateFailed(current.gateStatus);
+    if (currentGateFailed && (!previous.gateAvailable || !previousGateFailed)) {
+      transitions.push(makeSonarTransition('sonar_gate_failed', previous, current));
+    } else if (previous.gateAvailable && previousGateFailed && sonarGateSucceeded(current.gateStatus)) {
+      transitions.push(makeSonarTransition('sonar_gate_recovered', previous, current));
+    }
   }
   if (previous.issueCountAvailable && current.issueCountAvailable) {
     if (current.unresolvedIssueCount > previous.unresolvedIssueCount) {

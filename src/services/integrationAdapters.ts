@@ -1,7 +1,7 @@
 import { ScriptRunOptions, runPipelineJson } from './scriptClient';
 import { KronosState as KronosStateSnapshot, MergeRequest, MergeRequestChangedFile, MergeRequestComment, Ticket } from '../state/types';
 import { normalizeChangedFiles } from './changedFiles';
-import { GitLabHttpTransport, GitLabRestRequestOptions, createGitLabRestClient, gitLabProjectPathFromMergeRequestUrl, gitlabRestClient } from './gitlabRestClient';
+import { GitLabHttpTransport, GitLabRestRequestOptions, configuredGitLabProjectPathFromMergeRequestUrl, createGitLabRestClient, gitlabRestClient } from './gitlabRestClient';
 import { JenkinsHttpTransport, JenkinsRestRequestOptions, createJenkinsRestClient, jenkinsRestClient } from './jenkinsRestClient';
 import { parseJsonWithLabel } from './jsonFiles';
 import { arrayFromUnknown, isRecord, optionalFiniteNumberFromUnknown, optionalTrimmedStringFromUnknown, recordsFromUnknown } from './records';
@@ -155,7 +155,7 @@ function mergeRequestRestTarget(runner: KronosScriptRunner, ticketKey: string): 
       return { projectIdOrPath: String(Math.floor(projectId)), iid: Math.floor(iid) };
     }
   }
-  const projectPath = gitLabProjectPathFromMergeRequestUrl(ticket?.mr?.url);
+  const projectPath = configuredGitLabProjectPathFromMergeRequestUrl(ticket?.mr?.url, runner.env || process.env);
   if (projectPath) {
     return { projectIdOrPath: projectPath, iid: Math.floor(iid) };
   }

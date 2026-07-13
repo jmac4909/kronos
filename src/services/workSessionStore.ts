@@ -667,11 +667,40 @@ function normalizeBoolean(value: unknown, label: string): boolean {
 
 function requiredSingleLine(value: unknown, label: string, maxLength: number): string {
   if (typeof value !== 'string') { throw new Error(`${label} must be a string.`); }
-  const normalized = value.trim().replace(/\s+/g, ' ');
+  const sanitized = redactSensitiveText(value);
+  const normalized = sanitized.trim().replace(/\s+/g, ' ');
   if (!normalized || normalized.length > maxLength || CONTROL_PATTERN.test(value)) {
     throw new Error(`${label} is missing, too long, or contains control characters.`);
   }
   return normalized;
+}
+
+function redactSensitiveText(value: string): string {
+  const sanitizedUrls = value.replace(/\bhttps?:\/\/[^\s<>"`]+/gi, raw => {
+    let candidate = raw;
+    let trailing = '';
+    while (/[),.;!?]$/.test(candidate)) {
+      trailing = `${candidate.slice(-1)}${trailing}`;
+      candidate = candidate.slice(0, -1);
+    }
+    try {
+      const url = new URL(candidate);
+      url.username = '';
+      url.password = '';
+      url.search = '';
+      url.hash = '';
+      return `${url.toString()}${trailing}`;
+    } catch {
+      return `[REDACTED URL]${trailing}`;
+    }
+  });
+  return sanitizedUrls
+    .replace(/-----BEGIN [^-\r\n]*(?:PRIVATE KEY|SECRET)[^-\r\n]*-----[\s\S]*?-----END [^-\r\n]*(?:PRIVATE KEY|SECRET)[^-\r\n]*-----/gi, '[REDACTED PRIVATE MATERIAL]')
+    .replace(/\b(?:Bearer|Basic)\s+[A-Za-z0-9+/_=.-]{8,}/gi, '[REDACTED AUTHORIZATION]')
+    .replace(/\b(?:glpat-|sqp_|github_pat_|gh[pousr]_|sk-|xox[baprs]-)[A-Za-z0-9_-]{8,}\b/gi, '[REDACTED PROVIDER TOKEN]')
+    .replace(/\bAKIA[0-9A-Z]{16}\b/g, '[REDACTED AWS ACCESS KEY]')
+    .replace(/\beyJ[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{6,}\b/g, '[REDACTED JWT]')
+    .replace(/((?:authorization|token|private[-_ ]?token|access[-_ ]?token|api[-_ ]?key|client[-_ ]?secret|password|passwd|secret|credential)\s*[:=]\s*)[^\s,;]+/gi, '$1[REDACTED]');
 }
 
 function optionalSingleLine(value: unknown, label: string, maxLength: number): string | undefined {

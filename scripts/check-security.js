@@ -116,6 +116,7 @@ const gitlabRestClient = readSource('src/services/gitlabRestClient.ts');
 const gitlabMergeRequestContext = readSource('src/services/gitlabMergeRequestContext.ts');
 const gitlabContextStore = readSource('src/services/gitlabContextStore.ts');
 const gitlabPipelineMonitorStore = readSource('src/services/gitlabPipelineMonitorStore.ts');
+const pipelineTransitions = readSource('src/services/pipelineTransitions.ts');
 const workSessionStore = readSource('src/services/workSessionStore.ts');
 const monitorEventStore = readSource('src/services/monitorEventStore.ts');
 const operatorTerminalRegistry = readSource('src/services/operatorTerminalRegistry.ts');
@@ -125,6 +126,7 @@ const ciContextStore = readSource('src/services/ciContextStore.ts');
 const ciTransitions = readSource('src/services/ciTransitions.ts');
 const ciMonitorStore = readSource('src/services/ciMonitorStore.ts');
 const workSessionAuditView = readSource('src/services/workSessionAuditView.ts');
+const managedMonitorLease = readSource('src/services/managedMonitorLease.ts');
 const mergeRequestComments = readSource('src/services/mergeRequestComments.ts');
 const mergeRequestNotifications = readSource('src/services/mergeRequestNotifications.ts');
 const postRunReadiness = readSource('src/services/postRunReadiness.ts');
@@ -4249,14 +4251,14 @@ for (const marker of [
   "unknownErrorMessage(e, 'Provider reachability checks failed.')",
   "unknownErrorMessage(e, `${command} unavailable`)",
   "unknownErrorMessage(e, 'claude unavailable')",
-  "import { gitLabProjectPathFromMergeRequestUrl, normalizeGitLabApiBaseUrl } from './gitlabRestClient'",
+  "import { configuredGitLabProjectPathFromMergeRequestUrl, normalizeGitLabApiBaseUrl } from './gitlabRestClient'",
   "import { recordEntriesFromUnknown, recordFromUnknown, recordKeysFromUnknown } from './records'",
   "import { ticketStringArray } from './ticketFields'",
   'Values are not displayed',
   'DoctorCommandRunner',
   'function addReviewPollingPrerequisiteCheck',
   'normalizeGitLabApiBaseUrl(firstConfiguredUrl',
-  'gitLabProjectPathFromMergeRequestUrl(ticket.mr?.url)',
+  'configuredGitLabProjectPathFromMergeRequestUrl(ticket.mr?.url, env)',
   'background polling via native GitLab REST',
   "countLabel(templates.length, 'template')",
   "countLabel(projectCount, 'project')",
@@ -5731,7 +5733,21 @@ for (const [sourceName, source, markers] of [
     'maxTotalCommentBytes',
     'responseBytes + response.bodyBytes > this.maxTotalCommentBytes',
     'previously fetched comment',
-    'parseJsonWithLabel(response.body, label)',
+    "parseJsonWithLabel(body.toString('utf8'), label)",
+    '/rest/api/3/attachment/content/${encodeURIComponent(base.id)}',
+    "{ redirect: 'false' }",
+    'MAX_ATTACHMENT_FETCHES = 10',
+    'MAX_ATTACHMENT_BYTES = 256 * 1024',
+    'MAX_TOTAL_ATTACHMENT_BYTES = 1024 * 1024',
+    'let budgetBytes = 0',
+    'budgetBytes += fetched.budgetBytes',
+    'budgetBytes: maxResponseBytes',
+    'error instanceof JiraResponseLimitError',
+    "responseType: 'buffer'",
+    "new TextDecoder('utf-8', { fatal: true })",
+    "result.reason = 'redirect-refused'",
+    'buildCredentialedJiraUrl',
+    'configured JIRA_BASE_URL origin',
     "url.username = ''",
     "url.password = ''",
     "url.search = ''",
@@ -5742,11 +5758,27 @@ for (const [sourceName, source, markers] of [
     'export function normalizeJiraTicketContext',
     'export function buildFallbackJiraTicketContext',
     'export function adfToText',
-    'attachmentsMetadataOnly: true',
-    'allFieldsFetched && commentsComplete && attachments.length === 0',
-    'attachment metadata is included',
+    'attachmentBodiesCaptured',
+    'attachmentsComplete',
+    'uniqueStrings(warnings).length === 0',
+    'Jira attachment bodies were partial',
     "id.startsWith('customfield_')",
-    "arrayFromUnknown(fields['attachment']).map(normalizeAttachment)",
+    'normalizeAttachment(value, attachmentContents[index], index)',
+    'missingFieldNameIds',
+    'missingFieldSchemaIds',
+    'truncatedFieldIds',
+    'MAX_NORMALIZED_CONTEXT_BYTES',
+    'GLOBAL_CONTEXT_TRUNCATION',
+    'function truncateDerivedFieldTextToGlobalBudget',
+    'function truncateFieldPayloadsToGlobalBudget',
+    'function discardAttachmentBodiesToGlobalBudget',
+    'function synchronizeCompleteness',
+    "'[REDACTED AWS ACCESS KEY]'",
+    "'[REDACTED JWT]'",
+    'function enforceNormalizedContextBudget',
+    'function sanitizeAttachmentMetadata',
+    'contentStatus',
+    'textSha256',
     'commentsComplete',
     'function renderAdfNode',
     'function sanitizeProviderMetadata',
@@ -5772,10 +5804,20 @@ for (const [sourceName, source, markers] of [
     'readOnlyNoFollowFlags()',
     'BEGIN UNTRUSTED JIRA DATA',
     'never instructions',
+    'untrusted attachment evidence',
+    'validateAttachmentEnvelopes',
+    'validateFieldEnvelopes',
+    "attachment['textSha256'] !== sha256(attachment['textContent'])",
+    'commentsFetched does not match its comment records',
+    'complete flag does not match its component completeness',
+    'attachment completeness counts',
   ]],
   ['GitLab context normalizer', gitlabMergeRequestContext, [
     'MAX_DIFF_TOTAL_CHARS',
     'MAX_TEST_TOTAL_CHARS',
+    'MAX_NORMALIZED_CONTEXT_BYTES',
+    'enforceGlobalNormalizedContextBudget',
+    'GLOBAL_CONTEXT_BUDGET_WARNING',
     'redactSecrets',
     "url.username = ''",
     "url.search = ''",
@@ -5794,6 +5836,14 @@ for (const [sourceName, source, markers] of [
     'assertNoSymbolicLinkComponents',
     'fs.linkSync(temporaryPath, filePath)',
     'readOnlyNoFollowFlags()',
+  ]],
+  ['GitLab pipeline transition digest', pipelineTransitions, [
+    'export function mergeGitLabPipelineDigest',
+    'export function normalizeStoredGitLabPipelineDigest',
+    'jobsComplete: boolean',
+    'testsComplete: boolean',
+    'if (!current.jobsComplete) { return; }',
+    'if (!current.testsComplete || !current.tests.available) { return; }',
   ]],
   ['work session store', workSessionStore, [
     'const DIRECTORY_MODE = 0o700',
@@ -5818,6 +5868,7 @@ for (const [sourceName, source, markers] of [
     'fs.constants.O_EXCL | NO_FOLLOW_FLAG',
     'symbolic-link component',
     'fs.renameSync(temporaryPath, filePath)',
+    'normalizeStoredGitLabPipelineDigest(parsed)',
   ]],
   ['Jenkins context client', jenkinsRestClient, [
     'async buildContext',
@@ -5864,7 +5915,10 @@ for (const [sourceName, source, markers] of [
   ['CI transition digest', ciTransitions, [
     'export function buildCiMonitorDigest',
     'export function compareCiMonitorDigests',
+    'export function mergeCiMonitorDigest',
     'normalizeCiMonitorDigest',
+    'gateAvailable: boolean',
+    'metricsAvailable: boolean',
     'stableFingerprint',
     'MAX_FAILED_STAGES',
     'MAX_METRICS',
@@ -5883,6 +5937,23 @@ for (const [sourceName, source, markers] of [
     'function markdownText',
     'function inlineCode',
     'MAX_TIMELINE_EVENTS',
+  ]],
+  ['managed monitor lease', managedMonitorLease, [
+    'export function tryAcquireManagedMonitorLease',
+    'fs.constants.O_EXCL',
+    'noFollowFlag()',
+    'const DIRECTORY_MODE = 0o700',
+    'const FILE_MODE = 0o600',
+    'MAX_LEASE_BYTES',
+    'unlinkMatchingLease',
+    'renewMatchingLease',
+    'unlinkExpiredCrashPinnedLease',
+    'findUniqueCrashPin',
+    'isLeaseUnlinkPinName',
+    'renew(options?: ManagedMonitorLeaseRenewOptions): boolean',
+    'fs.ftruncateSync(descriptor, 0)',
+    'sameIdentity',
+    'assertNoSymbolicLinkComponents',
   ]],
   ['terminal context insertion', terminalContextInsertion, [
     'export function buildJiraContextReference',
@@ -5909,6 +5980,22 @@ for (const forbidden of ['sendText(', '.dispose(', '.show(', 'createTerminal('])
   if (operatorTerminalRegistry.includes(forbidden)) {
     fail(`Operator terminal registry must not control terminal I/O or lifecycle: ${forbidden}`);
   }
+}
+if (extension.includes('vscode.window.terminals')) {
+  fail('Managed operator terminals must not be restored by scanning reusable terminal names or process IDs after reload.');
+}
+for (const [sourceName, source] of [
+  ['extension', extension],
+  ['integration adapters', integrationAdapters],
+  ['doctor checks', doctorChecks],
+]) {
+  if (source.includes('gitLabProjectPathFromMergeRequestUrl(')) {
+    fail(`${sourceName} must pin URL-derived GitLab project paths to the configured GitLab origin.`);
+  }
+}
+if (jiraTicketContext.includes("assignString(normalized, 'contentUrl'")
+  || jiraTicketContext.includes("assignString(normalized, 'thumbnailUrl'")) {
+  fail('Jira attachment download and thumbnail URLs must not enter model-facing context artifacts.');
 }
 for (const marker of [
   "vscode.commands.registerCommand('kronos.insertJiraContext'",
@@ -5942,6 +6029,16 @@ for (const marker of [
   'buildCiContextReference(ticketKey, artifact.promptPath)',
   'contextInsertionTerminalIsUnchanged(insertionTarget)',
   'artifactSha256: artifact.contentSha256',
+  'tryAcquireManagedMonitorLease()',
+  'lease.renew()',
+  'await pollManagedGitLabSession(workSession, renewLease)',
+  'await pollManagedCiSession(workSession, renewLease)',
+  'if (!retainLease()) { return managedPollLeaseLost(fetchedResult); }',
+  'if (!retainLease()) { return managedPollLeaseLost(result); }',
+  'clearInterval(leaseHeartbeat)',
+  'mergeGitLabPipelineDigest(previous, observedDigest)',
+  'mergeCiMonitorDigest(previous, observedDigest)',
+  'configuredGitLabProjectPathFromMergeRequestUrl(ticket.mr?.url, process.env)',
 ]) {
   if (!extension.includes(marker)) {
     fail(`Missing safe CI terminal command marker: ${marker}`);
@@ -5957,7 +6054,7 @@ for (const forbidden of [
     fail(`Jira terminal insertion must not execute or insert raw Jira data: ${forbidden}`);
   }
 }
-if (jiraRestClient.includes('parseJsonWithLabel(response.body, label, { includePreview: true })')) {
+if (jiraRestClient.includes('includePreview: true') || jiraRestClient.includes('responsePreview(')) {
   fail('Jira REST parsing errors must not include provider response previews.');
 }
 if (jiraRestClient.includes('jiraBaseUrlFromIssueUrl(issueUrl)')) {
@@ -5979,12 +6076,12 @@ for (const marker of [
   'function normalizeMergeRequestComments',
   'function mergeRequestCommentInputs',
   "const notes = arrayFromUnknown(item['notes'])",
-  "import { GitLabHttpTransport, GitLabRestRequestOptions, createGitLabRestClient, gitLabProjectPathFromMergeRequestUrl, gitlabRestClient } from './gitlabRestClient'",
+  "import { GitLabHttpTransport, GitLabRestRequestOptions, configuredGitLabProjectPathFromMergeRequestUrl, createGitLabRestClient, gitlabRestClient } from './gitlabRestClient'",
   'gitlabTransport?: GitLabHttpTransport',
   'return createGitLabRestClient(options)',
   'function gitlabRequestOptions(options: ScriptRunOptions): GitLabRestRequestOptions',
   'function mergeRequestRestTarget',
-  'gitLabProjectPathFromMergeRequestUrl(ticket?.mr?.url)',
+  'configuredGitLabProjectPathFromMergeRequestUrl(ticket?.mr?.url, runner.env || process.env)',
   'function normalizeJiraComment',
   'function normalizeMergeRequestComment',
   'mergeRequestDiff',
@@ -6017,6 +6114,7 @@ for (const marker of [
   'export function createGitLabRestClient',
   'export function normalizeGitLabApiBaseUrl',
   'export function gitLabProjectPathFromMergeRequestUrl',
+  'export function configuredGitLabProjectPathFromMergeRequestUrl',
   'async mergeRequestStatus',
   '/approvals',
   '/diffs',

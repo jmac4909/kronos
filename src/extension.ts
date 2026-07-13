@@ -45,7 +45,7 @@ import { RecoveryInventory, RecoveryItem, buildRecoveryInventory, resolveRecover
 import { DispatchCollision, detectDispatchCollisions, type DispatchCollisionInput } from './services/collisionDetector';
 import { gitlabAdapter, jenkinsAdapter, jiraAdapter, sonarAdapter } from './services/integrationAdapters';
 import { isJiraRestConfigured, jiraRestClient } from './services/jiraRestClient';
-import { gitLabProjectPathFromMergeRequestUrl, gitlabRestClient } from './services/gitlabRestClient';
+import { configuredGitLabProjectPathFromMergeRequestUrl, gitlabRestClient } from './services/gitlabRestClient';
 import { jenkinsRestClient, type JenkinsBuildContext } from './services/jenkinsRestClient';
 import { sonarRestClient, type SonarBranchContext } from './services/sonarRestClient';
 import { buildCiContext, writeCiContextArtifacts } from './services/ciContextStore';
@@ -71,9 +71,10 @@ import {
 } from './services/workSessionStore';
 import { acknowledgeMonitorEvent, appendMonitorEvent, listMonitorEvents } from './services/monitorEventStore';
 import { buildWorkSessionAuditMarkdown } from './services/workSessionAuditView';
-import { compareGitLabPipelineDigests, normalizeGitLabPipelineDigest, type GitLabPipelineTransition } from './services/pipelineTransitions';
+import { tryAcquireManagedMonitorLease } from './services/managedMonitorLease';
+import { compareGitLabPipelineDigests, mergeGitLabPipelineDigest, normalizeGitLabPipelineDigest, type GitLabPipelineTransition } from './services/pipelineTransitions';
 import { gitLabPipelineMonitorSnapshotPath, readGitLabPipelineMonitorSnapshot, writeGitLabPipelineMonitorSnapshot } from './services/gitlabPipelineMonitorStore';
-import { buildCiMonitorDigest, compareCiMonitorDigests, normalizeCiMonitorDigest, type CiMonitorDigest, type CiMonitorTransition } from './services/ciTransitions';
+import { buildCiMonitorDigest, compareCiMonitorDigests, mergeCiMonitorDigest, normalizeCiMonitorDigest, type CiMonitorDigest, type CiMonitorTransition } from './services/ciTransitions';
 import { ciMonitorSnapshotPath, readCiMonitorSnapshot, writeCiMonitorSnapshot } from './services/ciMonitorStore';
 import { buildRunCompletionEvidenceCheck, buildRunCompletionEvidenceText, evaluatePostRunReadiness, postRunReadinessRunPatch, resolvePostRunTicket, shouldRecordRunCompletionEvidence } from './services/postRunReadiness';
 import { existingAcceptanceCriterion, extractAcceptanceCriteria } from './services/acceptanceCriteria';
@@ -257,6 +258,7 @@ const REQUIRED_PROMPTS = [
   'continue-work',
 ];
 const REVIEW_POLL_FAILURE_NOTIFICATION_MS = 15 * 60 * 1000;
+const MANAGED_MONITOR_LEASE_RENEWAL_MS = 60 * 1000;
 const reviewPollFailureNotifications = new Map<string, number>();
 const reviewMergeRequestNotifications = new Set<string>();
 const reviewTerminalMergeRequestActions = new Set<string>();
@@ -1680,9 +1682,6 @@ export function activate(context: vscode.ExtensionContext) {
     );
   };
   const runStartupSideEffects = () => {
-    void restorePersistedOperatorTerminalBindings().catch(e => {
-      appendKronosLog('Could not restore operator terminal bindings after reload.', unknownErrorMessage(e, 'Terminal binding restore failed.'));
-    });
     startRuntimePolling();
     ensureInitialIntegrationManifest();
     try {
@@ -1788,35 +1787,6 @@ export function activate(context: vscode.ExtensionContext) {
     });
     sessionTree.refresh();
     return updated;
-  };
-
-  const restorePersistedOperatorTerminalBindings = async (): Promise<void> => {
-    const live = await Promise.all(vscode.window.terminals.map(async terminal => {
-      try {
-        return { terminal, processId: await terminal.processId };
-      } catch {
-        return { terminal, processId: undefined };
-      }
-    }));
-    const claimed = new Set<vscode.Terminal>();
-    let restored = 0;
-    for (const workSession of listWorkSessions().filter(session => session.status === 'active')) {
-      for (const binding of workSession.terminals.filter(candidate => candidate.status === 'attached' && candidate.processId !== undefined)) {
-        const matches = live.filter(candidate =>
-          !claimed.has(candidate.terminal)
-          && candidate.processId === binding.processId
-          && candidate.terminal.name === binding.name
-        );
-        if (matches.length !== 1 || !matches[0]) { continue; }
-        operatorTerminals.attach(matches[0].terminal, { sessionId: workSession.id, bindingId: binding.id });
-        claimed.add(matches[0].terminal);
-        restored += 1;
-      }
-    }
-    if (restored > 0) {
-      sessionTree.refresh();
-      appendKronosLog(`Restored ${restored} operator terminal binding${restored === 1 ? '' : 's'} after extension reload.`);
-    }
   };
 
   const ensureWorkSessionProviderBindings = (workSession: WorkSessionRecord, ticket: Ticket): WorkSessionRecord => {
@@ -1929,16 +1899,44 @@ export function activate(context: vscode.ExtensionContext) {
   };
 
   let managedWorkSessionPollInProgress = false;
-  type ManagedPollResult = { polled: number; transitions: number; failures: number; skipped: number };
-  const emptyManagedPollResult = (): ManagedPollResult => ({ polled: 0, transitions: 0, failures: 0, skipped: 0 });
-  const combineManagedPollResults = (left: ManagedPollResult, right: ManagedPollResult): ManagedPollResult => ({
-    polled: left.polled + right.polled,
-    transitions: left.transitions + right.transitions,
-    failures: left.failures + right.failures,
-    skipped: left.skipped + right.skipped,
+  type ManagedPollResult = {
+    polled: number;
+    transitions: number;
+    failures: number;
+    skipped: number;
+    leaseUnavailable: boolean;
+    leaseUnavailableReason?: 'active' | 'contended' | 'unsafe' | 'local' | 'renewal-failed';
+  };
+  const emptyManagedPollResult = (): ManagedPollResult => ({
+    polled: 0,
+    transitions: 0,
+    failures: 0,
+    skipped: 0,
+    leaseUnavailable: false,
   });
+  const combineManagedPollResults = (left: ManagedPollResult, right: ManagedPollResult): ManagedPollResult => {
+    const combined: ManagedPollResult = {
+      polled: left.polled + right.polled,
+      transitions: left.transitions + right.transitions,
+      failures: left.failures + right.failures,
+      skipped: left.skipped + right.skipped,
+      leaseUnavailable: left.leaseUnavailable || right.leaseUnavailable,
+    };
+    const leaseUnavailableReason = left.leaseUnavailableReason || right.leaseUnavailableReason;
+    if (leaseUnavailableReason) { combined.leaseUnavailableReason = leaseUnavailableReason; }
+    return combined;
+  };
+  const managedPollLeaseLost = (result: ManagedPollResult): ManagedPollResult => ({
+    ...result,
+    leaseUnavailable: true,
+    leaseUnavailableReason: 'renewal-failed',
+  });
+  type ManagedMonitorLeaseGuard = () => boolean;
 
-  const pollManagedGitLabSession = async (workSession: WorkSessionRecord): Promise<ManagedPollResult> => {
+  const pollManagedGitLabSession = async (
+    workSession: WorkSessionRecord,
+    retainLease: ManagedMonitorLeaseGuard,
+  ): Promise<ManagedPollResult> => {
     const mrBinding = [...workSession.providerBindings].reverse().find(binding =>
       binding.provider === 'gitlab' && binding.resource === 'merge-request'
     );
@@ -1949,7 +1947,7 @@ export function activate(context: vscode.ExtensionContext) {
       return { ...emptyManagedPollResult(), skipped: 1 };
     }
     const ticket = state.state?.tickets[workSession.ticketKey];
-    let projectIdOrPath = mrBinding.projectId || gitLabProjectPathFromMergeRequestUrl(mrBinding.url);
+    let projectIdOrPath = mrBinding.projectId || configuredGitLabProjectPathFromMergeRequestUrl(mrBinding.url, process.env);
     if (!projectIdOrPath && ticket) {
       for (const projectName of ticketStringArray(ticket.projects)) {
         const configured = state.state?.projects[projectName]?.config?.gitlab_project_id;
@@ -1958,25 +1956,41 @@ export function activate(context: vscode.ExtensionContext) {
           break;
         }
       }
-      projectIdOrPath = projectIdOrPath || gitLabProjectPathFromMergeRequestUrl(ticket.mr?.url);
+      projectIdOrPath = projectIdOrPath || configuredGitLabProjectPathFromMergeRequestUrl(ticket.mr?.url, process.env);
     }
     if (!projectIdOrPath) {
       appendKronosLog(`Skipped managed GitLab monitoring for ${workSession.ticketKey}.`, 'No GitLab project id or path is bound to the work session.');
       return { ...emptyManagedPollResult(), skipped: 1 };
     }
 
+    let snapshot;
     try {
-      const snapshot = await gitlabRestClient.mergeRequestMonitor({ projectIdOrPath, iid });
-      const digest = normalizeGitLabPipelineDigest(snapshot);
-      if (!digest) { return { ...emptyManagedPollResult(), polled: 1 }; }
+      snapshot = await gitlabRestClient.mergeRequestMonitor({ projectIdOrPath, iid });
+    } catch (e: unknown) {
+      const stillOwnsLease = retainLease();
+      appendKronosLog(`Managed GitLab monitoring failed for ${workSession.ticketKey}.`, unknownErrorMessage(e, 'GitLab monitoring failed.'));
+      const failedResult = { ...emptyManagedPollResult(), failures: 1 };
+      return stillOwnsLease ? failedResult : managedPollLeaseLost(failedResult);
+    }
+
+    const fetchedResult = { ...emptyManagedPollResult(), polled: 1 };
+    if (!retainLease()) { return managedPollLeaseLost(fetchedResult); }
+
+    try {
+      const observedDigest = normalizeGitLabPipelineDigest(snapshot);
+      if (!observedDigest) { return fetchedResult; }
       let previous = null;
       try {
         previous = readGitLabPipelineMonitorSnapshot(workSession.id);
       } catch (e: unknown) {
         appendKronosLog(`Ignored an invalid pipeline baseline for ${workSession.ticketKey}.`, unknownErrorMessage(e, 'Invalid baseline.'));
       }
+      const digest = previous
+        ? mergeGitLabPipelineDigest(previous, observedDigest) || observedDigest
+        : observedDigest;
       const transitions = previous ? compareGitLabPipelineDigests(previous, digest) : [];
       const snapshotPath = gitLabPipelineMonitorSnapshotPath(workSession.id);
+      if (!retainLease()) { return managedPollLeaseLost(fetchedResult); }
       if (!previous) {
         writeGitLabPipelineMonitorSnapshot(workSession.id, digest);
         appendMonitorEvent({
@@ -1989,7 +2003,7 @@ export function activate(context: vscode.ExtensionContext) {
           artifactPath: snapshotPath,
           metadata: { mergeRequestIid: iid, pipelineId: digest.id },
         });
-        return { ...emptyManagedPollResult(), polled: 1 };
+        return fetchedResult;
       }
 
       const recorded: Array<{ transition: GitLabPipelineTransition; eventId: string }> = [];
@@ -2032,7 +2046,10 @@ export function activate(context: vscode.ExtensionContext) {
     }
   };
 
-  const pollManagedCiSession = async (workSession: WorkSessionRecord): Promise<ManagedPollResult> => {
+  const pollManagedCiSession = async (
+    workSession: WorkSessionRecord,
+    retainLease: ManagedMonitorLeaseGuard,
+  ): Promise<ManagedPollResult> => {
     const bindings = [...workSession.providerBindings].reverse();
     const jenkinsBinding = bindings.find(binding => binding.provider === 'jenkins' && binding.resource === 'build');
     const sonarBinding = bindings.find(binding => binding.provider === 'sonar' && binding.resource === 'quality-gate');
@@ -2049,8 +2066,10 @@ export function activate(context: vscode.ExtensionContext) {
         try {
           jenkinsContext = await jenkinsRestClient.buildContext(jenkinsBinding.url);
           result.polled += 1;
+          if (!retainLease()) { return managedPollLeaseLost(result); }
         } catch (e: unknown) {
           result.failures += 1;
+          if (!retainLease()) { return managedPollLeaseLost(result); }
           appendKronosLog(`Managed Jenkins monitoring failed for ${workSession.ticketKey}.`, unknownErrorMessage(e, 'Jenkins monitoring failed.'));
         }
       }
@@ -2069,8 +2088,10 @@ export function activate(context: vscode.ExtensionContext) {
         try {
           sonarContext = await sonarRestClient.branchContext(projectKey, branch);
           result.polled += 1;
+          if (!retainLease()) { return managedPollLeaseLost(result); }
         } catch (e: unknown) {
           result.failures += 1;
+          if (!retainLease()) { return managedPollLeaseLost(result); }
           appendKronosLog(`Managed SonarQube monitoring failed for ${workSession.ticketKey}.`, unknownErrorMessage(e, 'SonarQube monitoring failed.'));
         }
       }
@@ -2092,9 +2113,13 @@ export function activate(context: vscode.ExtensionContext) {
     else if (jenkinsBinding && previous?.jenkins) { mergedValue.jenkins = previous.jenkins; }
     if (liveDigest?.sonar) { mergedValue.sonar = liveDigest.sonar; }
     else if (sonarBinding && previous?.sonar) { mergedValue.sonar = previous.sonar; }
-    const digest = normalizeCiMonitorDigest(mergedValue);
-    if (!digest) { return result; }
+    const observedDigest = normalizeCiMonitorDigest(mergedValue);
+    if (!observedDigest) { return result; }
+    const digest = previous
+      ? mergeCiMonitorDigest(previous, observedDigest) || observedDigest
+      : observedDigest;
     const snapshotPath = ciMonitorSnapshotPath(workSession.id);
+    if (!retainLease()) { return managedPollLeaseLost(result); }
     if (!previous) {
       writeCiMonitorSnapshot(workSession.id, digest);
       appendMonitorEvent({
@@ -2155,15 +2180,65 @@ export function activate(context: vscode.ExtensionContext) {
   };
 
   const pollManagedWorkSessions = async (): Promise<ManagedPollResult> => {
-    if (managedWorkSessionPollInProgress) { return emptyManagedPollResult(); }
+    if (managedWorkSessionPollInProgress) {
+      return { ...emptyManagedPollResult(), leaseUnavailable: true, leaseUnavailableReason: 'local' };
+    }
     managedWorkSessionPollInProgress = true;
+    const lease = tryAcquireManagedMonitorLease();
+    if (!lease.acquired) {
+      managedWorkSessionPollInProgress = false;
+      appendKronosLog(
+        'Skipped this managed-provider poll because another extension host owns the polling lease.',
+        `Lease state: ${lease.reason || 'unavailable'}.`,
+      );
+      return {
+        ...emptyManagedPollResult(),
+        leaseUnavailable: true,
+        leaseUnavailableReason: lease.reason || 'contended',
+      };
+    }
     let total = emptyManagedPollResult();
+    let leaseHealthy = true;
+    let leaseLossLogged = false;
+    const markLeaseLost = () => {
+      leaseHealthy = false;
+      if (leaseLossLogged) { return; }
+      leaseLossLogged = true;
+      appendKronosLog('Stopped managed-provider polling because the cross-window lease could not be renewed.');
+    };
+    const renewLease = (): boolean => {
+      if (leaseHealthy && !lease.renew()) { markLeaseLost(); }
+      return leaseHealthy;
+    };
+    const leaseHeartbeat = setInterval(renewLease, MANAGED_MONITOR_LEASE_RENEWAL_MS);
+    leaseHeartbeat.unref();
     try {
       const sessions = listWorkSessions().filter(session => session.status === 'active' && session.monitoring.enabled);
       for (const workSession of sessions) {
+        if (!renewLease()) {
+          total.leaseUnavailable = true;
+          total.leaseUnavailableReason = 'renewal-failed';
+          break;
+        }
         let sessionResult = emptyManagedPollResult();
-        sessionResult = combineManagedPollResults(sessionResult, await pollManagedGitLabSession(workSession));
-        sessionResult = combineManagedPollResults(sessionResult, await pollManagedCiSession(workSession));
+        sessionResult = combineManagedPollResults(
+          sessionResult,
+          await pollManagedGitLabSession(workSession, renewLease),
+        );
+        if (sessionResult.leaseUnavailable || !renewLease()) {
+          sessionResult = managedPollLeaseLost(sessionResult);
+          total = combineManagedPollResults(total, sessionResult);
+          break;
+        }
+        sessionResult = combineManagedPollResults(
+          sessionResult,
+          await pollManagedCiSession(workSession, renewLease),
+        );
+        if (sessionResult.leaseUnavailable || !renewLease()) {
+          sessionResult = managedPollLeaseLost(sessionResult);
+          total = combineManagedPollResults(total, sessionResult);
+          break;
+        }
         const hasMonitorableBinding = workSession.providerBindings.some(binding =>
           binding.provider === 'gitlab' || binding.provider === 'jenkins' || binding.provider === 'sonar'
         );
@@ -2183,9 +2258,17 @@ export function activate(context: vscode.ExtensionContext) {
         }
         total = combineManagedPollResults(total, sessionResult);
       }
+      if (!leaseHealthy) {
+        total.leaseUnavailable = true;
+        total.leaseUnavailableReason = 'renewal-failed';
+      }
       if (total.polled > 0) { sessionTree.refresh(); }
       return total;
     } finally {
+      clearInterval(leaseHeartbeat);
+      if (!lease.release()) {
+        appendKronosLog('Managed-provider polling lease was no longer owned when release was attempted.');
+      }
       managedWorkSessionPollInProgress = false;
     }
   };
@@ -2294,10 +2377,26 @@ export function activate(context: vscode.ExtensionContext) {
         { location: vscode.ProgressLocation.Notification, title: 'Kronos: Polling managed GitLab, Jenkins, and SonarQube providers...' },
         async () => {
           const result = await pollManagedWorkSessions();
+          if (result.leaseUnavailable && result.polled === 0) {
+            if (result.leaseUnavailableReason === 'unsafe') {
+              vscode.window.showWarningMessage('Kronos refused to poll because its cross-window monitoring lease path is unsafe. See Kronos output; no provider request was started.');
+            } else if (result.leaseUnavailableReason === 'renewal-failed') {
+              vscode.window.showWarningMessage('Kronos stopped this poll because it could not renew the cross-window monitoring lease. See Kronos output.');
+            } else {
+              vscode.window.showInformationMessage('A managed-provider poll is already running in this or another Kronos window. No duplicate poll was started.');
+            }
+            return;
+          }
           const skipped = result.skipped > 0 ? ` ${result.skipped} configured provider${result.skipped === 1 ? ' was' : 's were'} skipped; see Kronos output.` : '';
+          const leaseNotice = result.leaseUnavailableReason === 'renewal-failed'
+            ? ' The poll stopped early because its cross-window lease could not be renewed; see Kronos output.'
+            : '';
           const message = `Polled ${result.polled} managed provider context${result.polled === 1 ? '' : 's'}; recorded ${result.transitions} structural transition${result.transitions === 1 ? '' : 's'}.${skipped}`;
-          if (result.failures > 0) {
-            vscode.window.showWarningMessage(`${message} ${result.failures} provider context${result.failures === 1 ? '' : 's'} could not be refreshed; see Kronos output.`);
+          if (result.failures > 0 || leaseNotice) {
+            const failureNotice = result.failures > 0
+              ? ` ${result.failures} provider context${result.failures === 1 ? '' : 's'} could not be refreshed; see Kronos output.`
+              : '';
+            vscode.window.showWarningMessage(`${message}${failureNotice}${leaseNotice}`);
           } else {
             vscode.window.showInformationMessage(message);
           }
@@ -2982,7 +3081,7 @@ export function activate(context: vscode.ExtensionContext) {
           let jiraContext: JiraTicketContext | undefined;
           const fallbackWarnings: string[] = [];
           if (isJiraRestConfigured(process.env)) {
-            progress.report({ message: 'Fetching all Jira fields and comments...' });
+            progress.report({ message: 'Fetching all visible Jira fields, comments, and safe text attachments...' });
             try {
               const snapshot = await jiraRestClient.ticketContext(ticketKey, ticket.jira_url);
               jiraContext = normalizeJiraTicketContext(ticketKey, snapshot, { ...ticket });
@@ -3036,7 +3135,7 @@ export function activate(context: vscode.ExtensionContext) {
             sessionTree.refresh();
           }
 
-          const fetchedSummary = `${jiraContext.completeness.fieldCount} fields, ${jiraContext.comments.length} comments, ${jiraContext.attachments.length} attachment record${jiraContext.attachments.length === 1 ? '' : 's'}`;
+          const fetchedSummary = `${jiraContext.completeness.fieldCount} fields (${jiraContext.completeness.customFieldCount} custom), ${jiraContext.comments.length} comments, ${jiraContext.completeness.attachmentBodiesCaptured}/${jiraContext.completeness.attachmentsTotal} attachment bodies captured`;
           const message = `Inserted [${ticketKey}] into ${terminal.name} without submitting it (${fetchedSummary}). Review it, then press Enter when ready.`;
           if (jiraContext.completeness.complete) {
             vscode.window.showInformationMessage(message);
@@ -3073,7 +3172,7 @@ export function activate(context: vscode.ExtensionContext) {
           break;
         }
       }
-      projectIdOrPath = projectIdOrPath || gitLabProjectPathFromMergeRequestUrl(ticket.mr?.url);
+      projectIdOrPath = projectIdOrPath || configuredGitLabProjectPathFromMergeRequestUrl(ticket.mr?.url, process.env);
       if (!projectIdOrPath) {
         vscode.window.showWarningMessage(`${ticketKey} needs a project gitlab_project_id or a parseable GitLab MR URL.`);
         return;
