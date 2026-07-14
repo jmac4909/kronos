@@ -8,6 +8,7 @@ node_modules/**
 vscode-user-*/**
 .vscode-test/**
 .claude/**
+.kronos/**
 **/__pycache__/**
 **/*.pyc
 CLAUDE.md
@@ -17,10 +18,6 @@ CLAUDE.md
 *.log
 .env*
 out/**/*.map
-GOOD_TO_GREAT_REVIEW.md
-INTENT_AND_ENHANCEMENT_PLAN.md
-HUMAN_FEEDBACK_CHECKLIST.md
-WINDOWS_FEEDBACK_*.md
 push-master.sh
 cache-github-token.sh
 tsconfig.json

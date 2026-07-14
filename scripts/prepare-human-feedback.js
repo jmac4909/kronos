@@ -1,234 +1,103 @@
-const fs = require('fs');
-const path = require('path');
-const { spawnSync } = require('child_process');
+const fs = require('node:fs');
+const path = require('node:path');
+const { spawnSync } = require('node:child_process');
 
-const ROOT = process.cwd();
-const VSIX = path.join(ROOT, 'kronos-0.1.0.vsix');
-const IS_WINDOWS = process.platform === 'win32';
+const root = path.resolve(__dirname, '..');
 
 function fail(message) {
-  console.error(`\nFeedback readiness failed: ${message}`);
+  console.error(`Human-feedback readiness failed: ${message}`);
   process.exit(1);
 }
 
-function run(command, args, options = {}) {
-  const label = [command, ...args].join(' ');
-  console.log(`\n> ${label}`);
+function run(command, args, capture = false) {
+  console.log(`> ${command} ${args.join(' ')}`);
   const result = spawnSync(command, args, {
-    cwd: ROOT,
+    cwd: root,
     encoding: 'utf8',
-    shell: shouldUseWindowsShell(command),
-    stdio: options.capture ? 'pipe' : 'inherit',
+    stdio: capture ? 'pipe' : 'inherit',
+    shell: process.platform === 'win32' && (command === 'npm' || command === 'npx'),
   });
-
-  if (result.error) {
-    fail(`${label}: ${result.error.message}`);
-  }
+  if (result.error) { fail(result.error.message); }
   if (result.status !== 0) {
-    if (options.capture) {
-      process.stdout.write(result.stdout || '');
-      process.stderr.write(result.stderr || '');
-    }
-    fail(`${label} exited with ${result.status}`);
+    if (capture) { process.stdout.write(result.stdout || ''); process.stderr.write(result.stderr || ''); }
+    fail(`${command} exited with ${result.status}`);
   }
   return result.stdout || '';
 }
 
-function commandExists(command) {
-  const result = IS_WINDOWS
-    ? spawnSync('where.exe', [command], {
-        cwd: ROOT,
-        encoding: 'utf8',
-        stdio: 'pipe',
-      })
-    : spawnSync('sh', ['-lc', `command -v ${command}`], {
-        cwd: ROOT,
-        encoding: 'utf8',
-        stdio: 'pipe',
-      });
-  if (result.error) { return ''; }
-  return result.status === 0 ? firstOutputLine(result.stdout) : '';
-}
-
-function shouldUseWindowsShell(command) {
-  return IS_WINDOWS && (command === 'npm' || command === 'npx');
-}
-
-function firstOutputLine(value) {
-  return String(value || '')
-    .split(/\r?\n/)
-    .map(line => line.trim())
-    .find(Boolean) || '';
-}
-
-function requireFile(file, includes = []) {
-  const absolute = path.join(ROOT, file);
-  if (!fs.existsSync(absolute)) {
-    fail(`${file} is missing`);
-  }
-  const text = fs.readFileSync(absolute, 'utf8');
-  for (const marker of includes) {
-    if (!text.includes(marker)) {
-      fail(`${file} is missing marker: ${marker}`);
-    }
-  }
-  return text;
-}
-
-function assertTreeIncludes(tree, marker) {
-  if (!tree.includes(marker)) {
-    fail(`VSIX file list is missing ${marker}`);
+function requireMarkers(file, markers) {
+  const filePath = path.join(root, file);
+  if (!fs.existsSync(filePath)) { fail(`${file} is missing`); }
+  const source = fs.readFileSync(filePath, 'utf8');
+  for (const marker of markers) {
+    if (!source.includes(marker)) { fail(`${file} is missing: ${marker}`); }
   }
 }
 
-function assertTreeExcludes(tree, marker) {
-  if (tree.includes(marker)) {
-    fail(`VSIX file list unexpectedly includes ${marker}`);
-  }
+const manifest = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+if (Object.keys(manifest.dependencies || {}).length !== 0) { fail('runtime dependencies must remain empty'); }
+const allowedDevDependencies = new Set(['@types/node', '@types/vscode', 'typescript']);
+for (const name of Object.keys(manifest.devDependencies || {})) {
+  if (!allowedDevDependencies.has(name)) { fail(`unexpected development dependency: ${name}`); }
 }
+if (manifest.contributes.commands.length !== 20) { fail('expected exactly 20 terminal-first commands'); }
+if (manifest.contributes.views.kronos.length !== 3) { fail('expected exactly Work, Sessions, and Attention'); }
 
-console.log('Preparing Kronos human-feedback build.');
+requireMarkers('README.md', ['zero third-party runtime dependencies', 'Work', 'Sessions', 'Attention']);
+requireMarkers('docs/terminal-first-product-contract.md', ['Ownership Invariants', 'Context Insertion Contract', 'Monitoring Contract']);
+requireMarkers('HUMAN_FEEDBACK_CHECKLIST.md', ['Non-Negotiable Boundary', 'Stop Conditions', 'Signoff Bar']);
 
-const manifest = JSON.parse(requireFile('package.json'));
-const commandCount = manifest.contributes?.commands?.length || 0;
-if (commandCount < 80) {
-  fail(`expected the contributed command surface to be populated, found ${commandCount}`);
-}
-
-requireFile('README.md', [
-  'Current Readiness',
-  'Main Surfaces To Review',
-  'HUMAN_FEEDBACK_CHECKLIST.md',
-  'Run Kronos Extension (Feedback State)',
-  'npm run webview:dom',
-  'npm run feedback:smoke',
-  'rendered fixture content',
-  'Spec Beanstalk',
+for (const removed of [
+  'src/runners/sessionDispatcher.ts',
+  'src/views/QueueTreeProvider.ts',
+  'src/services/queuePlanner.ts',
+  'media/kronos-jira-board.js',
   'resources/spec-beanstalk/xlsx_to_markdown.py',
-]);
-requireFile('HUMAN_FEEDBACK_CHECKLIST.md', [
-  'Smoke Flow',
-  'Feedback Questions',
-  'Stop Conditions',
-  'Signoff Bar',
-  'npm run feedback:state',
-  'npm run feedback:smoke',
-  'KRONOS-FB-1',
-  'Run Kronos Extension (Feedback State)',
-  'evidence handoff',
-  'Spec Beanstalk',
-]);
-requireFile('resources/spec-beanstalk/xlsx_to_markdown.py', [
-  'Python standard library',
-  'spec-beanstalk-trace.json',
-  'formatting',
-]);
-requireFile('scripts/create-feedback-state.js', [
-  'Kronos feedback state created.',
-  'refusing to write directly to ~/.claude/kronos',
-  'feedback-run-paused-stale',
-]);
-requireFile('scripts/run-feedback-smoke.js', [
-  '@vscode/test-electron',
-  'downloadAndUnzipVSCode',
-  'libgtk-3.so.0',
-  'extensionTestsEnv',
-  'KRONOS_FEEDBACK_SMOKE',
-]);
-requireFile('scripts/run-webview-dom-tests.js', [
-  'jsdom',
-  'kronos-jira-board.js',
-  'kronos-action-panel.js',
-  'Link to a project first to start or queue\\.',
-]);
-requireFile('test/feedback-smoke/index.js', [
-  'jmacke01.kronos',
-  'kronos.openDashboard',
-  'kronosSetupWizard',
-  'kronosMrAutopilot',
-  'kronosIntegrationContracts',
-  'kronosRecoveryCenter',
-  'Review Paused Run',
-  'kronosSpecBeanstalk',
-]);
-requireFile('WINDOWS_FEEDBACK_2026-07-02.md', [
-  'VS Code 1.127.0',
-  'gcloud.cmd',
-  'Run records can remain `running`',
-  'Webview buttons are dead',
-  'latest CDP smoke',
-  'ready=true',
-]);
-requireFile('LICENSE', ['All rights reserved']);
-requireFile('.vscode/launch.json', [
-  'Run Kronos Extension',
-  'Run Kronos Extension (Feedback State)',
-  '${workspaceFolder}/.claude/kronos-feedback-state',
-]);
-requireFile('.vscode/tasks.json', [
-  'Kronos: Prepare Feedback Dev Host',
-  'feedback:state',
-]);
+]) {
+  if (fs.existsSync(path.join(root, removed))) { fail(`legacy file still exists: ${removed}`); }
+}
 
+run(process.execPath, ['scripts/create-feedback-state.js', '--force']);
 run('npm', ['test']);
 run('npm', ['run', 'package']);
 
-if (!fs.existsSync(VSIX)) {
-  fail('kronos-0.1.0.vsix was not created');
-}
-const stat = fs.statSync(VSIX);
-if (stat.size < 200 * 1024) {
-  fail(`kronos-0.1.0.vsix is unexpectedly small (${stat.size} bytes)`);
+const vsixName = `${manifest.name}-${manifest.version}.vsix`;
+const vsixPath = path.join(root, vsixName);
+if (!fs.existsSync(vsixPath) || fs.statSync(vsixPath).size < 10 * 1024) {
+  fail(`${vsixName} is missing or unexpectedly small`);
 }
 
-const tree = run('npx', ['--yes', '@vscode/vsce', 'ls', '--tree', '--no-dependencies'], { capture: true });
-for (const marker of [
-  'LICENSE',
-  'package.json',
-  'README.md',
-  'media/',
-  'resources/',
-  'spec-beanstalk/',
-  'out/',
-  'extension.js',
-  'services/',
+// Use the flat file list for exact package assertions. The visual tree output
+// prints child names without their parent prefix, which makes path checks
+// dependent on presentation rather than actual VSIX contents.
+const tree = run('npx', ['--yes', '@vscode/vsce@3.9.2', 'ls', '--no-dependencies'], true);
+for (const expected of [
+  'out/extension.js',
+  'out/terminalFirstExtension.js',
+  'out/views/WorkTreeProvider.js',
+  'out/views/ManagedSessionTreeProvider.js',
+  'out/views/AttentionTreeProvider.js',
+  'media/kronos-action-panel.js',
+  'media/kronos-webview-runtime.js',
+  'docs/terminal-first-product-contract.md',
+  'HUMAN_FEEDBACK_CHECKLIST.md',
 ]) {
-  assertTreeIncludes(tree, marker);
+  if (!tree.includes(expected)) { fail(`VSIX tree is missing ${expected}`); }
 }
-for (const marker of [
+for (const forbidden of [
   'src/',
   'scripts/',
   'test/',
   'node_modules/',
-  '.git/',
-  '.vscode-test/',
-  '.claude/',
-  'HUMAN_FEEDBACK_CHECKLIST.md',
-  'GOOD_TO_GREAT_REVIEW.md',
-  'INTENT_AND_ENHANCEMENT_PLAN.md',
-  'WINDOWS_FEEDBACK_2026-07-02.md',
-  'push-master.sh',
-  'cache-github-token.sh',
+  '.kronos/',
+  'sessionDispatcher',
+  'QueueTreeProvider',
+  'jira-board',
+  'spec-beanstalk',
 ]) {
-  assertTreeExcludes(tree, marker);
+  if (tree.includes(forbidden)) { fail(`VSIX tree contains forbidden legacy/development content: ${forbidden}`); }
 }
 
-const codePath = commandExists('code');
-const codiumPath = commandExists('codium');
-
-console.log('\nHuman feedback readiness: PASS');
-console.log(`- Commands contributed: ${commandCount}`);
-console.log(`- VSIX: ${VSIX} (${Math.round(stat.size / 1024)} KB)`);
-console.log(`- README/checklist/license/dev-host config: present`);
-if (codePath || codiumPath) {
-  console.log(`- VS Code CLI available: ${codePath || codiumPath}`);
-} else {
-  console.log('- VS Code CLI not found on this host; install/test the VSIX on a machine with VS Code.');
-}
-console.log('- Windows VS Code 1.127 webview smoke evidence is recorded in WINDOWS_FEEDBACK_2026-07-02.md.');
-console.log('- Webview DOM smoke: npm run webview:dom covers board filtering, modal actions, comments, and action-panel payloads.');
-console.log('- Spec Beanstalk: packaged Python analyzer converts .xlsx workbooks into Markdown and JSON trace artifacts under the Java repo.');
-console.log('- Safe dev-host path: run the VS Code launch configuration "Run Kronos Extension (Feedback State)".');
-console.log('- Automated host smoke: run npm run feedback:smoke in a graphical or xvfb-capable environment with VS Code native GUI libraries such as GTK 3 installed.');
-console.log('- Installed VSIX fixture path: run npm run feedback:state and launch VS Code with KRONOS_DIR=.claude/kronos-feedback-state.');
-console.log('- Remaining manual gate: run HUMAN_FEEDBACK_CHECKLIST.md with a human operator and capture UX feedback.');
+console.log('Kronos terminal-first human-feedback readiness: PASS');
+console.log(`VSIX: ${vsixPath} (${Math.round(fs.statSync(vsixPath).size / 1024)} KiB)`);
+console.log('Automated gates passed. The remaining gate is the operator-owned terminal review in HUMAN_FEEDBACK_CHECKLIST.md.');

@@ -346,7 +346,7 @@ function pruneCommentsToGlobalBudget(context: JiraTicketContext): void {
   let upper = comments.length;
   while (lower < upper) {
     const candidateCount = Math.ceil((lower + upper) / 2);
-    context.comments = comments.slice(0, candidateCount);
+    context.comments = comments.slice(comments.length - candidateCount);
     context.completeness.commentsFetched = candidateCount;
     if (serializedContextBytes(context) <= MAX_NORMALIZED_CONTEXT_BYTES) {
       lower = candidateCount;
@@ -354,7 +354,7 @@ function pruneCommentsToGlobalBudget(context: JiraTicketContext): void {
       upper = candidateCount - 1;
     }
   }
-  context.comments = comments.slice(0, lower);
+  context.comments = comments.slice(comments.length - lower);
   context.completeness.commentsFetched = lower;
 }
 

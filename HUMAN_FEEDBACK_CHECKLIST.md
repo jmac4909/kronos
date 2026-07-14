@@ -1,89 +1,128 @@
-# Kronos Human Feedback Checklist
+# Kronos Terminal-First Human Feedback Checklist
 
-Use this checklist for the first hands-on review. The target session is 20 to 30 minutes.
+Use this checklist for a 15-to-25-minute hands-on evaluation of the operator-owned terminal workflow.
+
+## Non-Negotiable Boundary
+
+During this review, Kronos may read provider data, insert a non-submitting context reference, monitor provider status, and write a private local audit record.
+
+Kronos must never:
+
+- launch Claude or create a terminal for the operator;
+- read terminal input, output, or scrollback;
+- press Enter or submit inserted text;
+- run a project test, build, scan, deployment, or remediation command;
+- create, switch, commit, push, merge, or otherwise change Git;
+- mutate Jira, GitLab, Jenkins, SonarQube, or a database;
+- close the operator's terminal when management stops.
+
+Stop the review immediately if any boundary is crossed.
 
 ## Setup
 
-1. Run `npm run feedback:ready`.
-2. Confirm it reports `Human feedback readiness: PASS`.
-3. Run `npm run feedback:smoke` in a graphical or `xvfb-run` capable environment with the native VS Code/Electron GUI libraries installed.
-4. Install the VSIX with `code --install-extension kronos-0.1.0.vsix --force`.
-5. Reload VS Code.
-6. Run `Kronos: Open Dashboard`.
+1. Run `npm run compile` and `npm run package` from the Kronos repository.
+2. Install with `code --install-extension kronos-0.1.0.vsix --force`.
+3. Reload VS Code.
+4. Start an interactive Claude session yourself in a terminal you control. Do not ask Kronos to create it.
+5. Open the Kronos activity icon.
+6. Confirm exactly three views are visible: **Work**, **Sessions**, and **Attention**.
 
-Alternative dev path: open this folder in VS Code and start the `Run Kronos Extension (Feedback State)` launch configuration. It resets the fixture-state setup before launch and points the extension host at `.claude/kronos-feedback-state`.
-
-## Safe Review State
-
-`npm run feedback:ready` validates and packages Kronos; it does not seed fixture tickets or write sample state under `~/.claude/kronos`.
-
-For a safe synthetic state with the installed VSIX, run:
+For a safe synthetic local state, use:
 
 ```bash
 npm run feedback:state
-KRONOS_DIR="$PWD/.claude/kronos-feedback-state" code .
+KRONOS_DIR="$PWD/.kronos/feedback-state" code .
 ```
 
 On Windows PowerShell:
 
 ```powershell
 npm run feedback:state
-$env:KRONOS_DIR = "$PWD\.claude\kronos-feedback-state"
+$env:KRONOS_DIR = "$PWD\.kronos\feedback-state"
 code .
 ```
 
-The fixture creates `KRONOS-FB-1`, `KRONOS-FB-2`, and `KRONOS-FB-3` under an ignored local directory. It is safe for evidence note/check mutation and operator-panel review, but it is synthetic provider data and should not be posted to real Jira, GitLab, Jenkins, or Sonar systems.
+Use a real ticket only when its provider data is approved for local context capture. The fixture is synthetic and must not be used to post or mutate provider state.
 
-For mutation steps, use a scratch ticket that already exists in the reviewer's local `~/.claude/kronos/state.json` and is clearly safe for test evidence. If the available state only contains real work tickets, run the smoke as read-only: inspect panels and gates, but skip evidence note/check creation, export, and publish/handoff actions. Record "no safe scratch ticket available" in feedback notes.
+## Work View
 
-## Smoke Flow
+1. Refresh Jira tickets.
+2. Filter Work, then clear the filter. Confirm both operations are understandable and reversible.
+3. Open one ticket workspace and confirm the title, summary, description, status, provider links, and known completeness warnings are easy to find.
+4. Confirm the visible actions are limited to the terminal-first read, insert, monitor, and audit workflow.
+5. With the intended interactive terminal focused, choose **Manage Focused Terminal**.
+6. Confirm Kronos identifies the ticket and focused terminal but does not read from or write to the terminal yet.
+7. Choose **Insert `[TICKET-KEY]`**.
+8. Confirm exactly one editable reference is inserted, Enter is not pressed, and the terminal remains fully interactive and operator-controlled.
+9. Inspect the referenced Jira artifact. Confirm custom-field names and values, comments, attachment capture/skip reasons, provenance, and partial-completeness warnings are understandable.
+10. Edit the inserted line and decide yourself whether to press Enter.
 
-1. Confirm the Kronos activity bar appears and all six tree views load.
-2. Open Dashboard and check whether the command center and Operator Cockpit make the current day obvious: setup readiness, MR autopilot, spec traceability, contracts, quality, now, next, blocked, needs human, evidence, and recovery.
-3. Open the Jira Board. Try search, filters, grouping, a ticket modal, and a ticket detail view.
-4. In Ticket Detail, inspect timeline, acceptance criteria, linked MR/build/project fields, evidence ledger, and evidence gate.
-5. With a safe interactive Claude terminal focused, click `Insert [KRONOS-FB-1]`. Confirm Kronos inserts one editable reference line, does not press Enter, and leaves the terminal fully operator-controlled. Skip this step if the fixture has no configured Jira credentials.
-6. On the approved scratch ticket only, add one evidence note and one evidence check.
-7. On the approved scratch ticket only, export evidence and open the evidence handoff panel. Confirm the comment is understandable and safe to paste manually.
-8. Open Queue Planner, Backlog Triage, Next Best Action, Plan Next 2 Hours, and Overnight Candidates. Check whether each recommendation explains why it is next.
-9. Open Setup Wizard, Integration Contracts, and MR Autopilot. Confirm setup blockers, script command contracts, guarded MR polling, pass-plan counts, preflight blockers, and next-action flow are understandable.
-10. Open Spec Beanstalk. Confirm the panel makes the two modes clear: generate `.xlsx` spec artifacts into a Java repo, or start/continue Claude implementation from the generated spec, and that traceability from workbook formatting to Markdown/JSON artifacts is inspectable.
-11. Run Verify Local and Verify Remote on a safe scratch ticket if available. Confirm local asks for project, branch, environment, and before-fix vs after-fix mode; confirm remote asks for project, remote environment, and mode without offering a branch picker.
-12. Open Run Center. Inspect saved runs, logs, status labels, recovery actions, retry/resume affordances, and archive behavior.
-13. Open Recovery Center and Human Review Inbox. Confirm the highest-risk item is easy to identify.
-14. Open Kronos Doctor, Integration Manifest, Profile Manager, Prompt Manager, Prompt Smoke Tests, Prompt History, Trend Metrics, Agent Quality, and Aging Report. Confirm Agent Quality explains recurring failure themes, not just the numeric score.
+If GitLab and CI providers are safely configured:
+
+11. Insert the linked `[MR-N]` context and confirm review, pipeline, job, and test completeness is explicit.
+12. Insert `[CI-TICKET-KEY]` and confirm Jenkins and SonarQube evidence clearly says which provider portions were fetched, partial, or unavailable.
+
+## Sessions View
+
+1. Confirm the managed work session shows ticket key, attached terminal state, provider bindings, monitoring state, last attempt, and latest result without showing terminal content.
+2. Focus the managed terminal from Sessions.
+3. Detach it and confirm the terminal remains open.
+4. Focus the intended terminal and explicitly reattach it.
+5. Pause monitoring and confirm provider polling stops for that work session.
+6. Resume monitoring and run **Poll Managed Providers** once.
+7. Open the work-session audit and confirm it shows context artifacts, hashes/completeness, provider transitions, and acknowledgements but no terminal transcript.
+8. Stop managing the work session and confirm the terminal remains open and usable.
+
+## Attention View
+
+1. Confirm provider failures, recoveries, partial reads, and monitoring blockers are grouped by ticket rather than scattered by provider.
+2. Open an attention item's provider page and confirm it points to the expected configured provider.
+3. Open the related ticket workspace from the same item.
+4. Insert fresh MR or CI context from the item when applicable; confirm the reference goes only to the explicitly attached terminal and is not submitted.
+5. Acknowledge the item and confirm acknowledgement changes only local Attention/audit state.
+6. Confirm ordinary unchanged polls do not create repeated attention noise.
+
+## Reload and Recovery
+
+1. With a managed session present, reload VS Code.
+2. Confirm the durable session and audit history remain.
+3. Confirm the live terminal is shown as detached after reload; Kronos must not restore it from a saved name or process ID.
+4. Explicitly reattach the focused terminal and confirm context insertion works again.
+5. Temporarily make one provider unavailable or use a safe invalid test configuration. Confirm the other providers remain usable, the result is marked partial/blocked, and no stale success is reported as current.
 
 ## Feedback Questions
 
-- What was the first moment where the UI felt unclear or unsafe?
-- Which panel best explained the next action, and which panel felt noisy?
-- Could you tell the difference between "agent finished" and "work is ready"?
-- Did evidence gates make the review safer, or did they feel like paperwork?
-- Were any buttons or commands too dangerous, ambiguous, or hard to recover from?
-- What information was missing before you would trust an overnight run?
-- Would you trust Spec Beanstalk to preserve important Excel formatting, or would you need to inspect the generated trace first?
-- What should be on the Dashboard but is currently buried elsewhere?
+- Was it always clear that you, not Kronos, owned the terminal and submission decision?
+- Could you move from a Jira ticket to the correct terminal in two obvious actions?
+- Did Work show enough context without becoming another dashboard of unrelated controls?
+- Could you distinguish attached, detached, paused, blocked, partial, and healthy session states?
+- Which provider transition deserves an interrupting notification, and which should remain quietly in Attention?
+- Was the audit sufficient to reconstruct what context was supplied without recording terminal content?
+- What information was missing before you would trust background monitoring during normal interactive work?
 
 ## Stop Conditions
 
-Stop the review and capture notes if any of these happen:
+Stop and record the exact action if:
 
-- A webview opens blank.
-- A command crashes the extension host.
-- A malformed ticket, MR, build, evidence row, or run record breaks a panel.
-- A destructive or publishing action does not clearly state what it will change.
-- A panel cannot explain what the operator should do next.
+- any inserted terminal text is submitted automatically;
+- Kronos launches a process or terminal;
+- a project command, test, build, scan, or deployment runs;
+- the current Git branch, worktree, index, commit history, or remote changes;
+- provider state changes;
+- terminal content appears in a local artifact or audit;
+- a context reference is inserted into a terminal other than the explicitly managed one;
+- a provider credential appears in UI, logs, context, or audit data;
+- stopping management closes or interrupts the terminal;
+- a malformed provider response or local record crashes a view.
 
 ## Signoff Bar
 
-This build is ready for broader feedback when:
+The terminal-first trial is ready for broader feedback when:
 
-- `npm run feedback:ready` passes.
-- `npm test` includes the webview DOM behavior checks for Board filtering, modal actions, comments, and action-panel payloads.
-- `npm run feedback:smoke` opens and checks rendered fixture content/action wiring for the dashboard, board, ticket detail, evidence gate, evidence handoff, run center, recovery center, human review inbox, doctor, prompt manager, queue planner, backlog triage, and Spec Beanstalk.
-- Dashboard, Board, Ticket Detail, Run Center, Evidence Gate, Recovery Center, Doctor, and Prompt Manager all open without runtime errors.
-- Setup Wizard, Integration Contracts, and MR Autopilot all open without runtime errors and explain whether automation is safe to continue.
-- Verify Local prompts for branch, environment, and reproduction/fix-confirmation mode before dispatch. Verify Remote prompts for remote environment and mode only; the branch is whatever is deployed in that environment.
-- Sonar scan/fix, Verify Develop, Verify TEST, and Verify Combined create managed worktrees rather than switching the main checkout.
-- Spec Beanstalk opens without runtime errors and clearly separates generate-only from start/continue Claude implementation.
-- A human reviewer can complete the smoke flow and provide feedback without reading implementation files.
+- only Work, Sessions, and Attention appear in the Kronos activity container;
+- a reviewer can complete the ticket-to-terminal-to-context journey without source-code knowledge;
+- every insertion is editable and non-submitting;
+- terminal focus, detach, reattach, pause, resume, audit, and stop-management behavior is clear;
+- meaningful MR/pipeline/CI changes reach Attention without duplicate unchanged noise;
+- context and audit records expose provenance and partial completeness without terminal contents or credentials;
+- the repository and all providers remain unchanged by Kronos throughout the review.

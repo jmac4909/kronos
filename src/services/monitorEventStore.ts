@@ -8,16 +8,14 @@ export type MonitorEventType =
   | 'session.created'
   | 'terminal.attached'
   | 'terminal.detached'
-  | 'terminal.command.completed'
   | 'context.inserted'
   | 'provider.transition'
+  | 'provider.baseline'
   | 'notification.shown'
   | 'notification.acknowledged'
-  | 'git.observed'
-  | 'decision.recorded'
-  | 'approval.recorded';
+  | 'decision.recorded';
 
-export type MonitorEventSource = 'operator' | 'terminal' | 'jira' | 'gitlab' | 'jenkins' | 'sonar' | 'kronos';
+export type MonitorEventSource = 'operator' | 'jira' | 'gitlab' | 'jenkins' | 'sonar' | 'kronos';
 export type MonitorEventMetadataValue = string | number | boolean | null;
 
 export interface MonitorEventSubject {
@@ -98,18 +96,15 @@ const EVENT_TYPES = new Set<MonitorEventType>([
   'session.created',
   'terminal.attached',
   'terminal.detached',
-  'terminal.command.completed',
   'context.inserted',
   'provider.transition',
+  'provider.baseline',
   'notification.shown',
   'notification.acknowledged',
-  'git.observed',
   'decision.recorded',
-  'approval.recorded',
 ]);
 const EVENT_SOURCES = new Set<MonitorEventSource>([
   'operator',
-  'terminal',
   'jira',
   'gitlab',
   'jenkins',

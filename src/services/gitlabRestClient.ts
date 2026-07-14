@@ -45,6 +45,10 @@ export interface GitLabMergeRequestContextOptions extends GitLabRestRequestOptio
   includeTestReport?: boolean;
 }
 
+export interface GitLabMergeRequestMonitorOptions extends GitLabRestRequestOptions {
+  includeReview?: boolean;
+}
+
 export interface GitLabMergeRequestContextSnapshot {
   mr: unknown;
   notes: unknown[];
@@ -71,6 +75,9 @@ export interface GitLabMergeRequestContextSnapshot {
 
 export interface GitLabMergeRequestMonitorSnapshot {
   mr: unknown;
+  notes: unknown[];
+  discussions: unknown[];
+  approvals?: unknown;
   pipelines: unknown[];
   pipeline?: unknown;
   jobs: unknown[];
@@ -78,6 +85,9 @@ export interface GitLabMergeRequestMonitorSnapshot {
   fetchedAt: string;
   responseBytes: number;
   completeness: {
+    notesComplete: boolean;
+    discussionsComplete: boolean;
+    approvalsComplete: boolean;
     pipelinesComplete: boolean;
     jobsComplete: boolean;
     testsComplete: boolean;
@@ -153,7 +163,7 @@ export class GitLabRestClient {
 
   async mergeRequestMonitor(
     target: GitLabMergeRequestTarget,
-    options: GitLabRestRequestOptions = {},
+    options: GitLabMergeRequestMonitorOptions = {},
   ): Promise<GitLabMergeRequestMonitorSnapshot> {
     const budget = new GitLabResponseBudget(
       boundedInteger(options.maxTotalBytes, this.maxTotalBytes, 1024, 250 * 1024 * 1024),
@@ -213,19 +223,53 @@ export class GitLabRestClient {
       if (testReportSummary === undefined) { testsComplete = false; }
     }
 
+    let notes: unknown[] = [];
+    let discussions: unknown[] = [];
+    let notesComplete = false;
+    let discussionsComplete = false;
+    let approvals: unknown;
+    if (options.includeReview === true) {
+      // Lifecycle reads happen after pipeline reads so bounded review history
+      // can never consume the budget needed by pipeline monitoring.
+      const notesResult = await collect(
+        `${mergeRequestPath(target)}/notes`,
+        `GitLab MR !${target.iid} notes`,
+        { sort: 'asc', order_by: 'updated_at' },
+      );
+      const discussionsResult = await collect(
+        `${mergeRequestPath(target)}/discussions`,
+        `GitLab MR !${target.iid} discussions`,
+      );
+      warnings.push(...notesResult.warnings, ...discussionsResult.warnings);
+      notes = notesResult.values;
+      discussions = discussionsResult.values;
+      notesComplete = notesResult.complete;
+      discussionsComplete = discussionsResult.complete;
+      approvals = await optional(
+        `${mergeRequestPath(target)}/approvals`,
+        `GitLab MR !${target.iid} approvals`,
+      );
+    }
+
     const snapshot: GitLabMergeRequestMonitorSnapshot = {
       mr,
+      notes,
+      discussions,
       pipelines: pipelinesResult.values,
       jobs,
       fetchedAt: new Date().toISOString(),
       responseBytes: budget.usedBytes,
       completeness: {
+        notesComplete,
+        discussionsComplete,
+        approvalsComplete: approvals !== undefined,
         pipelinesComplete: pipelinesResult.complete,
         jobsComplete,
         testsComplete,
         warnings: uniqueStrings(warnings),
       },
     };
+    if (approvals !== undefined) { snapshot.approvals = approvals; }
     if (pipeline !== undefined) { snapshot.pipeline = pipeline; }
     if (testReportSummary !== undefined) { snapshot.testReportSummary = testReportSummary; }
     return snapshot;

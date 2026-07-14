@@ -30,6 +30,10 @@ export type JiraHttpTransport = (request: JiraHttpRequest) => Promise<JiraHttpRe
 export interface JiraRestClientOptions {
   env?: NodeJS.ProcessEnv;
   transport?: JiraHttpTransport;
+  maxWorkListPages?: number;
+  workListPageSize?: number;
+  maxWorkListIssues?: number;
+  maxTotalWorkListBytes?: number;
   maxCommentPages?: number;
   commentsPerPage?: number;
   maxResponseBytes?: number;
@@ -54,6 +58,19 @@ export interface JiraTicketSnapshot {
   attachmentFetchCount: number;
   attachmentResponseBytes: number;
   commentTotal?: number;
+  warnings: string[];
+}
+
+export type JiraWorkListJqlSource = 'JIRA_JQL' | 'default';
+
+export interface JiraWorkListSnapshot {
+  issues: unknown[];
+  fetchedAt: string;
+  jql: string;
+  jqlSource: JiraWorkListJqlSource;
+  complete: boolean;
+  pageCount: number;
+  responseBytes: number;
   warnings: string[];
 }
 
@@ -94,10 +111,28 @@ interface JiraAttachmentFetchResult {
 }
 
 const DEFAULT_TIMEOUT_MS = 15000;
+const DEFAULT_MAX_WORK_LIST_PAGES = 10;
+const DEFAULT_WORK_LIST_PAGE_SIZE = 50;
+const DEFAULT_MAX_WORK_LIST_ISSUES = 500;
+const DEFAULT_MAX_TOTAL_WORK_LIST_BYTES = 10 * 1024 * 1024;
 const DEFAULT_MAX_COMMENT_PAGES = 100;
 const DEFAULT_COMMENTS_PER_PAGE = 100;
 const DEFAULT_MAX_RESPONSE_BYTES = 5 * 1024 * 1024;
 const DEFAULT_MAX_TOTAL_COMMENT_BYTES = 20 * 1024 * 1024;
+const MAX_JIRA_JQL_LENGTH = 16 * 1024;
+const MAX_JIRA_NEXT_PAGE_TOKEN_LENGTH = 16 * 1024;
+const DEFAULT_JIRA_WORK_LIST_JQL = 'assignee = currentUser() AND resolution = unresolved ORDER BY updated DESC';
+const JIRA_WORK_LIST_FIELDS = [
+  'summary',
+  'issuetype',
+  'priority',
+  'status',
+  'updated',
+  'labels',
+  'project',
+  'description',
+  'attachment',
+] as const;
 const MAX_ATTACHMENT_FETCHES = 10;
 const MAX_ATTACHMENT_BYTES = 256 * 1024;
 const MAX_TOTAL_ATTACHMENT_BYTES = 1024 * 1024;
@@ -118,6 +153,10 @@ const UNSAFE_TEXT_CONTROL_PATTERN = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u00
 export class JiraRestClient {
   private readonly env: NodeJS.ProcessEnv;
   private readonly transport: JiraHttpTransport;
+  private readonly maxWorkListPages: number;
+  private readonly workListPageSize: number;
+  private readonly maxWorkListIssues: number;
+  private readonly maxTotalWorkListBytes: number;
   private readonly maxCommentPages: number;
   private readonly commentsPerPage: number;
   private readonly maxResponseBytes: number;
@@ -126,6 +165,15 @@ export class JiraRestClient {
   constructor(options: JiraRestClientOptions = {}) {
     this.env = options.env || process.env;
     this.transport = options.transport || defaultJiraTransport;
+    this.maxWorkListPages = boundedInteger(options.maxWorkListPages, DEFAULT_MAX_WORK_LIST_PAGES, 1, 100);
+    this.workListPageSize = boundedInteger(options.workListPageSize, DEFAULT_WORK_LIST_PAGE_SIZE, 1, 100);
+    this.maxWorkListIssues = boundedInteger(options.maxWorkListIssues, DEFAULT_MAX_WORK_LIST_ISSUES, 1, 5000);
+    this.maxTotalWorkListBytes = boundedInteger(
+      options.maxTotalWorkListBytes,
+      DEFAULT_MAX_TOTAL_WORK_LIST_BYTES,
+      1024,
+      250 * 1024 * 1024,
+    );
     this.maxCommentPages = boundedInteger(options.maxCommentPages, DEFAULT_MAX_COMMENT_PAGES, 1, 1000);
     this.commentsPerPage = boundedInteger(options.commentsPerPage, DEFAULT_COMMENTS_PER_PAGE, 1, 100);
     this.maxResponseBytes = boundedInteger(
@@ -140,6 +188,127 @@ export class JiraRestClient {
       1024,
       250 * 1024 * 1024,
     );
+  }
+
+  /**
+   * Reads the Jira Work list through Jira Cloud's enhanced JQL search API.
+   * This method only issues credential-pinned GET requests and never mutates Jira.
+   */
+  async searchWorkList(options: JiraRestRequestOptions = {}): Promise<JiraWorkListSnapshot> {
+    const config = resolveJiraRestConfig(this.env);
+    const query = resolveJiraWorkListJql(this.env);
+    const issues: unknown[] = [];
+    const warnings: string[] = [];
+    const seenPageTokens = new Set<string>();
+    let pageCount = 0;
+    let responseBytes = 0;
+    let nextPageToken: string | undefined;
+    let complete = false;
+    let stoppedWithWarning = false;
+
+    while (pageCount < this.maxWorkListPages && issues.length < this.maxWorkListIssues) {
+      const pageNumber = pageCount + 1;
+      const remainingIssues = this.maxWorkListIssues - issues.length;
+      const remainingBytes = this.maxTotalWorkListBytes - responseBytes;
+      if (remainingBytes <= 0) {
+        pushUniqueWarning(
+          warnings,
+          `Jira Work search stopped at the ${this.maxTotalWorkListBytes}-byte cumulative safety limit.`,
+        );
+        stoppedWithWarning = true;
+        break;
+      }
+      const requestQuery: Record<string, string | number> = {
+        jql: query.jql,
+        maxResults: Math.min(this.workListPageSize, remainingIssues),
+        fields: JIRA_WORK_LIST_FIELDS.join(','),
+        fieldsByKeys: 'true',
+        failFast: 'false',
+      };
+      if (nextPageToken) { requestQuery['nextPageToken'] = nextPageToken; }
+
+      let response: Awaited<ReturnType<JiraRestClient['requestJson']>>;
+      try {
+        response = await this.requestJson(
+          config,
+          '/rest/api/3/search/jql',
+          `Jira Work search page ${pageNumber}`,
+          requestQuery,
+          options,
+          Math.min(this.maxResponseBytes, remainingBytes),
+        );
+      } catch (error: unknown) {
+        if (pageCount === 0) { throw error; }
+        const reason = error instanceof JiraResponseLimitError
+          ? ` because responses reached the ${this.maxTotalWorkListBytes}-byte cumulative safety limit`
+          : '';
+        pushUniqueWarning(
+          warnings,
+          `Jira Work search page ${pageNumber} could not be fetched${reason}; ${issues.length} previously fetched issue${issues.length === 1 ? '' : 's'} were retained.`,
+        );
+        stoppedWithWarning = true;
+        break;
+      }
+
+      responseBytes += response.bodyBytes;
+      const page = isRecord(response.value) ? response.value : undefined;
+      if (!page) {
+        pushUniqueWarning(warnings, `Jira Work search page ${pageNumber} returned an invalid pagination object.`);
+        stoppedWithWarning = true;
+        break;
+      }
+      const pageIssues = arrayFromUnknown(page['issues']);
+      const retainedIssues = pageIssues.slice(0, remainingIssues);
+      issues.push(...retainedIssues);
+      pageCount = pageNumber;
+      for (const warning of jiraSearchWarnings(page)) { pushUniqueWarning(warnings, warning); }
+
+      if (pageIssues.length > retainedIssues.length) {
+        pushUniqueWarning(warnings, `Jira Work search stopped at the safety limit of ${this.maxWorkListIssues} issues.`);
+        stoppedWithWarning = true;
+        break;
+      }
+      if (page['isLast'] === true) {
+        complete = true;
+        break;
+      }
+
+      const candidateToken = jiraNextPageToken(page['nextPageToken']);
+      if (!candidateToken) {
+        pushUniqueWarning(
+          warnings,
+          `Jira Work search page ${pageNumber} was not marked final and did not provide a safe nextPageToken.`,
+        );
+        stoppedWithWarning = true;
+        break;
+      }
+      if (seenPageTokens.has(candidateToken)) {
+        pushUniqueWarning(warnings, `Jira Work search stopped at page ${pageNumber} because pagination repeated a page token.`);
+        stoppedWithWarning = true;
+        break;
+      }
+      seenPageTokens.add(candidateToken);
+      nextPageToken = candidateToken;
+    }
+
+    if (!complete && !stoppedWithWarning) {
+      if (pageCount >= this.maxWorkListPages) {
+        pushUniqueWarning(warnings, `Jira Work search stopped at the safety limit of ${this.maxWorkListPages} pages.`);
+      } else if (issues.length >= this.maxWorkListIssues) {
+        pushUniqueWarning(warnings, `Jira Work search stopped at the safety limit of ${this.maxWorkListIssues} issues.`);
+      }
+    }
+
+    return {
+      issues,
+      fetchedAt: new Date().toISOString(),
+      jql: query.jql,
+      jqlSource: query.source,
+      complete,
+      pageCount,
+      responseBytes,
+      warnings,
+    };
   }
 
   async ticketContext(
@@ -350,7 +519,7 @@ export class JiraRestClient {
           config,
           `/rest/api/3/issue/${encodeURIComponent(ticketKey)}/comment`,
           `Jira comments for ${ticketKey} page ${pageNumber}`,
-          { startAt, maxResults: this.commentsPerPage, orderBy: 'created' },
+          { startAt, maxResults: this.commentsPerPage, orderBy: '-created' },
           options,
         );
       } catch {
@@ -392,7 +561,15 @@ export class JiraRestClient {
     if (!complete) {
       warnings.push(`Jira comment collection stopped at the safety limit of ${this.maxCommentPages} pages.`);
     }
-    const result: JiraCommentCollection = { comments, complete, pageCount, responseBytes, warnings };
+    // Jira pages newest-first so a bounded/partial read retains recent operator
+    // context. Reverse only the retained set for natural chronological prompts.
+    const result: JiraCommentCollection = {
+      comments: [...comments].reverse(),
+      complete,
+      pageCount,
+      responseBytes,
+      warnings,
+    };
     if (total !== undefined) {
       result.total = total;
     }
@@ -405,13 +582,15 @@ export class JiraRestClient {
     label: string,
     query: Record<string, string | number>,
     options: JiraRestRequestOptions,
+    maxResponseBytes = this.maxResponseBytes,
   ): Promise<{ value: unknown; headers: Record<string, string | string[] | undefined>; bodyBytes: number }> {
+    const responseLimitBytes = Math.min(this.maxResponseBytes, Math.max(1, Math.floor(maxResponseBytes)));
     const request: JiraHttpRequest = {
       method: 'GET',
       url: buildCredentialedJiraUrl(config.baseUrl, apiPath, query),
       headers: jiraHeaders(config),
       timeoutMs: boundedInteger(options.timeoutMs, DEFAULT_TIMEOUT_MS, 250, 120000),
-      maxResponseBytes: this.maxResponseBytes,
+      maxResponseBytes: responseLimitBytes,
       responseType: 'text',
     };
     let response: JiraHttpResponse;
@@ -426,8 +605,8 @@ export class JiraRestClient {
       );
     }
     const body = responseBodyBuffer(response.body);
-    if (body.length > this.maxResponseBytes) {
-      throw new JiraRestError(`Jira REST ${label} exceeded the ${this.maxResponseBytes}-byte response safety limit.`);
+    if (body.length > responseLimitBytes) {
+      throw new JiraResponseLimitError(`Jira REST ${label} exceeded the ${responseLimitBytes}-byte response safety limit.`);
     }
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw jiraHttpError(label, response.statusCode);
@@ -470,6 +649,20 @@ export function resolveJiraRestConfig(env: NodeJS.ProcessEnv = process.env): Jir
     throw new JiraRestError('Jira REST configuration is incomplete. Values are not displayed.');
   }
   return { baseUrl, email, apiToken };
+}
+
+function resolveJiraWorkListJql(
+  env: NodeJS.ProcessEnv,
+): { jql: string; source: JiraWorkListJqlSource } {
+  const configured = env['JIRA_JQL']?.trim();
+  if (!configured) { return { jql: DEFAULT_JIRA_WORK_LIST_JQL, source: 'default' }; }
+  if (configured.length > MAX_JIRA_JQL_LENGTH) {
+    throw new JiraRestError(`JIRA_JQL exceeds the ${MAX_JIRA_JQL_LENGTH}-character safety limit.`);
+  }
+  if (/\u0000/.test(configured)) {
+    throw new JiraRestError('JIRA_JQL contains an unsafe control character.');
+  }
+  return { jql: configured, source: 'JIRA_JQL' };
 }
 
 export function normalizeJiraBaseUrl(value: string | undefined): string | undefined {
@@ -589,6 +782,37 @@ function nonNegativeInteger(value: unknown): number | undefined {
 function boundedInteger(value: number | undefined, fallback: number, minimum: number, maximum: number): number {
   if (value === undefined || !Number.isFinite(value)) { return fallback; }
   return Math.min(maximum, Math.max(minimum, Math.floor(value)));
+}
+
+function jiraNextPageToken(value: unknown): string | undefined {
+  if (typeof value !== 'string') { return undefined; }
+  const token = value.trim();
+  if (!token || token.length > MAX_JIRA_NEXT_PAGE_TOKEN_LENGTH || /[\u0000-\u001F\u007F]/.test(token)) {
+    return undefined;
+  }
+  return token;
+}
+
+function jiraSearchWarnings(page: Record<string, unknown>): string[] {
+  const rawWarnings = [
+    ...arrayFromUnknown(page['warningMessages']),
+    ...arrayFromUnknown(page['errorMessages']),
+  ];
+  const warnings = rawWarnings
+    .slice(0, 20)
+    .map(value => typeof value === 'string'
+      ? value.replace(/[\u0000-\u001F\u007F]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 1000)
+      : '')
+    .filter(Boolean)
+    .map(value => `Jira Work search warning: ${value}`);
+  if (rawWarnings.length > 20) {
+    warnings.push(`Jira Work search returned ${rawWarnings.length - 20} additional warning messages that were omitted.`);
+  }
+  return warnings;
+}
+
+function pushUniqueWarning(warnings: string[], warning: string): void {
+  if (!warnings.includes(warning)) { warnings.push(warning); }
 }
 
 function normalizedAttachmentId(value: unknown): string | undefined {

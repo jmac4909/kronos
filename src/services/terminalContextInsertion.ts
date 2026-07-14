@@ -2,7 +2,6 @@ import * as path from 'path';
 import { normalizeJiraIssueKey } from './jiraRestClient';
 
 export interface TerminalContextInsertionTarget {
-  show(preserveFocus?: boolean): void;
   sendText(text: string, shouldExecute?: boolean): void;
 }
 
@@ -43,7 +42,6 @@ export function insertTerminalContextReference(
   reference: string,
 ): void {
   assertSafeTerminalContextReference(reference);
-  terminal.show(false);
   terminal.sendText(reference, false);
 }
 

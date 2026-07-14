@@ -2,6 +2,7 @@ node_modules/
 out/
 *.vsix
 .claude/
+.kronos/
 .vscode-test/
 __pycache__/
 *.pyc

@@ -9,7 +9,7 @@ export interface JenkinsRestRequestOptions {
 }
 
 export interface JenkinsHttpRequest {
-  method: 'GET' | 'POST';
+  method: 'GET';
   url: string;
   headers: Record<string, string>;
   timeoutMs: number;
@@ -40,12 +40,6 @@ export interface JenkinsBuildSummary {
   timestamp?: number;
   duration?: number;
   estimatedDuration?: number;
-}
-
-export interface JenkinsBuildTriggerResult {
-  queued: boolean;
-  statusCode: number;
-  queueUrl?: string;
 }
 
 export interface JenkinsBuildCause {
@@ -184,7 +178,7 @@ export class JenkinsRestClient {
     const normalizedJobUrl = normalizeJenkinsJobUrl(jobUrl, resolveJenkinsRestConfig(this.env).baseUrl);
     if (!normalizedJobUrl) { return null; }
     const tree = 'lastBuild[number,result,building,url,timestamp,duration,estimatedDuration],lastCompletedBuild[number,result,building,url,timestamp,duration,estimatedDuration],number,result,building,url,timestamp,duration,estimatedDuration';
-    const response = await this.requestJson(normalizedJobUrl, 'GET', 'Jenkins build status', { tree }, options);
+    const response = await this.requestJson(normalizedJobUrl, 'Jenkins build status', { tree }, options);
     const record = isRecord(response.value) ? response.value : {};
     const candidate = firstBuildRecord(record['lastBuild'], record['lastCompletedBuild'], record);
     return candidate ? normalizeJenkinsBuild(candidate, normalizedJobUrl) : null;
@@ -198,7 +192,6 @@ export class JenkinsRestClient {
     }
     const response = await this.requestJson(
       normalizedInputUrl,
-      'GET',
       'Jenkins build context',
       { tree: JOB_OR_BUILD_TREE },
       options,
@@ -275,35 +268,6 @@ export class JenkinsRestClient {
     return context;
   }
 
-  async triggerBuild(
-    jobUrl: string,
-    parameters: Record<string, string | number | boolean> = {},
-    options: JenkinsRestRequestOptions = {},
-  ): Promise<JenkinsBuildTriggerResult> {
-    const normalizedJobUrl = normalizeJenkinsJobUrl(jobUrl, resolveJenkinsRestConfig(this.env).baseUrl);
-    if (!normalizedJobUrl) {
-      throw new JenkinsRestError('Jenkins job URL is missing or invalid.');
-    }
-    const hasParameters = Object.keys(parameters).length > 0;
-    const response = await this.requestRaw(
-      normalizedJobUrl,
-      'POST',
-      hasParameters ? 'Jenkins buildWithParameters trigger' : 'Jenkins build trigger',
-      hasParameters ? parameters : {},
-      options,
-      hasParameters ? 'buildWithParameters' : 'build',
-    );
-    if (response.statusCode < 200 || response.statusCode >= 400) {
-      throw jenkinsHttpError('Jenkins build trigger', response.statusCode);
-    }
-    const location = sanitizeJenkinsReturnedUrl(headerString(response.headers, 'location'), safeUrlOrigin(normalizedJobUrl));
-    return {
-      queued: true,
-      statusCode: response.statusCode,
-      ...(location ? { queueUrl: location } : {}),
-    };
-  }
-
   private async requestOptionalJson(
     resourceUrl: string,
     label: string,
@@ -312,7 +276,7 @@ export class JenkinsRestClient {
     suffix: string,
   ): Promise<OptionalJenkinsJsonResult> {
     try {
-      const response = await this.requestRaw(resourceUrl, 'GET', label, query, options, suffix);
+      const response = await this.requestRaw(resourceUrl, label, query, options, suffix);
       if (response.statusCode === 404) {
         return { status: 'unavailable', warning: `${label} is unavailable on this Jenkins build.` };
       }
@@ -327,13 +291,12 @@ export class JenkinsRestClient {
 
   private async requestJson(
     jobUrl: string,
-    method: JenkinsHttpRequest['method'],
     label: string,
     query: Record<string, string | number | boolean> = {},
     options: JenkinsRestRequestOptions = {},
     suffix = 'api/json',
   ): Promise<{ value: unknown; headers: Record<string, string | string[] | undefined> }> {
-    const response = await this.requestRaw(jobUrl, method, label, query, options, suffix);
+    const response = await this.requestRaw(jobUrl, label, query, options, suffix);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw jenkinsHttpError(label, response.statusCode);
     }
@@ -345,7 +308,6 @@ export class JenkinsRestClient {
 
   private async requestRaw(
     jobUrl: string,
-    method: JenkinsHttpRequest['method'],
     label: string,
     query: Record<string, string | number | boolean> = {},
     options: JenkinsRestRequestOptions = {},
@@ -357,7 +319,7 @@ export class JenkinsRestClient {
     let response: JenkinsHttpResponse;
     try {
       response = await this.transport({
-        method,
+        method: 'GET',
         url,
         timeoutMs: boundedInteger(options.timeoutMs, DEFAULT_TIMEOUT_MS, 250, 120000),
         maxResponseBytes: this.maxResponseBytes,
@@ -790,12 +752,6 @@ function firstNonEmpty(...values: Array<string | undefined>): string | undefined
     if (trimmed) { return trimmed; }
   }
   return undefined;
-}
-
-function headerString(headers: Record<string, string | string[] | undefined>, name: string): string | undefined {
-  const raw = headers[name] || headers[name.toLowerCase()] || headers[name.toUpperCase()];
-  const value = Array.isArray(raw) ? raw[0] : raw;
-  return optionalTrimmedStringFromUnknown(value);
 }
 
 function looksLikeBuildRecord(record: Record<string, unknown>): boolean {
