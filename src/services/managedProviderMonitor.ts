@@ -784,13 +784,15 @@ function initialGitLabMergeRequestNotice(
   artifactPath: string,
   providerUrl: string | undefined,
 ): ManagedProviderNotice | null {
-  if (!gitLabMergeRequestNeedsAttention(digest)) { return null; }
+  const needsAttention = gitLabMergeRequestNeedsAttention(digest);
   const reasons: string[] = [];
   if (digest.changesRequested === true) { reasons.push('changes requested'); }
   if (digest.discussionsComplete && digest.unresolvedDiscussions.count > 0) {
     reasons.push(`${digest.unresolvedDiscussions.count} unresolved discussion${digest.unresolvedDiscussions.count === 1 ? '' : 's'}`);
   }
-  const summary = `${session.ticketKey} MR !${digest.iid} needs attention: ${reasons.join('; ')}.`;
+  const summary = needsAttention
+    ? `${session.ticketKey} MR !${digest.iid} needs attention: ${reasons.join('; ')}.`
+    : `${session.ticketKey} MR !${digest.iid} first observed (${mergeRequestEventState(digest)}).`;
   const event = appendTransitionOnce({
     session,
     source: 'gitlab',
@@ -799,11 +801,13 @@ function initialGitLabMergeRequestNotice(
     state: mergeRequestEventState(digest),
     fingerprint: digest.fingerprint,
     artifactPath,
-    transitionKey: `initial-mr-attention:${digest.fingerprint}`,
-    metadata: mergeRequestMetadata(digest, 'initial_mr_attention'),
+    transitionKey: needsAttention
+      ? `initial-mr-attention:${digest.fingerprint}`
+      : `initial-mr-observed:${digest.fingerprint}`,
+    metadata: mergeRequestMetadata(digest, needsAttention ? 'initial_mr_attention' : 'initial_mr_observed'),
   });
   return event
-    ? notice(event, session, 'warning', providerUrl, 'kronos.insertGitLabContext')
+    ? notice(event, session, needsAttention ? 'warning' : 'information', providerUrl, 'kronos.insertGitLabContext')
     : null;
 }
 
@@ -1051,7 +1055,7 @@ function mergeRequestTransitionSummary(
 
 function mergeRequestMetadata(
   digest: GitLabMergeRequestDigest,
-  transitionKind: GitLabMergeRequestTransitionKind | 'initial_mr_attention' | 'baseline',
+  transitionKind: GitLabMergeRequestTransitionKind | 'initial_mr_attention' | 'initial_mr_observed' | 'baseline',
 ): Record<string, string | number | boolean | null> {
   return {
     transitionKind,

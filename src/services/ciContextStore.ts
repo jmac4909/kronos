@@ -2,6 +2,7 @@ import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import type { JenkinsBuildContext } from './jenkinsRestClient';
+import { redactSensitiveTokens } from './sensitiveText';
 import type { SonarBranchContext } from './sonarRestClient';
 import { KRONOS_DIR } from './stateStore';
 
@@ -211,12 +212,7 @@ function sanitizeProviderValue(value: unknown, tracker: { remainingChars: number
 }
 
 function redactSecrets(value: string): string {
-  return value
-    .replace(/-----BEGIN [^-\r\n]*(?:PRIVATE KEY|SECRET)[^-\r\n]*-----[\s\S]*?-----END [^-\r\n]*(?:PRIVATE KEY|SECRET)[^-\r\n]*-----/gi, '[REDACTED PRIVATE MATERIAL]')
-    .replace(/\b(?:Bearer|Basic)\s+[A-Za-z0-9+/_=.-]{8,}/gi, '[REDACTED AUTHORIZATION]')
-    .replace(/\b(?:glpat-|sqp_)[A-Za-z0-9_-]{8,}\b/gi, '[REDACTED PROVIDER TOKEN]')
-    .replace(/([?&](?:token|access[_-]?token|api[_-]?key|private[_-]?token|password|secret)=)[^&#\s]+/gi, '$1[REDACTED]')
-    .replace(/((?:authorization|token|private[-_ ]?token|access[-_ ]?token|api[-_ ]?key|client[-_ ]?secret|password|passwd)\s*[:=]\s*)[^\s,;]+/gi, '$1[REDACTED]');
+  return redactSensitiveTokens(value);
 }
 
 function safeSingleLine(value: string, maxLength: number): string {

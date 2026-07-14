@@ -4,6 +4,7 @@ import * as path from 'path';
 import { safeFileStem } from './fileNames';
 import { unknownErrorMessage } from './errorUtils';
 import { isRecord } from './records';
+import { redactSensitiveTokens } from './sensitiveText';
 import { KRONOS_DIR } from './stateStore';
 
 export type WorkSessionStatus = 'active' | 'closed';
@@ -872,13 +873,7 @@ function redactSensitiveText(value: string): string {
       return `[REDACTED URL]${trailing}`;
     }
   });
-  return sanitizedUrls
-    .replace(/-----BEGIN [^-\r\n]*(?:PRIVATE KEY|SECRET)[^-\r\n]*-----[\s\S]*?-----END [^-\r\n]*(?:PRIVATE KEY|SECRET)[^-\r\n]*-----/gi, '[REDACTED PRIVATE MATERIAL]')
-    .replace(/\b(?:Bearer|Basic)\s+[A-Za-z0-9+/_=.-]{8,}/gi, '[REDACTED AUTHORIZATION]')
-    .replace(/\b(?:glpat-|sqp_|github_pat_|gh[pousr]_|sk-|xox[baprs]-)[A-Za-z0-9_-]{8,}\b/gi, '[REDACTED PROVIDER TOKEN]')
-    .replace(/\bAKIA[0-9A-Z]{16}\b/g, '[REDACTED AWS ACCESS KEY]')
-    .replace(/\beyJ[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{6,}\b/g, '[REDACTED JWT]')
-    .replace(/((?:authorization|token|private[-_ ]?token|access[-_ ]?token|api[-_ ]?key|client[-_ ]?secret|password|passwd|secret|credential)\s*[:=]\s*)[^\s,;]+/gi, '$1[REDACTED]');
+  return redactSensitiveTokens(sanitizedUrls);
 }
 
 function optionalSingleLine(value: unknown, label: string, maxLength: number): string | undefined {

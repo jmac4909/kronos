@@ -6,6 +6,7 @@ import {
   type JiraArtifactValue,
   type JiraUnprunedValue,
 } from './jiraValuePruning';
+import { redactSensitiveTokens } from './sensitiveText';
 
 const MAX_CONTEXT_TEXT_CHARS = 1024 * 1024;
 const MAX_FIELD_TEXT_CHARS = 256 * 1024;
@@ -965,16 +966,7 @@ function redactProviderText(value: string, tracker?: JiraValueNormalizationTrack
     }
     return `${sanitizedProviderUrlInText(candidate) || '[REDACTED URL]'}${trailing}`;
   });
-  const sanitized = sanitizedUrls
-    .replace(/-----BEGIN [^-\r\n]*(?:PRIVATE KEY|SECRET)[^-\r\n]*-----[\s\S]*?-----END [^-\r\n]*(?:PRIVATE KEY|SECRET)[^-\r\n]*-----/gi, '[REDACTED PRIVATE MATERIAL]')
-    .replace(/\b(?:Bearer|Basic)\s+[A-Za-z0-9+/_=.-]{8,}/gi, '[REDACTED AUTHORIZATION]')
-    .replace(/\b(?:glpat-|sqp_|ATATT|github_pat_|gh[pousr]_|sk-|xox[baprs]-)[A-Za-z0-9_-]{8,}\b/gi, '[REDACTED PROVIDER TOKEN]')
-    .replace(/\bAKIA[0-9A-Z]{16}\b/g, '[REDACTED AWS ACCESS KEY]')
-    .replace(/\beyJ[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{6,}\b/g, '[REDACTED JWT]')
-    .replace(/([?&](?:token|access[_-]?token|api[_-]?key|private[_-]?token|password|secret)=)[^&#\s]+/gi, '$1[REDACTED]')
-    .replace(/((?:authorization|token|private[-_ ]?token|access[-_ ]?token|api[-_ ]?key|client[-_ ]?secret|password|passwd|secret|credential)\s*[:=]\s*)(?!\[REDACTED(?:\s|\]))(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\s,;]+)/gi, '$1[REDACTED]')
-    .replace(/(["']?[A-Z0-9_.-]*(?:TOKEN|SECRET|PASSWORD|PASSWD|API_KEY|PRIVATE_KEY|CLIENT_SECRET|CREDENTIAL)[A-Z0-9_.-]*["']?\s*[:=]\s*)(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\s,;]+)/g, '$1[REDACTED]')
-    .replace(/(^\s*[+\- ]?\s*(?:export\s+)?(?:(?:const|let|var|readonly|final|def|string)\s+)?[A-Z0-9_.-]*(?:TOKEN|SECRET|PASSWORD|PASSWD|API_KEY|PRIVATE_KEY|CLIENT_SECRET|CREDENTIAL)[A-Z0-9_.-]*\s*[:=]\s*).+$/gm, '$1[REDACTED]')
+  const sanitized = redactSensitiveTokens(sanitizedUrls)
     .replace(/\u0000/g, '')
     .replace(/[\u0001-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g, '');
   if (sanitized.length > MAX_CONTEXT_TEXT_CHARS && tracker) { tracker.truncated = true; }

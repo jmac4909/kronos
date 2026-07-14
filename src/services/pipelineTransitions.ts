@@ -1,6 +1,7 @@
 import * as crypto from 'crypto';
 import type { GitLabMergeRequestContextSnapshot, GitLabMergeRequestMonitorSnapshot } from './gitlabRestClient';
 import { arrayFromUnknown, isRecord, optionalFiniteNumberFromUnknown, optionalTrimmedStringFromUnknown } from './records';
+import { redactSensitiveTokens } from './sensitiveText';
 
 export type GitLabPipelineTransitionKind =
   | 'new_pipeline'
@@ -518,21 +519,10 @@ function boundedString(value: unknown, maxLength: number): string {
   const text = typeof value === 'number' && Number.isFinite(value)
     ? String(value)
     : optionalTrimmedStringFromUnknown(value) || '';
-  return redactSensitiveText(text)
+  return redactSensitiveTokens(text)
     .replace(/[\u0000-\u001f\u007f\u2028\u2029]+/g, ' ')
     .trim()
     .slice(0, maxLength);
-}
-
-function redactSensitiveText(value: string): string {
-  return value
-    .replace(/-----BEGIN [^-\r\n]*(?:PRIVATE KEY|SECRET)[^-\r\n]*-----[\s\S]*?-----END [^-\r\n]*(?:PRIVATE KEY|SECRET)[^-\r\n]*-----/gi, '[REDACTED PRIVATE MATERIAL]')
-    .replace(/\b(?:Bearer|Basic)\s+[A-Za-z0-9+/_=.-]{8,}/gi, '[REDACTED AUTHORIZATION]')
-    .replace(/\b(?:glpat-|sqp_|github_pat_|gh[pousr]_|sk-|xox[baprs]-)[A-Za-z0-9_-]{8,}\b/gi, '[REDACTED PROVIDER TOKEN]')
-    .replace(/\bAKIA[0-9A-Z]{16}\b/g, '[REDACTED AWS ACCESS KEY]')
-    .replace(/\beyJ[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{6,}\b/g, '[REDACTED JWT]')
-    .replace(/([?&](?:token|access[_-]?token|api[_-]?key|private[_-]?token|password|secret|credential)=)[^&#\s]+/gi, '$1[REDACTED]')
-    .replace(/((?:authorization|token|private[-_ ]?token|access[-_ ]?token|api[-_ ]?key|client[-_ ]?secret|password|passwd|secret|credential)\s*[:=]\s*)[^\s,;]+/gi, '$1[REDACTED]');
 }
 
 function firstString(...values: unknown[]): string {

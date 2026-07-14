@@ -2,6 +2,7 @@ import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import { safeFileStem } from './fileNames';
+import { redactSensitiveTokens } from './sensitiveText';
 import { KRONOS_DIR } from './stateStore';
 
 export interface ProjectGitContextArtifact {
@@ -64,13 +65,7 @@ export function writeProjectGitContextArtifact(
 }
 
 function redactGitEvidence(value: string): string {
-  return value
-    .replace(/-----BEGIN [^-\r\n]*(?:PRIVATE KEY|SECRET)[^-\r\n]*-----[\s\S]*?-----END [^-\r\n]*(?:PRIVATE KEY|SECRET)[^-\r\n]*-----/gi, '[REDACTED PRIVATE MATERIAL]')
-    .replace(/\b(?:Bearer|Basic)\s+[A-Za-z0-9+/_=.-]{8,}/gi, '[REDACTED AUTHORIZATION]')
-    .replace(/\b(?:glpat-|sqp_|github_pat_|gh[pousr]_|sk-|xox[baprs]-)[A-Za-z0-9_-]{8,}\b/gi, '[REDACTED TOKEN]')
-    .replace(/([?&](?:token|access[_-]?token|api[_-]?key|private[_-]?token|password|secret)=)[^&#\s]+/gi, '$1[REDACTED]')
-    .replace(/((?:authorization|token|private[-_ ]?token|access[-_ ]?token|api[-_ ]?key|client[-_ ]?secret|password|passwd)\s*[:=]\s*)[^\s,;]+/gi, '$1[REDACTED]')
-    .replace(/(^\s*[+\- ]?\s*(?:export\s+)?(?:(?:const|let|var|readonly|final|def|string)\s+)?[A-Z0-9_.-]*(?:TOKEN|SECRET|PASSWORD|PASSWD|API_KEY|PRIVATE_KEY|CLIENT_SECRET|CREDENTIAL)[A-Z0-9_.-]*\s*[:=]\s*).+$/gim, '$1[REDACTED]');
+  return redactSensitiveTokens(value);
 }
 
 function ensurePrivateDirectory(directoryPath: string, recursive = false): void {

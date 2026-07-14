@@ -31,6 +31,7 @@ const workSessions = require('../out/services/workSessionStore.js');
 const pipelineTransitions = require('../out/services/pipelineTransitions.js');
 const mergeRequestTransitions = require('../out/services/gitlabMergeRequestTransitions.js');
 const mergeRequestMonitorStore = require('../out/services/gitlabMergeRequestMonitorStore.js');
+const monitorEventStore = require('../out/services/monitorEventStore.js');
 const ticketMergeRequestProjection = require('../out/services/ticketMergeRequestProjection.js');
 const ciTransitions = require('../out/services/ciTransitions.js');
 const { buildTicketWorkspaceHtml } = require('../out/services/ticketWorkspaceView.js');
@@ -39,6 +40,7 @@ const { buildContextComposerHtml } = require('../out/services/contextComposerVie
 const { buildProjectIntegrationPanelHtml } = require('../out/services/projectIntegrationView.js');
 const managedProviderMonitor = require('../out/services/managedProviderMonitor.js');
 const managedMonitorLease = require('../out/services/managedMonitorLease.js');
+const sensitiveText = require('../out/services/sensitiveText.js');
 
 function createSymlinkOrSkip(t, target, linkPath, type = 'file') {
   try {
@@ -61,6 +63,21 @@ test('managed monitoring lease omits unsupported open flags on Windows and fails
     () => managedMonitorLease.managedMonitorNoFollowFlag('linux', undefined),
     /require O_NOFOLLOW support/,
   );
+});
+
+test('all provider evidence paths share the complete credential redaction vocabulary', () => {
+  const redacted = sensitiveText.redactSensitiveTokens([
+    'Authorization: Bearer abcdefghijklmnop',
+    'jira=ATATTabcdefgh1234',
+    'gitlab=glpat-abcdefgh1234',
+    'sonar=sqp_abcdefgh1234',
+    'AWS=AKIAABCDEFGHIJKLMNOP',
+    'token=https://example.test/?access_token=secret-value',
+    'CLIENT_SECRET = "do-not-keep"',
+  ].join('\n'));
+  for (const secret of ['abcdefghijklmnop', 'ATATTabcdefgh1234', 'glpat-abcdefgh1234', 'sqp_abcdefgh1234', 'AKIAABCDEFGHIJKLMNOP', 'secret-value', 'do-not-keep']) {
+    assert.equal(redacted.includes(secret), false);
+  }
 });
 
 test('managed monitoring lease acquires, blocks duplicate owners, renews, and releases', () => {
@@ -246,6 +263,7 @@ test('managed provider polling automatically discovers and locally binds a proje
     const monitor = new managedProviderMonitor.ManagedProviderMonitor({ state: () => state });
     const result = await monitor.poll();
     assert.equal(result.polled, 1);
+    assert.equal(result.transitions, 1);
     assert.equal(result.failures, 0);
     const updated = workSessions.readWorkSession(session.id);
     assert.ok(updated.providerBindings.some(binding =>
@@ -273,6 +291,16 @@ test('managed provider polling automatically discovers and locally binds a proje
       unresolved_discussion_count: 0,
       discussions_resolved: true,
     });
+    const discoveryEvent = monitorEventStore.listMonitorEvents({
+      sessionId: session.id,
+      types: ['provider.transition'],
+    }).find(event => event.metadata?.transitionKind === 'initial_mr_observed');
+    assert.ok(discoveryEvent);
+    assert.equal(discoveryEvent.subject.kind, 'merge-request');
+    assert.equal(discoveryEvent.subject.id, '90');
+    assert.match(discoveryEvent.summary, /first observed \(opened\/mergeable\)/);
+    const duplicate = await monitor.poll();
+    assert.equal(duplicate.transitions, 0);
   } finally {
     gitLabRestModule.gitlabRestClient.discoverOpenMergeRequest = originalDiscover;
     gitLabRestModule.gitlabRestClient.mergeRequestMonitor = originalMonitor;
