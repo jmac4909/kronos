@@ -187,6 +187,8 @@ Saving project integration data, explicitly linking a ticket project, attaching 
 
 By default, private terminal-first state lives under `~/.kronos`, or the explicitly configured `KRONOS_DIR`:
 
+The one-time migration from the legacy default directory rejects symbolic-link ancestors and unsupported entries, caps traversal at 20,000 entries and 2 GiB, and recursively applies private file and directory modes before the migrated state is accepted.
+
 - work-session records contain an operator-facing title, optional real ticket identity, terminal metadata, provider bindings, context references, and monitoring readiness; each record is capped at 4 MiB and uses the shared cross-platform private atomic file primitive;
 - context directories contain normalized content-addressed provider artifacts and prompt boundaries; immutable artifacts use bounded byte verification and exclusive no-replace publication through the shared cross-platform private-file layer;
 - compact monitor snapshots contain the latest comparison baseline;

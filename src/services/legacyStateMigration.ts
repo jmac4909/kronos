@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { assertSafeDirectoryPath } from './privateFilePrimitives';
 
 export interface LegacyStateMigrationResult {
   migrated: boolean;
@@ -24,7 +25,7 @@ export function migrateLegacyKronosState(
 ): LegacyStateMigrationResult {
   const targetPath = path.resolve(targetPathValue);
   const legacyPath = path.resolve(legacyPathValue);
-  if (fs.existsSync(targetPath)) { return { migrated: false, reason: 'target-exists' }; }
+  if (lstatIfPresent(targetPath)) { return { migrated: false, reason: 'target-exists' }; }
   let legacyStat: fs.Stats;
   try {
     legacyStat = fs.lstatSync(legacyPath);
@@ -37,10 +38,15 @@ export function migrateLegacyKronosState(
     return { migrated: false, reason: 'unsafe' };
   }
   try {
-    fs.mkdirSync(path.dirname(targetPath), { recursive: true, mode: DIRECTORY_MODE });
+    assertSafeDirectoryPath(path.dirname(targetPath), 'Legacy Kronos migration target');
+    assertSafeDirectoryPath(legacyPath, 'Legacy Kronos migration source');
+  } catch {
+    return { migrated: false, reason: 'unsafe' };
+  }
+  try {
     fs.renameSync(legacyPath, targetPath);
     try {
-      makePrivate(targetPath);
+      makePrivateTree(targetPath);
       return { migrated: true, method: 'rename' };
     } catch {
       try { fs.renameSync(targetPath, legacyPath); } catch { /* the target still contains the complete state */ }
@@ -54,7 +60,7 @@ export function migrateLegacyKronosState(
   try {
     copyLegacyDirectory(legacyPath, temporaryPath);
     fs.renameSync(temporaryPath, targetPath);
-    makePrivate(targetPath);
+    makePrivateTree(targetPath);
     return { migrated: true, method: 'copy' };
   } catch {
     try { fs.rmSync(temporaryPath, { recursive: true, force: true }); } catch { /* best effort temporary cleanup */ }
@@ -95,8 +101,42 @@ function copyLegacyDirectory(sourceRoot: string, targetRoot: string): void {
   }
 }
 
-function makePrivate(targetPath: string): void {
-  if (process.platform !== 'win32') { fs.chmodSync(targetPath, DIRECTORY_MODE); }
+function makePrivateTree(targetPath: string): void {
+  const work = [targetPath];
+  let entries = 0;
+  let totalBytes = 0;
+  while (work.length > 0) {
+    const current = work.pop();
+    if (!current) { break; }
+    const stat = fs.lstatSync(current);
+    entries += 1;
+    if (entries > MAX_ENTRIES || stat.isSymbolicLink()) {
+      throw new Error('Legacy Kronos state exceeds migration safety limits.');
+    }
+    if (stat.isDirectory()) {
+      if (process.platform !== 'win32') { fs.chmodSync(current, DIRECTORY_MODE); }
+      for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+        if (entry.isSymbolicLink()) { throw new Error('Legacy Kronos state contains a symbolic link.'); }
+        work.push(path.join(current, entry.name));
+      }
+      continue;
+    }
+    if (!stat.isFile()) { throw new Error('Legacy Kronos state contains an unsupported file type.'); }
+    totalBytes += stat.size;
+    if (!Number.isSafeInteger(totalBytes) || totalBytes > MAX_TOTAL_BYTES) {
+      throw new Error('Legacy Kronos state exceeds migration byte limits.');
+    }
+    if (process.platform !== 'win32') { fs.chmodSync(current, FILE_MODE); }
+  }
+}
+
+function lstatIfPresent(targetPath: string): fs.Stats | undefined {
+  try {
+    return fs.lstatSync(targetPath);
+  } catch (error: unknown) {
+    if (errorCode(error) === 'ENOENT') { return undefined; }
+    throw error;
+  }
 }
 
 function errorCode(error: unknown): string | undefined {

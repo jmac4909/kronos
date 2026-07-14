@@ -15,6 +15,7 @@ All notable changes to the Kronos preview are documented here.
 
 ### Changed
 
+- Hardened one-time legacy-state migration by rejecting symbolic-link ancestors, recognizing broken target links, and recursively applying private directory/file modes after same-filesystem renames.
 - Added shared bounded immutable-artifact and two-file pair primitives with content verification, incomplete-pair refusal, and no-replace publication; local Git, Jira, GitLab, and CI context evidence—including arbitrary binary Jira attachments—now use them for consistent Windows/POSIX path safety.
 - Moved the append-only monitor-event ledger onto shared identity-checked append and bounded-tail primitives, eliminating its separate Windows/POSIX open-flag implementation while retaining complete-line tail reads.
 - Moved the Work catalog, work-session directory creation, and provider-config template creation onto the shared bounded atomic state layer, including safe private-directory creation that rejects symbolic-link ancestors and recovery by replacing an oversized prior regular file with valid bounded state.

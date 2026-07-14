@@ -84,6 +84,13 @@ export function ensurePrivateDirectoryPath(
   return resolved;
 }
 
+/** Validates one existing directory path without changing its permissions. */
+export function assertSafeDirectoryPath(directoryPath: string, label: string): string {
+  const resolved = path.resolve(directoryPath);
+  requireSafeDirectory(resolved, label);
+  return resolved;
+}
+
 /**
  * Windows has no O_NOFOLLOW. Callers compensate with complete lstat/fstat
  * identity checks. POSIX keeps the kernel guard and fails closed without it.

@@ -1726,11 +1726,18 @@ test('legacy ~/.claude/kronos state migrates once without helper scripts', t => 
   const legacy = path.join(home, '.claude', 'kronos');
   const target = path.join(home, '.kronos');
   fs.mkdirSync(path.join(legacy, 'work-sessions'), { recursive: true });
-  fs.writeFileSync(path.join(legacy, 'work.json'), '{"schemaVersion":1}\n');
+  fs.writeFileSync(path.join(legacy, 'work.json'), '{"schemaVersion":1}\n', { mode: 0o644 });
+  fs.writeFileSync(path.join(legacy, 'work-sessions', 'session.json'), '{}\n', { mode: 0o644 });
   const migrated = legacyStateMigration.migrateLegacyKronosState(target, legacy);
   assert.equal(migrated.migrated, true);
   assert.equal(fs.readFileSync(path.join(target, 'work.json'), 'utf8'), '{"schemaVersion":1}\n');
   assert.equal(fs.existsSync(legacy), false);
+  if (process.platform !== 'win32') {
+    assert.equal(fs.statSync(target).mode & 0o777, 0o700);
+    assert.equal(fs.statSync(path.join(target, 'work-sessions')).mode & 0o777, 0o700);
+    assert.equal(fs.statSync(path.join(target, 'work.json')).mode & 0o777, 0o600);
+    assert.equal(fs.statSync(path.join(target, 'work-sessions', 'session.json')).mode & 0o777, 0o600);
+  }
   assert.deepEqual(legacyStateMigration.migrateLegacyKronosState(target, legacy), {
     migrated: false,
     reason: 'target-exists',
