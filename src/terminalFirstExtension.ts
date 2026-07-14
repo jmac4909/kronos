@@ -68,6 +68,7 @@ import {
   configuredCiPollingTargets,
   configuredGitLabPollingTarget,
   configuredSonarBranch,
+  configuredSonarBranchName,
   type ManagedProviderNotice,
   type ManagedProviderPollResult,
 } from './services/managedProviderMonitor';
@@ -1584,7 +1585,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
     const savedTargets = ticketSession ? configuredCiPollingTargets(this.state.state, ticketSession) : {};
     const config = this.projectConfig(ticket);
     const jenkinsUrl = savedTargets.jenkinsUrl || ticket.build?.url || config?.jenkins_url;
-    const sonarTarget = savedTargets.sonar || configuredSonarBranch(this.state.state, ticketKey);
+    let sonarTarget = savedTargets.sonar || configuredSonarBranch(this.state.state, ticketKey) || undefined;
     if (!jenkinsUrl && !sonarTarget) {
       void vscode.window.showWarningMessage(`${ticketKey} has no linked Jenkins URL or SonarQube project/branch.`);
       return;
@@ -1598,6 +1599,17 @@ class TerminalFirstRuntime implements vscode.Disposable {
         progress.report({ message: 'Reading Jenkins build, stages, and tests...' });
         try { jenkins = await jenkinsRestClient.buildContext(jenkinsUrl); }
         catch (error: unknown) { warnings.push(unknownErrorMessage(error, 'Jenkins context was unavailable.')); }
+      }
+      if (!sonarTarget && jenkins?.sonarProjectKey) {
+        const branch = jenkins.sonarBranch || configuredSonarBranchName(this.state.state, ticketKey);
+        if (branch) {
+          const providerUrl = sonarDashboardUrl(jenkins.sonarProjectKey, branch);
+          sonarTarget = {
+            projectKey: jenkins.sonarProjectKey,
+            branch,
+            ...(providerUrl ? { providerUrl } : {}),
+          };
+        }
       }
       if (sonarTarget) {
         progress.report({ message: 'Reading SonarQube gate, measures, and issues...' });

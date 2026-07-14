@@ -18,6 +18,8 @@ const projectDiscovery = require('../out/services/projectDiscovery.js');
 const { JiraRestClient } = require('../out/services/jiraRestClient.js');
 const gitLabRestModule = require('../out/services/gitlabRestClient.js');
 const { GitLabRestClient } = gitLabRestModule;
+const jenkinsRestModule = require('../out/services/jenkinsRestClient.js');
+const { JenkinsRestClient } = jenkinsRestModule;
 const sonarRestModule = require('../out/services/sonarRestClient.js');
 const jiraContext = require('../out/services/jiraTicketContext.js');
 const jiraValuePruning = require('../out/services/jiraValuePruning.js');
@@ -180,6 +182,48 @@ function gitLabDiscoveryClient(handler) {
     }),
   };
 }
+
+test('Jenkins context extracts only literal SonarQube configuration from bounded config.xml', async () => {
+  const requests = [];
+  const client = new JenkinsRestClient({
+    env: { JENKINS_URL: 'https://jenkins.example' },
+    transport: async request => {
+      requests.push(request.url);
+      const url = new URL(request.url);
+      if (url.pathname.endsWith('/config.xml')) {
+        return {
+          statusCode: 200,
+          body: '<flow-definition><script>sh &apos;sonar-scanner -Dsonar.projectKey=team:application -Dsonar.branch.name=feature/JIRA-930&apos;</script></flow-definition>',
+          headers: {},
+        };
+      }
+      if (url.pathname.endsWith('/testReport/api/json') || url.pathname.endsWith('/wfapi/describe')) {
+        return { statusCode: 404, body: '', headers: {} };
+      }
+      return {
+        statusCode: 200,
+        body: JSON.stringify({
+          lastBuild: {
+            number: 30,
+            result: 'SUCCESS',
+            building: false,
+            url: 'https://jenkins.example/job/application/30/',
+            actions: [],
+            artifacts: [],
+            changeSet: { items: [] },
+          },
+        }),
+        headers: {},
+      };
+    },
+  });
+  const context = await client.buildContext('https://jenkins.example/job/application');
+  assert.equal(context.sonarProjectKey, 'team:application');
+  assert.equal(context.sonarBranch, 'feature/JIRA-930');
+  assert.equal(context.completeness.configuration, 'complete');
+  assert.ok(requests.includes('https://jenkins.example/job/application/config.xml'));
+  assert.equal(JSON.stringify(context).includes('sonar-scanner'), false, 'raw Jenkins XML must not enter retained context');
+});
 
 test('GitLab discovery selects a unique current-branch MR before ticket search', async () => {
   const fixture = gitLabDiscoveryClient(url => url.searchParams.get('source_branch')
@@ -448,6 +492,94 @@ test('managed SonarQube polling persists a branch-qualified dashboard binding', 
       'https://sonar.example/dashboard?id=team%3Aapplication&branch=feature%2FJIRA-902',
     );
   } finally {
+    sonarRestModule.sonarRestClient.branchContext = originalBranchContext;
+    workSessions.removeWorkSession(session.id);
+  }
+});
+
+test('managed polling discovers the SonarQube target from Jenkins config.xml evidence', async () => {
+  const state = stateStore.emptyWorkCatalog();
+  state.projects.Application = {
+    config: {
+      jira_project_key: 'JIRA',
+      jenkins_url: 'https://jenkins.example/job/application',
+      default_branch: 'feature/JIRA-903',
+    },
+  };
+  state.tickets['JIRA-903'] = fixtureTicket({
+    summary: 'Jenkins Sonar target discovery',
+    projects: ['Application'],
+  });
+  const session = workSessions.createOrGetWorkSessionByTicket({
+    ticketKey: 'JIRA-903',
+    title: 'Jenkins Sonar target discovery',
+    projectName: 'Application',
+  });
+  const originalBuildContext = jenkinsRestModule.jenkinsRestClient.buildContext;
+  const originalBranchContext = sonarRestModule.sonarRestClient.branchContext;
+  let sonarRequest;
+  jenkinsRestModule.jenkinsRestClient.buildContext = async () => ({
+    schemaVersion: 1,
+    provider: 'jenkins',
+    fetchedAt: '2026-07-14T14:30:00.000Z',
+    jobOrBuildUrl: 'https://jenkins.example/job/application',
+    build: {
+      number: 31,
+      status: 'SUCCESS',
+      building: false,
+      url: 'https://jenkins.example/job/application/31/',
+      causes: [],
+      artifacts: [],
+      changes: [],
+    },
+    sonarProjectKey: 'team:application',
+    completeness: {
+      complete: true,
+      buildComplete: true,
+      testReport: 'complete',
+      stages: 'complete',
+      configuration: 'complete',
+      logsIncluded: false,
+      warnings: [],
+    },
+  });
+  sonarRestModule.sonarRestClient.branchContext = async (projectKey, branch) => {
+    sonarRequest = { projectKey, branch };
+    return {
+      schemaVersion: 1,
+      provider: 'sonarqube',
+      fetchedAt: '2026-07-14T14:30:01.000Z',
+      projectKey,
+      branch,
+      dashboardUrl: `https://sonar.example/dashboard?id=${encodeURIComponent(projectKey)}&branch=${encodeURIComponent(branch)}`,
+      qualityGate: { status: 'OK', conditions: [] },
+      measures: [],
+      issues: [],
+      completeness: {
+        complete: true,
+        qualityGateComplete: true,
+        measuresComplete: true,
+        issuesComplete: true,
+        issuesFetched: 0,
+        issuePages: 1,
+        issueResponseBytes: 2,
+        issuesTotal: 0,
+        warnings: [],
+      },
+    };
+  };
+  try {
+    const result = await new managedProviderMonitor.ManagedProviderMonitor({ state: () => state }).poll();
+    assert.equal(result.polled, 2);
+    assert.deepEqual(sonarRequest, { projectKey: 'team:application', branch: 'feature/JIRA-903' });
+    const updated = workSessions.readWorkSession(session.id);
+    assert.ok(updated.providerBindings.some(binding =>
+      binding.provider === 'sonar'
+        && binding.projectId === 'team:application'
+        && binding.url === 'https://sonar.example/dashboard?id=team%3Aapplication&branch=feature%2FJIRA-903'
+    ));
+  } finally {
+    jenkinsRestModule.jenkinsRestClient.buildContext = originalBuildContext;
     sonarRestModule.sonarRestClient.branchContext = originalBranchContext;
     workSessions.removeWorkSession(session.id);
   }

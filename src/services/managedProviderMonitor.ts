@@ -461,7 +461,7 @@ export class ManagedProviderMonitor {
     const state = this.options.state();
     const targets = configuredCiPollingTargets(state, session);
     const jenkinsUrl = targets.jenkinsUrl;
-    const sonarTarget = targets.sonar;
+    let sonarTarget = targets.sonar;
     if (!jenkinsUrl && !sonarTarget) { return emptyResult(); }
 
     let result = emptyResult();
@@ -512,6 +512,28 @@ export class ManagedProviderMonitor {
           url: jenkins.jobOrBuildUrl || jenkinsUrl,
         });
         result.polled += 1;
+        if (!sonarTarget && jenkins.sonarProjectKey) {
+          const branch = jenkins.sonarBranch || configuredSonarBranchName(state, session.ticketKey);
+          if (branch) {
+            const providerUrl = sonarDashboardUrl(jenkins.sonarProjectKey, branch);
+            sonarTarget = {
+              projectKey: jenkins.sonarProjectKey,
+              branch,
+              ...(providerUrl ? { providerUrl } : {}),
+            };
+            session = reconcileProviderBinding(session, {
+              provider: 'sonar',
+              resource: 'quality-gate',
+              subjectId: `${jenkins.sonarProjectKey}:${branch}`,
+              projectId: jenkins.sonarProjectKey,
+              ...(providerUrl ? { url: providerUrl } : {}),
+            });
+            this.log(
+              `Jenkins discovered SonarQube project ${jenkins.sonarProjectKey} for ${session.ticketKey}.`,
+              `Kronos bound the literal pipeline configuration to branch ${branch}.`,
+            );
+          }
+        }
       } catch (error: unknown) {
         jenkinsReadFailure = providerReadFailureReason(error);
         result.failures += 1;
@@ -1407,13 +1429,23 @@ export function configuredSonarBranch(
   const ticket = state?.tickets[ticketKey];
   const config = projectConfigurationForTicket(state, ticket);
   const projectKey = optionalTrimmedStringFromUnknown(config?.sonar_project_key);
+  const branch = configuredSonarBranchName(state, ticketKey);
+  return projectKey && branch ? { projectKey, branch } : null;
+}
+
+export function configuredSonarBranchName(
+  state: KronosStateSnapshot | null,
+  ticketKey: string,
+): string | null {
+  const ticket = state?.tickets[ticketKey];
+  const config = projectConfigurationForTicket(state, ticket);
   const branch = ticket?.mr?.source_branch
     || ticket?.mr?.sourceBranch
     || ticket?.mr?.branch
     || ticket?.mr?.head_branch
     || optionalTrimmedStringFromUnknown(config?.default_branch)
     || optionalTrimmedStringFromUnknown(config?.base_branch);
-  return projectKey && branch ? { projectKey, branch } : null;
+  return optionalTrimmedStringFromUnknown(branch) || null;
 }
 
 export function gitLabIncompleteMonitorComponents(

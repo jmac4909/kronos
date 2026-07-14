@@ -3,6 +3,7 @@ import * as https from 'https';
 import { unknownErrorCode } from './errorUtils';
 import { parseJsonWithLabel } from './jsonFiles';
 import { arrayFromUnknown, isRecord, optionalFiniteNumberFromUnknown, optionalTrimmedStringFromUnknown } from './records';
+import { redactSensitiveTokens } from './sensitiveText';
 
 export interface JenkinsRestRequestOptions {
   timeoutMs?: number;
@@ -105,6 +106,7 @@ export interface JenkinsBuildContextCompleteness {
   buildComplete: boolean;
   testReport: JenkinsOptionalContextStatus;
   stages: JenkinsOptionalContextStatus;
+  configuration: JenkinsOptionalContextStatus;
   logsIncluded: false;
   warnings: string[];
 }
@@ -117,6 +119,8 @@ export interface JenkinsBuildContext {
   build: JenkinsBuildDetails;
   tests?: JenkinsTestReportContext;
   stages?: JenkinsPipelineStage[];
+  sonarProjectKey?: string;
+  sonarBranch?: string;
   completeness: JenkinsBuildContextCompleteness;
 }
 
@@ -130,6 +134,11 @@ interface OptionalJenkinsJsonResult {
   status: JenkinsOptionalContextStatus;
   value?: unknown;
   warning?: string;
+}
+
+interface OptionalJenkinsTextResult {
+  status: JenkinsOptionalContextStatus;
+  value?: string;
 }
 
 const DEFAULT_TIMEOUT_MS = 15000;
@@ -212,9 +221,13 @@ export class JenkinsRestClient {
 
     const buildInspection = inspectJenkinsBuildRecord(buildRecord, buildFallbackUrl);
     const warnings: string[] = [...buildInspection.warnings];
-    const [testResult, stageResult] = await Promise.all([
+    const configurationUrl = nestedBuildRecord
+      ? normalizedInputUrl
+      : jenkinsJobUrlFromBuild(build.url, build.number) || normalizedInputUrl;
+    const [testResult, stageResult, configurationResult] = await Promise.all([
       this.requestOptionalJson(build.url, 'Jenkins test report', { tree: TEST_REPORT_TREE }, options, 'testReport/api/json'),
       this.requestOptionalJson(build.url, 'Jenkins Pipeline stages', {}, options, 'wfapi/describe'),
+      this.requestOptionalText(configurationUrl, 'Jenkins job configuration', options, 'config.xml'),
     ]);
     if (testResult.warning) { warnings.push(testResult.warning); }
     if (stageResult.warning) { warnings.push(stageResult.warning); }
@@ -252,6 +265,7 @@ export class JenkinsRestClient {
       buildComplete: buildInspection.complete,
       testReport: testStatus,
       stages: stageStatus,
+      configuration: configurationResult.status,
       logsIncluded: false,
       warnings: uniqueStrings(warnings),
     };
@@ -265,7 +279,28 @@ export class JenkinsRestClient {
     };
     if (tests) { context.tests = tests; }
     if (stages) { context.stages = stages; }
+    if (configurationResult.value) {
+      const sonarConfiguration = sonarConfigurationFromJenkinsXml(configurationResult.value);
+      if (sonarConfiguration.projectKey) { context.sonarProjectKey = sonarConfiguration.projectKey; }
+      if (sonarConfiguration.branch) { context.sonarBranch = sonarConfiguration.branch; }
+    }
     return context;
+  }
+
+  private async requestOptionalText(
+    resourceUrl: string,
+    label: string,
+    options: JenkinsRestRequestOptions,
+    suffix: string,
+  ): Promise<OptionalJenkinsTextResult> {
+    try {
+      const response = await this.requestRaw(resourceUrl, label, {}, options, suffix);
+      if (response.statusCode === 404) { return { status: 'unavailable' }; }
+      if (response.statusCode < 200 || response.statusCode >= 300) { return { status: 'partial' }; }
+      return { status: 'complete', value: response.body };
+    } catch {
+      return { status: 'partial' };
+    }
   }
 
   private async requestOptionalJson(
@@ -723,6 +758,54 @@ function sanitizeJenkinsReturnedUrl(value: string | undefined, expectedOrigin?: 
 function appendJenkinsBuildNumber(jobUrl: string, buildNumber: number | undefined): string {
   if (buildNumber === undefined) { return jobUrl; }
   return `${jobUrl.replace(/\/+$/, '')}/${buildNumber}/`;
+}
+
+function jenkinsJobUrlFromBuild(buildUrl: string, buildNumber: number): string | undefined {
+  const normalized = normalizeJenkinsHttpUrl(buildUrl);
+  if (!normalized) { return undefined; }
+  try {
+    const url = new URL(normalized);
+    const suffix = `/${buildNumber}`;
+    const pathName = url.pathname.replace(/\/+$/, '');
+    if (!pathName.endsWith(suffix)) { return undefined; }
+    url.pathname = `${pathName.slice(0, -suffix.length)}/`;
+    return normalizeJenkinsHttpUrl(url.toString());
+  } catch {
+    return undefined;
+  }
+}
+
+function sonarConfigurationFromJenkinsXml(value: string): { projectKey?: string; branch?: string } {
+  const decoded = decodeBasicXmlEntities(value);
+  const projectKey = literalSonarProperty(decoded, 'sonar.projectKey', /^[A-Za-z0-9_.:-]{1,400}$/);
+  const branch = literalSonarProperty(decoded, 'sonar.branch.name', /^[A-Za-z0-9_./:-]{1,500}$/);
+  return {
+    ...(projectKey ? { projectKey } : {}),
+    ...(branch ? { branch } : {}),
+  };
+}
+
+function literalSonarProperty(value: string, property: string, allowed: RegExp): string | undefined {
+  const escaped = property.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const tagMatch = new RegExp(`<${escaped}>\\s*([^<]+?)\\s*</${escaped}>`, 'i').exec(value);
+  const assignmentMatch = new RegExp(
+    `(?:^|[\\s'"<>;])(?:-D)?${escaped}\\s*(?:=|:)\\s*(?:"([^"]+)"|'([^']+)'|([^\\s<>"';&]+))`,
+    'im',
+  ).exec(value);
+  const candidate = (tagMatch?.[1] || assignmentMatch?.[1] || assignmentMatch?.[2] || assignmentMatch?.[3] || '').trim();
+  if (!candidate || !allowed.test(candidate) || redactSensitiveTokens(candidate) !== candidate) { return undefined; }
+  return candidate;
+}
+
+function decodeBasicXmlEntities(value: string): string {
+  return value.replace(/&(?:quot|apos|lt|gt|amp);/gi, entity => {
+    const normalized = entity.toLowerCase();
+    if (normalized === '&quot;') { return '"'; }
+    if (normalized === '&apos;') { return "'"; }
+    if (normalized === '&lt;') { return '<'; }
+    if (normalized === '&gt;') { return '>'; }
+    return '&';
+  });
 }
 
 function isLoopbackHostname(hostname: string): boolean {
