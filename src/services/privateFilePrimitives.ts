@@ -18,6 +18,53 @@ interface FileIdentity {
   ino: number;
 }
 
+/** Creates one private directory path without following existing symbolic-link ancestors. */
+export function ensurePrivateDirectoryPath(
+  directoryPath: string,
+  label: string,
+  mode = 0o700,
+): string {
+  if (!Number.isInteger(mode) || mode < 0 || mode > 0o777) {
+    throw new Error(`${label} directory mode is invalid.`);
+  }
+  const resolved = path.resolve(directoryPath);
+  const parsed = path.parse(resolved);
+  if (resolved === parsed.root) {
+    throw new Error(`${label} directory must not be the filesystem root.`);
+  }
+
+  let current = parsed.root;
+  requireSafeDirectory(current, label);
+  const components = resolved.slice(parsed.root.length).split(path.sep).filter(Boolean);
+  for (const component of components) {
+    const parentBefore = requireSafeDirectory(current, label);
+    const candidate = path.join(current, component);
+    let candidateStat = lstatIfPresent(candidate);
+    if (!candidateStat) {
+      try {
+        fs.mkdirSync(candidate, { mode });
+      } catch (error: unknown) {
+        if (errorCode(error) !== 'EEXIST') { throw error; }
+      }
+      const parentAfter = requireSafeDirectory(current, label);
+      if (!sameIdentity(fileIdentity(parentBefore), fileIdentity(parentAfter))) {
+        throw new Error(`${label} directory parent changed while it was created.`);
+      }
+      candidateStat = lstatIfPresent(candidate);
+    }
+    if (!candidateStat || !candidateStat.isDirectory() || candidateStat.isSymbolicLink()) {
+      throw new Error(`${label} path contains an unsafe directory component.`);
+    }
+    current = candidate;
+  }
+
+  const finalStat = requireSafeDirectory(resolved, label);
+  if (process.platform !== 'win32') {
+    enforceDirectoryMode(resolved, finalStat, label, mode);
+  }
+  return resolved;
+}
+
 /**
  * Windows has no O_NOFOLLOW. Callers compensate with complete lstat/fstat
  * identity checks. POSIX keeps the kernel guard and fails closed without it.
@@ -73,14 +120,10 @@ export function writePrivateTextFileAtomically(
 ): string {
   const data = Buffer.from(content, 'utf8');
   assertBoundedSize(data.length, options);
-  const inspectionOptions: PrivateFileReadOptions = {
-    label: options.label,
-    maxBytes: options.maxBytes,
-  };
   const directoryPath = path.dirname(filePath);
   const directoryBefore = requireSafeDirectory(directoryPath, options.label);
   const existing = inspectSafePathComponents(filePath, options.label);
-  if (existing) { assertRegularFile(filePath, existing, inspectionOptions); }
+  if (existing) { assertReplaceableRegularFile(filePath, existing, options.label); }
 
   const fileMode = options.fileMode ?? 0o600;
   const temporaryPath = path.join(
@@ -128,7 +171,7 @@ export function writePrivateTextFileAtomically(
       throw new Error(`${options.label} directory changed before commit.`);
     }
     const targetAtCommit = inspectSafePathComponents(filePath, options.label);
-    if (targetAtCommit) { assertRegularFile(filePath, targetAtCommit, inspectionOptions); }
+    if (targetAtCommit) { assertReplaceableRegularFile(filePath, targetAtCommit, options.label); }
     fs.renameSync(temporaryPath, filePath);
     const committed = fs.lstatSync(filePath);
     assertRegularFile(filePath, committed, { ...options, expectedMode: fileMode });
@@ -194,6 +237,12 @@ function assertRegularFile(
   }
 }
 
+function assertReplaceableRegularFile(filePath: string, stat: fs.Stats, label: string): void {
+  if (!stat.isFile() || stat.isSymbolicLink()) {
+    throw new Error(`${label} is not a safe replaceable file: ${filePath}`);
+  }
+}
+
 function readDescriptorFully(
   descriptor: number,
   size: number,
@@ -243,6 +292,36 @@ function fileIdentity(stat: fs.Stats): FileIdentity {
 
 function sameIdentity(left: FileIdentity, right: FileIdentity): boolean {
   return left.dev === right.dev && left.ino === right.ino;
+}
+
+function enforceDirectoryMode(
+  directoryPath: string,
+  before: fs.Stats,
+  label: string,
+  mode: number,
+): void {
+  const noFollow = privateFileNoFollowFlag(process.platform, Reflect.get(fs.constants, 'O_NOFOLLOW'));
+  const directoryFlag = typeof fs.constants.O_DIRECTORY === 'number' ? fs.constants.O_DIRECTORY : 0;
+  const descriptor = fs.openSync(directoryPath, fs.constants.O_RDONLY | directoryFlag | noFollow);
+  try {
+    const opened = fs.fstatSync(descriptor);
+    if (!opened.isDirectory() || !sameIdentity(fileIdentity(before), fileIdentity(opened))) {
+      throw new Error(`${label} directory changed while it was opened.`);
+    }
+    fs.fchmodSync(descriptor, mode);
+    const completed = fs.fstatSync(descriptor);
+    const pathAfter = fs.lstatSync(directoryPath);
+    if (!completed.isDirectory()
+      || pathAfter.isSymbolicLink()
+      || !pathAfter.isDirectory()
+      || !sameIdentity(fileIdentity(opened), fileIdentity(completed))
+      || !sameIdentity(fileIdentity(opened), fileIdentity(pathAfter))
+      || (completed.mode & 0o777) !== mode) {
+      throw new Error(`${label} directory changed while its permissions were secured.`);
+    }
+  } finally {
+    fs.closeSync(descriptor);
+  }
 }
 
 function lstatIfPresent(filePath: string): fs.Stats | null {

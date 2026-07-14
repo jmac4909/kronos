@@ -1,8 +1,12 @@
-import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import type { BuildStatus, KronosState, MergeRequest, Project, ProjectConfig, Ticket } from '../state/types';
 import { unknownErrorMessage } from './errorUtils';
+import {
+  ensurePrivateDirectoryPath,
+  readPrivateTextFileIfPresent,
+  writePrivateTextFileAtomically,
+} from './privateFilePrimitives';
 import { isRecord } from './records';
 import { migrateLegacyKronosState } from './legacyStateMigration';
 
@@ -13,11 +17,7 @@ if (!explicitKronosDir) {
 }
 export const KRONOS_DIR = explicitKronosDir || defaultKronosDir;
 export const STATE_FILE = path.join(KRONOS_DIR, 'work.json');
-const DIRECTORY_MODE = 0o700;
 const FILE_MODE = 0o600;
-const READ_CHUNK_BYTES = 64 * 1024;
-const NO_FOLLOW_VALUE = Reflect.get(fs.constants, 'O_NOFOLLOW');
-const NO_FOLLOW_FLAG = typeof NO_FOLLOW_VALUE === 'number' ? NO_FOLLOW_VALUE : 0;
 export const MAX_WORK_CATALOG_BYTES = 32 * 1024 * 1024;
 export const WORK_CATALOG_SCHEMA_VERSION = 2;
 
@@ -58,24 +58,13 @@ export function readStateFileWithIssues(): StateFileReadResult {
 export function writeStateFile(state: KronosState): void {
   const canonicalState = normalizeWorkCatalog({ ...state, schemaVersion: WORK_CATALOG_SCHEMA_VERSION }, STATE_FILE).state
     || emptyWorkCatalog();
-  ensurePrivateDirectory(KRONOS_DIR);
-  rejectUnsafeExistingFile(STATE_FILE);
-  const temporaryPath = `${STATE_FILE}.${process.pid}.${Date.now()}.tmp`;
-  let descriptor: number | undefined;
-  try {
-    descriptor = fs.openSync(temporaryPath, 'wx', FILE_MODE);
-    fs.writeFileSync(descriptor, `${JSON.stringify(canonicalState, null, 2)}\n`, 'utf8');
-    fs.fsyncSync(descriptor);
-    fs.closeSync(descriptor);
-    descriptor = undefined;
-    fs.renameSync(temporaryPath, STATE_FILE);
-    if (process.platform !== 'win32') { fs.chmodSync(STATE_FILE, FILE_MODE); }
-  } finally {
-    if (descriptor !== undefined) {
-      try { fs.closeSync(descriptor); } catch { /* best effort */ }
-    }
-    try { fs.unlinkSync(temporaryPath); } catch { /* already renamed or absent */ }
-  }
+  ensurePrivateDirectoryPath(KRONOS_DIR, 'Kronos Work catalog');
+  writePrivateTextFileAtomically(STATE_FILE, `${JSON.stringify(canonicalState, null, 2)}\n`, {
+    label: 'Kronos Work catalog',
+    maxBytes: MAX_WORK_CATALOG_BYTES,
+    temporaryPrefix: 'work-catalog',
+    fileMode: FILE_MODE,
+  });
 }
 
 export function normalizeWorkCatalog(raw: unknown, filePath = STATE_FILE): StateFileReadResult {
@@ -124,35 +113,11 @@ export function readBoundedPrivateUtf8File(filePath: string, maxBytes: number, l
     throw new Error(`${label} byte limit must be a positive safe integer.`);
   }
 
-  const resolvedPath = path.resolve(filePath);
-  const expectedStat = inspectNoFollowPath(resolvedPath, label);
-  assertSafeReadableFile(expectedStat, resolvedPath, maxBytes, label);
-
-  let descriptor: number | undefined;
-  try {
-    descriptor = fs.openSync(resolvedPath, fs.constants.O_RDONLY | NO_FOLLOW_FLAG);
-    const openedStat = fs.fstatSync(descriptor);
-    assertSafeReadableFile(openedStat, resolvedPath, maxBytes, label);
-    if (!sameFileIdentity(expectedStat, openedStat)) {
-      throw new Error(`${label} changed before it could be read safely.`);
-    }
-
-    const content = readDescriptorBounded(descriptor, maxBytes, label);
-    const finalDescriptorStat = fs.fstatSync(descriptor);
-    if (!sameStableFile(openedStat, finalDescriptorStat) || content.length !== finalDescriptorStat.size) {
-      throw new Error(`${label} changed while it was being read.`);
-    }
-
-    const finalPathStat = inspectNoFollowPath(resolvedPath, label);
-    if (!sameFileIdentity(finalDescriptorStat, finalPathStat)) {
-      throw new Error(`${label} path changed while it was being read.`);
-    }
-    return content.toString('utf8');
-  } finally {
-    if (descriptor !== undefined) {
-      try { fs.closeSync(descriptor); } catch { /* best effort */ }
-    }
-  }
+  const content = readPrivateTextFileIfPresent(filePath, { label, maxBytes });
+  if (content !== null) { return content; }
+  const error = new Error(`${label} is unavailable: ${path.resolve(filePath)}`) as NodeJS.ErrnoException;
+  error.code = 'ENOENT';
+  throw error;
 }
 
 function normalizeProject(value: unknown): Project | undefined {
@@ -316,88 +281,6 @@ function safeHttpUrl(value: unknown): string | undefined {
   }
 }
 
-function inspectNoFollowPath(targetPath: string, label: string): fs.Stats {
-  const resolved = path.resolve(targetPath);
-  const parsed = path.parse(resolved);
-  let current = parsed.root;
-  let stat = fs.lstatSync(current);
-  if (stat.isSymbolicLink() || !stat.isDirectory()) {
-    throw new Error(`${label} has an unsafe filesystem root: ${current}`);
-  }
-
-  const components = resolved.slice(parsed.root.length).split(path.sep).filter(Boolean);
-  for (let index = 0; index < components.length; index += 1) {
-    const component = components[index];
-    if (!component) { continue; }
-    current = path.join(current, component);
-    stat = fs.lstatSync(current);
-    if (stat.isSymbolicLink()) {
-      throw new Error(`${label} path contains a symbolic link: ${current}`);
-    }
-    if (index < components.length - 1 && !stat.isDirectory()) {
-      throw new Error(`${label} path contains a non-directory parent: ${current}`);
-    }
-  }
-  return stat;
-}
-
-function assertSafeReadableFile(stat: fs.Stats, filePath: string, maxBytes: number, label: string): void {
-  if (stat.isSymbolicLink() || !stat.isFile()) {
-    throw new Error(`${label} must be a regular file: ${filePath}`);
-  }
-  if (stat.size > maxBytes) {
-    throw new Error(`${label} exceeds the ${maxBytes}-byte read limit.`);
-  }
-}
-
-function readDescriptorBounded(descriptor: number, maxBytes: number, label: string): Buffer {
-  const chunks: Buffer[] = [];
-  let totalBytes = 0;
-  const chunk = Buffer.allocUnsafe(Math.min(READ_CHUNK_BYTES, maxBytes + 1));
-  while (true) {
-    const remaining = maxBytes + 1 - totalBytes;
-    if (remaining <= 0) {
-      throw new Error(`${label} exceeds the ${maxBytes}-byte read limit.`);
-    }
-    const bytesRead = fs.readSync(descriptor, chunk, 0, Math.min(chunk.length, remaining), null);
-    if (bytesRead === 0) { break; }
-    chunks.push(Buffer.from(chunk.subarray(0, bytesRead)));
-    totalBytes += bytesRead;
-    if (totalBytes > maxBytes) {
-      throw new Error(`${label} exceeds the ${maxBytes}-byte read limit.`);
-    }
-  }
-  return Buffer.concat(chunks, totalBytes);
-}
-
-function sameFileIdentity(left: fs.Stats, right: fs.Stats): boolean {
-  return left.dev === right.dev && left.ino === right.ino;
-}
-
-function sameStableFile(left: fs.Stats, right: fs.Stats): boolean {
-  return sameFileIdentity(left, right)
-    && left.size === right.size
-    && left.mtimeMs === right.mtimeMs
-    && left.ctimeMs === right.ctimeMs;
-}
-
 function hasErrorCode(error: unknown, code: string): boolean {
   return Boolean(error && typeof error === 'object' && Reflect.get(error, 'code') === code);
-}
-
-function ensurePrivateDirectory(directoryPath: string): void {
-  fs.mkdirSync(directoryPath, { recursive: true, mode: DIRECTORY_MODE });
-  const stat = fs.lstatSync(directoryPath);
-  if (!stat.isDirectory() || stat.isSymbolicLink()) { throw new Error('Kronos data path must be a real directory.'); }
-  if (process.platform !== 'win32') { fs.chmodSync(directoryPath, DIRECTORY_MODE); }
-}
-
-function rejectUnsafeExistingFile(filePath: string): void {
-  try {
-    const stat = fs.lstatSync(filePath);
-    if (!stat.isFile() || stat.isSymbolicLink()) { throw new Error('Kronos Work catalog path must be a regular file.'); }
-  } catch (error: unknown) {
-    if (isRecord(error) && error['code'] === 'ENOENT') { return; }
-    throw error;
-  }
 }

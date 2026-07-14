@@ -111,6 +111,17 @@ test('private file primitives atomically replace bounded state and reject symbol
     '{"value":2}\n',
     'a rejected replacement leaves the prior complete state intact',
   );
+  fs.truncateSync(filePath, options.maxBytes + 1);
+  assert.throws(
+    () => privateFilePrimitives.readPrivateTextFileIfPresent(filePath, options),
+    /exceeds the .*byte limit/i,
+  );
+  privateFilePrimitives.writePrivateTextFileAtomically(filePath, '{"value":4}\n', options);
+  assert.equal(
+    privateFilePrimitives.readPrivateTextFileIfPresent(filePath, options),
+    '{"value":4}\n',
+    'a bounded atomic replacement recovers an oversized prior file',
+  );
 
   const symlinkPath = path.join(directory, 'linked.json');
   if (!createSymlinkOrSkip(t, filePath, symlinkPath)) { return; }
@@ -122,6 +133,29 @@ test('private file primitives atomically replace bounded state and reject symbol
     () => privateFilePrimitives.writePrivateTextFileAtomically(symlinkPath, '{"value":3}\n', options),
     /symbolic link/,
   );
+});
+
+test('private directory creation rejects symbolic ancestors without writing through them', t => {
+  const safeDirectory = path.join(tempRoot, 'private-directory-primitives', 'nested');
+  assert.equal(
+    privateFilePrimitives.ensurePrivateDirectoryPath(safeDirectory, 'Private directory fixture'),
+    safeDirectory,
+  );
+  assert.equal(fs.statSync(safeDirectory).isDirectory(), true);
+  if (process.platform !== 'win32') { assert.equal(fs.statSync(safeDirectory).mode & 0o777, 0o700); }
+
+  const outside = path.join(tempRoot, 'private-directory-outside');
+  const linkedParent = path.join(tempRoot, 'private-directory-link');
+  fs.mkdirSync(outside);
+  if (!createSymlinkOrSkip(t, outside, linkedParent, 'dir')) { return; }
+  assert.throws(
+    () => privateFilePrimitives.ensurePrivateDirectoryPath(
+      path.join(linkedParent, 'must-not-exist'),
+      'Private directory fixture',
+    ),
+    /symbolic link|unsafe directory component/i,
+  );
+  assert.equal(fs.existsSync(path.join(outside, 'must-not-exist')), false);
 });
 
 test('Attention stream identity is stable by project, provider, resource, logical subject, and facet', () => {
@@ -1518,7 +1552,7 @@ test('provider environment reads are bounded and retain the exact allowlist', ()
   fs.writeFileSync(oversizedPath, '');
   fs.truncateSync(oversizedPath, providerEnv.MAX_PROVIDER_ENV_BYTES + 1);
   const oversized = providerEnv.loadProviderEnv({ filePath: oversizedPath, env: {} });
-  assert.match(oversized.error || '', /read limit/i);
+  assert.match(oversized.error || '', /exceeds the .*byte limit/i);
   assert.equal(oversized.loaded, 0);
 });
 
@@ -1617,6 +1651,11 @@ test('Work catalog strips legacy automation fields and persists privately', () =
     assert.equal(fs.statSync(stateStore.STATE_FILE).mode & 0o777, 0o600);
     assert.equal(fs.statSync(path.dirname(stateStore.STATE_FILE)).mode & 0o777, 0o700);
   }
+  const source = fs.readFileSync(path.join(root, 'src', 'services', 'stateStore.ts'), 'utf8');
+  assert.match(source, /ensurePrivateDirectoryPath/);
+  assert.match(source, /readPrivateTextFileIfPresent/);
+  assert.match(source, /writePrivateTextFileAtomically/);
+  assert.doesNotMatch(source, /NO_FOLLOW|fs\.openSync|fs\.mkdirSync/);
 });
 
 test('Work catalog rejects unsupported future schemas without interpreting their identities', () => {
@@ -1652,7 +1691,7 @@ test('Work catalog reads reject oversized regular files', () => {
   fs.truncateSync(stateStore.STATE_FILE, stateStore.MAX_WORK_CATALOG_BYTES + 1);
   const oversized = stateStore.readStateFileWithIssues();
   assert.equal(oversized.issues.length, 1);
-  assert.match(oversized.issues[0].detail, /read limit/i);
+  assert.match(oversized.issues[0].detail, /exceeds the .*byte limit/i);
   assert.deepEqual(oversized.state, stateStore.emptyWorkCatalog());
 
   stateStore.writeStateFile(stateStore.emptyWorkCatalog());
