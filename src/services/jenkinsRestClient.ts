@@ -261,7 +261,9 @@ export class JenkinsRestClient {
     }
 
     const completeness: JenkinsBuildContextCompleteness = {
-      complete: buildInspection.complete && testStatus === 'complete' && stageStatus === 'complete',
+      complete: buildInspection.complete
+        && optionalJenkinsEvidenceIsAcceptable(testStatus)
+        && optionalJenkinsEvidenceIsAcceptable(stageStatus),
       buildComplete: buildInspection.complete,
       testReport: testStatus,
       stages: stageStatus,
@@ -376,6 +378,10 @@ export class JenkinsRestClient {
     }
     return response;
   }
+}
+
+function optionalJenkinsEvidenceIsAcceptable(status: JenkinsOptionalContextStatus): boolean {
+  return status === 'complete' || status === 'unavailable';
 }
 
 export function createJenkinsRestClient(options: JenkinsRestClientOptions = {}): JenkinsRestClient {

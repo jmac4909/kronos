@@ -868,8 +868,11 @@ function initialCiNotices(
     if (event) { notices.push(notice(event, session, 'warning', jenkins.buildUrl, 'kronos.insertCiContext')); }
   }
   const sonar = digest.sonar;
-  if (sonar && sonar.gateAvailable && !PASSING_SONAR_GATES.has(sonar.gateStatus.toLowerCase())) {
-    const summary = `${session.ticketKey} was first observed with SonarQube quality gate ${sonar.gateStatus} (${sonar.unresolvedIssueCount} unresolved issue${sonar.unresolvedIssueCount === 1 ? '' : 's'}).`;
+  if (sonar && sonar.gateAvailable) {
+    const healthy = PASSING_SONAR_GATES.has(sonar.gateStatus.toLowerCase());
+    const summary = healthy
+      ? `${session.ticketKey} was first observed with a healthy SonarQube quality gate (${sonar.gateStatus}; ${sonar.unresolvedIssueCount} unresolved issue${sonar.unresolvedIssueCount === 1 ? '' : 's'}).`
+      : `${session.ticketKey} was first observed with SonarQube quality gate ${sonar.gateStatus} (${sonar.unresolvedIssueCount} unresolved issue${sonar.unresolvedIssueCount === 1 ? '' : 's'}).`;
     const event = appendTransitionOnce({
       session,
       source: 'sonar',
@@ -878,15 +881,23 @@ function initialCiNotices(
       state: sonar.gateStatus,
       fingerprint: sonar.fingerprint,
       artifactPath,
-      transitionKey: `initial-unhealthy-gate-${sonar.projectKey}-${sonar.branch}`,
+      transitionKey: `initial-${healthy ? 'healthy' : 'unhealthy'}-gate-${sonar.projectKey}-${sonar.branch}`,
       metadata: {
-        transitionKind: 'initial_unhealthy',
+        transitionKind: healthy ? 'initial_healthy' : 'initial_unhealthy',
         projectKey: sonar.projectKey,
         branch: sonar.branch,
         unresolvedIssueCount: sonar.unresolvedIssueCount,
       },
     });
-    if (event) { notices.push(notice(event, session, 'warning', sonar.dashboardUrl, 'kronos.insertCiContext')); }
+    if (event) {
+      notices.push(notice(
+        event,
+        session,
+        healthy ? 'information' : 'warning',
+        sonar.dashboardUrl,
+        'kronos.insertCiContext',
+      ));
+    }
   }
   return notices;
 }
@@ -1345,8 +1356,8 @@ function deterministicReadStatusFingerprint(
 function jenkinsIncompleteReadComponents(context: JenkinsBuildContext): string[] {
   return [
     ...(!context.completeness.buildComplete ? ['build'] : []),
-    ...(context.completeness.testReport !== 'complete' ? ['tests'] : []),
-    ...(context.completeness.stages !== 'complete' ? ['stages'] : []),
+    ...(context.completeness.testReport === 'partial' ? ['tests'] : []),
+    ...(context.completeness.stages === 'partial' ? ['stages'] : []),
   ];
 }
 

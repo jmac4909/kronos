@@ -233,6 +233,9 @@ test('Jenkins context extracts only literal SonarQube configuration from bounded
   assert.equal(context.sonarProjectKey, 'team:application');
   assert.equal(context.sonarBranch, 'feature/JIRA-930');
   assert.equal(context.completeness.configuration, 'complete');
+  assert.equal(context.completeness.testReport, 'unavailable');
+  assert.equal(context.completeness.stages, 'unavailable');
+  assert.equal(context.completeness.complete, true, 'optional Jenkins evidence can be legitimately unavailable');
   assert.ok(requests.includes('https://jenkins.example/job/application/config.xml'));
   assert.equal(JSON.stringify(context).includes('sonar-scanner'), false, 'raw Jenkins XML must not enter retained context');
   configXml = '<flow-definition><properties><sonar.projectKey>${SONAR_PROJECT_KEY}</sonar.projectKey><sonar.branch.name>${BRANCH_NAME}</sonar.branch.name></properties></flow-definition>';
@@ -555,6 +558,7 @@ test('managed SonarQube polling persists a branch-qualified dashboard binding', 
     const result = await new managedProviderMonitor.ManagedProviderMonitor({ state: () => state }).poll();
     assert.equal(result.polled, 1);
     assert.equal(result.failures, 0);
+    assert.equal(result.transitions, 1, 'the first healthy SonarQube observation is visible in Attention');
     const updated = workSessions.readWorkSession(session.id);
     const binding = updated.providerBindings.find(candidate =>
       candidate.provider === 'sonar'
@@ -565,6 +569,13 @@ test('managed SonarQube polling persists a branch-qualified dashboard binding', 
       binding.url,
       'https://sonar.example/dashboard?id=team%3Aapplication&branch=feature%2FJIRA-902',
     );
+    const healthyEvent = monitorEventStore.listMonitorEvents({
+      sessionId: session.id,
+      source: 'sonar',
+      types: ['provider.transition'],
+    }).find(event => event.metadata?.transitionKind === 'initial_healthy');
+    assert.ok(healthyEvent);
+    assert.equal(healthyEvent.after.state, 'ok');
   } finally {
     sonarRestModule.sonarRestClient.branchContext = originalBranchContext;
     workSessions.removeWorkSession(session.id);
@@ -2550,7 +2561,9 @@ test('extension activation registers the bounded surface and explicit launch com
       subject: { kind: 'provider-read', id: 'jenkins', ticketKey: 'JIRA-654' },
       after: { state: `monitoring/${state}`, fingerprint: `${state}-${reason}-${generation}` },
       metadata: {
-        transitionKind: state === 'complete' ? 'provider_read_recovered' : 'provider_read_failed',
+        transitionKind: state === 'complete'
+          ? 'provider_read_recovered'
+          : state === 'partial' ? 'provider_read_partial' : 'provider_read_failed',
         readState: state,
         readReason: reason,
         readComponents: 'none',
@@ -2561,15 +2574,19 @@ test('extension activation registers the bounded surface and explicit launch com
     failureEvent('attention-repeat-failure-2', '2026-07-14T10:01:00.000Z', 'failed', 'timeout', 2);
     failureEvent('attention-read-recovery', '2026-07-14T10:02:00.000Z', 'complete', 'complete', 3);
     failureEvent('attention-failure-after-recovery', '2026-07-14T10:03:00.000Z', 'failed', 'timeout', 4);
+    failureEvent('attention-partial-after-failure', '2026-07-14T10:04:00.000Z', 'partial', 'stages', 5);
     const attentionProvider = registeredTreeProviders.get('kronosAttention');
     const failureGroup = attentionProvider.getChildren().find(item => item.ticketKey === 'JIRA-654');
     const retainedFailureItems = attentionProvider.getChildren(failureGroup);
-    assert.equal(retainedFailureItems.length, 3, 'legacy consecutive duplicate failures collapse to one Attention item');
+    assert.equal(retainedFailureItems.length, 4, 'legacy consecutive duplicate failures collapse to one Attention item');
     assert.deepEqual(
       retainedFailureItems.map(item => item.entry.event.id),
-      ['attention-failure-after-recovery', 'attention-read-recovery', 'attention-repeat-failure-1'],
+      ['attention-partial-after-failure', 'attention-failure-after-recovery', 'attention-read-recovery', 'attention-repeat-failure-1'],
       'a recovery makes the same later failure a real new transition',
     );
+    assert.equal(retainedFailureItems[0].iconPath.id, 'warning');
+    assert.equal(retainedFailureItems[1].iconPath.id, 'error');
+    assert.equal(retainedFailureItems[2].iconPath.id, 'check');
     assert.deepEqual(
       retainedFailureItems[0].providerChoices.map(choice => choice.label),
       ['Jenkins build 32', 'Jenkins build 31'],

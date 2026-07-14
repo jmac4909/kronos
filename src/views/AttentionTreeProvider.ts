@@ -389,12 +389,18 @@ const METADATA_TOOLTIP_FIELDS: ReadonlyArray<readonly [string, string]> = [
 
 function eventIcon(event: MonitorEvent): vscode.ThemeIcon {
   const transitionKind = metadataString(event, 'transitionKind').toLowerCase();
-  const failure = transitionKind.includes('failed')
-    || transitionKind.includes('canceled')
-    || transitionKind.includes('increased');
-  return failure
-    ? new vscode.ThemeIcon('error', new vscode.ThemeColor('testing.iconFailed'))
-    : new vscode.ThemeIcon('bell-dot', new vscode.ThemeColor('charts.yellow'));
+  const state = event.after?.state?.toLowerCase() || '';
+  const signal = `${transitionKind} ${state}`;
+  if (['failed', 'failure', 'canceled', 'cancelled', 'unhealthy', 'error'].some(value => signal.includes(value))) {
+    return new vscode.ThemeIcon('error', new vscode.ThemeColor('testing.iconFailed'));
+  }
+  if (signal.includes('partial')) {
+    return new vscode.ThemeIcon('warning', new vscode.ThemeColor('list.warningForeground'));
+  }
+  if (['healthy', 'recovered', 'mergeable', 'ok', 'passed', 'success'].some(value => signal.includes(value))) {
+    return new vscode.ThemeIcon('check', new vscode.ThemeColor('testing.iconPassed'));
+  }
+  return new vscode.ThemeIcon('bell-dot', new vscode.ThemeColor('charts.yellow'));
 }
 
 function metadataString(event: MonitorEvent, key: string): string {
