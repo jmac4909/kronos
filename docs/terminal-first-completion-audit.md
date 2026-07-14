@@ -10,7 +10,7 @@ The repository is ready for the operator-owned human feedback pass in `HUMAN_FEE
 
 | Area | Automated evidence | Status |
 | --- | --- | --- |
-| Product surface | Manifest gate enforces exactly Work, Sessions, Attention, 34 commands, and 10 settings. Runtime graph rejects cycles and dead runtime exports. | Pass |
+| Product surface | Manifest gate enforces exactly Work, Sessions, Attention, 34 commands, and 10 settings. The activation harness registers and directly exercises every command. Runtime graph rejects cycles and dead runtime exports. | Pass |
 | Jira board | DOM and board tests cover search, status/project/label filters, completed-work defaults, reset/rerender behavior, registered projects, branches, and ticket-scoped actions. | Pass |
 | Jira context | Unit tests cover bounded REST reads, newest-comment fetching with chronological rendering, recursive empty-value pruning, meaningful `false`/`0`, arbitrary raw attachments, byte/count limits, hashes, and partial warnings. | Pass |
 | Terminal ownership | Unit and activation tests prove explicit validated Claude launch, one launch per action, no automatic Jira insertion, inert shell quoting, `sendText(..., false)` for context, and no transcript reads or terminal disposal. | Pass |
@@ -31,6 +31,7 @@ The repository is ready for the operator-owned human feedback pass in `HUMAN_FEE
 - Jenkins build choices are deterministically latest-first even when bindings share a timestamp.
 - Jenkins XML discovery skips expression-valued Sonar settings while still accepting a later safe literal setting.
 - Direct command coverage now exercises project Git/MR actions and the session pause, resume, detach, stop, and remove workflow.
+- The activation harness now exercises all 34 contributed commands, including synthetic successful Jira refresh, MR/CI context insertion, project-routed provider context, and manual provider polling without using a live endpoint.
 
 ## Operator-Only Signoff Still Required
 
