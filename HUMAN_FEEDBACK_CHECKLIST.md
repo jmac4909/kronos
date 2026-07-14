@@ -61,10 +61,10 @@ Use a real ticket only when its provider data is approved for local context capt
 
 ## Local Projects and Branches
 
-1. Add one safe parent folder to `Kronos: Project Discovery Roots`, set a bounded depth, then choose **Discover and Register Local Projects** from the Work toolbar.
-2. Confirm open workspace folders and Git projects under that root appear, deeper/out-of-limit folders do not, and nothing is registered until selected.
+1. Choose **Choose Project Discovery Folders** from the Work toolbar, select two safe parent folders in one native dialog, and confirm **Discover and Register Local Projects** opens immediately.
+2. Confirm open workspace folders and Git projects under both roots appear, deeper/out-of-limit folders do not, and nothing is registered until selected.
 3. Confirm the Jira board shows the project name, absolute path, and the branch currently named by Git `HEAD`.
-4. From a ticket, choose **Project / Branch**, select that project, and confirm the ticket workspace and Work row show the same branch and launch directory.
+4. From two tickets, choose **Project / Branch**, attach projects from the selected roots, and confirm each ticket workspace and Work row show the right branch and launch directory.
 5. Switch branches yourself in the terminal, refresh or reopen the board, and confirm Kronos reflects the new branch without running a Git command.
 6. Start Claude for the linked ticket and confirm its new terminal starts in the selected project directory.
 7. Choose **Manage Focused Terminal** on an existing terminal and confirm linking does not change that terminal's directory or send `cd`.

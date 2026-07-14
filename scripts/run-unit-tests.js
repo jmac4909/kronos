@@ -1099,6 +1099,10 @@ test('extension activation registers the bounded surface and explicit launch com
   const registeredCommands = [];
   const commandHandlers = new Map();
   const createdTerminals = [];
+  const configurationValues = new Map();
+  const configurationUpdates = [];
+  let openDialogResult;
+  let lastOpenDialogOptions;
   let failNextTerminalCreation = false;
   let deferNextProcessId = false;
   let resolveDeferredProcessId;
@@ -1126,6 +1130,7 @@ test('extension activation registers the bounded surface and explicit launch com
     ThemeIcon,
     ThemeColor,
     TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
+    ConfigurationTarget: { Global: 1 },
     ProgressLocation: { Notification: 15 },
     ViewColumn: { One: 1 },
     window: {
@@ -1137,6 +1142,15 @@ test('extension activation registers the bounded surface and explicit launch com
       showWarningMessage() { return Promise.resolve(undefined); },
       showInformationMessage() { return Promise.resolve(undefined); },
       showErrorMessage() { return Promise.resolve(undefined); },
+      showOpenDialog(options) {
+        lastOpenDialogOptions = options;
+        const result = openDialogResult;
+        openDialogResult = undefined;
+        return Promise.resolve(result);
+      },
+      showQuickPick(items, options) {
+        return Promise.resolve(options?.canPickMany ? items : undefined);
+      },
       createTerminal(options) {
         if (failNextTerminalCreation) {
           failNextTerminalCreation = false;
@@ -1166,7 +1180,15 @@ test('extension activation registers the bounded surface and explicit launch com
       isTrusted: true,
       name: 'Fixture Workspace',
       workspaceFolders: [{ name: 'fixture', uri: { fsPath: tempRoot } }],
-      getConfiguration() { return { get(_key, fallback) { return fallback; } }; },
+      getConfiguration() {
+        return {
+          get(key, fallback) { return configurationValues.has(key) ? configurationValues.get(key) : fallback; },
+          async update(key, value, target) {
+            configurationValues.set(key, value);
+            configurationUpdates.push({ key, value, target });
+          },
+        };
+      },
       onDidChangeConfiguration() { return disposable(); },
     },
     commands: {
@@ -1206,6 +1228,30 @@ test('extension activation registers the bounded surface and explicit launch com
     const expectedCommands = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
       .contributes.commands.map(command => command.command);
     assert.deepEqual(registeredCommands, expectedCommands);
+
+    const ideaProjectsRoot = path.join(tempRoot, 'IdeaProjects');
+    const pycharmProjectsRoot = path.join(tempRoot, 'PycharmProjects');
+    const ideaProject = path.join(ideaProjectsRoot, 'idea-service');
+    const pycharmProject = path.join(pycharmProjectsRoot, 'python-service');
+    fs.mkdirSync(path.join(ideaProject, '.git'), { recursive: true });
+    fs.mkdirSync(path.join(pycharmProject, '.git'), { recursive: true });
+    fs.writeFileSync(path.join(ideaProject, '.git', 'HEAD'), 'ref: refs/heads/feature/idea-service\n');
+    fs.writeFileSync(path.join(pycharmProject, '.git', 'HEAD'), 'ref: refs/heads/main\n');
+    openDialogResult = [{ fsPath: ideaProjectsRoot }, { fsPath: pycharmProjectsRoot }];
+    await commandHandlers.get('kronos.configureProjectDiscoveryFolders')();
+    assert.deepEqual(configurationValues.get('projectDiscoveryRoots'), [ideaProjectsRoot, pycharmProjectsRoot]);
+    assert.deepEqual(configurationUpdates.at(-1), {
+      key: 'projectDiscoveryRoots',
+      value: [ideaProjectsRoot, pycharmProjectsRoot],
+      target: vscode.ConfigurationTarget.Global,
+    });
+    assert.equal(lastOpenDialogOptions.canSelectFiles, false);
+    assert.equal(lastOpenDialogOptions.canSelectFolders, true);
+    assert.equal(lastOpenDialogOptions.canSelectMany, true);
+    assert.equal(lastOpenDialogOptions.defaultUri.fsPath, tempRoot);
+    const registeredProjects = stateStore.readStateFileWithIssues().state.projects;
+    assert.equal(registeredProjects['idea-service'].path, ideaProject);
+    assert.equal(registeredProjects['python-service'].path, pycharmProject);
 
     await Promise.all([
       commandHandlers.get('kronos.newClaudeSession')(),

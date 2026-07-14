@@ -208,6 +208,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
     this.command('kronos.filterWork', async () => this.configureWorkFilter());
     this.command('kronos.clearWorkFilter', () => this.workTree.clearFilter());
     this.command('kronos.openTicketWorkspace', async argument => this.openTicketWorkspace(argument));
+    this.command('kronos.configureProjectDiscoveryFolders', async () => this.configureProjectDiscoveryFolders());
     this.command('kronos.registerWorkspaceProject', async () => this.registerWorkspaceProject());
     this.command('kronos.chooseTicketProject', async argument => this.chooseTicketProject(argument));
     this.command('kronos.newClaudeSession', async () => this.newClaudeSession());
@@ -377,8 +378,13 @@ class TerminalFirstRuntime implements vscode.Disposable {
     if (discovery.projects.length === 0) {
       const action = await vscode.window.showWarningMessage(
         'No project folders were discovered. Open a workspace folder or configure Kronos project discovery roots.',
+        'Choose Discovery Folders',
         'Open Discovery Settings',
       );
+      if (action === 'Choose Discovery Folders') {
+        await this.configureProjectDiscoveryFolders();
+        return;
+      }
       if (action === 'Open Discovery Settings') {
         await vscode.commands.executeCommand('workbench.action.openSettings', '@ext:jmacke01.kronos project discovery');
       }
@@ -411,6 +417,45 @@ class TerminalFirstRuntime implements vscode.Disposable {
     );
   }
 
+  private async configureProjectDiscoveryFolders(): Promise<void> {
+    const defaultUri = vscode.workspace.workspaceFolders?.[0]?.uri;
+    const selectedFolders = await vscode.window.showOpenDialog({
+      canSelectFiles: false,
+      canSelectFolders: true,
+      canSelectMany: true,
+      title: 'Choose Kronos Project Discovery Folders',
+      openLabel: 'Add Discovery Folders',
+      ...(defaultUri ? { defaultUri } : {}),
+    });
+    if (!selectedFolders || selectedFolders.length === 0) { return; }
+
+    const existingRoots = this.projectDiscoverySettings().roots;
+    const roots = uniqueProjectDiscoveryRoots([
+      ...existingRoots,
+      ...selectedFolders.map(folder => folder.fsPath),
+    ], 50);
+    try {
+      await vscode.workspace.getConfiguration('kronos').update(
+        'projectDiscoveryRoots',
+        roots,
+        vscode.ConfigurationTarget.Global,
+      );
+    } catch (error: unknown) {
+      const detail = unknownErrorMessage(error, 'Kronos could not save the selected discovery folders.');
+      this.log('Could not save project discovery folders.', detail);
+      void vscode.window.showErrorMessage(detail);
+      return;
+    }
+
+    const addedCount = roots.length - existingRoots.length;
+    void vscode.window.showInformationMessage(
+      addedCount > 0
+        ? `Added ${addedCount} project discovery folder${addedCount === 1 ? '' : 's'}. Choose the projects Kronos may link to tickets.`
+        : 'Those project discovery folders were already configured. Choose the projects Kronos may link to tickets.',
+    );
+    await this.registerWorkspaceProject();
+  }
+
   private projectRegistrations(projects: readonly DiscoveredProject[]): Array<{ name: string; path: string }> {
     const existing = this.state.state?.projects || {};
     const names = new Map(Object.entries(existing).map(([name, project]) => [name.toLocaleLowerCase(), project.path || '']));
@@ -437,9 +482,11 @@ class TerminalFirstRuntime implements vscode.Disposable {
     const projects = listLocalProjects(this.state.state).filter(project => project.available);
     if (projects.length === 0) {
       const action = await vscode.window.showWarningMessage(
-        'No local project folder is registered. Open the project folder in this window, then register it.',
+        'No local project folder is registered. Choose parent folders to discover or scan the folders already configured.',
+        'Choose Discovery Folders',
         'Discover Projects',
       );
+      if (action === 'Choose Discovery Folders') { await this.configureProjectDiscoveryFolders(); }
       if (action === 'Discover Projects') { await this.registerWorkspaceProject(); }
       return;
     }
@@ -1409,6 +1456,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
   private async openSetup(): Promise<void> {
     const choice = await vscode.window.showQuickPick([
       { label: '$(terminal) Claude launch settings', description: 'command, terminal name, and starting directory', id: 'claude' },
+      { label: '$(folder-opened) Choose discovery folders', description: 'select IdeaProjects, PycharmProjects, or other parent folders', id: 'projectRoots' },
       { label: '$(folder-library) Discover local projects', description: 'inspect open folders and configured roots, then choose what Kronos may link', id: 'project' },
       { label: '$(key) Provider setup guide', description: 'Jira, GitLab, Jenkins, and SonarQube environment keys', id: 'providers' },
       { label: '$(pulse) Run Doctor', description: 'validate local state and configured boundaries', id: 'doctor' },
@@ -1420,6 +1468,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
       await vscode.commands.executeCommand('workbench.action.openSettings', '@ext:jmacke01.kronos claude');
       return;
     }
+    if (choice.id === 'projectRoots') { await this.configureProjectDiscoveryFolders(); return; }
     if (choice.id === 'project') { await this.registerWorkspaceProject(); return; }
     if (choice.id === 'doctor') { await this.openDoctor(); return; }
     if (choice.id === 'board') { await this.openJiraBoard(); return; }
@@ -1732,6 +1781,22 @@ function safeProjectName(value: unknown): string {
   return typeof value === 'string'
     ? value.replace(/[\u0000-\u001f\u007f\u2028\u2029]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200)
     : '';
+}
+
+function uniqueProjectDiscoveryRoots(values: readonly string[], limit: number): string[] {
+  const roots: string[] = [];
+  const seen = new Set<string>();
+  for (const value of values) {
+    const root = typeof value === 'string'
+      ? value.replace(/[\u0000-\u001f\u007f\u2028\u2029]/g, '').trim().slice(0, 4_000)
+      : '';
+    const key = process.platform === 'win32' ? root.toLocaleLowerCase() : root;
+    if (!root || seen.has(key)) { continue; }
+    seen.add(key);
+    roots.push(root);
+    if (roots.length >= limit) { break; }
+  }
+  return roots;
 }
 
 function boundedIntegerSetting(value: unknown, fallback: number, minimum: number, maximum: number): number {

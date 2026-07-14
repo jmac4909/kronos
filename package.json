@@ -87,6 +87,11 @@
         "icon": "$(open-preview)"
       },
       {
+        "command": "kronos.configureProjectDiscoveryFolders",
+        "title": "Kronos: Choose Project Discovery Folders",
+        "icon": "$(folder-opened)"
+      },
+      {
         "command": "kronos.registerWorkspaceProject",
         "title": "Kronos: Discover and Register Local Projects",
         "icon": "$(folder-library)"
@@ -215,9 +220,14 @@
           "group": "navigation@4"
         },
         {
-          "command": "kronos.registerWorkspaceProject",
+          "command": "kronos.configureProjectDiscoveryFolders",
           "when": "view == kronosWork",
           "group": "navigation@5"
+        },
+        {
+          "command": "kronos.registerWorkspaceProject",
+          "when": "view == kronosWork",
+          "group": "navigation@6"
         },
         {
           "command": "kronos.newClaudeSession",
@@ -370,7 +380,7 @@
           },
           "default": [],
           "scope": "machine",
-          "description": "Absolute folders Kronos may inspect for local Git projects when Discover and Register Local Projects is explicitly opened. Open workspace folders are always offered. Use ~ for the current home folder."
+          "description": "Parent folders Kronos may inspect for local Git projects when discovery is explicitly opened. Use Kronos: Choose Project Discovery Folders for the native multi-folder picker. Open workspace folders are always offered. Use ~ for the current home folder."
         },
         "kronos.projectDiscoveryDepth": {
           "type": "integer",
