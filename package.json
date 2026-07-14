@@ -515,7 +515,7 @@
     "compile": "node scripts/clean-output.js && node node_modules/typescript/bin/tsc -p ./",
     "watch": "node scripts/clean-output.js && node node_modules/typescript/bin/tsc -watch -p ./",
     "package": "npx --yes @vscode/vsce@3.9.2 package --no-dependencies --allow-missing-repository",
-    "test": "node scripts/check-manifest.js && node scripts/check-security.js && node scripts/check-context-governance.js && npm run compile && node scripts/run-unit-tests.js && npm run webview:dom && npm run webview:jira-board",
+    "test": "node scripts/check-manifest.js && node scripts/check-runtime-graph.js && node scripts/check-security.js && node scripts/check-context-governance.js && npm run compile && node scripts/run-unit-tests.js && npm run webview:dom && npm run webview:jira-board",
     "webview:dom": "node scripts/run-webview-dom-tests.js",
     "webview:jira-board": "node scripts/run-jira-work-board-tests.js",
     "feedback:state": "node scripts/create-feedback-state.js",

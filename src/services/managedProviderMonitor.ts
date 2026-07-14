@@ -1322,14 +1322,6 @@ function notice(
   return value;
 }
 
-export function projectConfigurationForSession(
-  state: KronosStateSnapshot | null,
-  session: TicketWorkSessionRecord,
-): Record<string, unknown> {
-  const ticket = state?.tickets[session.ticketKey];
-  return { ...projectConfigurationForTicket(state, ticket) };
-}
-
 export function configuredGitLabPollingTarget(
   state: KronosStateSnapshot | null,
   session: TicketWorkSessionRecord,

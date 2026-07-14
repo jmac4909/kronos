@@ -159,16 +159,6 @@ export function compareGitLabPipelineDigests(previous: unknown, current: unknown
   return transitions;
 }
 
-export function detectGitLabPipelineTransitions(
-  previousSnapshot: GitLabMergeRequestContextSnapshot | GitLabMergeRequestMonitorSnapshot | unknown,
-  currentSnapshot: GitLabMergeRequestContextSnapshot | GitLabMergeRequestMonitorSnapshot | unknown,
-): GitLabPipelineTransition[] {
-  const previous = normalizeGitLabPipelineDigest(previousSnapshot);
-  const current = normalizeGitLabPipelineDigest(currentSnapshot);
-  if (!previous || !current) { return []; }
-  return compareGitLabPipelineDigests(previous, current);
-}
-
 function selectedPipeline(root: Record<string, unknown>): Record<string, unknown> | undefined {
   const mergeRequest = isRecord(root['mr']) ? root['mr'] : {};
   const headPipeline = isRecord(mergeRequest['head_pipeline']) ? mergeRequest['head_pipeline'] : undefined;

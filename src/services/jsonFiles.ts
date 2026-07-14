@@ -1,13 +1,8 @@
-import * as fs from 'fs';
 import { unknownErrorMessage } from './errorUtils';
 
 interface ParseJsonWithLabelOptions {
   includePreview?: boolean;
   previewLength?: number;
-}
-
-export function readJsonFile(filePath: string): unknown {
-  return JSON.parse(stripUtf8Bom(fs.readFileSync(filePath, 'utf-8')));
 }
 
 export function stripUtf8Bom(content: string): string {

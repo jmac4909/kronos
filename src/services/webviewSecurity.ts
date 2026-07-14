@@ -30,51 +30,6 @@ export function webviewScriptCspOptions(cspSource: string, nonce: string): Webvi
   return { allowScripts: true, nonce, cspSource };
 }
 
-export function webviewVsCodeApiScript(webviewName = 'Kronos webview'): string {
-  const nameLiteral = JSON.stringify(webviewName) || '"Kronos webview"';
-  return [
-    'function kronosVsCodeApi() {',
-    "  const cacheKey = Symbol.for('kronos.vscodeApi');",
-    '  const root = typeof globalThis === \'object\' ? globalThis : window;',
-    "  const cached = root[cacheKey];",
-    "  if (cached && typeof cached.postMessage === 'function' && !cached.__kronosFallbackVsCodeApi) { return cached; }",
-    '  function kronosFallbackVsCodeApi() {',
-    "    return { __kronosFallbackVsCodeApi: true, postMessage: function(message) { console.warn('VS Code API unavailable for Kronos webview action', message); } };",
-    '  }',
-    "  if (typeof acquireVsCodeApi !== 'function') {",
-    '    return kronosFallbackVsCodeApi();',
-    '  }',
-    '  try {',
-    '    root[cacheKey] = acquireVsCodeApi();',
-    '    return root[cacheKey];',
-    '  } catch (error) {',
-    "    console.error('Failed to acquire VS Code API for Kronos webview action', error);",
-    '    return kronosFallbackVsCodeApi();',
-    '  }',
-    '}',
-    '(function() {',
-    `  const webviewName = ${nameLiteral};`,
-    '  function kronosErrorText(value) {',
-    '    if (value && typeof value === \'object\' && \'message\' in value) { return String(value.message || value); }',
-    '    return String(value || \'unknown error\');',
-    '  }',
-    '  try {',
-    "    document.documentElement.setAttribute('data-kronos-script-ready', 'true');",
-    "    document.documentElement.setAttribute('data-kronos-webview', webviewName);",
-    '  } catch (error) {',
-    "    console.warn('Kronos webview could not mark script readiness', error);",
-    '  }',
-    "  console.info('Kronos webview script ready', webviewName, navigator.userAgent);",
-    "  window.addEventListener('error', function(event) {",
-    "    console.error('Kronos webview script error', webviewName, event.message, event.filename, event.lineno, event.colno);",
-    '  });',
-    "  window.addEventListener('unhandledrejection', function(event) {",
-    "    console.error('Kronos webview unhandled rejection', webviewName, kronosErrorText(event.reason));",
-    '  });',
-    '}());',
-  ].join('\n');
-}
-
 export function webviewActionScriptTag(
   nonce: string,
   webviewName: string,

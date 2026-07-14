@@ -420,8 +420,6 @@ export function renderGitLabContextPrompt(
   ].join('\n');
 }
 
-export const buildGitLabContextPrompt = renderGitLabContextPrompt;
-
 function normalizeMergeRequest(
   mr: Record<string, unknown>,
   iid: number,
