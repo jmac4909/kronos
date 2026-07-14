@@ -446,12 +446,17 @@ export function addWorkSessionProviderBinding(
     const url = optionalProviderHttpUrl(input.url, 'provider URL', provider);
     if (projectId) { binding.projectId = projectId; }
     if (url) { binding.url = url; }
-    const existingIndex = record.providerBindings.findIndex(candidate => candidate.id === id);
+    const sameSubject = (candidate: WorkSessionProviderBinding) => candidate.provider === provider
+      && candidate.resource === resource
+      && candidate.subjectId === subjectId;
+    const existingIndex = record.providerBindings.findIndex(candidate => candidate.id === id || sameSubject(candidate));
     if (existingIndex >= 0) {
       record.providerBindings[existingIndex] = binding;
     } else {
       record.providerBindings.push(binding);
     }
+    record.providerBindings = record.providerBindings.filter((candidate, index) =>
+      !sameSubject(candidate) || index === existingIndex || (existingIndex < 0 && candidate.id === id));
     record.providerBindings = record.providerBindings.slice(-MAX_PROVIDER_BINDINGS);
   });
 }

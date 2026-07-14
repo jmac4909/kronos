@@ -255,6 +255,9 @@ class TerminalFirstRuntime implements vscode.Disposable {
       log: (message, detail) => this.log(message, detail),
       notify: notice => this.showProviderNotice(notice),
       refresh: () => this.refreshTerminalFirstViews(),
+      projectTicketProviderState: (ticketKey, input) => this.state.projectTicketProviderState(ticketKey, input),
+      updateProjectSonarTarget: (projectName, projectKey, branch) =>
+        this.state.setLocalProjectSonarTarget(projectName, projectKey, branch),
     });
 
     this.disposables.push(
@@ -705,6 +708,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
     });
     const projects: ProjectIntegrationFormProject[] = selectedProjects.map(project => {
       const config = this.state.state?.projects[project.name]?.config || {};
+      const suggestedSonarKey = config.sonar_project_key || sonarProjectKeySuggestion(config.repo_name, project.name);
       return {
         name: project.name,
         path: project.path,
@@ -713,7 +717,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
           ? { gitlabProject: String(config.gitlab_project_id || config.gitlab_project_path) }
           : {}),
         ...(config.jenkins_url ? { jenkinsUrl: config.jenkins_url } : {}),
-        ...(config.sonar_project_key ? { sonarProjectKey: config.sonar_project_key } : {}),
+        ...(suggestedSonarKey ? { sonarProjectKey: suggestedSonarKey } : {}),
         ...((config.default_branch || config.base_branch)
           ? { defaultBranch: config.default_branch || config.base_branch }
           : {}),
@@ -1609,10 +1613,16 @@ class TerminalFirstRuntime implements vscode.Disposable {
       let sonar: SonarBranchContext | undefined;
       if (jenkinsUrl) {
         progress.report({ message: 'Reading Jenkins build, stages, and tests...' });
-        try { jenkins = await jenkinsRestClient.buildContext(jenkinsUrl); }
+        try {
+          const jenkinsBranch = configuredSonarBranchName(this.state.state, ticketKey) || undefined;
+          jenkins = await jenkinsRestClient.buildContext(
+            jenkinsUrl,
+            jenkinsBranch ? { branch: jenkinsBranch } : {},
+          );
+        }
         catch (error: unknown) { warnings.push(unknownErrorMessage(error, 'Jenkins context was unavailable.')); }
       }
-      if (!sonarTarget && jenkins?.sonarProjectKey) {
+      if (jenkins?.sonarProjectKey && (!sonarTarget || sonarTarget.projectKey !== jenkins.sonarProjectKey)) {
         const branch = jenkins.sonarBranch || configuredSonarBranchName(this.state.state, ticketKey);
         if (branch) {
           const providerUrl = sonarDashboardUrl(jenkins.sonarProjectKey, branch);
@@ -1621,6 +1631,10 @@ class TerminalFirstRuntime implements vscode.Disposable {
             branch,
             ...(providerUrl ? { providerUrl } : {}),
           };
+          const projectName = selection.workSession?.projectName || ticket.launch_project;
+          if (projectName) {
+            this.state.setLocalProjectSonarTarget(projectName, jenkins.sonarProjectKey, branch);
+          }
         }
       }
       if (sonarTarget) {
@@ -2782,6 +2796,14 @@ function safeProjectName(value: unknown): string {
   return typeof value === 'string'
     ? value.replace(/[\u0000-\u001f\u007f\u2028\u2029]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200)
     : '';
+}
+
+function sonarProjectKeySuggestion(...values: unknown[]): string | undefined {
+  for (const value of values) {
+    const candidate = safeProjectName(value);
+    if (candidate && /^[A-Za-z0-9_.:-]{1,400}$/.test(candidate)) { return candidate; }
+  }
+  return undefined;
 }
 
 function uniqueProjectDiscoveryRoots(values: readonly string[], limit: number): string[] {

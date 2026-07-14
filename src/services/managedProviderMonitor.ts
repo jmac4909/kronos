@@ -6,7 +6,7 @@ import {
   type GitLabMergeRequestMonitorSnapshot,
 } from './gitlabRestClient';
 import { jenkinsRestClient, type JenkinsBuildContext } from './jenkinsRestClient';
-import { sonarDashboardUrl, sonarRestClient, type SonarBranchContext } from './sonarRestClient';
+import { isSonarRestConfigured, sonarDashboardUrl, sonarRestClient, type SonarBranchContext } from './sonarRestClient';
 import {
   compareGitLabPipelineDigests,
   mergeGitLabPipelineDigest,
@@ -68,7 +68,7 @@ import {
 import { optionalTrimmedStringFromUnknown } from './records';
 import { unknownErrorMessage } from './errorUtils';
 import { projectConfigurationForTicket, readProjectGitBranch } from './projectCatalog';
-import { latestGitLabMergeRequestBinding } from './ticketMergeRequestProjection';
+import { effectiveTicketMergeRequest, latestGitLabMergeRequestBinding } from './ticketMergeRequestProjection';
 import { isProviderReadTransitionKind, providerReadStateSignature } from './providerReadTransitions';
 
 export interface ManagedProviderPollResult {
@@ -104,6 +104,11 @@ export interface ManagedProviderMonitorOptions {
   log?: (message: string, detail?: string) => void;
   notify?: (notice: ManagedProviderNotice) => void;
   refresh?: () => void;
+  projectTicketProviderState?: (
+    ticketKey: string,
+    input: { mr?: NonNullable<KronosStateSnapshot['tickets'][string]['mr']>; build?: NonNullable<KronosStateSnapshot['tickets'][string]['build']> },
+  ) => void;
+  updateProjectSonarTarget?: (projectName: string, projectKey: string, branch?: string) => void;
 }
 
 const LEASE_RENEWAL_MS = 60 * 1000;
@@ -112,18 +117,22 @@ const FAILURE_BUILD_STATUSES = new Set(['failed', 'failure', 'error', 'unstable'
 const PASSING_SONAR_GATES = new Set(['ok', 'pass', 'passed', 'success']);
 
 export class ManagedProviderMonitor {
-  private running = false;
+  private inFlight: Promise<ManagedProviderPollResult> | undefined;
 
   constructor(private readonly options: ManagedProviderMonitorOptions) {}
 
-  async poll(): Promise<ManagedProviderPollResult> {
-    if (this.running) {
-      return { ...emptyResult(), leaseUnavailable: true, leaseReason: 'local' };
-    }
-    this.running = true;
+  poll(): Promise<ManagedProviderPollResult> {
+    if (this.inFlight) { return this.inFlight; }
+    const current = this.pollOnce().finally(() => {
+      if (this.inFlight === current) { this.inFlight = undefined; }
+    });
+    this.inFlight = current;
+    return current;
+  }
+
+  private async pollOnce(): Promise<ManagedProviderPollResult> {
     const lease = tryAcquireManagedMonitorLease();
     if (!lease.acquired) {
-      this.running = false;
       return { ...emptyResult(), leaseUnavailable: true, leaseReason: lease.reason || 'contended' };
     }
 
@@ -193,7 +202,6 @@ export class ManagedProviderMonitor {
     } finally {
       clearInterval(heartbeat);
       if (!lease.release()) { this.log('Managed-provider polling lease was no longer owned at release.'); }
-      this.running = false;
     }
   }
 
@@ -389,6 +397,13 @@ export class ManagedProviderMonitor {
         if (!previousMr || previousMr.fingerprint !== mrDigest.fingerprint) {
           writeGitLabMergeRequestMonitorSnapshot(session.id, mrDigest);
         }
+        const currentTicket = this.options.state()?.tickets[session.ticketKey];
+        if (currentTicket) {
+          const projected = effectiveTicketMergeRequest(currentTicket, session, mrDigest);
+          if (projected) {
+            this.options.projectTicketProviderState?.(session.ticketKey, { mr: projected });
+          }
+        }
       }
     } catch (error: unknown) {
       stateFailures += 1;
@@ -501,7 +516,11 @@ export class ManagedProviderMonitor {
     let sonarReadFailure: string | undefined;
     if (jenkinsUrl) {
       try {
-        jenkins = await jenkinsRestClient.buildContext(jenkinsUrl);
+        const jenkinsBranch = configuredSonarBranchName(state, session.ticketKey) || undefined;
+        jenkins = await jenkinsRestClient.buildContext(
+          jenkinsUrl,
+          jenkinsBranch ? { branch: jenkinsBranch } : {},
+        );
         session = reconcileProviderBinding(session, {
           provider: 'jenkins',
           resource: 'build',
@@ -509,25 +528,40 @@ export class ManagedProviderMonitor {
           url: jenkins.build.url || jenkins.jobOrBuildUrl || jenkinsUrl,
         });
         result.polled += 1;
-        if (!sonarTarget && jenkins.sonarProjectKey) {
+        this.options.projectTicketProviderState?.(session.ticketKey, {
+          build: {
+            number: jenkins.build.number,
+            status: jenkins.build.status,
+            url: jenkins.build.url || jenkins.jobOrBuildUrl || jenkinsUrl,
+          },
+        });
+        const discoveredProjectKey = jenkins.sonarProjectKey
+          || (!sonarTarget && isSonarRestConfigured() ? sonarProjectKeyHeuristic(state, session) : undefined);
+        if (discoveredProjectKey) {
           const branch = jenkins.sonarBranch || configuredSonarBranchName(state, session.ticketKey);
-          if (branch) {
-            const providerUrl = sonarDashboardUrl(jenkins.sonarProjectKey, branch);
+          const discoveredOverridesMismatch = Boolean(jenkins.sonarProjectKey
+            && sonarTarget?.projectKey !== jenkins.sonarProjectKey);
+          if (branch && (!sonarTarget || discoveredOverridesMismatch)) {
+            const providerUrl = sonarDashboardUrl(discoveredProjectKey, branch);
             sonarTarget = {
-              projectKey: jenkins.sonarProjectKey,
+              projectKey: discoveredProjectKey,
               branch,
               ...(providerUrl ? { providerUrl } : {}),
             };
             session = reconcileProviderBinding(session, {
               provider: 'sonar',
               resource: 'quality-gate',
-              subjectId: `${jenkins.sonarProjectKey}:${branch}`,
-              projectId: jenkins.sonarProjectKey,
+              subjectId: `${discoveredProjectKey}:${branch}`,
+              projectId: discoveredProjectKey,
               ...(providerUrl ? { url: providerUrl } : {}),
             });
+            const projectName = monitoringProjectName(state, session);
+            if (projectName) {
+              this.options.updateProjectSonarTarget?.(projectName, discoveredProjectKey, branch);
+            }
             this.log(
-              `Jenkins discovered SonarQube project ${jenkins.sonarProjectKey} for ${session.ticketKey}.`,
-              `Kronos bound the literal pipeline configuration to branch ${branch}.`,
+              `Jenkins discovered SonarQube project ${discoveredProjectKey} for ${session.ticketKey}.`,
+              `${jenkins.sonarProjectKey ? 'Kronos bound the literal pipeline configuration' : 'Kronos used the registered repository-name heuristic'} to branch ${branch}.`,
             );
           }
         }
@@ -649,6 +683,24 @@ export class ManagedProviderMonitor {
   }
 }
 
+function monitoringProjectName(
+  state: KronosStateSnapshot | null,
+  session: TicketWorkSessionRecord,
+): string | undefined {
+  return session.projectName || state?.tickets[session.ticketKey]?.launch_project;
+}
+
+function sonarProjectKeyHeuristic(
+  state: KronosStateSnapshot | null,
+  session: TicketWorkSessionRecord,
+): string | undefined {
+  const ticket = state?.tickets[session.ticketKey];
+  const config = projectConfigurationForTicket(state, ticket);
+  const candidate = optionalTrimmedStringFromUnknown(config.repo_name)
+    || optionalTrimmedStringFromUnknown(session.projectName);
+  return candidate && /^[A-Za-z0-9_.:-]{1,400}$/.test(candidate) ? candidate : undefined;
+}
+
 function reconcileProviderBinding(
   session: TicketWorkSessionRecord,
   input: AddWorkSessionProviderBindingInput,
@@ -658,7 +710,10 @@ function reconcileProviderBinding(
   const urlMatches = input.url === undefined || current?.url === input.url;
   const idMatches = input.id === undefined || current?.id === input.id;
   if (current && projectMatches && urlMatches && idMatches) { return session; }
-  const updated = addWorkSessionProviderBinding(session.id, input);
+  const updated = addWorkSessionProviderBinding(session.id, {
+    ...input,
+    ...(!input.id && current ? { id: current.id } : {}),
+  });
   if (updated.kind !== 'ticket') { throw new Error('Provider polling requires a ticket-linked work session.'); }
   return updated;
 }

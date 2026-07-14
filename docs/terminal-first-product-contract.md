@@ -155,11 +155,12 @@ Monitoring is read-only and belongs to an active provider-bound work session. A 
 - The operator can pause, resume, or poll a session immediately.
 - A private cross-window lease prevents duplicate concurrent polling against one Kronos data directory. POSIX uses `O_NOFOLLOW`; Windows, where that flag is unsupported, uses exclusive creation and lstat/fstat identity verification around every lease read, write, renewal, and unlink.
 - Monitoring baselines contain bounded normalized digests, not full provider responses.
-- `work.json` remains the Jira Work catalog. A ticket's displayed merge request is projected at read time from its catalog value, newest local session binding, and matching monitor digest, so automatic discovery appears consistently without rewriting Jira state. A newer binding wins stale catalog identity, and a digest is used only when its MR IID matches that identity.
+- `work.json` remains the local Work catalog and records the latest bounded MR and Jenkins build projection observed by monitoring. Jira refreshes preserve those projections until newer provider evidence arrives. A newer binding wins stale MR identity, and a digest is used only when its MR IID matches that identity.
 - Incomplete provider components do not erase the last complete component or create false recovery events.
 - Losing lease ownership stops persistence and prevents the next provider request from starting.
 - Provider errors affect readiness and Attention; they do not trigger remediation.
 - A configured Jenkins job permits a bounded, best-effort read of that job's `/config.xml`. When SonarQube has no explicit project binding, literal `sonar.projectKey` and optional literal `sonar.branch.name` values may establish the read-only SonarQube target for the same poll. Raw XML is never persisted, expression-valued properties are ignored, and the request remains pinned to the configured Jenkins origin.
+- Jenkins multibranch parents are detected from their provider class and resolved to the configured branch job before build evidence is read. Missing JUnit and Pipeline-stage endpoints are normal unavailable evidence, not a failed provider read. A Jenkins-only TLS verification override may be explicitly configured for a locally trusted corporate endpoint without affecting other providers.
 
 Monitoring can observe GitLab, Jenkins, and SonarQube. Jira remains explicitly refreshed from Work rather than continuously monitored as terminal content.
 

@@ -7,6 +7,7 @@ import { redactSensitiveTokens } from './sensitiveText';
 
 export interface JenkinsRestRequestOptions {
   timeoutMs?: number;
+  branch?: string;
 }
 
 export interface JenkinsHttpRequest {
@@ -15,6 +16,7 @@ export interface JenkinsHttpRequest {
   headers: Record<string, string>;
   timeoutMs: number;
   maxResponseBytes: number;
+  rejectUnauthorized?: boolean;
 }
 
 export interface JenkinsHttpResponse {
@@ -128,6 +130,7 @@ interface JenkinsRestConfig {
   baseUrl?: string;
   username?: string;
   token?: string;
+  rejectUnauthorized?: boolean;
 }
 
 interface OptionalJenkinsJsonResult {
@@ -165,7 +168,7 @@ const BUILD_TREE = [
   'artifacts[fileName,relativePath]',
   'changeSet[items[commitId,id,msg,timestamp,author[fullName],affectedPaths]]',
 ].join(',');
-const JOB_OR_BUILD_TREE = `lastBuild[${BUILD_TREE}],lastCompletedBuild[${BUILD_TREE}],${BUILD_TREE}`;
+const JOB_OR_BUILD_TREE = `_class,jobs[name,url,_class,lastBuild[${BUILD_TREE}],lastCompletedBuild[${BUILD_TREE}]],lastBuild[${BUILD_TREE}],lastCompletedBuild[${BUILD_TREE}],${BUILD_TREE}`;
 const TEST_REPORT_TREE = 'failCount,skipCount,passCount,totalCount,duration,suites[name,duration,cases[className,name,status,duration,errorDetails,errorStackTrace]]';
 
 export class JenkinsRestClient {
@@ -199,21 +202,38 @@ export class JenkinsRestClient {
     if (!normalizedInputUrl) {
       throw new JenkinsRestError('Jenkins job or build URL is missing or invalid.');
     }
-    const response = await this.requestJson(
-      normalizedInputUrl,
+    let resolvedInputUrl = normalizedInputUrl;
+    let response = await this.requestJson(
+      resolvedInputUrl,
       'Jenkins build context',
       { tree: JOB_OR_BUILD_TREE },
       options,
     );
-    const root = isRecord(response.value) ? response.value : {};
-    const nestedBuildRecord = firstBuildRecord(root['lastBuild'], root['lastCompletedBuild']);
-    const buildRecord = nestedBuildRecord || (looksLikeBuildRecord(root) ? root : undefined);
+    let root = isRecord(response.value) ? response.value : {};
+    let nestedBuildRecord = firstBuildRecord(root['lastBuild'], root['lastCompletedBuild']);
+    let buildRecord = nestedBuildRecord || (looksLikeBuildRecord(root) ? root : undefined);
+    if (!buildRecord && isJenkinsMultibranchProject(root)) {
+      const branchUrl = jenkinsMultibranchJobUrl(root, resolvedInputUrl, options.branch);
+      if (!branchUrl) {
+        throw new JenkinsRestError('Jenkins is a multibranch project. Configure a monitoring branch that matches one of its branch jobs.');
+      }
+      resolvedInputUrl = branchUrl;
+      response = await this.requestJson(
+        resolvedInputUrl,
+        'Jenkins multibranch build context',
+        { tree: JOB_OR_BUILD_TREE },
+        options,
+      );
+      root = isRecord(response.value) ? response.value : {};
+      nestedBuildRecord = firstBuildRecord(root['lastBuild'], root['lastCompletedBuild']);
+      buildRecord = nestedBuildRecord || (looksLikeBuildRecord(root) ? root : undefined);
+    }
     if (!buildRecord) {
       throw new JenkinsRestError('Jenkins build context did not contain a usable build record. Response content is not displayed.');
     }
     const buildFallbackUrl = nestedBuildRecord
-      ? appendJenkinsBuildNumber(normalizedInputUrl, nonNegativeInteger(buildRecord['number']))
-      : normalizedInputUrl;
+      ? appendJenkinsBuildNumber(resolvedInputUrl, nonNegativeInteger(buildRecord['number']))
+      : resolvedInputUrl;
     const build = normalizeJenkinsBuildDetails(buildRecord, buildFallbackUrl);
     if (!build) {
       throw new JenkinsRestError('Jenkins build context did not contain a valid build number. Response content is not displayed.');
@@ -222,8 +242,8 @@ export class JenkinsRestClient {
     const buildInspection = inspectJenkinsBuildRecord(buildRecord, buildFallbackUrl);
     const warnings: string[] = [...buildInspection.warnings];
     const configurationUrl = nestedBuildRecord
-      ? normalizedInputUrl
-      : jenkinsJobUrlFromBuild(build.url, build.number) || normalizedInputUrl;
+      ? resolvedInputUrl
+      : jenkinsJobUrlFromBuild(build.url, build.number) || resolvedInputUrl;
     const [testResult, stageResult, configurationResult] = await Promise.all([
       this.requestOptionalJson(build.url, 'Jenkins test report', { tree: TEST_REPORT_TREE }, options, 'testReport/api/json'),
       this.requestOptionalJson(build.url, 'Jenkins Pipeline stages', {}, options, 'wfapi/describe'),
@@ -275,7 +295,7 @@ export class JenkinsRestClient {
       schemaVersion: 1,
       provider: 'jenkins',
       fetchedAt: new Date().toISOString(),
-      jobOrBuildUrl: normalizedInputUrl,
+      jobOrBuildUrl: resolvedInputUrl,
       build,
       completeness,
     };
@@ -361,6 +381,7 @@ export class JenkinsRestClient {
         timeoutMs: boundedInteger(options.timeoutMs, DEFAULT_TIMEOUT_MS, 250, 120000),
         maxResponseBytes: this.maxResponseBytes,
         headers: jenkinsHeaders(config),
+        ...(config.rejectUnauthorized !== undefined ? { rejectUnauthorized: config.rejectUnauthorized } : {}),
       });
     } catch (error: unknown) {
       if (error instanceof JenkinsRestError) { throw error; }
@@ -421,7 +442,41 @@ function resolveJenkinsRestConfig(env: NodeJS.ProcessEnv): JenkinsRestConfig {
   if (baseUrl) { config.baseUrl = baseUrl; }
   if (username) { config.username = username; }
   if (token) { config.token = token; }
+  if (env['JENKINS_TLS_REJECT_UNAUTHORIZED']?.trim().toLowerCase() === 'false'
+    || env['JENKINS_TLS_REJECT_UNAUTHORIZED']?.trim() === '0') {
+    config.rejectUnauthorized = false;
+  }
   return config;
+}
+
+function isJenkinsMultibranchProject(value: Record<string, unknown>): boolean {
+  const className = optionalTrimmedStringFromUnknown(value['_class']) || '';
+  return className === 'org.jenkinsci.plugins.workflow.multibranch.WorkflowMultiBranchProject'
+    || className.endsWith('.WorkflowMultiBranchProject');
+}
+
+function jenkinsMultibranchJobUrl(
+  root: Record<string, unknown>,
+  parentUrl: string,
+  branchValue: string | undefined,
+): string | undefined {
+  const branch = optionalTrimmedStringFromUnknown(branchValue);
+  if (!branch || branch.length > 500 || /[\u0000-\u001f\u007f]/.test(branch)) { return undefined; }
+  const expectedOrigin = safeUrlOrigin(parentUrl);
+  for (const value of arrayFromUnknown(root['jobs']).slice(0, 1000)) {
+    if (!isRecord(value)) { continue; }
+    const name = optionalTrimmedStringFromUnknown(value['name']);
+    if (name !== branch && decodeJenkinsJobName(name) !== branch) { continue; }
+    const returnedUrl = sanitizeJenkinsReturnedUrl(optionalTrimmedStringFromUnknown(value['url']), expectedOrigin);
+    if (returnedUrl) { return returnedUrl; }
+  }
+  const encodedJobName = encodeURIComponent(encodeURIComponent(branch));
+  return normalizeJenkinsHttpUrl(`${parentUrl.replace(/\/+$/, '')}/job/${encodedJobName}/`);
+}
+
+function decodeJenkinsJobName(value: string | undefined): string | undefined {
+  if (!value) { return undefined; }
+  try { return decodeURIComponent(value); } catch { return undefined; }
 }
 
 function normalizeJenkinsBuild(record: Record<string, unknown>, fallbackUrl: string): JenkinsBuildSummary | null {
@@ -948,6 +1003,9 @@ function defaultJenkinsTransport(request: JenkinsHttpRequest): Promise<JenkinsHt
       method: request.method,
       timeout: request.timeoutMs,
       headers: request.headers,
+      ...(parsed.protocol === 'https:' && request.rejectUnauthorized !== undefined
+        ? { rejectUnauthorized: request.rejectUnauthorized }
+        : {}),
     }, res => {
       const chunks: Buffer[] = [];
       let receivedBytes = 0;

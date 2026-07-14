@@ -14,6 +14,7 @@ const MAX_NORMALIZED_CONTEXT_BYTES = 10 * 1024 * 1024;
 const GLOBAL_CONTEXT_TRUNCATION = '[Truncated by Kronos global context safety limit]';
 const SENSITIVE_FIELD_PATTERN = /^(?:authorization|cookie|set-cookie|credential|password|passwd|secret|token|api[_-]?key|private[_-]?key|access[_-]?token|client[_-]?secret)$/i;
 const SENSITIVE_FIELD_LABEL_PATTERN = /(?:authorization|cookie|credential|password|passwd|secret|token|api[ _-]?key|private[ _-]?key|access[ _-]?token|client[ _-]?secret)/i;
+const JIRA_NOISE_PROPERTY_PATTERN = /^(?:self|avatarUrls?|avatarUrl|iconUrl|icons|expand|renderedFields|staticMessage|placeholder|helpText)$/i;
 
 export type JiraContextValue = JiraArtifactValue;
 
@@ -812,6 +813,7 @@ function normalizeContextValueInternal(
     }
     const result: { [key: string]: JiraUnprunedValue } = {};
     for (const [key, item] of Object.entries(value)) {
+      if (JIRA_NOISE_PROPERTY_PATTERN.test(key)) { continue; }
       const normalizedItem = pruneEmptyJiraValue(normalizeContextValueInternal(item, seen, depth + 1, tracker));
       if (normalizedItem === undefined) { continue; }
       result[key] = SENSITIVE_FIELD_PATTERN.test(key) ? '[REDACTED]' : normalizedItem;

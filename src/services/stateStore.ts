@@ -4,9 +4,14 @@ import * as path from 'path';
 import type { BuildStatus, KronosState, MergeRequest, Project, ProjectConfig, Ticket } from '../state/types';
 import { unknownErrorMessage } from './errorUtils';
 import { isRecord } from './records';
+import { migrateLegacyKronosState } from './legacyStateMigration';
 
 const explicitKronosDir = process.env['KRONOS_DIR']?.trim();
-export const KRONOS_DIR = explicitKronosDir || path.join(os.homedir(), '.kronos');
+const defaultKronosDir = path.join(os.homedir(), '.kronos');
+if (!explicitKronosDir) {
+  migrateLegacyKronosState(defaultKronosDir, path.join(os.homedir(), '.claude', 'kronos'));
+}
+export const KRONOS_DIR = explicitKronosDir || defaultKronosDir;
 export const STATE_FILE = path.join(KRONOS_DIR, 'work.json');
 const DIRECTORY_MODE = 0o700;
 const FILE_MODE = 0o600;

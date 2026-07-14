@@ -12,6 +12,7 @@ process.env.KRONOS_DIR = path.join(tempRoot, 'runtime');
 test.after(() => fs.rmSync(tempRoot, { recursive: true, force: true }));
 
 const providerEnv = require('../out/services/providerEnv.js');
+const legacyStateMigration = require('../out/services/legacyStateMigration.js');
 const stateStore = require('../out/services/stateStore.js');
 const projectCatalog = require('../out/services/projectCatalog.js');
 const projectDiscovery = require('../out/services/projectDiscovery.js');
@@ -125,6 +126,20 @@ test('managed monitoring lease acquires, blocks duplicate owners, renews, and re
   const next = managedMonitorLease.tryAcquireManagedMonitorLease(options);
   assert.equal(next.acquired, true);
   assert.equal(next.release(), true);
+});
+
+test('one monitor coalesces overlapping polls instead of reporting a false cross-window lease owner', async () => {
+  const monitor = new managedProviderMonitor.ManagedProviderMonitor({ state: () => stateStore.emptyWorkCatalog() });
+  const first = monitor.poll();
+  const overlapping = monitor.poll();
+  assert.equal(overlapping, first);
+  assert.deepEqual(await overlapping, {
+    polled: 0,
+    transitions: 0,
+    failures: 0,
+    skipped: 0,
+    leaseUnavailable: false,
+  });
 });
 const {
   normalizeActionPanelMessage,
@@ -242,6 +257,57 @@ test('Jenkins context extracts only literal SonarQube configuration from bounded
   const expressionOnly = await client.buildContext('https://jenkins.example/job/application');
   assert.equal(expressionOnly.sonarProjectKey, undefined);
   assert.equal(expressionOnly.sonarBranch, undefined);
+});
+
+test('Jenkins resolves multibranch parents and scopes the TLS exception to Jenkins requests', async () => {
+  const requests = [];
+  const branchJobUrl = 'https://jenkins.example/job/application/job/feature%252FJIRA-940/';
+  const client = new JenkinsRestClient({
+    env: {
+      JENKINS_URL: 'https://jenkins.example',
+      JENKINS_TLS_REJECT_UNAUTHORIZED: 'false',
+    },
+    transport: async request => {
+      requests.push(request);
+      const url = new URL(request.url);
+      if (url.pathname === '/job/application/api/json') {
+        return {
+          statusCode: 200,
+          body: JSON.stringify({
+            _class: 'org.jenkinsci.plugins.workflow.multibranch.WorkflowMultiBranchProject',
+            lastBuild: null,
+            jobs: [{ name: 'feature/JIRA-940', url: branchJobUrl }],
+          }),
+          headers: {},
+        };
+      }
+      if (request.url.startsWith(`${branchJobUrl}api/json`)) {
+        return {
+          statusCode: 200,
+          body: JSON.stringify({
+            lastBuild: {
+              number: 41,
+              result: 'SUCCESS',
+              building: false,
+              url: `${branchJobUrl}41/`,
+              actions: [],
+              artifacts: [],
+              changeSet: { items: [] },
+            },
+          }),
+          headers: {},
+        };
+      }
+      return { statusCode: 404, body: '', headers: {} };
+    },
+  });
+  const context = await client.buildContext('https://jenkins.example/job/application', {
+    branch: 'feature/JIRA-940',
+  });
+  assert.equal(context.jobOrBuildUrl, branchJobUrl);
+  assert.equal(context.build.number, 41);
+  assert.ok(requests.every(request => request.rejectUnauthorized === false));
+  assert.ok(requests.some(request => request.url.startsWith(`${branchJobUrl}api/json`)));
 });
 
 test('GitLab discovery selects a unique current-branch MR before ticket search', async () => {
@@ -588,6 +654,7 @@ test('managed polling discovers the SonarQube target from Jenkins config.xml evi
     config: {
       jira_project_key: 'JIRA',
       jenkins_url: 'https://jenkins.example/job/application',
+      sonar_project_key: 'team:wrong',
       default_branch: 'feature/JIRA-903',
     },
   };
@@ -603,6 +670,7 @@ test('managed polling discovers the SonarQube target from Jenkins config.xml evi
   const originalBuildContext = jenkinsRestModule.jenkinsRestClient.buildContext;
   const originalBranchContext = sonarRestModule.sonarRestClient.branchContext;
   let sonarRequest;
+  let persistedTarget;
   jenkinsRestModule.jenkinsRestClient.buildContext = async () => ({
     schemaVersion: 1,
     provider: 'jenkins',
@@ -654,9 +722,19 @@ test('managed polling discovers the SonarQube target from Jenkins config.xml evi
     };
   };
   try {
-    const result = await new managedProviderMonitor.ManagedProviderMonitor({ state: () => state }).poll();
+    const result = await new managedProviderMonitor.ManagedProviderMonitor({
+      state: () => state,
+      updateProjectSonarTarget: (projectName, projectKey, branch) => {
+        persistedTarget = { projectName, projectKey, branch };
+      },
+    }).poll();
     assert.equal(result.polled, 2);
     assert.deepEqual(sonarRequest, { projectKey: 'team:application', branch: 'feature/JIRA-903' });
+    assert.deepEqual(persistedTarget, {
+      projectName: 'Application',
+      projectKey: 'team:application',
+      branch: 'feature/JIRA-903',
+    });
     const updated = workSessions.readWorkSession(session.id);
     assert.ok(updated.providerBindings.some(binding =>
       binding.provider === 'sonar'
@@ -838,6 +916,38 @@ test('local projects preserve provider bindings and report branch without runnin
   const unlinked = projectCatalog.setTicketLocalProject(switched, 'JIRA-123');
   assert.deepEqual(unlinked.tickets['JIRA-123'].projects, ['Provider']);
   assert.equal(unlinked.tickets['JIRA-123'].launch_project, undefined);
+});
+
+test('provider observations update the durable Work catalog without losing Jira metadata', () => {
+  const initial = stateStore.emptyWorkCatalog();
+  initial.tickets['JIRA-123'] = fixtureTicket();
+  const next = projectCatalog.projectTicketProviderState(initial, 'JIRA-123', {
+    mr: {
+      iid: 77,
+      state: 'opened',
+      review_status: 'approved',
+      url: 'https://gitlab.example/group/app/-/merge_requests/77',
+    },
+    build: { number: 18, status: 'SUCCESS', url: 'https://jenkins.example/job/app/18/' },
+  });
+  assert.equal(next.tickets['JIRA-123'].summary, initial.tickets['JIRA-123'].summary);
+  assert.equal(next.tickets['JIRA-123'].mr.iid, 77);
+  assert.equal(next.tickets['JIRA-123'].build.number, 18);
+  assert.equal(projectCatalog.projectTicketProviderState(next, 'JIRA-123', {}), next);
+});
+
+test('Jira project keys never auto-link every repository that shares the same board', () => {
+  const current = stateStore.emptyWorkCatalog();
+  current.projects.Api = { config: { jira_project_key: 'JIRA' } };
+  current.projects.Web = { config: { jira_project_key: 'JIRA' } };
+  const snapshot = {
+    issues: [jiraIssue('JIRA-123', 'Ambiguous project mapping')],
+    fetchedAt: '2026-07-14T12:00:00.000Z',
+    complete: true,
+  };
+  const result = jiraWorkCatalog.catalogFromJiraWorkList(snapshot, current, 'https://jira.example');
+  assert.equal(result.state.tickets['JIRA-123'].projects.includes('Api'), false);
+  assert.equal(result.state.tickets['JIRA-123'].projects.includes('Web'), false);
 });
 
 test('checked projects replace local registrations and safely unlink removed launch projects', () => {
@@ -1061,6 +1171,32 @@ test('provider environment reads reject target and parent symbolic links', t => 
   const linkedParent = providerEnv.loadProviderEnv({ filePath: path.join(parentLink, '.env'), env: parentEnv });
   assert.match(linkedParent.error || '', /symbolic link/i);
   assert.deepEqual(parentEnv, {});
+});
+
+test('legacy ~/.claude/kronos state migrates once without helper scripts', t => {
+  const home = path.join(tempRoot, 'legacy-state-home');
+  const legacy = path.join(home, '.claude', 'kronos');
+  const target = path.join(home, '.kronos');
+  fs.mkdirSync(path.join(legacy, 'work-sessions'), { recursive: true });
+  fs.writeFileSync(path.join(legacy, 'work.json'), '{"schemaVersion":1}\n');
+  const migrated = legacyStateMigration.migrateLegacyKronosState(target, legacy);
+  assert.equal(migrated.migrated, true);
+  assert.equal(fs.readFileSync(path.join(target, 'work.json'), 'utf8'), '{"schemaVersion":1}\n');
+  assert.equal(fs.existsSync(legacy), false);
+  assert.deepEqual(legacyStateMigration.migrateLegacyKronosState(target, legacy), {
+    migrated: false,
+    reason: 'target-exists',
+  });
+
+  const unsafeLegacy = path.join(home, '.claude', 'unsafe-kronos');
+  const unsafeTarget = path.join(home, '.unsafe-kronos');
+  const outside = path.join(home, 'outside');
+  fs.mkdirSync(outside, { recursive: true });
+  if (!createSymlinkOrSkip(t, outside, unsafeLegacy, 'dir')) { return; }
+  assert.deepEqual(legacyStateMigration.migrateLegacyKronosState(unsafeTarget, unsafeLegacy), {
+    migrated: false,
+    reason: 'unsafe',
+  });
 });
 
 test('Work catalog strips legacy automation fields and persists privately', () => {
@@ -1640,6 +1776,29 @@ test('standalone work sessions persist without fake Jira identities and preserve
   );
 });
 
+test('provider bindings update one semantic subject instead of accumulating duplicate Sonar rows', () => {
+  const options = { kronosDir: path.join(tempRoot, 'provider-binding-dedupe') };
+  const session = workSessions.createOrGetWorkSessionByTicket({ ticketKey: 'JIRA-808' }, options);
+  workSessions.addWorkSessionProviderBinding(session.id, {
+    provider: 'sonar',
+    resource: 'quality-gate',
+    subjectId: 'app:main',
+    url: 'https://sonar.example/dashboard?id=app&branch=main',
+  }, options);
+  workSessions.addWorkSessionProviderBinding(session.id, {
+    provider: 'sonar',
+    resource: 'quality-gate',
+    subjectId: 'app:main',
+    projectId: 'app',
+    url: 'https://sonar.example/dashboard?id=app&branch=main',
+  }, options);
+  const updated = workSessions.readWorkSession(session.id, options);
+  const sonarBindings = updated.providerBindings.filter(binding =>
+    binding.provider === 'sonar' && binding.subjectId === 'app:main');
+  assert.equal(sonarBindings.length, 1);
+  assert.equal(sonarBindings[0].projectId, 'app');
+});
+
 test('Claude terminal launch is explicit, focused, validated, and operator-triggered', () => {
   const calls = [];
   const terminal = {
@@ -1798,7 +1957,6 @@ test('Jira artifacts recursively omit empty fields while retaining false, zero, 
   }), {
     disabled: false,
     count: 0,
-    providerDefault: 'None',
     token: '[REDACTED]',
   });
 
@@ -1813,6 +1971,9 @@ test('Jira artifacts recursively omit empty fields while retaining false, zero, 
       disabled: false,
       estimate: 0,
       providerDefault: 'None',
+      avatarUrls: { small: 'https://jira.example/avatar.png' },
+      self: 'https://jira.example/rest/api/user/1',
+      staticMessage: 'Choose a value from the template',
       nested: [null, ' ', false, 0, {}, { label: 'Retain me', empty: [] }],
     },
   };
@@ -1838,7 +1999,6 @@ test('Jira artifacts recursively omit empty fields while retaining false, zero, 
   assert.deepEqual(context.customFields[0].value, {
     disabled: false,
     estimate: 0,
-    providerDefault: 'None',
     nested: [false, 0, { label: 'Retain me' }],
   });
   assert.match(context.customFields[0].text, /"disabled": false/);
@@ -2990,6 +3150,11 @@ test('extension activation registers the bounded surface and explicit launch com
     const manuallyPolledSession = workSessions.getWorkSessionByTicket('JIRA-123');
     assert.equal(manuallyPolledSession.monitoring.lastState, 'healthy');
     assert.ok(manuallyPolledSession.monitoring.lastPolledAt);
+    const projectedWorkCatalog = stateStore.readStateFileWithIssues().state;
+    assert.equal(projectedWorkCatalog.tickets['JIRA-123'].mr.iid, 88);
+    assert.equal(projectedWorkCatalog.tickets['JIRA-123'].mr.review_status, 'approved');
+    assert.equal(projectedWorkCatalog.tickets['JIRA-123'].build.number, 32);
+    assert.equal(projectedWorkCatalog.tickets['JIRA-123'].build.status, 'SUCCESS');
 
     await commandHandlers.get('kronos.pauseWorkSessionMonitoring')({ workSessionId: ticketSession.id });
     assert.equal(workSessions.getWorkSessionByTicket('JIRA-123').monitoring.enabled, false);

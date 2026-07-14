@@ -94,9 +94,13 @@ function linkedProjectNames(
 ): string[] {
   const linked = new Set(previous?.projects || []);
   if (jiraProjectKey) {
-    for (const [name, project] of Object.entries(projects)) {
-      if (project.config.jira_project_key?.toUpperCase() === jiraProjectKey.toUpperCase()) { linked.add(name); }
-    }
+    const candidates = Object.entries(projects)
+      .filter(([, project]) => project.config.jira_project_key?.toUpperCase() === jiraProjectKey.toUpperCase())
+      .map(([name]) => name);
+    // A Jira project key identifies a board, not necessarily one repository.
+    // Only infer a project when the mapping is unambiguous; otherwise the
+    // operator chooses the relevant local project explicitly.
+    if (candidates.length === 1 && candidates[0]) { linked.add(candidates[0]); }
   }
   return [...linked].filter(name => Boolean(projects[name]) || name === jiraProjectKey).slice(0, 100);
 }

@@ -93,7 +93,7 @@ ${operationsPanelCss()}
       <ul>
         <li>Jira: <code>JIRA_BASE_URL</code>, <code>JIRA_EMAIL</code>, <code>JIRA_API_TOKEN</code>, optional <code>JIRA_JQL</code></li>
         <li>GitLab: <code>GITLAB_API_BASE_URL</code> or <code>GITLAB_BASE_URL</code>, plus <code>GITLAB_TOKEN</code></li>
-        <li>Jenkins: <code>JENKINS_URL</code>, optional username and API token</li>
+        <li>Jenkins: <code>JENKINS_URL</code>, optional username/API token, and optional Jenkins-only <code>JENKINS_TLS_REJECT_UNAUTHORIZED=false</code> for a locally trusted corporate endpoint</li>
         <li>SonarQube: <code>SONAR_HOST_URL</code> or <code>SONAR_URL</code>, plus <code>SONAR_TOKEN</code></li>
       </ul>
       <p>After changing the private environment file, reload the VS Code window and run Doctor again.</p>

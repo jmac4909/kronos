@@ -18,7 +18,10 @@ export type JiraUnprunedValue =
  */
 export function pruneEmptyJiraValue(value: JiraUnprunedValue): JiraArtifactValue | undefined {
   if (value === null) { return undefined; }
-  if (typeof value === 'string') { return value.trim() ? value : undefined; }
+  if (typeof value === 'string') {
+    const normalized = value.trim();
+    return normalized && !isJiraPlaceholderText(normalized) ? value : undefined;
+  }
   if (typeof value === 'number' || typeof value === 'boolean') { return value; }
   if (Array.isArray(value)) {
     const retained = value
@@ -33,6 +36,10 @@ export function pruneEmptyJiraValue(value: JiraUnprunedValue): JiraArtifactValue
     if (pruned !== undefined) { retained[key] = pruned; }
   }
   return Object.keys(retained).length > 0 ? retained : undefined;
+}
+
+function isJiraPlaceholderText(value: string): boolean {
+  return new Set(['none', 'not set', 'no value', 'n/a', 'null', 'undefined']).has(value.toLowerCase());
 }
 
 /** Recognizes an ADF document whose rich-text content is semantically empty. */

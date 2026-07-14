@@ -6,11 +6,14 @@ import { unknownErrorMessage } from '../services/errorUtils';
 import { jiraRestClient, resolveJiraRestConfig } from '../services/jiraRestClient';
 import { catalogFromJiraWorkList } from '../services/jiraWorkCatalog';
 import {
+  projectTicketProviderState,
   registerLocalProject,
   replaceRegisteredLocalProjects,
   setLocalProjectIntegrations,
+  setLocalProjectSonarTarget,
   setTicketLocalProject,
   type LocalProjectIntegrationInput,
+  type TicketProviderStateInput,
 } from '../services/projectCatalog';
 
 export interface TerminalFirstStateIssue {
@@ -121,6 +124,22 @@ export class TerminalFirstState implements vscode.Disposable {
 
   setTicketLocalProject(ticketKey: string, projectName?: string): void {
     const next = setTicketLocalProject(this.snapshot || emptyWorkCatalog(), ticketKey, projectName);
+    writeStateFile(next);
+    this.reloadAndNotify();
+  }
+
+  projectTicketProviderState(ticketKey: string, input: TicketProviderStateInput): void {
+    const current = this.snapshot || emptyWorkCatalog();
+    const next = projectTicketProviderState(current, ticketKey, input);
+    if (next === current) { return; }
+    writeStateFile(next);
+    this.reloadAndNotify();
+  }
+
+  setLocalProjectSonarTarget(projectName: string, projectKey: string, branch?: string): void {
+    const current = this.snapshot || emptyWorkCatalog();
+    const next = setLocalProjectSonarTarget(current, projectName, projectKey, branch);
+    if (next === current) { return; }
     writeStateFile(next);
     this.reloadAndNotify();
   }

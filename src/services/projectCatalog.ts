@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import type { KronosState, Project, ProjectConfig, Ticket } from '../state/types';
+import type { BuildStatus, KronosState, MergeRequest, Project, ProjectConfig, Ticket } from '../state/types';
 import { normalizeJenkinsJobUrl } from './jenkinsRestClient';
 import { readBoundedPrivateUtf8File } from './stateStore';
 
@@ -21,6 +21,68 @@ export interface LocalProjectIntegrationInput {
   jenkinsUrl?: string;
   sonarProjectKey?: string;
   defaultBranch?: string;
+}
+
+export interface TicketProviderStateInput {
+  mr?: MergeRequest;
+  build?: BuildStatus;
+}
+
+export function setLocalProjectSonarTarget(
+  state: KronosState,
+  projectNameValue: string,
+  projectKeyValue: string,
+  branchValue?: string,
+): KronosState {
+  const projectName = requiredSingleLine(projectNameValue, 'project name', 200);
+  const project = state.projects[projectName];
+  if (!project) { return state; }
+  const projectKey = safeSingleLine(projectKeyValue, 400);
+  if (!projectKey || !/^[A-Za-z0-9_.:-]+$/.test(projectKey)) {
+    throw new Error(`${projectName} discovered an invalid SonarQube project key.`);
+  }
+  const branch = safeSingleLine(branchValue, 500);
+  if (project.config.sonar_project_key === projectKey
+    && (!branch || project.config.default_branch === branch)) {
+    return state;
+  }
+  return {
+    ...state,
+    projects: {
+      ...state.projects,
+      [projectName]: {
+        ...project,
+        config: {
+          ...project.config,
+          sonar_project_key: projectKey,
+          ...(branch ? { default_branch: branch } : {}),
+        },
+      },
+    },
+  };
+}
+
+export function projectTicketProviderState(
+  state: KronosState,
+  ticketKeyValue: string,
+  input: TicketProviderStateInput,
+): KronosState {
+  const ticketKey = normalizeTicketKey(ticketKeyValue);
+  const ticket = state.tickets[ticketKey];
+  if (!ticket) { return state; }
+  const mr = input.mr ? { ...input.mr } : ticket.mr;
+  const build = input.build ? { ...input.build } : ticket.build;
+  if (JSON.stringify(mr) === JSON.stringify(ticket.mr)
+    && JSON.stringify(build) === JSON.stringify(ticket.build)) {
+    return state;
+  }
+  return {
+    ...state,
+    tickets: {
+      ...state.tickets,
+      [ticketKey]: { ...ticket, projects: [...ticket.projects], mr, build },
+    },
+  };
 }
 
 export function registerLocalProject(
