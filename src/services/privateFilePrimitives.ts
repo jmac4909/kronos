@@ -17,6 +17,13 @@ interface PrivateFileAppendOptions extends PrivateFileReadOptions {
   fileMode?: number;
 }
 
+interface PrivateImmutableFileOptions extends PrivateFileWriteOptions {}
+
+export interface ImmutablePrivateFileResult {
+  path: string;
+  created: boolean;
+}
+
 interface FileIdentity {
   dev: number;
   ino: number;
@@ -85,10 +92,10 @@ export function privateFileNoFollowFlag(platform: NodeJS.Platform, flagValue: un
 }
 
 /** Reads one bounded regular file after path, descriptor, and identity checks. */
-export function readPrivateTextFileIfPresent(
+export function readPrivateBufferFileIfPresent(
   filePath: string,
   options: PrivateFileReadOptions,
-): string | null {
+): Buffer | null {
   const before = inspectSafePathComponents(filePath, options.label);
   if (!before) { return null; }
   assertRegularFile(filePath, before, options);
@@ -113,10 +120,17 @@ export function readPrivateTextFileIfPresent(
       || after.size !== opened.size) {
       throw new Error(`${options.label} changed while it was being read.`);
     }
-    return content.toString('utf8');
+    return content;
   } finally {
     if (descriptor !== undefined) { fs.closeSync(descriptor); }
   }
+}
+
+export function readPrivateTextFileIfPresent(
+  filePath: string,
+  options: PrivateFileReadOptions,
+): string | null {
+  return readPrivateBufferFileIfPresent(filePath, options)?.toString('utf8') ?? null;
 }
 
 /** Writes one bounded private file through an exclusive same-directory temp. */
@@ -194,6 +208,96 @@ export function writePrivateTextFileAtomically(
     }
     removeMatchingFile(temporaryPath, temporaryIdentity);
     throw error;
+  }
+}
+
+/** Creates or verifies one bounded immutable content-addressed private artifact. */
+export function ensureImmutablePrivateFile(
+  filePath: string,
+  content: string | Buffer,
+  options: PrivateImmutableFileOptions,
+): ImmutablePrivateFileResult {
+  const data = Buffer.isBuffer(content) ? Buffer.from(content) : Buffer.from(content, 'utf8');
+  assertBoundedSize(data.length, options);
+  const directoryPath = path.dirname(filePath);
+  const directoryBefore = requireSafeDirectory(directoryPath, options.label);
+  const fileMode = options.fileMode ?? 0o600;
+  const existing = inspectSafePathComponents(filePath, options.label);
+  if (existing) {
+    verifyImmutablePrivateFile(filePath, data, options, fileMode);
+    return { path: filePath, created: false };
+  }
+
+  const temporaryPath = path.join(
+    directoryPath,
+    `.${safeTemporaryPrefix(options.temporaryPrefix)}.${process.pid}.${crypto.randomBytes(8).toString('hex')}.tmp`,
+  );
+  let descriptor: number | undefined;
+  let temporaryIdentity: FileIdentity | undefined;
+  try {
+    if (inspectSafePathComponents(temporaryPath, options.label)) {
+      throw new Error(`${options.label} temporary path already exists.`);
+    }
+    descriptor = fs.openSync(
+      temporaryPath,
+      fs.constants.O_WRONLY
+        | fs.constants.O_CREAT
+        | fs.constants.O_EXCL
+        | privateFileNoFollowFlag(process.platform, Reflect.get(fs.constants, 'O_NOFOLLOW')),
+      fileMode,
+    );
+    const opened = fs.fstatSync(descriptor);
+    if (!opened.isFile() || opened.isSymbolicLink()) {
+      throw new Error(`${options.label} temporary path is not a safe regular file.`);
+    }
+    temporaryIdentity = fileIdentity(opened);
+    if (process.platform !== 'win32') { fs.fchmodSync(descriptor, fileMode); }
+    writeDescriptorFully(descriptor, data, options);
+    fs.fsyncSync(descriptor);
+    const completed = fs.fstatSync(descriptor);
+    if (!completed.isFile()
+      || !sameIdentity(temporaryIdentity, fileIdentity(completed))
+      || completed.size !== data.length) {
+      throw new Error(`${options.label} temporary file changed while it was written.`);
+    }
+    fs.closeSync(descriptor);
+    descriptor = undefined;
+
+    const tempPathStat = fs.lstatSync(temporaryPath);
+    if (!tempPathStat.isFile() || tempPathStat.isSymbolicLink()
+      || !sameIdentity(temporaryIdentity, fileIdentity(tempPathStat))) {
+      throw new Error(`${options.label} temporary path changed before publication.`);
+    }
+    const directoryAtCommit = requireSafeDirectory(directoryPath, options.label);
+    if (!sameIdentity(fileIdentity(directoryBefore), fileIdentity(directoryAtCommit))) {
+      throw new Error(`${options.label} directory changed before publication.`);
+    }
+    const targetAtCommit = inspectSafePathComponents(filePath, options.label);
+    if (targetAtCommit) {
+      verifyImmutablePrivateFile(filePath, data, options, fileMode);
+      return { path: filePath, created: false };
+    }
+    try {
+      fs.linkSync(temporaryPath, filePath);
+    } catch (error: unknown) {
+      if (errorCode(error) !== 'EEXIST') { throw error; }
+      verifyImmutablePrivateFile(filePath, data, options, fileMode);
+      return { path: filePath, created: false };
+    }
+    const committed = fs.lstatSync(filePath);
+    assertRegularFile(filePath, committed, { ...options, expectedMode: fileMode });
+    if (!sameIdentity(temporaryIdentity, fileIdentity(committed)) || committed.size !== data.length) {
+      throw new Error(`${options.label} changed during immutable publication.`);
+    }
+    fs.unlinkSync(temporaryPath);
+    temporaryIdentity = undefined;
+    syncDirectory(directoryPath);
+    return { path: filePath, created: true };
+  } finally {
+    if (descriptor !== undefined) {
+      try { fs.closeSync(descriptor); } catch { /* best effort */ }
+    }
+    removeMatchingFile(temporaryPath, temporaryIdentity);
   }
 }
 
@@ -361,6 +465,24 @@ function assertReplaceableRegularFile(filePath: string, stat: fs.Stats, label: s
   }
 }
 
+function verifyImmutablePrivateFile(
+  filePath: string,
+  expected: Buffer,
+  options: PrivateFileReadOptions,
+  fileMode: number,
+): void {
+  const actual = readPrivateBufferFileIfPresent(filePath, options);
+  if (!actual) { throw new Error(`${options.label} disappeared during immutable verification.`); }
+  if (!actual.equals(expected)) {
+    throw new Error(`${options.label} content does not match its immutable content address.`);
+  }
+  if (process.platform !== 'win32') {
+    const before = inspectSafePathComponents(filePath, options.label);
+    if (!before) { throw new Error(`${options.label} disappeared while its permissions were secured.`); }
+    enforceRegularFileMode(filePath, before, options.label, fileMode);
+  }
+}
+
 function readDescriptorFully(
   descriptor: number,
   size: number,
@@ -452,6 +574,37 @@ function enforceDirectoryMode(
       || !sameIdentity(fileIdentity(opened), fileIdentity(pathAfter))
       || (completed.mode & 0o777) !== mode) {
       throw new Error(`${label} directory changed while its permissions were secured.`);
+    }
+  } finally {
+    fs.closeSync(descriptor);
+  }
+}
+
+function enforceRegularFileMode(
+  filePath: string,
+  before: fs.Stats,
+  label: string,
+  mode: number,
+): void {
+  const descriptor = fs.openSync(
+    filePath,
+    fs.constants.O_RDONLY | privateFileNoFollowFlag(process.platform, Reflect.get(fs.constants, 'O_NOFOLLOW')),
+  );
+  try {
+    const opened = fs.fstatSync(descriptor);
+    if (!opened.isFile() || !sameIdentity(fileIdentity(before), fileIdentity(opened))) {
+      throw new Error(`${label} changed while its permissions were opened.`);
+    }
+    fs.fchmodSync(descriptor, mode);
+    const completed = fs.fstatSync(descriptor);
+    const pathAfter = fs.lstatSync(filePath);
+    if (!completed.isFile()
+      || pathAfter.isSymbolicLink()
+      || !pathAfter.isFile()
+      || !sameIdentity(fileIdentity(opened), fileIdentity(completed))
+      || !sameIdentity(fileIdentity(opened), fileIdentity(pathAfter))
+      || (completed.mode & 0o777) !== mode) {
+      throw new Error(`${label} changed while its permissions were secured.`);
     }
   } finally {
     fs.closeSync(descriptor);

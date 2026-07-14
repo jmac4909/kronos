@@ -1,7 +1,7 @@
 import * as crypto from 'crypto';
-import * as fs from 'fs';
 import * as path from 'path';
 import { safeFileStem } from './fileNames';
+import { ensureImmutablePrivateFile, ensurePrivateDirectoryPath } from './privateFilePrimitives';
 import { redactSensitiveTokens } from './sensitiveText';
 import { KRONOS_DIR } from './stateStore';
 
@@ -12,7 +12,6 @@ export interface ProjectGitContextArtifact {
   redacted: boolean;
 }
 
-const DIRECTORY_MODE = 0o700;
 const FILE_MODE = 0o600;
 const MAX_CONTEXT_BYTES = 768 * 1024;
 
@@ -44,54 +43,18 @@ export function writeProjectGitContextArtifact(
   const root = path.resolve(options.kronosDir || KRONOS_DIR);
   const contextRoot = path.join(root, 'git-context');
   const directory = path.join(contextRoot, contextId);
-  ensurePrivateDirectory(root, true);
-  ensurePrivateDirectory(contextRoot);
-  ensurePrivateDirectory(directory);
+  ensurePrivateDirectoryPath(directory, 'Kronos Git context');
   const contentSha256 = crypto.createHash('sha256').update(prompt, 'utf8').digest('hex');
   const promptPath = path.join(directory, `prompt-${contentSha256.slice(0, 24)}.md`);
-  const existing = lstatIfPresent(promptPath);
-  if (existing) {
-    assertRegularFile(promptPath, existing);
-    const actual = fs.readFileSync(promptPath, 'utf8');
-    if (actual !== prompt) { throw new Error('Git context content does not match its immutable content address.'); }
-    fs.chmodSync(promptPath, FILE_MODE);
-    return { contextId, promptPath, contentSha256, redacted };
-  }
-  fs.writeFileSync(promptPath, prompt, { encoding: 'utf8', mode: FILE_MODE, flag: 'wx' });
-  const written = fs.lstatSync(promptPath);
-  assertRegularFile(promptPath, written);
-  fs.chmodSync(promptPath, FILE_MODE);
+  ensureImmutablePrivateFile(promptPath, prompt, {
+    label: 'Kronos Git context artifact',
+    maxBytes: MAX_CONTEXT_BYTES,
+    temporaryPrefix: 'git-context',
+    fileMode: FILE_MODE,
+  });
   return { contextId, promptPath, contentSha256, redacted };
 }
 
 function redactGitEvidence(value: string): string {
   return redactSensitiveTokens(value);
-}
-
-function ensurePrivateDirectory(directoryPath: string, recursive = false): void {
-  const existing = lstatIfPresent(directoryPath);
-  if (!existing) { fs.mkdirSync(directoryPath, { recursive, mode: DIRECTORY_MODE }); }
-  const stat = fs.lstatSync(directoryPath);
-  if (stat.isSymbolicLink() || !stat.isDirectory()) {
-    throw new Error(`Git context path is not a private directory: ${directoryPath}`);
-  }
-  fs.chmodSync(directoryPath, DIRECTORY_MODE);
-}
-
-function assertRegularFile(filePath: string, stat: fs.Stats): void {
-  if (stat.isSymbolicLink() || !stat.isFile()) {
-    throw new Error(`Git context artifact is not a regular file: ${filePath}`);
-  }
-}
-
-function lstatIfPresent(filePath: string): fs.Stats | undefined {
-  try { return fs.lstatSync(filePath); }
-  catch (error: unknown) {
-    if (isRecord(error) && error['code'] === 'ENOENT') { return undefined; }
-    throw error;
-  }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }

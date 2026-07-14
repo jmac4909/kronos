@@ -206,6 +206,49 @@ test('private append and tail primitives keep complete records and own the monit
   assert.equal(fs.existsSync(path.join(outside, 'monitor-events.jsonl')), false);
 });
 
+test('immutable private artifacts verify content and own local Git context persistence', t => {
+  const directory = path.join(tempRoot, 'immutable-private-artifacts');
+  privateFilePrimitives.ensurePrivateDirectoryPath(directory, 'Immutable artifact fixture');
+  const filePath = path.join(directory, 'artifact.bin');
+  const options = {
+    label: 'Immutable artifact fixture',
+    maxBytes: 64,
+    temporaryPrefix: 'immutable-fixture',
+    fileMode: 0o600,
+  };
+  assert.equal(privateFilePrimitives.ensureImmutablePrivateFile(filePath, Buffer.from([0, 1, 2]), options).created, true);
+  assert.equal(privateFilePrimitives.ensureImmutablePrivateFile(filePath, Buffer.from([0, 1, 2]), options).created, false);
+  assert.throws(
+    () => privateFilePrimitives.ensureImmutablePrivateFile(filePath, Buffer.from([0, 1, 3]), options),
+    /does not match its immutable content address/i,
+  );
+
+  const gitRoot = path.join(tempRoot, 'shared-git-context');
+  const artifact = projectGitContextStore.writeProjectGitContextArtifact(
+    'Shared project',
+    'branch: feature/shared\nstatus: clean\n',
+    { kronosDir: gitRoot },
+  );
+  assert.match(fs.readFileSync(artifact.promptPath, 'utf8'), /feature\/shared/);
+  const source = fs.readFileSync(path.join(root, 'src', 'services', 'projectGitContextStore.ts'), 'utf8');
+  assert.match(source, /ensureImmutablePrivateFile/);
+  assert.doesNotMatch(source, /fs\.|NO_FOLLOW/);
+
+  const outside = path.join(tempRoot, 'shared-git-context-outside');
+  const linkedRoot = path.join(tempRoot, 'shared-git-context-link');
+  fs.mkdirSync(outside);
+  if (!createSymlinkOrSkip(t, outside, linkedRoot, process.platform === 'win32' ? 'junction' : 'dir')) { return; }
+  assert.throws(
+    () => projectGitContextStore.writeProjectGitContextArtifact(
+      'Linked project',
+      'branch: unsafe\n',
+      { kronosDir: linkedRoot },
+    ),
+    /symbolic link/i,
+  );
+  assert.equal(fs.existsSync(path.join(outside, 'git-context')), false);
+});
+
 test('Attention stream identity is stable by project, provider, resource, logical subject, and facet', () => {
   const projectSession = { id: 'session-one', projectName: 'Application' };
   const siblingSession = { id: 'session-two', projectName: 'Application' };

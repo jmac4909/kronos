@@ -188,7 +188,7 @@ Saving project integration data, explicitly linking a ticket project, attaching 
 By default, private terminal-first state lives under `~/.kronos`, or the explicitly configured `KRONOS_DIR`:
 
 - work-session records contain an operator-facing title, optional real ticket identity, terminal metadata, provider bindings, context references, and monitoring readiness; each record is capped at 4 MiB and uses the shared cross-platform private atomic file primitive;
-- context directories contain normalized content-addressed provider artifacts and prompt boundaries;
+- context directories contain normalized content-addressed provider artifacts and prompt boundaries; immutable artifacts use bounded byte verification and exclusive no-replace publication through the shared cross-platform private-file layer;
 - compact monitor snapshots contain the latest comparison baseline;
 - the append-only monitor-event ledger records session, context, transition, notification, acknowledgement, and operator-decision events; each JSONL record is capped at 16 KiB, each UI read uses a bounded complete-line tail window, and append/tail operations share the cross-platform path/descriptor identity layer.
 
