@@ -190,7 +190,7 @@ By default, private terminal-first state lives under `~/.kronos`, or the explici
 - work-session records contain an operator-facing title, optional real ticket identity, terminal metadata, provider bindings, context references, and monitoring readiness; each record is capped at 4 MiB and uses the shared cross-platform private atomic file primitive;
 - context directories contain normalized content-addressed provider artifacts and prompt boundaries;
 - compact monitor snapshots contain the latest comparison baseline;
-- the append-only monitor-event ledger records session, context, transition, notification, acknowledgement, and operator-decision events.
+- the append-only monitor-event ledger records session, context, transition, notification, acknowledgement, and operator-decision events; each JSONL record is capped at 16 KiB, each UI read uses a bounded complete-line tail window, and append/tail operations share the cross-platform path/descriptor identity layer.
 
 The audit may include provider summaries, timestamps, completeness warnings, hashes, and private artifact paths. It never contains terminal input, terminal output, scrollback, provider credentials, authorization headers, cookies, raw job traces, or Jenkins console logs.
 

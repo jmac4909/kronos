@@ -1,7 +1,11 @@
 import * as crypto from 'crypto';
-import * as fs from 'fs';
 import * as path from 'path';
 import { isRecord } from './records';
+import {
+  appendPrivateTextRecord,
+  ensurePrivateDirectoryPath,
+  readPrivateTextTailLinesIfPresent,
+} from './privateFilePrimitives';
 import { KRONOS_DIR } from './stateStore';
 
 export type MonitorEventType =
@@ -89,8 +93,6 @@ const CONTROL_PATTERN = /[\u0000-\u001f\u007f\u2028\u2029]/;
 const TICKET_KEY_PATTERN = /^[A-Z][A-Z0-9_]{0,127}-[1-9][0-9]*$/;
 const SENSITIVE_KEY_PATTERN = /(?:authorization|cookie|credential|password|passwd|secret|token|api[_-]?key|private[_-]?key|raw|body|trace|log)/i;
 const SENSITIVE_TEXT_PATTERN = /(?:authorization\s*:|private-token\s*:|(?:password|passwd|secret|token|api[_-]?key|credential)\s*[=:]\s*\S+|https?:\/\/[^\s/@:]+:[^\s/@]+@|\b(?:glpat-|sqp_|github_pat_|gh[pousr]_|sk-|xox[baprs]-)[A-Za-z0-9_-]{8,}\b|\bAKIA[0-9A-Z]{16}\b|\beyJ[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{6,}\b|-----BEGIN [^-\r\n]*(?:PRIVATE KEY|SECRET)[^-\r\n]*-----)/i;
-const NO_FOLLOW_VALUE = Reflect.get(fs.constants, 'O_NOFOLLOW');
-const NO_FOLLOW_FLAG = typeof NO_FOLLOW_VALUE === 'number' ? NO_FOLLOW_VALUE : 0;
 
 const EVENT_TYPES = new Set<MonitorEventType>([
   'session.created',
@@ -132,29 +134,12 @@ export function appendMonitorEvent(
   }
 
   const filePath = monitorEventsPath(options);
-  ensurePrivateDirectory(path.dirname(filePath));
-  assertSafeRegularFileIfPresent(filePath);
-  let descriptor: number | undefined;
-  try {
-    assertSafeDirectory(path.dirname(filePath));
-    assertSafeRegularFileIfPresent(filePath);
-    descriptor = fs.openSync(
-      filePath,
-      fs.constants.O_WRONLY | fs.constants.O_APPEND | fs.constants.O_CREAT | NO_FOLLOW_FLAG,
-      FILE_MODE,
-    );
-    if (!fs.fstatSync(descriptor).isFile()) {
-      throw new Error(`Monitor event path is not a safe regular file: ${filePath}`);
-    }
-    if (process.platform !== 'win32') { fs.fchmodSync(descriptor, FILE_MODE); }
-    fs.writeFileSync(descriptor, line, 'utf8');
-    fs.fsyncSync(descriptor);
-    fs.closeSync(descriptor);
-    descriptor = undefined;
-    setPrivateMode(filePath, FILE_MODE);
-  } finally {
-    if (descriptor !== undefined) { fs.closeSync(descriptor); }
-  }
+  ensurePrivateDirectoryPath(path.dirname(filePath), 'Kronos monitor event ledger', DIRECTORY_MODE);
+  appendPrivateTextRecord(filePath, line, {
+    label: 'Kronos monitor event ledger',
+    maxBytes: MAX_EVENT_BYTES,
+    fileMode: FILE_MODE,
+  });
   return cloneEvent(event);
 }
 
@@ -163,7 +148,6 @@ export function listMonitorEvents(
   options: MonitorEventStoreOptions = {},
 ): MonitorEvent[] {
   const filePath = monitorEventsPath(options);
-  if (!assertSafeRegularFileIfPresent(filePath)) { return []; }
   const normalizedFilter = normalizeFilter(filter);
   const maxReadBytes = boundedInteger(
     options.maxReadBytes,
@@ -171,7 +155,10 @@ export function listMonitorEvents(
     MIN_MAX_READ_BYTES,
     MAX_MAX_READ_BYTES,
   );
-  const lines = readBoundedTailLines(filePath, maxReadBytes);
+  const lines = readPrivateTextTailLinesIfPresent(filePath, {
+    label: 'Kronos monitor event ledger',
+    maxBytes: maxReadBytes,
+  }) || [];
   const matching: MonitorEvent[] = [];
   for (let index = lines.length - 1; index >= 0 && matching.length < normalizedFilter.limit; index -= 1) {
     const line = lines[index];
@@ -388,136 +375,6 @@ function nowIso(now?: Date): string {
   const date = now || new Date();
   if (!Number.isFinite(date.getTime())) { throw new Error('Monitor event timestamp is invalid.'); }
   return date.toISOString();
-}
-
-function readBoundedTailLines(filePath: string, maxBytes: number): string[] {
-  assertSafeRegularFile(filePath);
-  const descriptor = fs.openSync(filePath, fs.constants.O_RDONLY | NO_FOLLOW_FLAG);
-  try {
-    const stat = fs.fstatSync(descriptor);
-    if (!stat.isFile()) {
-      throw new Error(`Monitor event path is not a safe regular file: ${filePath}`);
-    }
-    const bytesToRead = Math.min(stat.size, maxBytes);
-    if (bytesToRead <= 0) { return []; }
-    const start = stat.size - bytesToRead;
-    const buffer = Buffer.alloc(bytesToRead);
-    fs.readSync(descriptor, buffer, 0, bytesToRead, start);
-    let text = buffer.toString('utf8');
-    if (start > 0) {
-      const firstNewline = text.indexOf('\n');
-      text = firstNewline >= 0 ? text.slice(firstNewline + 1) : '';
-    }
-    return text.split(/\r?\n/).filter(Boolean);
-  } finally {
-    fs.closeSync(descriptor);
-  }
-}
-
-function ensurePrivateDirectory(directoryPath: string): void {
-  const resolved = path.resolve(directoryPath);
-  const parsed = path.parse(resolved);
-  let current = parsed.root;
-  assertSafeDirectory(current);
-
-  for (const component of pathComponents(resolved)) {
-    const candidate = path.join(current, component);
-    const existing = inspectSafePathComponents(candidate);
-    if (!existing) {
-      assertSafeDirectory(current);
-      try {
-        fs.mkdirSync(candidate, { mode: DIRECTORY_MODE });
-      } catch (error: unknown) {
-        if (!hasErrorCode(error, 'EEXIST')) { throw error; }
-      }
-      assertSafeDirectory(candidate);
-      setPrivateMode(candidate, DIRECTORY_MODE);
-    } else if (!existing.isDirectory()) {
-      throw new Error(`Monitor event directory has a non-directory path component: ${candidate}`);
-    }
-    current = candidate;
-  }
-
-  assertSafeDirectory(resolved);
-  setPrivateMode(resolved, DIRECTORY_MODE);
-}
-
-function assertSafeDirectory(directoryPath: string): void {
-  const stat = inspectSafePathComponents(directoryPath);
-  if (!stat || !stat.isDirectory()) {
-    throw new Error(`Monitor event directory is not a safe private directory: ${directoryPath}`);
-  }
-}
-
-function assertSafeRegularFile(filePath: string): void {
-  const stat = inspectSafePathComponents(filePath);
-  if (!stat || !stat.isFile()) {
-    throw new Error(`Monitor event path is not a safe regular file: ${filePath}`);
-  }
-}
-
-function assertSafeRegularFileIfPresent(filePath: string): boolean {
-  const stat = inspectSafePathComponents(filePath);
-  if (!stat) { return false; }
-  if (!stat.isFile()) {
-    throw new Error(`Monitor event path is not a safe regular file: ${filePath}`);
-  }
-  return true;
-}
-
-function inspectSafePathComponents(targetPath: string): fs.Stats | null {
-  const resolved = path.resolve(targetPath);
-  const parsed = path.parse(resolved);
-  let current = parsed.root;
-  let stat = lstatIfPresent(current);
-  if (!stat || stat.isSymbolicLink() || !stat.isDirectory()) {
-    throw new Error(`Monitor event path has an unsafe filesystem root: ${current}`);
-  }
-
-  const components = pathComponents(resolved);
-  for (let index = 0; index < components.length; index += 1) {
-    const component = components[index];
-    if (!component) { continue; }
-    current = path.join(current, component);
-    stat = lstatIfPresent(current);
-    if (!stat) { return null; }
-    if (stat.isSymbolicLink()) {
-      throw new Error(`Monitor event path has a symbolic-link component: ${current}`);
-    }
-    if (index < components.length - 1 && !stat.isDirectory()) {
-      throw new Error(`Monitor event path has a non-directory parent component: ${current}`);
-    }
-  }
-  return stat;
-}
-
-function pathComponents(targetPath: string): string[] {
-  const resolved = path.resolve(targetPath);
-  const root = path.parse(resolved).root;
-  return resolved.slice(root.length).split(path.sep).filter(Boolean);
-}
-
-function lstatIfPresent(targetPath: string): fs.Stats | null {
-  try {
-    return fs.lstatSync(targetPath);
-  } catch (error: unknown) {
-    if (hasErrorCode(error, 'ENOENT')) { return null; }
-    throw error;
-  }
-}
-
-function hasErrorCode(error: unknown, code: string): boolean {
-  return Boolean(error && typeof error === 'object' && Reflect.get(error, 'code') === code);
-}
-
-function setPrivateMode(filePath: string, mode: number): void {
-  if (process.platform !== 'win32') {
-    const stat = inspectSafePathComponents(filePath);
-    if (!stat || (!stat.isDirectory() && !stat.isFile())) {
-      throw new Error(`Monitor event private path is unsafe: ${filePath}`);
-    }
-    fs.chmodSync(filePath, mode);
-  }
 }
 
 function boundedInteger(value: number | undefined, fallback: number, minimum: number, maximum: number): number {

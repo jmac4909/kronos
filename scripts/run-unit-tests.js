@@ -158,6 +158,54 @@ test('private directory creation rejects symbolic ancestors without writing thro
   assert.equal(fs.existsSync(path.join(outside, 'must-not-exist')), false);
 });
 
+test('private append and tail primitives keep complete records and own the monitor ledger boundary', t => {
+  const directory = path.join(tempRoot, 'private-append-primitives');
+  privateFilePrimitives.ensurePrivateDirectoryPath(directory, 'Private append fixture');
+  const filePath = path.join(directory, 'events.jsonl');
+  const appendOptions = { label: 'Private append fixture', maxBytes: 64, fileMode: 0o600 };
+  privateFilePrimitives.appendPrivateTextRecord(filePath, 'alpha\n', appendOptions);
+  privateFilePrimitives.appendPrivateTextRecord(filePath, 'beta\n', appendOptions);
+  assert.deepEqual(
+    privateFilePrimitives.readPrivateTextTailLinesIfPresent(filePath, {
+      label: 'Private append fixture',
+      maxBytes: 6,
+    }),
+    ['beta'],
+  );
+
+  const ledgerRoot = path.join(tempRoot, 'shared-monitor-ledger');
+  monitorEventStore.appendMonitorEvent({
+    id: 'shared-ledger-event',
+    at: '2026-07-14T18:00:00.000Z',
+    sessionId: 'shared-ledger-session',
+    type: 'decision.recorded',
+    source: 'operator',
+    summary: 'Retained one bounded operator decision.',
+  }, { kronosDir: ledgerRoot });
+  assert.equal(monitorEventStore.listMonitorEvents({}, { kronosDir: ledgerRoot })[0].id, 'shared-ledger-event');
+  const source = fs.readFileSync(path.join(root, 'src', 'services', 'monitorEventStore.ts'), 'utf8');
+  assert.match(source, /appendPrivateTextRecord/);
+  assert.match(source, /readPrivateTextTailLinesIfPresent/);
+  assert.doesNotMatch(source, /NO_FOLLOW|fs\.openSync|fs\.mkdirSync/);
+
+  const outside = path.join(tempRoot, 'shared-monitor-outside');
+  const linkedRoot = path.join(tempRoot, 'shared-monitor-link');
+  fs.mkdirSync(outside);
+  if (!createSymlinkOrSkip(t, outside, linkedRoot, process.platform === 'win32' ? 'junction' : 'dir')) { return; }
+  assert.throws(
+    () => monitorEventStore.appendMonitorEvent({
+      id: 'must-not-write-through-link',
+      at: '2026-07-14T18:01:00.000Z',
+      sessionId: 'shared-ledger-session',
+      type: 'decision.recorded',
+      source: 'operator',
+      summary: 'This event must not be written.',
+    }, { kronosDir: linkedRoot }),
+    /symbolic link/i,
+  );
+  assert.equal(fs.existsSync(path.join(outside, 'monitor-events.jsonl')), false);
+});
+
 test('Attention stream identity is stable by project, provider, resource, logical subject, and facet', () => {
   const projectSession = { id: 'session-one', projectName: 'Application' };
   const siblingSession = { id: 'session-two', projectName: 'Application' };

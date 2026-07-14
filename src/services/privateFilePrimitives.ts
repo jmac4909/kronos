@@ -13,6 +13,10 @@ interface PrivateFileWriteOptions extends PrivateFileReadOptions {
   fileMode?: number;
 }
 
+interface PrivateFileAppendOptions extends PrivateFileReadOptions {
+  fileMode?: number;
+}
+
 interface FileIdentity {
   dev: number;
   ino: number;
@@ -52,7 +56,10 @@ export function ensurePrivateDirectoryPath(
       }
       candidateStat = lstatIfPresent(candidate);
     }
-    if (!candidateStat || !candidateStat.isDirectory() || candidateStat.isSymbolicLink()) {
+    if (candidateStat?.isSymbolicLink()) {
+      throw new Error(`${label} path contains a symbolic link.`);
+    }
+    if (!candidateStat || !candidateStat.isDirectory()) {
       throw new Error(`${label} path contains an unsafe directory component.`);
     }
     current = candidate;
@@ -190,6 +197,117 @@ export function writePrivateTextFileAtomically(
   }
 }
 
+/** Appends one bounded record with one O_APPEND write after path and identity checks. */
+export function appendPrivateTextRecord(
+  filePath: string,
+  content: string,
+  options: PrivateFileAppendOptions,
+): string {
+  const data = Buffer.from(content, 'utf8');
+  assertBoundedSize(data.length, options);
+  if (data.length === 0) { throw new Error(`${options.label} append record is empty.`); }
+  const directoryPath = path.dirname(filePath);
+  const directoryBefore = requireSafeDirectory(directoryPath, options.label);
+  const existing = inspectSafePathComponents(filePath, options.label);
+  if (existing) { assertReplaceableRegularFile(filePath, existing, options.label); }
+
+  const fileMode = options.fileMode ?? 0o600;
+  let descriptor: number | undefined;
+  try {
+    descriptor = fs.openSync(
+      filePath,
+      fs.constants.O_WRONLY
+        | fs.constants.O_APPEND
+        | fs.constants.O_CREAT
+        | privateFileNoFollowFlag(process.platform, Reflect.get(fs.constants, 'O_NOFOLLOW')),
+      fileMode,
+    );
+    const opened = fs.fstatSync(descriptor);
+    assertReplaceableRegularFile(filePath, opened, options.label);
+    if (existing && !sameIdentity(fileIdentity(existing), fileIdentity(opened))) {
+      throw new Error(`${options.label} changed while it was being opened for append.`);
+    }
+    const pathAtOpen = fs.lstatSync(filePath);
+    assertReplaceableRegularFile(filePath, pathAtOpen, options.label);
+    if (!sameIdentity(fileIdentity(opened), fileIdentity(pathAtOpen))) {
+      throw new Error(`${options.label} path changed while it was being opened for append.`);
+    }
+    const directoryAtOpen = requireSafeDirectory(directoryPath, options.label);
+    if (!sameIdentity(fileIdentity(directoryBefore), fileIdentity(directoryAtOpen))) {
+      throw new Error(`${options.label} directory changed while it was being opened for append.`);
+    }
+    if (process.platform !== 'win32') { fs.fchmodSync(descriptor, fileMode); }
+    const bytesWritten = fs.writeSync(descriptor, data, 0, data.length, null);
+    if (bytesWritten !== data.length) {
+      throw new Error(`${options.label} record could not be appended atomically.`);
+    }
+    fs.fsyncSync(descriptor);
+    const completed = fs.fstatSync(descriptor);
+    const pathAfter = fs.lstatSync(filePath);
+    assertReplaceableRegularFile(filePath, completed, options.label);
+    assertReplaceableRegularFile(filePath, pathAfter, options.label);
+    if (!sameIdentity(fileIdentity(opened), fileIdentity(completed))
+      || !sameIdentity(fileIdentity(opened), fileIdentity(pathAfter))
+      || completed.size < opened.size + data.length
+      || (process.platform !== 'win32' && (completed.mode & 0o777) !== fileMode)) {
+      throw new Error(`${options.label} changed while a record was appended.`);
+    }
+    return filePath;
+  } finally {
+    if (descriptor !== undefined) { fs.closeSync(descriptor); }
+  }
+}
+
+/** Reads complete lines from one bounded tail window after path and identity checks. */
+export function readPrivateTextTailLinesIfPresent(
+  filePath: string,
+  options: PrivateFileReadOptions,
+): string[] | null {
+  if (!Number.isSafeInteger(options.maxBytes) || options.maxBytes < 1) {
+    throw new Error(`${options.label} tail byte limit must be a positive safe integer.`);
+  }
+  const before = inspectSafePathComponents(filePath, options.label);
+  if (!before) { return null; }
+  assertReplaceableRegularFile(filePath, before, options.label);
+  let descriptor: number | undefined;
+  try {
+    descriptor = fs.openSync(
+      filePath,
+      fs.constants.O_RDONLY | privateFileNoFollowFlag(process.platform, Reflect.get(fs.constants, 'O_NOFOLLOW')),
+    );
+    const opened = fs.fstatSync(descriptor);
+    assertReplaceableRegularFile(filePath, opened, options.label);
+    if (!sameIdentity(fileIdentity(before), fileIdentity(opened))) {
+      throw new Error(`${options.label} changed while it was being opened for a tail read.`);
+    }
+    if (!Number.isSafeInteger(opened.size) || opened.size < 0) {
+      throw new Error(`${options.label} has an unsupported file size.`);
+    }
+    const bytesToRead = Math.min(opened.size, options.maxBytes);
+    const start = opened.size - bytesToRead;
+    const content = bytesToRead > 0
+      ? readDescriptorRangeFully(descriptor, start, bytesToRead, options.label)
+      : Buffer.alloc(0);
+    const completed = fs.fstatSync(descriptor);
+    const pathAfter = fs.lstatSync(filePath);
+    assertReplaceableRegularFile(filePath, completed, options.label);
+    assertReplaceableRegularFile(filePath, pathAfter, options.label);
+    if (!sameIdentity(fileIdentity(opened), fileIdentity(completed))
+      || !sameIdentity(fileIdentity(opened), fileIdentity(pathAfter))
+      || completed.size < opened.size) {
+      throw new Error(`${options.label} changed while its tail was being read.`);
+    }
+    let text = content.toString('utf8');
+    if (start > 0) {
+      const firstNewline = text.indexOf('\n');
+      text = firstNewline >= 0 ? text.slice(firstNewline + 1) : '';
+    }
+    return text.split(/\r?\n/).filter(Boolean);
+  } finally {
+    if (descriptor !== undefined) { fs.closeSync(descriptor); }
+  }
+}
+
 function inspectSafePathComponents(targetPath: string, label: string): fs.Stats | null {
   const resolved = path.resolve(targetPath);
   const parsed = path.parse(resolved);
@@ -254,6 +372,22 @@ function readDescriptorFully(
   while (offset < size) {
     const bytesRead = fs.readSync(descriptor, content, offset, size - offset, offset);
     if (bytesRead <= 0) { throw new Error(`${options.label} ended before its recorded size.`); }
+    offset += bytesRead;
+  }
+  return content;
+}
+
+function readDescriptorRangeFully(
+  descriptor: number,
+  start: number,
+  size: number,
+  label: string,
+): Buffer {
+  const content = Buffer.alloc(size);
+  let offset = 0;
+  while (offset < size) {
+    const bytesRead = fs.readSync(descriptor, content, offset, size - offset, start + offset);
+    if (bytesRead <= 0) { throw new Error(`${label} ended during a bounded tail read.`); }
     offset += bytesRead;
   }
   return content;
