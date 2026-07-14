@@ -11,7 +11,7 @@ import {
   newestWorkSessionProviderBinding,
 } from '../services/workSessionStore';
 import { normalizeProviderPublicUrl } from '../services/providerUrls';
-import { isProviderReadTransitionKind, providerReadStateSignature } from '../services/providerReadTransitions';
+import { isProviderReadTransitionKind } from '../services/providerReadTransitions';
 
 export interface AttentionCommandTarget {
   eventId: string;
@@ -42,7 +42,7 @@ interface AttentionEntry {
   providerChoices: AttentionProviderChoice[];
 }
 
-/** Shows only unacknowledged durable provider transitions, grouped by project when known. */
+/** Shows only the newest unacknowledged state per provider stream, grouped by project when known. */
 export class AttentionTreeProvider implements vscode.TreeDataProvider<AttentionTreeItem>, vscode.Disposable {
   private readonly changeEmitter = new vscode.EventEmitter<AttentionTreeItem | undefined>();
   private readonly loadMonitorEvents: () => MonitorEvent[];
@@ -120,9 +120,8 @@ export class AttentionTreeProvider implements vscode.TreeDataProvider<AttentionT
 
     const sessions = this.safeLoadWorkSessions();
     const sessionsById = new Map(sessions.map(session => [session.id, session]));
-    return collapseRepeatedProviderReadTransitions(events)
+    return latestProviderTransitions(events, sessionsById)
       .filter(event => !acknowledged.has(attentionEventKey(event.sessionId, event.id)))
-      .filter(event => sessionsById.has(event.sessionId))
       .map(event => {
         const session = sessionsById.get(event.sessionId);
         const providerChoices = providerChoicesForEvent(event, session);
@@ -148,30 +147,32 @@ export class AttentionTreeProvider implements vscode.TreeDataProvider<AttentionT
   }
 }
 
-function collapseRepeatedProviderReadTransitions(events: readonly MonitorEvent[]): MonitorEvent[] {
-  const transitions = events.filter(event => event.type === 'provider.transition');
-  const chronological = transitions
+function latestProviderTransitions(
+  events: readonly MonitorEvent[],
+  sessionsById: ReadonlyMap<string, WorkSessionRecord>,
+): MonitorEvent[] {
+  const newestFirst = events
     .map((event, index) => ({ event, index }))
-    .sort((left, right) => left.event.at.localeCompare(right.event.at) || right.index - left.index);
-  const lastStateBySubject = new Map<string, string>();
-  const retained = new Set<string>();
-  for (const { event } of chronological) {
-    if (!isProviderReadTransitionKind(event.metadata?.['transitionKind'])) {
-      retained.add(event.id);
-      continue;
-    }
-    const subjectKey = [event.sessionId, event.source, event.subject?.kind || '', event.subject?.id || ''].join('\u0000');
-    const signature = providerReadStateSignature(
-      event.metadata?.['readState'],
-      event.after?.state,
-      event.metadata?.['readReason'],
-      event.metadata?.['readComponents'],
-    );
-    if (lastStateBySubject.get(subjectKey) === signature) { continue; }
-    lastStateBySubject.set(subjectKey, signature);
-    retained.add(event.id);
+    .filter(({ event }) => event.type === 'provider.transition' && sessionsById.has(event.sessionId))
+    .sort((left, right) => right.event.at.localeCompare(left.event.at)
+      || left.index - right.index
+      || right.event.id.localeCompare(left.event.id));
+  const latestByStream = new Map<string, MonitorEvent>();
+  for (const { event } of newestFirst) {
+    const session = sessionsById.get(event.sessionId);
+    const key = attentionStreamKey(event, session);
+    if (!latestByStream.has(key)) { latestByStream.set(key, event); }
   }
-  return transitions.filter(event => retained.has(event.id));
+  return [...latestByStream.values()];
+}
+
+function attentionStreamKey(event: MonitorEvent, session: WorkSessionRecord | undefined): string {
+  const scope = session?.projectName ? `project:${session.projectName}` : `session:${event.sessionId}`;
+  const transitionKind = event.metadata?.['transitionKind'];
+  const facet = isProviderReadTransitionKind(transitionKind)
+    ? 'provider-read'
+    : event.subject?.kind || `event:${event.subject?.id || event.id}`;
+  return [scope, event.source, facet].join('\u0000');
 }
 
 export type AttentionTreeItem = AttentionGroupTreeItem | AttentionEventTreeItem | AttentionMessageTreeItem;

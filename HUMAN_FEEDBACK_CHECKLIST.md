@@ -45,7 +45,7 @@ $env:KRONOS_DIR = "$PWD\.kronos\feedback-state"
 code .
 ```
 
-The synthetic state includes one detached ticket session, one detached standalone session, retained MR/Jenkins/Sonar targets, and several Attention transitions. Polling is paused, every provider URL uses the reserved `.invalid` domain, and no terminal is started. Use these rows to review grouping, target pickers, and duplicate-failure collapse before creating your own live terminal sessions. Do not resume this fixture's monitoring unless you specifically want to exercise unavailable-provider behavior.
+The synthetic state includes one detached ticket session, one detached standalone session, retained MR/Jenkins/Sonar targets, and several Attention transitions. Polling is paused, every provider URL uses the reserved `.invalid` domain, and no terminal is started. Use these rows to review grouping, target pickers, and newest-state replacement before creating your own live terminal sessions. Do not resume this fixture's monitoring unless you specifically want to exercise unavailable-provider behavior.
 
 Use a real ticket only when its provider data is approved for local context capture. The fixture is synthetic and must not be used to post or mutate provider state.
 
@@ -131,6 +131,7 @@ If GitLab and CI providers are safely configured:
 6. Acknowledge the item and confirm acknowledgement changes only local Attention/audit state.
 7. Confirm ordinary unchanged polls do not create repeated attention noise.
 8. With Jenkins configured and no explicit SonarQube project key, use a safe fixture job whose `/config.xml` contains a literal `sonar.projectKey`. Confirm polling discovers SonarQube without retaining raw XML; confirm an expression value such as `${SONAR_PROJECT_KEY}` is ignored.
+9. Cause a provider stream to change state more than once (for example failure, recovery, then partial). Confirm only its newest state remains in Attention, the older transitions remain in the audit, and acknowledging the newest state does not bring an older row back.
 
 ## Reload and Recovery
 

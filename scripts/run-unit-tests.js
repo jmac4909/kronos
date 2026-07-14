@@ -2745,15 +2745,13 @@ test('extension activation registers the bounded surface and explicit launch com
     const attentionProvider = registeredTreeProviders.get('kronosAttention');
     const failureGroup = attentionProvider.getChildren().find(item => item.ticketKey === 'JIRA-654');
     const retainedFailureItems = attentionProvider.getChildren(failureGroup);
-    assert.equal(retainedFailureItems.length, 4, 'legacy consecutive duplicate failures collapse to one Attention item');
+    assert.equal(retainedFailureItems.length, 1, 'only the newest state for a provider stream remains in Attention');
     assert.deepEqual(
       retainedFailureItems.map(item => item.entry.event.id),
-      ['attention-partial-after-failure', 'attention-failure-after-recovery', 'attention-read-recovery', 'attention-repeat-failure-1'],
-      'a recovery makes the same later failure a real new transition',
+      ['attention-partial-after-failure'],
+      'new failures, recoveries, and partial reads replace older stale rows while audit history is retained',
     );
     assert.equal(retainedFailureItems[0].iconPath.id, 'warning');
-    assert.equal(retainedFailureItems[1].iconPath.id, 'error');
-    assert.equal(retainedFailureItems[2].iconPath.id, 'check');
     assert.deepEqual(
       retainedFailureItems[0].providerChoices.map(choice => choice.label),
       ['Jenkins build 32', 'Jenkins build 31'],
@@ -2764,7 +2762,46 @@ test('extension activation registers the bounded surface and explicit launch com
       event.type === 'notification.acknowledged'
       && event.metadata?.acknowledgedEventId === retainedFailureItems[0].eventId
     ));
+    assert.equal(
+      attentionProvider.getChildren().some(item => item.ticketKey === 'JIRA-654'),
+      false,
+      'acknowledging the newest state must not resurrect an older superseded event',
+    );
     workSessions.removeWorkSession(failureSession.id);
+
+    const replacementSession = workSessions.createOrGetWorkSessionByTicket({
+      ticketKey: 'JIRA-655',
+      title: 'Attention build replacement fixture',
+    });
+    monitorEventStore.appendMonitorEvent({
+      id: 'attention-old-build-failure',
+      at: '2026-07-14T11:00:00.000Z',
+      sessionId: replacementSession.id,
+      type: 'provider.transition',
+      source: 'jenkins',
+      summary: 'JIRA-655 Jenkins build 31 failed.',
+      subject: { kind: 'build', id: '31', ticketKey: 'JIRA-655' },
+      after: { state: 'FAILURE', fingerprint: 'build-31-failure' },
+      metadata: { transitionKind: 'build_failed', buildNumber: 31 },
+    });
+    monitorEventStore.appendMonitorEvent({
+      id: 'attention-new-build-success',
+      at: '2026-07-14T11:05:00.000Z',
+      sessionId: replacementSession.id,
+      type: 'provider.transition',
+      source: 'jenkins',
+      summary: 'JIRA-655 Jenkins build 32 recovered.',
+      subject: { kind: 'build', id: '32', ticketKey: 'JIRA-655' },
+      after: { state: 'SUCCESS', fingerprint: 'build-32-success' },
+      metadata: { transitionKind: 'build_recovered', buildNumber: 32 },
+    });
+    const replacementGroup = attentionProvider.getChildren().find(item => item.ticketKey === 'JIRA-655');
+    assert.deepEqual(
+      attentionProvider.getChildren(replacementGroup).map(item => item.eventId),
+      ['attention-new-build-success'],
+      'a newer Jenkins build replaces the stale result even though its provider subject id changed',
+    );
+    workSessions.removeWorkSession(replacementSession.id);
 
     const attentionSession = workSessions.createOrGetWorkSessionByTicket({
       ticketKey: 'JIRA-321',
