@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { OperatorTerminalRegistry } from '../services/operatorTerminalRegistry';
 import { WorkSessionRecord, listWorkSessions } from '../services/workSessionStore';
+import { readProjectGitBranch } from '../services/projectCatalog';
 
 export interface ManagedSessionCommandTarget {
   workSessionId: string;
@@ -120,17 +121,19 @@ function sessionSortOrder(left: WorkSessionRecord, right: WorkSessionRecord): nu
 }
 
 function sessionDescription(session: WorkSessionRecord, liveCount: number): string {
-  if (session.status === 'closed') { return 'management closed'; }
+  const branch = session.projectPath ? readProjectGitBranch(session.projectPath)?.branch : undefined;
+  const project = branch ? `${session.projectName || 'project'} @ ${branch} • ` : '';
+  if (session.status === 'closed') { return `${project}management closed`; }
   if (session.kind === 'standalone') {
     return liveCount === 0
-      ? 'standalone • terminal detached'
-      : `standalone • ${liveCount} terminal${liveCount === 1 ? '' : 's'} attached`;
+      ? `${project}standalone • terminal detached`
+      : `${project}standalone • ${liveCount} terminal${liveCount === 1 ? '' : 's'} attached`;
   }
   const monitoring = session.monitoring.enabled
     ? `monitoring ${session.monitoring.lastState || 'waiting'}`
     : 'monitoring paused';
-  if (liveCount === 0) { return `terminal detached • ${monitoring}`; }
-  return `${liveCount} terminal${liveCount === 1 ? '' : 's'} attached • ${monitoring}`;
+  if (liveCount === 0) { return `${project}terminal detached • ${monitoring}`; }
+  return `${project}${liveCount} terminal${liveCount === 1 ? '' : 's'} attached • ${monitoring}`;
 }
 
 function sessionTooltip(session: WorkSessionRecord, liveCount: number): string {
@@ -167,6 +170,8 @@ function sessionTooltip(session: WorkSessionRecord, liveCount: number): string {
   ];
   if (session.projectName) { lines.splice(4, 0, `Project: ${session.projectName}`); }
   if (session.projectPath) { lines.splice(5, 0, `Project path: ${session.projectPath}`); }
+  const branch = session.projectPath ? readProjectGitBranch(session.projectPath)?.branch : undefined;
+  if (branch) { lines.splice(6, 0, `Git branch: ${branch}`); }
   if (session.closedAt) { lines.push(`Closed: ${session.closedAt}`); }
   return lines.join('\n');
 }

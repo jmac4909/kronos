@@ -174,12 +174,14 @@ function normalizeTicket(value: unknown): Ticket | undefined {
   const jiraStatusCategory = safeString(value['jira_status_category']);
   const description = safeMultilineString(value['description']);
   const jiraUrl = safeHttpUrl(value['jira_url']);
+  const launchProject = safeString(value['launch_project']);
   const labels = safeStringArray(value['labels']);
   const attachments = normalizeAttachments(value['attachments']);
   if (updated) { ticket.updated = updated; }
   if (jiraStatusCategory) { ticket.jira_status_category = jiraStatusCategory; }
   if (description) { ticket.description = description; }
   if (jiraUrl) { ticket.jira_url = jiraUrl; }
+  if (launchProject) { ticket.launch_project = launchProject; }
   if (labels.length > 0) { ticket.labels = labels; }
   if (attachments.length > 0) { ticket.attachments = attachments; }
   return ticket;

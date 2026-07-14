@@ -36,6 +36,8 @@ export interface Ticket {
   labels?: string[];
   attachments?: Array<{ filename: string; size: number; mimeType: string }>;
   jira_url?: string;
+  /** Explicit local project used only as the starting directory for new ticket launches. */
+  launch_project?: string;
   projects: string[];
   mr: MergeRequest | null;
   build: BuildStatus | null;

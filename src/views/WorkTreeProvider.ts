@@ -8,6 +8,7 @@ import {
   type WorkTicketFilter,
   type WorkTicketFilterOptions,
 } from '../services/workTicketFilters';
+import { ticketLocalProject, type LocalProjectSummary } from '../services/projectCatalog';
 
 export type { WorkCompletionFilter, WorkTicketFilter, WorkTicketFilterOptions } from '../services/workTicketFilters';
 export { isCompletedWorkTicket, normalizeWorkTicketFilter, workTicketMatchesFilter } from '../services/workTicketFilters';
@@ -64,7 +65,11 @@ export class WorkTreeProvider implements vscode.TreeDataProvider<WorkTreeItem>, 
       }
       return [new WorkTreeMessageItem('No tickets match your search.', 'search')];
     }
-    return visibleTickets.map(([ticketKey, ticket]) => new WorkTicketTreeItem(ticketKey, ticket));
+    return visibleTickets.map(([ticketKey, ticket]) => new WorkTicketTreeItem(
+      ticketKey,
+      ticket,
+      ticketLocalProject(state, ticket),
+    ));
   }
 
   setSearchQuery(query: string): void {
@@ -105,6 +110,7 @@ export class WorkTicketTreeItem extends vscode.TreeItem {
   constructor(
     public readonly ticketKey: string,
     public readonly ticket: Ticket,
+    localProject?: LocalProjectSummary,
   ) {
     const key = safeSingleLine(ticketKey, 160) || 'Ticket';
     const summary = safeSingleLine(ticket.summary, 400) || 'Untitled ticket';
@@ -115,11 +121,12 @@ export class WorkTicketTreeItem extends vscode.TreeItem {
       safeSingleLine(ticket.jira_status, 120),
       safeSingleLine(ticket.priority, 80),
       projects.length > 0 ? projects.join(', ') : 'unlinked',
+      localProject?.branch ? `branch ${localProject.branch}` : '',
       ticket.mr ? `MR !${ticket.mr.iid} ${safeSingleLine(ticket.mr.state, 40)}` : '',
       ticket.build ? `build #${ticket.build.number} ${safeSingleLine(ticket.build.status, 80)}` : '',
     ].filter(Boolean);
     this.description = facts.join(' • ');
-    this.tooltip = buildWorkTicketTooltip(key, summary, ticket, projects);
+    this.tooltip = buildWorkTicketTooltip(key, summary, ticket, projects, localProject);
     this.iconPath = new vscode.ThemeIcon(
       ticket.type.toLowerCase().includes('bug') || ticket.type.toLowerCase().includes('defect')
         ? 'bug'
@@ -142,7 +149,13 @@ function compareWorkTickets(
   return rightUpdated - leftUpdated || left[0].localeCompare(right[0]);
 }
 
-function buildWorkTicketTooltip(key: string, summary: string, ticket: Ticket, projects: readonly string[]): string {
+function buildWorkTicketTooltip(
+  key: string,
+  summary: string,
+  ticket: Ticket,
+  projects: readonly string[],
+  localProject?: LocalProjectSummary,
+): string {
   const lines = [
     `${key}: ${summary}`,
     `Jira status: ${safeSingleLine(ticket.jira_status, 160) || 'unknown'}`,
@@ -150,6 +163,10 @@ function buildWorkTicketTooltip(key: string, summary: string, ticket: Ticket, pr
     `Priority: ${safeSingleLine(ticket.priority, 120) || 'unknown'}`,
     `Projects: ${projects.join(', ') || 'unlinked'}`,
   ];
+  if (localProject) {
+    lines.push(`Launch directory: ${localProject.path}`);
+    lines.push(`Git branch: ${localProject.branch || 'unavailable'}`);
+  }
   if (ticket.mr) {
     lines.push(`MR !${ticket.mr.iid}: ${safeSingleLine(ticket.mr.state, 80)} / ${safeSingleLine(ticket.mr.review_status, 120)}`);
   }

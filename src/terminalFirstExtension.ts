@@ -45,6 +45,7 @@ import {
   recordWorkSessionContextArtifact,
   reopenWorkSession,
   setWorkSessionMonitoring,
+  setWorkSessionProject,
   type TicketWorkSessionRecord,
   type WorkSessionRecord,
   workSessionEventContext,
@@ -84,10 +85,12 @@ import {
 } from './services/webviewSecurity';
 import { normalizeActionPanelMessage } from './services/webviewMessages';
 import { isRecord } from './services/records';
+import { listLocalProjects, ticketLocalProject, type LocalProjectSummary } from './services/projectCatalog';
 
 const TICKET_WORKSPACE_ACTIONS = new Set([
   'startClaudeForTicket',
   'manageActiveTerminal',
+  'chooseTicketProject',
   'insertJiraContext',
   'insertGitLabContext',
   'insertCiContext',
@@ -196,6 +199,8 @@ class TerminalFirstRuntime implements vscode.Disposable {
     this.command('kronos.filterWork', async () => this.configureWorkFilter());
     this.command('kronos.clearWorkFilter', () => this.workTree.clearFilter());
     this.command('kronos.openTicketWorkspace', async argument => this.openTicketWorkspace(argument));
+    this.command('kronos.registerWorkspaceProject', async () => this.registerWorkspaceProject());
+    this.command('kronos.chooseTicketProject', async argument => this.chooseTicketProject(argument));
     this.command('kronos.newClaudeSession', async () => this.newClaudeSession());
     this.command('kronos.startClaudeForTicket', async argument => this.startClaudeForTicket(argument));
     this.command('kronos.manageActiveTerminal', async argument => this.manageFocusedTerminal(argument));
@@ -321,6 +326,95 @@ class TerminalFirstRuntime implements vscode.Disposable {
       else { delete next.project; }
       this.workTree.setFilter(next);
     }
+  }
+
+  private async registerWorkspaceProject(): Promise<void> {
+    const folders = vscode.workspace.workspaceFolders || [];
+    if (folders.length === 0) {
+      void vscode.window.showWarningMessage('Open the project folder in this VS Code window, then register it with Kronos.');
+      return;
+    }
+    const folder = folders.length === 1
+      ? folders[0]
+      : await vscode.window.showQuickPick(
+        folders.map(candidate => ({ label: candidate.name, detail: candidate.uri.fsPath, folder: candidate })),
+        { title: 'Register a Local Project', placeHolder: 'Choose an open workspace folder', matchOnDetail: true },
+      ).then(selection => selection?.folder);
+    if (!folder) { return; }
+    const existingName = Object.entries(this.state.state?.projects || {})
+      .find(([, project]) => project.path === folder.uri.fsPath)?.[0];
+    let projectName = existingName || folder.name;
+    const collision = this.state.state?.projects[projectName];
+    if (collision?.path && collision.path !== folder.uri.fsPath) {
+      const entered = await vscode.window.showInputBox({
+        title: 'Name the Local Project',
+        prompt: 'This name already points to another folder. Choose a distinct name.',
+        value: folder.name,
+        validateInput: value => {
+          const normalized = safeProjectName(value);
+          if (!normalized) { return 'Enter a project name.'; }
+          const existing = this.state.state?.projects[normalized];
+          return existing?.path && existing.path !== folder.uri.fsPath
+            ? 'That name already points to another project folder.'
+            : undefined;
+        },
+      });
+      projectName = safeProjectName(entered);
+      if (!projectName) { return; }
+    }
+    this.state.registerLocalProject(projectName, folder.uri.fsPath);
+    const project = listLocalProjects(this.state.state).find(candidate => candidate.name === projectName);
+    void vscode.window.showInformationMessage(
+      `Registered ${projectName} at ${folder.uri.fsPath}${project?.branch ? ` on ${project.branch}` : ''}.`,
+    );
+  }
+
+  private async chooseTicketProject(argument: unknown): Promise<void> {
+    const ticketKey = await this.resolveTicketKey(argument, true);
+    const ticket = ticketKey ? this.state.state?.tickets[ticketKey] : undefined;
+    if (!ticketKey || !ticket) { return; }
+    const projects = listLocalProjects(this.state.state).filter(project => project.available);
+    if (projects.length === 0) {
+      const action = await vscode.window.showWarningMessage(
+        'No local project folder is registered. Open the project folder in this window, then register it.',
+        'Register Workspace Project',
+      );
+      if (action === 'Register Workspace Project') { await this.registerWorkspaceProject(); }
+      return;
+    }
+    const current = ticketLocalProject(this.state.state, ticket);
+    const choices: Array<vscode.QuickPickItem & { project?: LocalProjectSummary; unlink?: true }> = projects.map(project => ({
+      label: `${project.name}${current?.name === project.name ? ' $(check)' : ''}`,
+      description: project.branch || (project.available ? 'Git branch unavailable' : 'folder unavailable'),
+      detail: project.path,
+      project,
+    }));
+    if (current) {
+      choices.push({
+        label: '$(close) Unlink local project',
+        description: 'Future ticket launches fall back to the open workspace',
+        unlink: true,
+      });
+    }
+    const choice = await vscode.window.showQuickPick(choices, {
+      title: `Choose ${ticketKey} Launch Project`,
+      placeHolder: 'Claude will start in this folder; Kronos will not move existing terminals',
+      matchOnDescription: true,
+      matchOnDetail: true,
+    });
+    if (!choice) { return; }
+    this.state.setTicketLocalProject(ticketKey, choice.unlink ? undefined : choice.project?.name);
+    const selected = choice.unlink ? undefined : choice.project;
+    const existingSession = getWorkSessionByTicket(ticketKey);
+    if (existingSession) {
+      setWorkSessionProject(existingSession.id, selected
+        ? { projectName: selected.name, projectPath: selected.path }
+        : {});
+    }
+    this.refreshTerminalFirstViews();
+    void vscode.window.showInformationMessage(selected
+      ? `${ticketKey} will launch Claude in ${selected.path}${selected.branch ? ` on ${selected.branch}` : ''}. Existing terminals were not changed.`
+      : `${ticketKey} local project unlinked. Existing terminals were not changed.`);
   }
 
   private async refreshTickets(showResult: boolean): Promise<void> {
@@ -474,6 +568,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
       actionScriptUri,
       workSession: session,
       liveTerminalCount: session ? this.operatorTerminals.listBindings(session.id).length : 0,
+      localProject: ticketLocalProject(this.state.state, ticket),
     });
     record.panel.webview.html = withWebviewCsp(
       html,
@@ -531,13 +626,12 @@ class TerminalFirstRuntime implements vscode.Disposable {
       ticketKey,
       title: ticket.summary,
     };
-    const projectName = ticket.projects[0];
-    if (projectName) {
-      sessionInput.projectName = projectName;
-      const projectPath = this.state.state?.projects[projectName]?.path;
-      if (projectPath) { sessionInput.projectPath = projectPath; }
-    }
+    const project = ticketLocalProject(this.state.state, ticket);
+    if (project) { sessionInput.projectName = project.name; sessionInput.projectPath = project.path; }
     let session = createOrGetWorkSessionByTicket(sessionInput);
+    session = this.requireTicketSession(setWorkSessionProject(session.id, project
+      ? { projectName: project.name, projectPath: project.path }
+      : {}));
     if (session.status === 'closed') { session = this.requireTicketSession(reopenWorkSession(session.id)); }
     session = this.ensureProviderBindings(session, ticket);
     await this.attachTerminal(session, terminal);
@@ -600,13 +694,12 @@ class TerminalFirstRuntime implements vscode.Disposable {
           ticketKey: input.ticketKey,
           title: input.title,
         };
-        const projectName = input.ticket.projects[0];
-        if (projectName) {
-          sessionInput.projectName = projectName;
-          const projectPath = this.state.state?.projects[projectName]?.path;
-          if (projectPath) { sessionInput.projectPath = projectPath; }
-        }
+        const project = ticketLocalProject(this.state.state, input.ticket);
+        if (project) { sessionInput.projectName = project.name; sessionInput.projectPath = project.path; }
         let ticketSession = createOrGetWorkSessionByTicket(sessionInput);
+        ticketSession = this.requireTicketSession(setWorkSessionProject(ticketSession.id, project
+          ? { projectName: project.name, projectPath: project.path }
+          : {}));
         closeSessionIfNotSubmitted = !previousSession || previousSession.status === 'closed';
         if (ticketSession.status === 'closed') {
           ticketSession = this.requireTicketSession(reopenWorkSession(ticketSession.id));
@@ -674,8 +767,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
     const name = suffix ? `${configuredName.slice(0, Math.max(1, 80 - suffix.length))}${suffix}` : configuredName;
     const mode = configuration.get<string>('claudeLaunchCwd', 'ticketProject');
     const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-    const projectName = ticket?.projects[0];
-    const ticketProjectPath = projectName ? this.state.state?.projects[projectName]?.path : undefined;
+    const ticketProjectPath = ticketLocalProject(this.state.state, ticket)?.path;
     const cwd = mode === 'home'
       ? os.homedir()
       : mode === 'workspace'
@@ -732,8 +824,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
 
   private ensureProviderBindings(session: TicketWorkSessionRecord, ticket: Ticket): TicketWorkSessionRecord {
     let updated = session;
-    const projectName = ticket.projects[0];
-    const config = projectName ? this.state.state?.projects[projectName]?.config : undefined;
+    const config = this.projectConfig(ticket);
     if (ticket.source === 'jira') {
       const binding: Parameters<typeof addWorkSessionProviderBinding>[1] = {
         provider: 'jira',
@@ -1220,6 +1311,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
   private async openSetup(): Promise<void> {
     const choice = await vscode.window.showQuickPick([
       { label: '$(terminal) Claude launch settings', description: 'command, terminal name, and starting directory', id: 'claude' },
+      { label: '$(folder-library) Register workspace project', description: 'save this folder for ticket launch directories and Git branch display', id: 'project' },
       { label: '$(key) Provider setup guide', description: 'Jira, GitLab, Jenkins, and SonarQube environment keys', id: 'providers' },
       { label: '$(pulse) Run Doctor', description: 'validate local state and configured boundaries', id: 'doctor' },
       { label: '$(layout) Open Jira Work Board', description: 'review and filter fetched Jira work', id: 'board' },
@@ -1229,6 +1321,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
       await vscode.commands.executeCommand('workbench.action.openSettings', '@ext:jmacke01.kronos claude');
       return;
     }
+    if (choice.id === 'project') { await this.registerWorkspaceProject(); return; }
     if (choice.id === 'doctor') { await this.openDoctor(); return; }
     if (choice.id === 'board') { await this.openJiraBoard(); return; }
     const envPath = defaultProviderEnvPath().replace(/`/g, 'ˋ');
@@ -1271,6 +1364,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
     }
     const rows = [
       doctorRow('Work catalog', this.state.state !== null && stateIssues.length === 0, `${Object.keys(this.state.state?.tickets || {}).length} Jira ticket(s); ${stateIssues.length} local issue(s)`),
+      doctorRow('Local projects', listLocalProjects(this.state.state).every(project => project.available), listLocalProjects(this.state.state).map(project => `${project.name}: ${project.branch || (project.available ? 'Git branch unavailable' : 'folder unavailable')}`).join('; ') || 'No workspace projects registered.'),
       doctorRow('Claude launch settings', claudeSettingsValid, claudeSettingsDetail),
       doctorRow('Workspace trust for launch', vscode.workspace.isTrusted, vscode.workspace.isTrusted ? 'Explicit Claude launch is enabled.' : 'Claude launch is disabled in this untrusted workspace.'),
       doctorRow('Jira REST', isJiraRestConfigured(), 'Requires JIRA_BASE_URL, JIRA_EMAIL, and JIRA_API_TOKEN.'),
@@ -1416,8 +1510,15 @@ class TerminalFirstRuntime implements vscode.Disposable {
   }
 
   private projectConfig(ticket: Ticket): ProjectConfig | undefined {
-    const projectName = ticket.projects[0];
-    return projectName ? this.state.state?.projects[projectName]?.config : undefined;
+    const config: ProjectConfig = {};
+    let found = false;
+    for (const projectName of [...ticket.projects].reverse()) {
+      const projectConfig = this.state.state?.projects[projectName]?.config;
+      if (!projectConfig) { continue; }
+      Object.assign(config, projectConfig);
+      found = true;
+    }
+    return found ? config : undefined;
   }
 
   private appendContextEvent(
@@ -1519,6 +1620,12 @@ function stringProperty(value: unknown, key: string): string | undefined {
   if (!isRecord(value)) { return undefined; }
   const candidate = value[key];
   return typeof candidate === 'string' && candidate.trim() ? candidate.trim() : undefined;
+}
+
+function safeProjectName(value: unknown): string {
+  return typeof value === 'string'
+    ? value.replace(/[\u0000-\u001f\u007f\u2028\u2029]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200)
+    : '';
 }
 
 function doctorRow(label: string, passed: boolean, detail: string): string {

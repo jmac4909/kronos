@@ -75,6 +75,7 @@ function fixture(now, targetDir) {
         description: 'Use this ticket to evaluate Manage Focused Terminal and explicit context insertion.',
         labels: ['terminal-first', 'safe-fixture'],
         jira_url: 'https://jira.example.invalid/browse/JIRA-123',
+        launch_project: 'fixture-service',
         projects: ['fixture-service'],
         mr: {
           iid: 77,
@@ -102,6 +103,7 @@ function fixture(now, targetDir) {
         description: 'Provider URLs intentionally use .invalid and must never be mutated.',
         labels: ['terminal-first', 'needs-attention'],
         jira_url: 'https://jira.example.invalid/browse/JIRA-456',
+        launch_project: 'fixture-service',
         projects: ['fixture-service'],
         mr: {
           iid: 78,
@@ -148,6 +150,7 @@ const now = new Date().toISOString();
 const state = fixture(now, targetDir);
 writePrivate(path.join(targetDir, 'work.json'), `${JSON.stringify(state, null, 2)}\n`);
 writePrivate(path.join(targetDir, 'fixture-repo', 'README.md'), '# Kronos terminal-first feedback fixture\n\nNo provider or project command should run here.\n');
+writePrivate(path.join(targetDir, 'fixture-repo', '.git', 'HEAD'), 'ref: refs/heads/feature/kronos-feedback\n');
 writePrivate(path.join(targetDir, '.env.example'), [
   '# Copy only to a private test location and provide non-production values.',
   'JIRA_BASE_URL=https://jira.example.invalid',

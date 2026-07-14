@@ -87,6 +87,16 @@
         "icon": "$(open-preview)"
       },
       {
+        "command": "kronos.registerWorkspaceProject",
+        "title": "Kronos: Register Workspace Project",
+        "icon": "$(folder-library)"
+      },
+      {
+        "command": "kronos.chooseTicketProject",
+        "title": "Kronos: Choose Ticket Project and Branch",
+        "icon": "$(repo)"
+      },
+      {
         "command": "kronos.newClaudeSession",
         "title": "Kronos: New Claude Session",
         "icon": "$(add)"
@@ -205,6 +215,11 @@
           "group": "navigation@4"
         },
         {
+          "command": "kronos.registerWorkspaceProject",
+          "when": "view == kronosWork",
+          "group": "navigation@5"
+        },
+        {
           "command": "kronos.newClaudeSession",
           "when": "view == kronosSessions",
           "group": "navigation@1"
@@ -250,6 +265,11 @@
           "command": "kronos.manageActiveTerminal",
           "when": "viewItem == work_ticket",
           "group": "terminal@1"
+        },
+        {
+          "command": "kronos.chooseTicketProject",
+          "when": "viewItem == work_ticket",
+          "group": "project@1"
         },
         {
           "command": "kronos.insertJiraContext",

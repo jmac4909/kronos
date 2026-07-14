@@ -26,6 +26,8 @@ The normative boundary and navigation model are in [docs/terminal-first-product-
 
 Work is a Jira board with search, status, project, and label filters. Completed work is hidden by default and can be shown explicitly. Refresh the board, combine or clear filters, open one ticket workspace, then either attach an existing focused terminal or choose **Start Claude for Ticket**. Ticket association is created only from this ticket path, never by standalone **New Claude**.
 
+Use **Register Workspace Project** from the Work toolbar to save an open workspace folder in the private local catalog. A ticket's **Project / Branch** action selects one primary local launch project while retaining its Jira/provider project associations. Kronos shows the project's current Git branch by reading `.git/HEAD` with Node built-ins; it never invokes Git or changes the repository. Future ticket-launched Claude terminals start in the linked folder. Existing terminals are never moved or sent a `cd` command.
+
 From a ticket workspace, explicitly insert the context needed for the next instruction:
 
 - `[JIRA-123]` for Jira fields, description, comments, custom fields, and bounded safe-text attachments;
@@ -54,8 +56,8 @@ An attention item can open the originating provider page, open its ticket worksp
 
 ## Typical Journey
 
-1. Open **Kronos > Work**, use the Jira board filters, and select a ticket.
-2. Review the ticket workspace and choose **Start Claude for Ticket**, or focus an existing terminal and choose **Manage Focused Terminal**.
+1. Open **Kronos > Work**, register the open workspace project if needed, use the Jira board filters, and select a ticket.
+2. Choose the ticket's local project/branch, then choose **Start Claude for Ticket**, or focus an existing terminal and choose **Manage Focused Terminal**.
 3. For an explicit start, Kronos validates the configured executable and approved interactive flags, terminal name, and working directory; it then creates and focuses one VS Code terminal and executes that command once.
 4. Choose **Insert `[JIRA-123]`**. Kronos writes a private context artifact and inserts its non-submitting reference.
 5. Edit the line if needed, press Enter yourself, and continue directing the interactive session normally.

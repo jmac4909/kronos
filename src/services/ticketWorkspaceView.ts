@@ -3,6 +3,7 @@ import type { WorkSessionContextArtifact, WorkSessionRecord } from './workSessio
 import { ticketWorkspaceActionButton, ticketWorkspaceActionScript } from './operatorPanel';
 import { formatWebviewDateTime } from './webviewFormat';
 import { escapeAttr, escapeClass, escapeHtml, kronosWebviewBaseCss, safeHttpHref } from './webviewHtml';
+import type { LocalProjectSummary } from './projectCatalog';
 
 export interface TicketWorkspaceViewInput {
   ticketKey: string;
@@ -11,6 +12,7 @@ export interface TicketWorkspaceViewInput {
   actionScriptUri: string;
   workSession?: WorkSessionRecord | null;
   liveTerminalCount?: number;
+  localProject?: LocalProjectSummary | undefined;
 }
 
 export function buildTicketWorkspaceHtml(input: TicketWorkspaceViewInput): string {
@@ -23,6 +25,7 @@ export function buildTicketWorkspaceHtml(input: TicketWorkspaceViewInput): strin
   const actionButtons = [
     ticketWorkspaceActionButton('startClaudeForTicket', 'Start Claude for Ticket', { ticket: ticketKey, primary: true }),
     ticketWorkspaceActionButton('manageActiveTerminal', 'Manage Focused Terminal', { ticket: ticketKey }),
+    ticketWorkspaceActionButton('chooseTicketProject', 'Choose Project / Branch', { ticket: ticketKey }),
     ...(ticket.source === 'jira'
       ? [ticketWorkspaceActionButton('insertJiraContext', `Insert [${ticketKey}]`, { ticket: ticketKey })]
       : []),
@@ -83,7 +86,7 @@ ${ticketWorkspaceActionScript(input.nonce, input.actionScriptUri)}
   <section class="kronos-card terminal-workspace">
     <h2>Terminal Workspace</h2>
     <div class="workspace-actions">${actionButtons.join('')}</div>
-    ${buildTerminalWorkspaceFacts(workSession, liveTerminalCount)}
+    ${buildTerminalWorkspaceFacts(workSession, liveTerminalCount, input.localProject)}
     ${buildProviderLinks(ticket, workSession)}
   </section>
 
@@ -105,7 +108,11 @@ ${ticketWorkspaceActionScript(input.nonce, input.actionScriptUri)}
 </html>`;
 }
 
-function buildTerminalWorkspaceFacts(workSession: WorkSessionRecord | undefined, liveTerminalCount: number): string {
+function buildTerminalWorkspaceFacts(
+  workSession: WorkSessionRecord | undefined,
+  liveTerminalCount: number,
+  localProject: LocalProjectSummary | undefined,
+): string {
   const attachment = terminalAttachmentState(workSession, liveTerminalCount);
   const monitoring = monitoringState(workSession);
   const artifactCount = workSession?.artifacts.length || 0;
@@ -114,6 +121,9 @@ function buildTerminalWorkspaceFacts(workSession: WorkSessionRecord | undefined,
     ${fact('Monitoring', `<span class="status-pill ${escapeClass(monitoring.tone)}">${escapeHtml(monitoring.label)}</span>`, true)}
     ${fact('Saved context', `${artifactCount} artifact${artifactCount === 1 ? '' : 's'}`)}
     ${fact('Session', workSession ? sessionStatusLabel(workSession.status) : 'Ready to connect')}
+    ${fact('Launch project', localProject?.name || 'workspace fallback')}
+    ${fact('Git branch', localProject?.branch || (localProject ? 'unavailable' : 'not linked'))}
+    ${fact('Launch directory', localProject?.path || 'current workspace')}
   </div>`;
 }
 

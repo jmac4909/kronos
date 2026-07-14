@@ -109,6 +109,11 @@ export interface CreateStandaloneWorkSessionInput {
   monitoringEnabled?: boolean;
 }
 
+export interface SetWorkSessionProjectInput {
+  projectName?: string;
+  projectPath?: string;
+}
+
 export interface WorkSessionEventContext {
   sessionId: string;
   sessionTitle: string;
@@ -372,6 +377,21 @@ export function attachWorkSessionTerminal(
       record.terminals.push(candidate);
     }
     record.terminals = record.terminals.slice(-MAX_TERMINALS);
+  });
+}
+
+export function setWorkSessionProject(
+  sessionId: string,
+  input: SetWorkSessionProjectInput,
+  options: WorkSessionStoreOptions = {},
+): WorkSessionRecord {
+  return mutateWorkSession(sessionId, options, record => {
+    delete record.projectName;
+    delete record.projectPath;
+    const projectName = optionalSingleLine(input.projectName, 'project name', 200);
+    const projectPath = optionalAbsolutePath(input.projectPath, 'project path');
+    if (projectName) { record.projectName = projectName; }
+    if (projectPath) { record.projectPath = projectPath; }
   });
 }
 

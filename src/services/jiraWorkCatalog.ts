@@ -49,6 +49,9 @@ export function catalogFromJiraWorkList(
     const statusCategory = jiraStatusCategory(rawStatus)
       || (!statusName ? previous?.jira_status_category : undefined);
     if (statusCategory) { ticket.jira_status_category = statusCategory; }
+    if (previous?.launch_project && projects[previous.launch_project]?.path) {
+      ticket.launch_project = previous.launch_project;
+    }
     const updated = providerText(fields['updated']);
     const labels = Array.isArray(fields['labels'])
       ? fields['labels'].map(providerText).filter((item): item is string => Boolean(item)).slice(0, 500)

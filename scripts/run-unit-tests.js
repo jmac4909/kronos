@@ -13,6 +13,7 @@ test.after(() => fs.rmSync(tempRoot, { recursive: true, force: true }));
 
 const providerEnv = require('../out/services/providerEnv.js');
 const stateStore = require('../out/services/stateStore.js');
+const projectCatalog = require('../out/services/projectCatalog.js');
 const { JiraRestClient } = require('../out/services/jiraRestClient.js');
 const jiraContext = require('../out/services/jiraTicketContext.js');
 const jiraValuePruning = require('../out/services/jiraValuePruning.js');
@@ -89,6 +90,65 @@ function jiraTransport(pages) {
   };
   return { transport, requests };
 }
+
+test('local projects preserve provider bindings and report branch without running Git', () => {
+  const projectRoot = path.join(tempRoot, 'project-catalog-fixture');
+  const alternateRoot = path.join(tempRoot, 'project-catalog-alternate');
+  fs.mkdirSync(path.join(projectRoot, '.git'), { recursive: true });
+  fs.mkdirSync(path.join(alternateRoot, '.git'), { recursive: true });
+  fs.writeFileSync(path.join(projectRoot, '.git', 'HEAD'), 'ref: refs/heads/feature/ticket-context\n');
+  fs.writeFileSync(path.join(alternateRoot, '.git', 'HEAD'), '0123456789abcdef0123456789abcdef01234567\n');
+  const initial = stateStore.emptyWorkCatalog();
+  initial.projects.Provider = { config: { jira_project_key: 'JIRA', gitlab_project_id: 77 } };
+  initial.tickets['JIRA-123'] = fixtureTicket({ projects: ['Provider'] });
+
+  const registered = projectCatalog.registerLocalProject(initial, 'Application', projectRoot);
+  const withAlternate = projectCatalog.registerLocalProject(registered, 'Alternate', alternateRoot);
+  const linked = projectCatalog.setTicketLocalProject(withAlternate, 'JIRA-123', 'Application');
+  assert.deepEqual(linked.tickets['JIRA-123'].projects, ['Provider']);
+  assert.equal(linked.tickets['JIRA-123'].launch_project, 'Application');
+  assert.equal(linked.projects.Provider.config.gitlab_project_id, 77);
+  assert.deepEqual(projectCatalog.readProjectGitBranch(projectRoot), {
+    branch: 'feature/ticket-context',
+    detached: false,
+  });
+  assert.deepEqual(projectCatalog.readProjectGitBranch(alternateRoot), {
+    branch: 'detached@0123456',
+    detached: true,
+  });
+  assert.deepEqual(projectCatalog.ticketLocalProject(linked, linked.tickets['JIRA-123']), {
+    name: 'Application',
+    path: projectRoot,
+    branch: 'feature/ticket-context',
+    detached: false,
+    available: true,
+  });
+
+  const switched = projectCatalog.setTicketLocalProject(linked, 'JIRA-123', 'Alternate');
+  assert.deepEqual(switched.tickets['JIRA-123'].projects, ['Provider']);
+  assert.equal(switched.tickets['JIRA-123'].launch_project, 'Alternate');
+  const unlinked = projectCatalog.setTicketLocalProject(switched, 'JIRA-123');
+  assert.deepEqual(unlinked.tickets['JIRA-123'].projects, ['Provider']);
+  assert.equal(unlinked.tickets['JIRA-123'].launch_project, undefined);
+});
+
+test('Git worktree pointers are bounded and symbolic Git metadata is ignored', t => {
+  const worktree = path.join(tempRoot, 'worktree-project');
+  const gitDirectory = path.join(tempRoot, 'worktree-git-data');
+  fs.mkdirSync(worktree, { recursive: true });
+  fs.mkdirSync(gitDirectory, { recursive: true });
+  fs.writeFileSync(path.join(worktree, '.git'), `gitdir: ${gitDirectory}\n`);
+  fs.writeFileSync(path.join(gitDirectory, 'HEAD'), 'ref: refs/heads/review/worktree\n');
+  assert.deepEqual(projectCatalog.readProjectGitBranch(worktree), {
+    branch: 'review/worktree',
+    detached: false,
+  });
+
+  const unsafe = path.join(tempRoot, 'unsafe-git-project');
+  fs.mkdirSync(unsafe, { recursive: true });
+  if (!createSymlinkOrSkip(t, gitDirectory, path.join(unsafe, '.git'), 'dir')) { return; }
+  assert.equal(projectCatalog.readProjectGitBranch(unsafe), undefined);
+});
 
 test('provider environment parsing preserves values and rejects malformed keys', () => {
   const parsed = providerEnv.parseProviderDotEnv(`
@@ -349,14 +409,21 @@ test('Jira Work catalog retains Jira status category for deterministic local fil
     warnings: [],
   };
   const current = stateStore.emptyWorkCatalog();
-  current.tickets['JIRA-10'] = fixtureTicket({ jira_status: 'Shipped', jira_status_category: 'done' });
+  current.projects.fixture = { path: tempRoot, config: { jira_project_key: 'JIRA' } };
+  current.tickets['JIRA-10'] = fixtureTicket({
+    jira_status: 'Shipped',
+    jira_status_category: 'done',
+    launch_project: 'fixture',
+  });
   const catalog = jiraWorkCatalog.catalogFromJiraWorkList(snapshot, current, 'https://jira.example/');
   assert.equal(catalog.state.tickets['JIRA-9'].jira_status, 'Shipped');
   assert.equal(catalog.state.tickets['JIRA-9'].jira_status_category, 'done');
   assert.equal(catalog.state.tickets['JIRA-9'].jira_url, 'https://jira.example/browse/JIRA-9');
   assert.equal(catalog.state.tickets['JIRA-10'].jira_status_category, 'done');
+  assert.equal(catalog.state.tickets['JIRA-10'].launch_project, 'fixture');
   const reloaded = stateStore.normalizeWorkCatalog(catalog.state).state;
   assert.equal(reloaded.tickets['JIRA-9'].jira_status_category, 'done');
+  assert.equal(reloaded.tickets['JIRA-10'].launch_project, 'fixture');
 });
 
 test('Work filtering hides completed Jira work by default and exposes explicit completion modes', () => {
@@ -889,7 +956,7 @@ test('GitLab MR review monitoring retains complete facets across partial reads a
   assert.equal(recovered.status.generation, 2);
 });
 
-test('ticket workspace exposes explicit Claude launch, terminal management, and context insertion', () => {
+test('ticket workspace exposes explicit Claude launch, project branch, terminal management, and context insertion', () => {
   const html = buildTicketWorkspaceHtml({
     ticketKey: 'JIRA-123',
     ticket: fixtureTicket({
@@ -902,8 +969,15 @@ test('ticket workspace exposes explicit Claude launch, terminal management, and 
     }),
     nonce: 'abcdef1234567890',
     actionScriptUri: 'vscode-resource://kronos/media/kronos-action-panel.js',
+    localProject: {
+      name: 'fixture',
+      path: '/workspace/fixture',
+      branch: 'feature/terminal-first-context',
+      detached: false,
+      available: true,
+    },
   });
-  for (const action of ['startClaudeForTicket', 'manageActiveTerminal', 'insertJiraContext', 'insertGitLabContext', 'insertCiContext']) {
+  for (const action of ['startClaudeForTicket', 'manageActiveTerminal', 'chooseTicketProject', 'insertJiraContext', 'insertGitLabContext', 'insertCiContext']) {
     assert.match(html, new RegExp(`data-action="${action}"`));
   }
   for (const forbidden of [
@@ -921,6 +995,8 @@ test('ticket workspace exposes explicit Claude launch, terminal management, and 
     assert.doesNotMatch(html, new RegExp(forbidden, 'i'));
   }
   assert.match(html, /Terminal-first ticket workspace/);
+  assert.match(html, /feature\/terminal-first-context/);
+  assert.match(html, /\/workspace\/fixture/);
 
   const locallyConnected = buildTicketWorkspaceHtml({
     ticketKey: 'JIRA-123',
@@ -1079,12 +1155,14 @@ test('extension activation registers the bounded surface and explicit launch com
       refreshedAt: '2026-07-14T12:00:00.000Z',
       projects: { fixture: { path: tempRoot, config: { jira_project_key: 'JIRA' } } },
       tickets: {
-        'JIRA-123': fixtureTicket(),
-        'JIRA-456': fixtureTicket({ summary: 'Attachment race fixture' }),
-        'JIRA-789': fixtureTicket({ summary: 'Closed-before-attach fixture' }),
-        'JIRA-999': fixtureTicket({ summary: 'Launch failure fixture' }),
+        'JIRA-123': fixtureTicket({ launch_project: 'fixture' }),
+        'JIRA-456': fixtureTicket({ summary: 'Attachment race fixture', launch_project: 'fixture' }),
+        'JIRA-789': fixtureTicket({ summary: 'Closed-before-attach fixture', launch_project: 'fixture' }),
+        'JIRA-999': fixtureTicket({ summary: 'Launch failure fixture', launch_project: 'fixture' }),
       },
     });
+    fs.mkdirSync(path.join(tempRoot, '.git'), { recursive: true });
+    fs.writeFileSync(path.join(tempRoot, '.git', 'HEAD'), 'ref: refs/heads/feature/runtime-project\n');
     require(modulePath).activate(context);
     assert.deepEqual(registeredViews, ['kronosWork', 'kronosSessions', 'kronosAttention']);
     const expectedCommands = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
@@ -1112,6 +1190,9 @@ test('extension activation registers the bounded surface and explicit launch com
     assert.equal(ticketSession.kind, 'ticket');
     assert.equal(ticketSession.ticketKey, 'JIRA-123');
     assert.match(createdTerminals[1].options.name, /JIRA-123/);
+    assert.equal(createdTerminals[1].options.cwd, tempRoot);
+    assert.equal(ticketSession.projectName, 'fixture');
+    assert.equal(ticketSession.projectPath, tempRoot);
     assert.deepEqual(createdTerminals[1].actions, [
       ['show', false],
       ['sendText', 'claude', true],

@@ -1,5 +1,8 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 
 const {
   JIRA_WORK_BOARD_ACTIONS,
@@ -72,6 +75,27 @@ test('completed status detection supports common names and explicit team statuse
   assert.equal(isCompletedJiraStatus('QA Done'), false);
   assert.equal(isCompletedJiraStatus('In Progress'), false);
   assert.equal(isCompletedJiraStatus('Shipped to Customer', new Set(['shipped to customer'])), true);
+});
+
+test('board lists registered local project paths and current Git branches', () => {
+  const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'kronos-board-project-'));
+  try {
+    fs.mkdirSync(path.join(projectRoot, '.git'));
+    fs.writeFileSync(path.join(projectRoot, '.git', 'HEAD'), 'ref: refs/heads/feature/board-projects\n');
+    const fixtureState = state({ 'KRONOS-1': ticket('In Progress') });
+    fixtureState.projects.Kronos.path = projectRoot;
+    const html = buildJiraWorkBoardHtml({
+      state: fixtureState,
+      nonce: 'abcdef1234567890',
+      scriptUri: 'vscode-resource://kronos/media/kronos-jira-work-board.js',
+    });
+    assert.match(html, /Local Projects/);
+    assert.match(html, /feature\/board-projects/);
+    assert.match(html, new RegExp(projectRoot.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+    assert.match(html, /data-action="chooseTicketProject"/);
+  } finally {
+    fs.rmSync(projectRoot, { recursive: true, force: true });
+  }
 });
 
 test('board runtime posts only normalized command and Jira ticket key', () => {

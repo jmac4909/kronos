@@ -27,8 +27,13 @@ assert.deepEqual(packageJson.contributes.views.kronos.map(view => view.id), [
   'kronosSessions',
   'kronosAttention',
 ]);
-assert.equal(packageJson.contributes.commands.length, 24);
+assert.equal(packageJson.contributes.commands.length, 26);
+assert.equal(work.tickets['JIRA-123'].launch_project, 'fixture-service');
+assert.equal(
+  fs.readFileSync(path.join(fixtureDir, 'fixture-repo', '.git', 'HEAD'), 'utf8').trim(),
+  'ref: refs/heads/feature/kronos-feedback',
+);
 
 console.log('Kronos terminal-first feedback smoke: PASS');
 console.log(`Fixture: ${fixtureDir}`);
-console.log('No provider endpoint, project command, terminal process, or Git repository was touched.');
+console.log('No provider endpoint, project command, terminal process, or live Git repository was touched.');

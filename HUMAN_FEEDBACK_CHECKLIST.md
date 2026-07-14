@@ -59,6 +59,16 @@ Use a real ticket only when its provider data is approved for local context capt
 8. Inspect a ticket with sparse standard/custom fields. Confirm `null`, blank text, empty arrays/objects, and recursively empty rich text are absent while meaningful `false` and `0` values remain.
 9. Confirm the visible actions are limited to the explicit Claude launch, terminal attach, read, insert, monitor, and audit workflow.
 
+## Local Projects and Branches
+
+1. Open a Git-backed workspace folder and choose **Register Workspace Project** from the Work toolbar.
+2. Confirm the Jira board shows the project name, absolute path, and the branch currently named by Git `HEAD`.
+3. From a ticket, choose **Project / Branch**, select that project, and confirm the ticket workspace and Work row show the same branch and launch directory.
+4. Switch branches yourself in the terminal, refresh or reopen the board, and confirm Kronos reflects the new branch without running a Git command.
+5. Start Claude for the linked ticket and confirm its new terminal starts in the selected project directory.
+6. Choose **Manage Focused Terminal** on an existing terminal and confirm linking does not change that terminal's directory or send `cd`.
+7. Unlink the local project and confirm future ticket launches fall back to the configured workspace/home behavior while Jira/provider project tags remain.
+
 ## Start Claude for a Ticket
 
 1. Count the open terminals, then choose **Start Claude for Ticket** from the selected ticket.

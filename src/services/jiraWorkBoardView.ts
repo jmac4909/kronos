@@ -6,6 +6,7 @@ import {
 } from './webviewSecurity';
 import { escapeAttr, escapeHtml, kronosWebviewBaseCss } from './webviewHtml';
 import { isCompletedWorkTicket } from './workTicketFilters';
+import { listLocalProjects } from './projectCatalog';
 
 export const JIRA_WORK_BOARD_SCRIPT = 'kronos-jira-work-board.js';
 
@@ -13,6 +14,7 @@ export const JIRA_WORK_BOARD_ACTIONS = [
   'openTicketWorkspace',
   'startClaudeForTicket',
   'manageActiveTerminal',
+  'chooseTicketProject',
   'insertJiraContext',
   'insertGitLabContext',
   'insertCiContext',
@@ -63,6 +65,7 @@ export function buildJiraWorkBoardHtml(input: JiraWorkBoardInput): string {
   const completedCount = tickets.filter(ticket => ticket.completed).length;
   const initiallyVisibleCount = tickets.length - completedCount;
   const refreshedAt = safeSingleLine(input.state?.refreshedAt, 100);
+  const localProjects = listLocalProjects(input.state);
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -84,6 +87,15 @@ export function buildJiraWorkBoardHtml(input: JiraWorkBoardInput): string {
   .jira-board-toggle input { margin: 0; }
   .jira-board-reset { min-height: 30px; }
   .jira-board-summary { min-height: 20px; margin: 8px 2px 12px; color: var(--k-muted); font-size: 11px; }
+  .jira-projects { display: grid; gap: 8px; margin-bottom: 12px; padding: 11px 12px; border: 1px solid var(--k-border); border-radius: var(--k-radius); background: var(--k-surface); }
+  .jira-projects-header { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+  .jira-projects-header h2 { margin: 0; color: var(--k-fg); font-size: 12px; text-transform: none; }
+  .jira-projects-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 7px; }
+  .jira-project { min-width: 0; padding: 8px 9px; border: 1px solid var(--k-border); border-radius: var(--k-radius-sm); background: var(--k-surface-soft); }
+  .jira-project-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .jira-project-name { font-weight: 650; }
+  .jira-project-branch { color: var(--k-info); font-size: 10px; overflow-wrap: anywhere; }
+  .jira-project-path { margin-top: 4px; color: var(--k-muted); font-size: 10px; overflow-wrap: anywhere; }
   .jira-board { display: flex; align-items: flex-start; gap: 10px; min-height: 360px; padding-bottom: 12px; overflow-x: auto; scrollbar-gutter: stable; }
   .jira-board-column { display: grid; flex: 1 0 280px; min-width: 280px; max-width: 380px; gap: 8px; padding: 9px; border: 1px solid var(--k-border); border-radius: var(--k-radius); background: var(--k-surface-soft); }
   .jira-board-column-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 24px; padding: 0 2px; color: var(--k-muted); font-size: 11px; font-weight: 650; text-transform: uppercase; }
@@ -132,6 +144,13 @@ ${webviewRuntimeScriptTag(input.nonce, webviewRuntimeScriptUri(input.scriptUri))
     </div>
   </header>
 
+  <section class="jira-projects" aria-label="Registered local projects">
+    <div class="jira-projects-header"><h2>Local Projects</h2><span class="kronos-subtitle">Branch is read locally from Git HEAD</span></div>
+    ${localProjects.length > 0
+    ? `<div class="jira-projects-grid">${localProjects.map(project => `<div class="jira-project"><div class="jira-project-heading"><span class="jira-project-name">${escapeHtml(project.name)}</span><span class="jira-project-branch">${escapeHtml(project.branch || (project.available ? 'branch unavailable' : 'folder unavailable'))}</span></div><div class="jira-project-path">${escapeHtml(project.path)}</div></div>`).join('')}</div>`
+    : '<div class="kronos-empty">No local projects registered. Open a project folder and use Register Workspace Project from the Work toolbar.</div>'}
+  </section>
+
   <section class="jira-board-filters" aria-label="Jira board filters">
     <div class="jira-board-filter search">
       <label for="jira-board-search">Search</label>
@@ -172,7 +191,7 @@ function normalizeBoardTicket(
   const key = normalizeTicketKey(keyValue);
   if (!key) { return null; }
   const status = safeSingleLine(ticket.jira_status, 160) || 'Unknown';
-  const projects = uniqueFacet(ticket.projects);
+  const projects = uniqueFacet([ticket.launch_project || '', ...ticket.projects]);
   const labels = uniqueFacet(ticket.labels || []);
   return {
     key,
@@ -283,6 +302,7 @@ function buildTicketCardHtml(ticket: BoardTicket): string {
       ${actionButton('startClaudeForTicket', 'Start Claude', ticket.key, true)}
       ${actionButton('openTicketWorkspace', 'Workspace', ticket.key)}
       ${actionButton('manageActiveTerminal', 'Manage Focused', ticket.key)}
+      ${actionButton('chooseTicketProject', 'Project / Branch', ticket.key)}
       ${actionButton('insertJiraContext', `[${ticket.key}]`, ticket.key)}
       ${actionButton('insertGitLabContext', 'MR Context', ticket.key)}
       ${actionButton('insertCiContext', 'CI Context', ticket.key)}

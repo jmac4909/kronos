@@ -54,6 +54,8 @@ It supports:
 - searching tickets and filtering by status, project, and label;
 - hiding completed work by default, explicitly showing it, and clearing filters reversibly;
 - opening one canonical ticket workspace;
+- registering an explicitly open local workspace folder and reading its current Git branch without invoking Git;
+- choosing or unlinking one primary local launch project for a ticket while preserving Jira/provider project associations;
 - managing the explicitly focused terminal for that ticket;
 - explicitly creating and focusing a Claude terminal linked to that ticket;
 - inserting Jira, GitLab MR/pipeline, or combined Jenkins/SonarQube context.
@@ -62,9 +64,12 @@ Jira normalization recursively removes values with no meaningful content: `null`
 
 The ticket workspace prioritizes either terminal-first sequence:
 
-1. start a new validated Claude terminal for this ticket, or manage an existing focused terminal;
-2. insert the context needed now;
-3. continue working in the operator-owned terminal.
+1. optionally choose the registered local project/branch that future launches should use;
+2. start a new validated Claude terminal for this ticket, or manage an existing focused terminal;
+3. insert the context needed now;
+4. continue working in the operator-owned terminal.
+
+Project linking changes local Kronos metadata only. A new ticket-launched terminal may use the linked project folder as its starting directory. Linking never changes branch, index, worktree, or repository state, and never changes the current directory of an existing terminal.
 
 It does not plan or execute software-delivery work.
 
@@ -81,7 +86,8 @@ Each session presents:
 - the live terminal attachment count without terminal contents;
 - provider bindings;
 - latest context-artifact freshness and completeness;
-- monitoring readiness, last attempt, latest successful poll, failures, and skips.
+- monitoring readiness, last attempt, latest successful poll, failures, and skips;
+- the linked local project path and currently observed branch when available.
 
 Supported actions are focus, explicit reattach, detach, pause monitoring, resume monitoring, poll now, open audit, and stop management.
 

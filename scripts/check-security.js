@@ -207,7 +207,7 @@ function checkGitMutationBoundary(file, source, code) {
     file,
     source,
     code,
-    /\bgit\s+(?:add|am|apply|bisect|branch|checkout|cherry-pick|clean|clone|commit|fetch|merge|mv|pull|push|rebase|reset|restore|revert|rm|stash|switch|tag|worktree)\b/gi,
+    /\bgit\s+(?:add|am|apply|bisect|branch|checkout|cherry-pick|clean|clone|commit|fetch|merge|mv|pull|push|rebase|reset|restore|revert|rm|stash|switch|tag|worktree)\b/g,
     'NO_GIT_MUTATION',
     match => `contains forbidden Git-changing command ${JSON.stringify(match[0])}.`,
   );

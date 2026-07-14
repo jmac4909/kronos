@@ -15,6 +15,7 @@
     openTicketWorkspace: true,
     startClaudeForTicket: true,
     manageActiveTerminal: true,
+    chooseTicketProject: true,
     insertJiraContext: true,
     insertGitLabContext: true,
     insertCiContext: true,
