@@ -2245,6 +2245,9 @@ test('extension activation registers the bounded surface and explicit launch com
   const configurationUpdates = [];
   const createdWebviewPanels = [];
   const executedCommands = [];
+  const openedTextDocuments = [];
+  const shownTextDocuments = [];
+  let gitRepositoryOpenCalls = 0;
   let openDialogResult;
   let lastOpenDialogOptions;
   let multiPickHandler;
@@ -2302,6 +2305,10 @@ test('extension activation registers the bounded surface and explicit launch com
       },
       showInformationMessage() { return Promise.resolve(undefined); },
       showErrorMessage() { return Promise.resolve(undefined); },
+      showTextDocument(document, options) {
+        shownTextDocuments.push({ document, options });
+        return Promise.resolve({ document });
+      },
       withProgress(options, task) { return task({ report() {} }); },
       createWebviewPanel(viewType, title, column, options) {
         const messageHandlers = [];
@@ -2383,6 +2390,11 @@ test('extension activation registers the bounded surface and explicit launch com
         };
       },
       onDidChangeConfiguration() { return disposable(); },
+      openTextDocument(options) {
+        const document = { ...options };
+        openedTextDocuments.push(document);
+        return Promise.resolve(document);
+      },
     },
     commands: {
       registerCommand(id, handler) { registeredCommands.push(id); commandHandlers.set(id, handler); return disposable(); },
@@ -2392,6 +2404,35 @@ test('extension activation registers the bounded surface and explicit launch com
       openExternal(uri) {
         openedExternalUrls.push(uri.toString());
         return Promise.resolve(true);
+      },
+    },
+    extensions: {
+      getExtension(id) {
+        if (id !== 'vscode.git') { return undefined; }
+        const repository = {
+          rootUri: { fsPath: tempRoot },
+          state: {
+            HEAD: { name: 'feature/runtime-project' },
+            mergeChanges: [],
+            indexChanges: [],
+            workingTreeChanges: [{ uri: { fsPath: path.join(tempRoot, 'src', 'changed.ts') }, status: 5 }],
+            untrackedChanges: [],
+          },
+          async diffWithHEAD() { return 'diff --git a/src/changed.ts b/src/changed.ts\n-old\n+new\n'; },
+        };
+        return {
+          isActive: true,
+          exports: {
+            enabled: true,
+            getAPI() {
+              return {
+                repositories: [repository],
+                getRepository(uri) { return uri.fsPath === tempRoot ? repository : null; },
+                async openRepository() { gitRepositoryOpenCalls += 1; },
+              };
+            },
+          },
+        };
       },
     },
     Uri: {
@@ -2411,7 +2452,16 @@ test('extension activation registers the bounded surface and explicit launch com
     stateStore.writeStateFile({
       schemaVersion: 1,
       refreshedAt: '2026-07-14T12:00:00.000Z',
-      projects: { fixture: { path: tempRoot, config: { jira_project_key: 'JIRA' } } },
+      projects: {
+        fixture: {
+          path: tempRoot,
+          config: {
+            jira_project_key: 'JIRA',
+            gitlab_project_path: 'group/fixture',
+            default_branch: 'main',
+          },
+        },
+      },
       tickets: {
         'JIRA-123': fixtureTicket({ launch_project: 'fixture' }),
         'JIRA-456': fixtureTicket({ summary: 'Attachment race fixture', launch_project: 'fixture' }),
@@ -2635,7 +2685,7 @@ test('extension activation registers the bounded surface and explicit launch com
       name: 'Restored JIRA-123 terminal',
       processId: Promise.resolve(2900),
       show(preserveFocus) { reconnectedActions.push(['show', preserveFocus]); },
-      sendText() { throw new Error('reconnecting a Session must not write to its terminal'); },
+      sendText(text, shouldExecute) { reconnectedActions.push(['sendText', text, shouldExecute]); },
     };
     vscode.window.terminals = [reconnectedTerminal];
     vscode.window.activeTerminal = undefined;
@@ -2668,6 +2718,50 @@ test('extension activation registers the bounded surface and explicit launch com
       0,
       'a terminal closed during PID resolution must never be attached afterward',
     );
+
+    await commandHandlers.get('kronos.openProjectGitStatus')({ projectName: 'fixture', projectPath: tempRoot });
+    assert.equal(gitRepositoryOpenCalls, 0, 'known repositories are not reopened by the status action');
+    assert.match(openedTextDocuments.at(-1).content, /Branch: feature\/runtime-project/);
+    assert.match(openedTextDocuments.at(-1).content, /working modified: src\/changed\.ts/);
+    assert.match(openedTextDocuments.at(-1).content, /-old\n\+new/);
+    assert.equal(shownTextDocuments.at(-1).options.preview, true);
+
+    vscode.window.activeTerminal = reconnectedTerminal;
+    const panelCountBeforeGitContext = createdWebviewPanels.length;
+    await commandHandlers.get('kronos.insertProjectGitContext')({ projectName: 'fixture', projectPath: tempRoot });
+    const gitComposerPanel = createdWebviewPanels.slice(panelCountBeforeGitContext)
+      .find(panel => panel.viewType === 'kronosContextComposer');
+    assert.ok(gitComposerPanel, 'project Git insertion must open the editable context composer');
+    assert.match(gitComposerPanel.webview.html, /1 changed path/);
+    const writesBeforeGitInsert = reconnectedActions.length;
+    await gitComposerPanel.receive({ command: 'insertDraft', focus: 'Review the working tree before opening an MR.' });
+    assert.equal(reconnectedActions.length, writesBeforeGitInsert + 1);
+    assert.equal(reconnectedActions.at(-1)[0], 'sendText');
+    assert.equal(reconnectedActions.at(-1)[2], false, 'Git context insertion must not submit the terminal line');
+    assert.match(reconnectedActions.at(-1)[1], /^\[GIT-fixture\]/);
+
+    const previousGitLabBaseUrl = process.env.GITLAB_BASE_URL;
+    process.env.GITLAB_BASE_URL = 'https://gitlab.example';
+    try {
+      await commandHandlers.get('kronos.openProjectMergeRequest')({ projectName: 'fixture', projectPath: tempRoot });
+    } finally {
+      if (previousGitLabBaseUrl === undefined) { delete process.env.GITLAB_BASE_URL; }
+      else { process.env.GITLAB_BASE_URL = previousGitLabBaseUrl; }
+    }
+    const newMergeRequestUrl = new URL(openedExternalUrls.at(-1));
+    assert.equal(newMergeRequestUrl.origin, 'https://gitlab.example');
+    assert.equal(newMergeRequestUrl.pathname, '/group/fixture/-/merge_requests/new');
+    assert.equal(newMergeRequestUrl.searchParams.get('merge_request[source_branch]'), 'feature/runtime-project');
+    assert.equal(newMergeRequestUrl.searchParams.get('merge_request[target_branch]'), 'main');
+    workSessions.addWorkSessionProviderBinding(ticketSession.id, {
+      provider: 'gitlab',
+      resource: 'merge-request',
+      subjectId: '88',
+      projectId: 'group/fixture',
+      url: 'https://gitlab.example/group/fixture/-/merge_requests/88',
+    });
+    await commandHandlers.get('kronos.openProjectMergeRequest')({ projectName: 'fixture', projectPath: tempRoot });
+    assert.equal(openedExternalUrls.at(-1), 'https://gitlab.example/group/fixture/-/merge_requests/88');
 
     failNextTerminalCreation = true;
     await commandHandlers.get('kronos.startClaudeForTicket')({ ticketKey: 'JIRA-999' });
