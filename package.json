@@ -93,7 +93,7 @@
       },
       {
         "command": "kronos.registerWorkspaceProject",
-        "title": "Kronos: Discover and Register Local Projects",
+        "title": "Kronos: Discover and Manage Local Projects",
         "icon": "$(folder-library)"
       },
       {

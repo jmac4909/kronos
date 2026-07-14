@@ -61,6 +61,7 @@ test('board builder exposes useful Jira filters and only ticket-scoped terminal-
   assert.doesNotMatch(html, /not a jira key/i);
   assert.match(html, /kronos-webview-runtime\.js/);
   assert.match(html, /kronos-jira-work-board\.js/);
+  assert.match(html, /jira-ticket-heading-actions[^]*data-action="chooseTicketProject"[^]*\+ Add Project/);
 
   for (const action of JIRA_WORK_BOARD_ACTIONS) {
     assert.match(html, new RegExp(`data-action="${action}"`));
@@ -99,7 +100,7 @@ test('board lists registered local project paths and current Git branches', () =
   try {
     fs.mkdirSync(path.join(projectRoot, '.git'));
     fs.writeFileSync(path.join(projectRoot, '.git', 'HEAD'), 'ref: refs/heads/feature/board-projects\n');
-    const fixtureState = state({ 'KRONOS-1': ticket('In Progress') });
+    const fixtureState = state({ 'KRONOS-1': ticket('In Progress', { launch_project: 'Kronos' }) });
     fixtureState.projects.Kronos.path = projectRoot;
     const html = buildJiraWorkBoardHtml({
       state: fixtureState,
@@ -110,6 +111,7 @@ test('board lists registered local project paths and current Git branches', () =
     assert.match(html, /feature\/board-projects/);
     assert.match(html, new RegExp(projectRoot.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
     assert.match(html, /data-action="chooseTicketProject"/);
+    assert.match(html, /Project: Kronos/);
   } finally {
     fs.rmSync(projectRoot, { recursive: true, force: true });
   }
@@ -147,6 +149,13 @@ test('board runtime filters cards and reveals a specifically selected completed 
     stopPropagation() {},
   });
   assert.deepEqual(messages.at(-1), { command: 'startClaudeForTicket', ticket: 'KRONOS-2' });
+
+  harness.board.dispatch('click', {
+    target: actionTarget('chooseTicketProject', 'KRONOS-2'),
+    preventDefault() {},
+    stopPropagation() {},
+  });
+  assert.deepEqual(messages.at(-1), { command: 'chooseTicketProject', ticket: 'KRONOS-2' });
 
   harness.board.dispatch('click', {
     target: cardTarget(harness.doneCard),

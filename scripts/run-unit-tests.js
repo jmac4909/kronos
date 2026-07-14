@@ -133,6 +133,34 @@ test('local projects preserve provider bindings and report branch without runnin
   assert.equal(unlinked.tickets['JIRA-123'].launch_project, undefined);
 });
 
+test('checked projects replace local registrations and safely unlink removed launch projects', () => {
+  const localRoot = path.join(tempRoot, 'replace-local-project');
+  const providerRoot = path.join(tempRoot, 'replace-provider-project');
+  const newRoot = path.join(tempRoot, 'replace-new-project');
+  fs.mkdirSync(localRoot, { recursive: true });
+  fs.mkdirSync(providerRoot, { recursive: true });
+  fs.mkdirSync(newRoot, { recursive: true });
+  const initial = stateStore.emptyWorkCatalog();
+  initial.projects.Local = { path: localRoot, config: { repo_name: 'Local' } };
+  initial.projects.Provider = {
+    path: providerRoot,
+    config: { repo_name: 'Provider', jira_project_key: 'JIRA', gitlab_project_id: 77 },
+  };
+  initial.tickets['JIRA-1'] = fixtureTicket({ launch_project: 'Local', projects: [] });
+  initial.tickets['JIRA-2'] = fixtureTicket({ launch_project: 'Provider', projects: ['Provider'] });
+
+  const replaced = projectCatalog.replaceRegisteredLocalProjects(initial, [
+    { name: 'New Project', path: newRoot },
+  ]);
+  assert.equal(Object.hasOwn(replaced.projects, 'Local'), false, 'a local-only unchecked project must be removed');
+  assert.equal(replaced.projects.Provider.path, undefined, 'an unchecked provider project must lose only its local path');
+  assert.equal(replaced.projects.Provider.config.gitlab_project_id, 77, 'provider configuration must be retained');
+  assert.equal(replaced.projects['New Project'].path, newRoot);
+  assert.equal(replaced.tickets['JIRA-1'].launch_project, undefined);
+  assert.equal(replaced.tickets['JIRA-2'].launch_project, undefined);
+  assert.deepEqual(replaced.tickets['JIRA-2'].projects, ['Provider']);
+});
+
 test('Git worktree pointers are bounded and symbolic Git metadata is ignored', t => {
   const worktree = path.join(tempRoot, 'worktree-project');
   const gitDirectory = path.join(tempRoot, 'worktree-git-data');
@@ -1175,6 +1203,7 @@ test('ticket workspace exposes explicit Claude launch, project branch, terminal 
     assert.doesNotMatch(html, new RegExp(forbidden, 'i'));
   }
   assert.match(html, /Terminal-first ticket workspace/);
+  assert.ok(html.indexOf('Project: fixture') < html.indexOf('Start Claude for Ticket'));
   assert.match(html, /feature\/terminal-first-context/);
   assert.match(html, /\/workspace\/fixture/);
 
@@ -1247,6 +1276,10 @@ test('extension activation registers the bounded surface and explicit launch com
   const configurationUpdates = [];
   let openDialogResult;
   let lastOpenDialogOptions;
+  let multiPickHandler;
+  let lastMultiPickItems = [];
+  let warningMessageResult;
+  let lastWarningMessage;
   let failNextTerminalCreation = false;
   let deferNextProcessId = false;
   let resolveDeferredProcessId;
@@ -1283,7 +1316,12 @@ test('extension activation registers the bounded surface and explicit launch com
       registerTreeDataProvider(id) { registeredViews.push(id); return disposable(); },
       onDidCloseTerminal(handler) { closeTerminalHandler = handler; return disposable(); },
       createOutputChannel() { return { appendLine() {}, dispose() {} }; },
-      showWarningMessage() { return Promise.resolve(undefined); },
+      showWarningMessage(message) {
+        lastWarningMessage = message;
+        const result = warningMessageResult;
+        warningMessageResult = undefined;
+        return Promise.resolve(result);
+      },
       showInformationMessage() { return Promise.resolve(undefined); },
       showErrorMessage() { return Promise.resolve(undefined); },
       showOpenDialog(options) {
@@ -1293,7 +1331,11 @@ test('extension activation registers the bounded surface and explicit launch com
         return Promise.resolve(result);
       },
       showQuickPick(items, options) {
-        return Promise.resolve(options?.canPickMany ? items : undefined);
+        if (!options?.canPickMany) { return Promise.resolve(undefined); }
+        lastMultiPickItems = items;
+        const handler = multiPickHandler;
+        multiPickHandler = undefined;
+        return Promise.resolve(handler ? handler(items) : items);
       },
       createTerminal(options) {
         if (failNextTerminalCreation) {
@@ -1397,6 +1439,19 @@ test('extension activation registers the bounded surface and explicit launch com
     assert.equal(registeredProjects['idea-service'].path, ideaProject);
     assert.equal(registeredProjects['python-service'].path, pycharmProject);
 
+    const unregisteredProject = path.join(ideaProjectsRoot, 'new-service');
+    fs.mkdirSync(path.join(unregisteredProject, '.git'), { recursive: true });
+    fs.writeFileSync(path.join(unregisteredProject, '.git', 'HEAD'), 'ref: refs/heads/feature/new-service\n');
+    multiPickHandler = items => items.filter(item => item.registered && item.label !== 'idea-service');
+    await commandHandlers.get('kronos.registerWorkspaceProject')();
+    assert.ok(lastMultiPickItems.slice(0, 3).every(item => item.registered === true));
+    assert.equal(lastMultiPickItems.at(-1).label, 'new-service');
+    assert.equal(lastMultiPickItems.at(-1).registered, false);
+    const updatedProjects = stateStore.readStateFileWithIssues().state.projects;
+    assert.equal(Object.hasOwn(updatedProjects, 'idea-service'), false, 'unchecking a registered project must unregister it');
+    assert.equal(Object.hasOwn(updatedProjects, 'new-service'), false, 'an unchecked discovered project must remain unregistered');
+    assert.equal(updatedProjects['python-service'].path, pycharmProject);
+
     await Promise.all([
       commandHandlers.get('kronos.newClaudeSession')(),
       commandHandlers.get('kronos.newClaudeSession')(),
@@ -1472,6 +1527,16 @@ test('extension activation registers the bounded surface and explicit launch com
     await commandHandlers.get('kronos.startClaudeForTicket')({ ticketKey: 'JIRA-999' });
     const failedSession = workSessions.getWorkSessionByTicket('JIRA-999');
     assert.equal(failedSession.status, 'closed', 'a new session must be compensated when launch fails before submission');
+
+    multiPickHandler = items => items.filter(item => item.registered && item.label !== 'fixture');
+    warningMessageResult = 'Unregister and Unlink';
+    await commandHandlers.get('kronos.registerWorkspaceProject')();
+    assert.match(lastWarningMessage, /will unlink 4 tickets/i);
+    const unregisteredFixtureState = stateStore.readStateFileWithIssues().state;
+    assert.equal(unregisteredFixtureState.projects.fixture.path, undefined);
+    assert.equal(unregisteredFixtureState.tickets['JIRA-123'].launch_project, undefined);
+    assert.equal(workSessions.getWorkSessionByTicket('JIRA-123').projectName, undefined);
+    assert.equal(workSessions.getWorkSessionByTicket('JIRA-123').projectPath, undefined);
   } finally {
     for (const item of [...context.subscriptions].reverse()) { item.dispose(); }
     Module._load = originalLoad;

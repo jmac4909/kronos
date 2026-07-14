@@ -34,6 +34,55 @@ export function registerLocalProject(
 }
 
 /**
+ * Makes the checked project paths the complete local-registration set.
+ * Provider-only project metadata is retained, while removed launch bindings
+ * are cleared so tickets cannot point at an unregistered directory.
+ */
+export function replaceRegisteredLocalProjects(
+  state: KronosState,
+  registrations: readonly { name: string; path: string }[],
+): KronosState {
+  const selectedPaths = new Set(registrations.map(item => pathKey(item.path)));
+  const removedNames = new Set<string>();
+  const projects: Record<string, Project> = {};
+  for (const [name, project] of Object.entries(state.projects)) {
+    if (!project.path || selectedPaths.has(pathKey(project.path))) {
+      projects[name] = { ...project, config: { ...project.config } };
+      continue;
+    }
+    removedNames.add(name);
+    if (shouldRetainProviderProject(state, name, project)) {
+      projects[name] = { config: { ...project.config } };
+    }
+  }
+
+  let next: KronosState = {
+    ...state,
+    projects,
+    tickets: Object.fromEntries(Object.entries(state.tickets).map(([key, ticket]) => {
+      if (!ticket.launch_project || !removedNames.has(ticket.launch_project)) {
+        return [key, { ...ticket, projects: [...ticket.projects] }];
+      }
+      const unlinked: Ticket = { ...ticket, projects: [...ticket.projects] };
+      delete unlinked.launch_project;
+      return [key, unlinked];
+    })),
+  };
+
+  const existingPaths = new Set(Object.values(projects)
+    .map(project => project.path)
+    .filter((value): value is string => Boolean(value))
+    .map(pathKey));
+  for (const registration of registrations.slice(0, MAX_LOCAL_PROJECTS)) {
+    const key = pathKey(registration.path);
+    if (existingPaths.has(key)) { continue; }
+    next = registerLocalProject(next, registration.name, registration.path);
+    existingPaths.add(key);
+  }
+  return next;
+}
+
+/**
  * Selects one local launch project without changing Jira/provider project
  * associations.
  */
@@ -153,6 +202,17 @@ function isProjectDirectory(value: string): boolean {
   } catch {
     return false;
   }
+}
+
+function shouldRetainProviderProject(state: KronosState, name: string, project: Project): boolean {
+  if (Object.keys(project.config).some(key => key !== 'repo_name')) { return true; }
+  if (project.config.repo_name && project.config.repo_name !== name) { return true; }
+  return Object.values(state.tickets).some(ticket => ticket.projects.includes(name));
+}
+
+function pathKey(value: string): string {
+  const normalized = path.normalize(value);
+  return process.platform === 'win32' ? normalized.toLocaleLowerCase() : normalized;
 }
 
 function normalizeTicketKey(value: string): string {

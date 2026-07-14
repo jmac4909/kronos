@@ -23,9 +23,13 @@ export function buildTicketWorkspaceHtml(input: TicketWorkspaceViewInput): strin
   const liveTerminalCount = resolveLiveTerminalCount(workSession, input.liveTerminalCount);
   const mrIid = connectedMergeRequestIid(ticket, workSession);
   const actionButtons = [
+    ticketWorkspaceActionButton(
+      'chooseTicketProject',
+      input.localProject ? `Project: ${input.localProject.name}` : 'Add Project / Branch',
+      { ticket: ticketKey },
+    ),
     ticketWorkspaceActionButton('startClaudeForTicket', 'Start Claude for Ticket', { ticket: ticketKey, primary: true }),
     ticketWorkspaceActionButton('manageActiveTerminal', 'Manage Focused Terminal', { ticket: ticketKey }),
-    ticketWorkspaceActionButton('chooseTicketProject', 'Choose Project / Branch', { ticket: ticketKey }),
     ...(ticket.source === 'jira'
       ? [ticketWorkspaceActionButton('insertJiraContext', `Insert [${ticketKey}]`, { ticket: ticketKey })]
       : []),

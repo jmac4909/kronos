@@ -375,7 +375,8 @@ class TerminalFirstRuntime implements vscode.Disposable {
       ...settings,
     });
     for (const warning of discovery.warnings) { this.log('Project discovery warning.', warning); }
-    if (discovery.projects.length === 0) {
+    const registeredProjects = listLocalProjects(this.state.state);
+    if (discovery.projects.length === 0 && registeredProjects.length === 0) {
       const action = await vscode.window.showWarningMessage(
         'No project folders were discovered. Open a workspace folder or configure Kronos project discovery roots.',
         'Choose Discovery Folders',
@@ -390,30 +391,69 @@ class TerminalFirstRuntime implements vscode.Disposable {
       }
       return;
     }
-    const registeredPaths = new Set(Object.values(this.state.state?.projects || {})
-      .map(project => project.path)
-      .filter((value): value is string => Boolean(value)));
-    const choices = discovery.projects.map(project => ({
-      label: project.name,
-      description: `${project.branch || 'branch unavailable'} · ${project.source === 'workspace' ? 'open workspace' : 'configured root'}`,
-      detail: project.path,
-      picked: registeredPaths.has(project.path) || project.source === 'workspace',
-      project,
-    }));
+    const discoveredByPath = new Map(discovery.projects.map(project => [localProjectPathKey(project.path), project]));
+    const registeredPathKeys = new Set(registeredProjects.map(project => localProjectPathKey(project.path)));
+    const registeredChoices = registeredProjects.map(registered => {
+      const discovered = discoveredByPath.get(localProjectPathKey(registered.path));
+      const project: DiscoveredProject = discovered || {
+        name: registered.name,
+        path: registered.path,
+        source: 'configured-root',
+        ...(registered.branch ? { branch: registered.branch } : {}),
+      };
+      return {
+        label: registered.name,
+        description: `registered · ${registered.branch || (registered.available ? 'branch unavailable' : 'folder unavailable')}`,
+        detail: registered.path,
+        picked: true,
+        registered: true,
+        project: { ...project, name: registered.name },
+      };
+    });
+    const discoveredChoices = discovery.projects
+      .filter(project => !registeredPathKeys.has(localProjectPathKey(project.path)))
+      .map(project => ({
+        label: project.name,
+        description: `not registered · ${project.branch || 'branch unavailable'} · ${project.source === 'workspace' ? 'open workspace' : 'configured root'}`,
+        detail: project.path,
+        picked: false,
+        registered: false,
+        project,
+      }));
+    const choices = [...registeredChoices, ...discoveredChoices];
     const selected = await vscode.window.showQuickPick(choices, {
-      title: 'Discover and Register Local Projects',
+      title: 'Manage Registered Local Projects',
       placeHolder: discovery.truncated
-        ? 'Discovery reached a configured or safety limit; choose projects from these bounded results'
-        : 'Choose the project folders Kronos may link to tickets',
+        ? 'Bounded discovery limit reached; checked projects stay registered and unchecked projects are removed'
+        : 'Check projects to register; uncheck registered projects to remove them',
       canPickMany: true,
       matchOnDescription: true,
       matchOnDetail: true,
     });
-    if (!selected || selected.length === 0) { return; }
+    if (selected === undefined) { return; }
+    const selectedPathKeys = new Set(selected.map(item => localProjectPathKey(item.project.path)));
+    const removedProjects = registeredProjects.filter(project => !selectedPathKeys.has(localProjectPathKey(project.path)));
+    const removedNames = new Set(removedProjects.map(project => project.name));
+    const linkedTicketKeys = Object.entries(this.state.state?.tickets || {})
+      .filter(([, ticket]) => Boolean(ticket.launch_project && removedNames.has(ticket.launch_project)))
+      .map(([ticketKey]) => ticketKey);
+    if (linkedTicketKeys.length > 0) {
+      const action = await vscode.window.showWarningMessage(
+        `Unregistering ${removedProjects.map(project => project.name).join(', ')} will unlink ${linkedTicketKeys.length} ticket${linkedTicketKeys.length === 1 ? '' : 's'} (${linkedTicketKeys.slice(0, 5).join(', ')}${linkedTicketKeys.length > 5 ? ', …' : ''}).`,
+        { modal: true },
+        'Unregister and Unlink',
+      );
+      if (action !== 'Unregister and Unlink') { return; }
+    }
     const registrations = this.projectRegistrations(selected.map(item => item.project));
-    this.state.registerLocalProjects(registrations);
+    this.state.replaceRegisteredLocalProjects(registrations);
+    for (const ticketKey of linkedTicketKeys) {
+      const session = getWorkSessionByTicket(ticketKey);
+      if (session) { setWorkSessionProject(session.id, {}); }
+    }
+    this.refreshTerminalFirstViews();
     void vscode.window.showInformationMessage(
-      `Registered ${registrations.length} local project${registrations.length === 1 ? '' : 's'}${discovery.truncated ? ' from bounded discovery results' : ''}.`,
+      `${registrations.length} local project${registrations.length === 1 ? ' is' : 's are'} registered; ${removedProjects.length} unregistered${linkedTicketKeys.length > 0 ? ` and unlinked from ${linkedTicketKeys.length} ticket${linkedTicketKeys.length === 1 ? '' : 's'}` : ''}${discovery.truncated ? ' from bounded discovery results' : ''}.`,
     );
   }
 
@@ -456,7 +496,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
     await this.registerWorkspaceProject();
   }
 
-  private projectRegistrations(projects: readonly DiscoveredProject[]): Array<{ name: string; path: string }> {
+  private projectRegistrations(projects: readonly Pick<DiscoveredProject, 'name' | 'path'>[]): Array<{ name: string; path: string }> {
     const existing = this.state.state?.projects || {};
     const names = new Map(Object.entries(existing).map(([name, project]) => [name.toLocaleLowerCase(), project.path || '']));
     return projects.map(project => {
@@ -1459,7 +1499,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
     const choice = await vscode.window.showQuickPick([
       { label: '$(terminal) Claude launch settings', description: 'command, terminal name, and starting directory', id: 'claude' },
       { label: '$(folder-opened) Choose discovery folders', description: 'select IdeaProjects, PycharmProjects, or other parent folders', id: 'projectRoots' },
-      { label: '$(folder-library) Discover local projects', description: 'inspect open folders and configured roots, then choose what Kronos may link', id: 'project' },
+      { label: '$(folder-library) Manage local projects', description: 'registered projects first; check to register and uncheck to remove', id: 'project' },
       { label: '$(key) Provider setup guide', description: 'Jira, GitLab, Jenkins, and SonarQube environment keys', id: 'providers' },
       { label: '$(pulse) Run Doctor', description: 'validate local state and configured boundaries', id: 'doctor' },
       { label: '$(layout) Open Jira Work Board', description: 'review and filter fetched Jira work', id: 'board' },
@@ -1799,6 +1839,10 @@ function uniqueProjectDiscoveryRoots(values: readonly string[], limit: number): 
     if (roots.length >= limit) { break; }
   }
   return roots;
+}
+
+function localProjectPathKey(value: string): string {
+  return process.platform === 'win32' ? value.toLocaleLowerCase() : value;
 }
 
 function boundedIntegerSetting(value: unknown, fallback: number, minimum: number, maximum: number): number {

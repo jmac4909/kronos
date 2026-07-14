@@ -107,7 +107,9 @@ export function buildJiraWorkBoardHtml(input: JiraWorkBoardInput): string {
   .jira-ticket-card[data-ticket-type="bug"] { border-left-color: var(--k-danger); }
   .jira-ticket-card:hover, .jira-ticket-card:focus-within { border-color: var(--k-border-strong); background: var(--k-hover); }
   .jira-ticket-card:focus-visible { outline: 1px solid var(--vscode-focusBorder, var(--k-accent)); outline-offset: 2px; }
-  .jira-ticket-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  .jira-ticket-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .jira-ticket-heading-actions { display: flex; align-items: center; justify-content: flex-end; gap: 6px; min-width: 0; }
+  .jira-ticket-heading-actions .kronos-button { min-height: 23px; max-width: 170px; padding: 2px 7px; overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
   .jira-ticket-key { color: var(--k-accent); font-size: 11px; font-weight: 700; }
   .jira-ticket-open { margin: 0; padding: 0; border: 0; color: var(--k-accent); background: transparent; font: inherit; cursor: pointer; }
   .jira-ticket-open:hover { text-decoration: underline; }
@@ -150,7 +152,7 @@ ${webviewRuntimeScriptTag(input.nonce, webviewRuntimeScriptUri(input.scriptUri))
     <div class="jira-projects-header"><h2>Local Projects</h2><span class="kronos-subtitle">Branch is read locally from Git HEAD</span></div>
     ${localProjects.length > 0
     ? `<div class="jira-projects-grid">${localProjects.map(project => `<div class="jira-project"><div class="jira-project-heading"><span class="jira-project-name">${escapeHtml(project.name)}</span><span class="jira-project-branch">${escapeHtml(project.branch || (project.available ? 'branch unavailable' : 'folder unavailable'))}</span></div><div class="jira-project-path">${escapeHtml(project.path)}</div></div>`).join('')}</div>`
-    : '<div class="kronos-empty">No local projects registered. Open a project folder or configure discovery roots, then use Discover Local Projects from the Work toolbar.</div>'}
+    : '<div class="kronos-empty">No local projects registered. Open a project folder or configure discovery roots, then use Discover and Manage Local Projects from the Work toolbar.</div>'}
   </section>
 
   <section class="jira-board-filters" aria-label="Jira board filters">
@@ -294,15 +296,16 @@ function buildTicketCardHtml(ticket: BoardTicket): string {
   const attachmentChip = attachmentCount > 0
     ? chip(`${attachmentCount} attachment${attachmentCount === 1 ? '' : 's'}`, '')
     : '';
+  const launchProject = safeSingleLine(value.launch_project, 200);
+  const projectActionLabel = launchProject ? `Project: ${launchProject}` : '+ Add Project';
   return `<article class="jira-ticket-card" data-ticket-card data-ticket="${escapeAttr(ticket.key)}" data-status="${escapeAttr(ticket.statusToken)}" data-projects="${escapeAttr(JSON.stringify(ticket.projectTokens))}" data-labels="${escapeAttr(JSON.stringify(ticket.labelTokens))}" data-search="${escapeAttr(ticket.searchText)}" data-completed="${ticket.completed ? 'true' : 'false'}" data-ticket-type="${typeKind}">
-    <div class="jira-ticket-heading"><button type="button" class="jira-ticket-key jira-ticket-open" data-action="openTicketWorkspace" data-ticket="${escapeAttr(ticket.key)}" aria-label="Open ${escapeAttr(ticket.key)}: ${escapeAttr(summary)}">${escapeHtml(ticket.key)}</button><span class="jira-ticket-priority">${escapeHtml(priority || type)}</span></div>
+    <div class="jira-ticket-heading"><button type="button" class="jira-ticket-key jira-ticket-open" data-action="openTicketWorkspace" data-ticket="${escapeAttr(ticket.key)}" aria-label="Open ${escapeAttr(ticket.key)}: ${escapeAttr(summary)}">${escapeHtml(ticket.key)}</button><div class="jira-ticket-heading-actions">${actionButton('chooseTicketProject', projectActionLabel, ticket.key)}<span class="jira-ticket-priority">${escapeHtml(priority || type)}</span></div></div>
     <div class="jira-ticket-summary">${escapeHtml(summary)}</div>
     <div class="jira-ticket-meta">${projectChips}${labelChips}${overflowCount > 0 ? chip(`+${overflowCount} more`, '') : ''}${mrChip}${buildChip}${attachmentChip}</div>
     <div class="jira-ticket-actions" aria-label="Actions for ${escapeAttr(ticket.key)}">
       ${actionButton('startClaudeForTicket', 'Start Claude', ticket.key, true)}
       ${actionButton('openTicketWorkspace', 'Workspace', ticket.key)}
       ${actionButton('manageActiveTerminal', 'Manage Focused', ticket.key)}
-      ${actionButton('chooseTicketProject', 'Project / Branch', ticket.key)}
       ${actionButton('insertJiraContext', `[${ticket.key}]`, ticket.key)}
       ${actionButton('insertGitLabContext', 'MR Context', ticket.key)}
       ${actionButton('insertCiContext', 'CI Context', ticket.key)}
