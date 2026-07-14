@@ -10,6 +10,7 @@ import {
   listWorkSessions,
   newestWorkSessionProviderBinding,
 } from '../services/workSessionStore';
+import { normalizeProviderPublicUrl } from '../services/providerUrls';
 
 export interface AttentionCommandTarget {
   eventId: string;
@@ -232,7 +233,7 @@ function providerUrlForEvent(event: MonitorEvent, session: WorkSessionRecord | u
   const exact = providerBinding(binding => binding.subjectId === event.subject?.id);
   const resourceMatched = providerBinding(binding => subjectMatchesResource(event.subject?.kind, binding));
   const candidate = exact?.url || resourceMatched?.url || providerBinding(() => true)?.url;
-  return candidate ? safePublicHttpUrl(candidate) : undefined;
+  return candidate ? normalizeProviderPublicUrl(candidate, event.source) : undefined;
 }
 
 function isProviderSource(source: MonitorEventSource): source is WorkSessionProviderBinding['provider'] {
@@ -245,20 +246,6 @@ function subjectMatchesResource(kind: string | undefined, binding: WorkSessionPr
   return (kind === 'pipeline' && binding.resource === 'merge-request')
     || (kind === 'build' && binding.resource === 'job')
     || (kind === 'quality-gate' && binding.resource === 'branch');
-}
-
-function safePublicHttpUrl(value: string): string | undefined {
-  try {
-    const parsed = new URL(value);
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') { return undefined; }
-    parsed.username = '';
-    parsed.password = '';
-    parsed.search = '';
-    parsed.hash = '';
-    return parsed.toString();
-  } catch {
-    return undefined;
-  }
 }
 
 function eventDescription(event: MonitorEvent): string {

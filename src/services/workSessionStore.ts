@@ -5,6 +5,7 @@ import { safeFileStem } from './fileNames';
 import { unknownErrorMessage } from './errorUtils';
 import { isRecord } from './records';
 import { redactSensitiveTokens } from './sensitiveText';
+import { normalizeProviderPublicUrl } from './providerUrls';
 import { KRONOS_DIR } from './stateStore';
 
 export type WorkSessionStatus = 'active' | 'closed';
@@ -442,7 +443,7 @@ export function addWorkSessionProviderBinding(
       ? normalizeEntityId(input.id, 'provider binding id')
       : providerBindingId(provider, resource, `${projectId || ''}-${subjectId}`);
     const binding: WorkSessionProviderBinding = { id, provider, resource, subjectId, attachedAt: at };
-    const url = optionalPublicHttpUrl(input.url, 'provider URL');
+    const url = optionalProviderHttpUrl(input.url, 'provider URL', provider);
     if (projectId) { binding.projectId = projectId; }
     if (url) { binding.url = url; }
     const existingIndex = record.providerBindings.findIndex(candidate => candidate.id === id);
@@ -699,7 +700,7 @@ function normalizeProviderBinding(value: unknown): WorkSessionProviderBinding {
     attachedAt: normalizeTimestamp(value['attachedAt'], 'provider attachedAt'),
   };
   const projectId = optionalSingleLine(value['projectId'], 'provider project id', 500);
-  const url = optionalPublicHttpUrl(value['url'], 'provider URL');
+  const url = optionalProviderHttpUrl(value['url'], 'provider URL', binding.provider);
   if (projectId) { binding.projectId = projectId; }
   if (url) { binding.url = url; }
   return binding;
@@ -934,20 +935,15 @@ function normalizePortablePath(value: string): string {
   return path.win32.isAbsolute(value) && !path.isAbsolute(value) ? path.win32.normalize(value) : path.resolve(value);
 }
 
-function optionalPublicHttpUrl(value: unknown, label: string): string | undefined {
+function optionalProviderHttpUrl(
+  value: unknown,
+  label: string,
+  provider: WorkSessionProvider,
+): string | undefined {
   if (value === undefined || value === null || value === '') { return undefined; }
-  if (typeof value !== 'string' || CONTROL_PATTERN.test(value)) { throw new Error(`${label} is invalid.`); }
-  try {
-    const url = new URL(value.trim());
-    if (url.protocol !== 'http:' && url.protocol !== 'https:') { throw new Error('unsupported protocol'); }
-    url.username = '';
-    url.password = '';
-    url.search = '';
-    url.hash = '';
-    return url.toString();
-  } catch {
-    throw new Error(`${label} must be an HTTP(S) URL.`);
-  }
+  const normalized = normalizeProviderPublicUrl(value, provider);
+  if (!normalized) { throw new Error(`${label} must be an HTTP(S) URL.`); }
+  return normalized;
 }
 
 function assertArtifactInsideKronos(artifactPath: string, options: WorkSessionStoreOptions): void {

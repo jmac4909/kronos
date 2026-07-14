@@ -18,6 +18,7 @@ const projectDiscovery = require('../out/services/projectDiscovery.js');
 const { JiraRestClient } = require('../out/services/jiraRestClient.js');
 const gitLabRestModule = require('../out/services/gitlabRestClient.js');
 const { GitLabRestClient } = gitLabRestModule;
+const sonarRestModule = require('../out/services/sonarRestClient.js');
 const jiraContext = require('../out/services/jiraTicketContext.js');
 const jiraValuePruning = require('../out/services/jiraValuePruning.js');
 const jiraWorkCatalog = require('../out/services/jiraWorkCatalog.js');
@@ -41,6 +42,7 @@ const { buildProjectIntegrationPanelHtml } = require('../out/services/projectInt
 const managedProviderMonitor = require('../out/services/managedProviderMonitor.js');
 const managedMonitorLease = require('../out/services/managedMonitorLease.js');
 const sensitiveText = require('../out/services/sensitiveText.js');
+const providerUrls = require('../out/services/providerUrls.js');
 
 function createSymlinkOrSkip(t, target, linkPath, type = 'file') {
   try {
@@ -78,6 +80,24 @@ test('all provider evidence paths share the complete credential redaction vocabu
   for (const secret of ['abcdefghijklmnop', 'ATATTabcdefgh1234', 'glpat-abcdefgh1234', 'sqp_abcdefgh1234', 'AKIAABCDEFGHIJKLMNOP', 'secret-value', 'do-not-keep']) {
     assert.equal(redacted.includes(secret), false);
   }
+});
+
+test('provider URLs retain only the SonarQube dashboard routing query', () => {
+  assert.equal(
+    providerUrls.normalizeProviderPublicUrl(
+      'https://sonar.example/dashboard?id=team%3Aapp&branch=feature%2FJIRA-123&token=secret#noise',
+      'sonar',
+    ),
+    'https://sonar.example/dashboard?id=team%3Aapp&branch=feature%2FJIRA-123',
+  );
+  assert.equal(
+    providerUrls.normalizeProviderPublicUrl('https://jenkins.example/job/app/?token=secret#noise', 'jenkins'),
+    'https://jenkins.example/job/app/',
+  );
+  assert.equal(
+    providerUrls.normalizeProviderPublicUrl('https://sonar.example/dashboard?id=glpat-supersecrettoken&branch=main', 'sonar'),
+    'https://sonar.example/dashboard?branch=main',
+  );
 });
 
 test('managed monitoring lease acquires, blocks duplicate owners, renews, and releases', () => {
@@ -368,6 +388,67 @@ test('managed provider polling backfills a durable binding from a catalog MR tar
     ));
   } finally {
     gitLabRestModule.gitlabRestClient.mergeRequestMonitor = originalMonitor;
+    workSessions.removeWorkSession(session.id);
+  }
+});
+
+test('managed SonarQube polling persists a branch-qualified dashboard binding', async () => {
+  const state = stateStore.emptyWorkCatalog();
+  state.projects.Application = {
+    config: {
+      jira_project_key: 'JIRA',
+      sonar_project_key: 'team:application',
+      default_branch: 'feature/JIRA-902',
+    },
+  };
+  state.tickets['JIRA-902'] = fixtureTicket({
+    summary: 'Sonar dashboard binding repair',
+    projects: ['Application'],
+  });
+  const session = workSessions.createOrGetWorkSessionByTicket({
+    ticketKey: 'JIRA-902',
+    title: 'Sonar dashboard binding repair',
+    projectName: 'Application',
+  });
+  const originalBranchContext = sonarRestModule.sonarRestClient.branchContext;
+  sonarRestModule.sonarRestClient.branchContext = async () => ({
+    schemaVersion: 1,
+    provider: 'sonarqube',
+    fetchedAt: '2026-07-14T14:00:00.000Z',
+    projectKey: 'team:application',
+    branch: 'feature/JIRA-902',
+    dashboardUrl: 'https://sonar.example/dashboard?id=team%3Aapplication&branch=feature%2FJIRA-902',
+    qualityGate: { status: 'OK', conditions: [] },
+    measures: [],
+    issues: [],
+    completeness: {
+      complete: true,
+      qualityGateComplete: true,
+      measuresComplete: true,
+      issuesComplete: true,
+      issuesFetched: 0,
+      issuePages: 1,
+      issueResponseBytes: 2,
+      issuesTotal: 0,
+      warnings: [],
+    },
+  });
+  try {
+    const result = await new managedProviderMonitor.ManagedProviderMonitor({ state: () => state }).poll();
+    assert.equal(result.polled, 1);
+    assert.equal(result.failures, 0);
+    const updated = workSessions.readWorkSession(session.id);
+    const binding = updated.providerBindings.find(candidate =>
+      candidate.provider === 'sonar'
+        && candidate.resource === 'quality-gate'
+        && candidate.subjectId === 'team:application:feature/JIRA-902'
+    );
+    assert.equal(
+      binding.url,
+      'https://sonar.example/dashboard?id=team%3Aapplication&branch=feature%2FJIRA-902',
+    );
+  } finally {
+    sonarRestModule.sonarRestClient.branchContext = originalBranchContext;
     workSessions.removeWorkSession(session.id);
   }
 });

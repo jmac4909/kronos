@@ -19,7 +19,7 @@ import {
 import { normalizeGitLabMergeRequestContext, type GitLabMergeRequestContext } from './services/gitlabMergeRequestContext';
 import { writeGitLabContextArtifacts } from './services/gitlabContextStore';
 import { isJenkinsRestConfigured, jenkinsRestClient, type JenkinsBuildContext } from './services/jenkinsRestClient';
-import { isSonarRestConfigured, sonarRestClient, type SonarBranchContext } from './services/sonarRestClient';
+import { isSonarRestConfigured, sonarDashboardUrl, sonarRestClient, type SonarBranchContext } from './services/sonarRestClient';
 import { buildCiContext, writeCiContextArtifacts } from './services/ciContextStore';
 import {
   buildCiContextReference,
@@ -1328,12 +1328,13 @@ class TerminalFirstRuntime implements vscode.Disposable {
     }
     const sonarTarget = configuredSonarBranch(this.state.state, session.ticketKey);
     if (sonarTarget) {
+      const dashboardUrl = sonarDashboardUrl(sonarTarget.projectKey, sonarTarget.branch);
       updated = this.requireTicketSession(addWorkSessionProviderBinding(updated.id, {
-        id: 'sonar-quality-gate',
         provider: 'sonar',
         resource: 'quality-gate',
         subjectId: `${sonarTarget.projectKey}:${sonarTarget.branch}`,
         projectId: sonarTarget.projectKey,
+        ...(dashboardUrl ? { url: dashboardUrl } : {}),
       }));
     }
     return updated;
@@ -1627,7 +1628,6 @@ class TerminalFirstRuntime implements vscode.Disposable {
         }
         if (sonar && sonarTarget) {
           session = addWorkSessionProviderBinding(session.id, {
-            id: 'sonar-quality-gate',
             provider: 'sonar',
             resource: 'quality-gate',
             subjectId: `${sonarTarget.projectKey}:${sonarTarget.branch}`,

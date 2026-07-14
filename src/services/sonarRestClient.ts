@@ -502,6 +502,22 @@ export function normalizeSonarBaseUrl(value: string | undefined): string | undef
   }
 }
 
+/** Builds a non-credentialed branch dashboard URL without requiring an API token. */
+export function sonarDashboardUrl(
+  projectKey: string,
+  branch: string,
+  env: NodeJS.ProcessEnv = process.env,
+): string | undefined {
+  const baseUrl = normalizeSonarBaseUrl(env['SONAR_HOST_URL']) || normalizeSonarBaseUrl(env['SONAR_URL']);
+  if (!baseUrl) { return undefined; }
+  try {
+    const target = normalizeSonarTarget(projectKey, branch);
+    return buildSonarDashboardUrl(baseUrl, target.projectKey, target.branch);
+  } catch {
+    return undefined;
+  }
+}
+
 export function normalizeQualityGateStatus(value: unknown): SonarQualityGateStatus {
   const root = isRecord(value) ? value : {};
   const projectStatus = isRecord(root['projectStatus']) ? root['projectStatus'] : root;

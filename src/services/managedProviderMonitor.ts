@@ -6,7 +6,7 @@ import {
   type GitLabMergeRequestMonitorSnapshot,
 } from './gitlabRestClient';
 import { jenkinsRestClient, type JenkinsBuildContext } from './jenkinsRestClient';
-import { sonarRestClient, type SonarBranchContext } from './sonarRestClient';
+import { sonarDashboardUrl, sonarRestClient, type SonarBranchContext } from './sonarRestClient';
 import {
   compareGitLabPipelineDigests,
   mergeGitLabPipelineDigest,
@@ -479,13 +479,14 @@ export class ManagedProviderMonitor {
         });
       }
       if (sonarTarget) {
+        const dashboardUrl = sonarTarget.providerUrl
+          || sonarDashboardUrl(sonarTarget.projectKey, sonarTarget.branch);
         session = reconcileProviderBinding(session, {
-          id: 'sonar-quality-gate',
           provider: 'sonar',
           resource: 'quality-gate',
           subjectId: `${sonarTarget.projectKey}:${sonarTarget.branch}`,
           projectId: sonarTarget.projectKey,
-          ...(sonarTarget.providerUrl ? { url: sonarTarget.providerUrl } : {}),
+          ...(dashboardUrl ? { url: dashboardUrl } : {}),
         });
       }
     } catch (error: unknown) {
@@ -538,6 +539,13 @@ export class ManagedProviderMonitor {
     if (sonarTarget) {
       try {
         sonar = await sonarRestClient.branchContext(sonarTarget.projectKey, sonarTarget.branch);
+        session = reconcileProviderBinding(session, {
+          provider: 'sonar',
+          resource: 'quality-gate',
+          subjectId: `${sonar.projectKey}:${sonar.branch}`,
+          projectId: sonar.projectKey,
+          url: sonar.dashboardUrl,
+        });
         result.polled += 1;
       } catch (error: unknown) {
         sonarReadFailure = providerReadFailureReason(error);
@@ -1375,11 +1383,17 @@ export function configuredCiPollingTargets(
   const boundBranch = boundPrefix && sonarBinding?.subjectId.startsWith(boundPrefix)
     ? sonarBinding.subjectId.slice(boundPrefix.length).trim()
     : '';
-  const sonar = configuredSonar
-    ? configuredSonar
-    : boundProjectKey && boundBranch
-      ? { projectKey: boundProjectKey, branch: boundBranch, ...(sonarBinding?.url ? { providerUrl: sonarBinding.url } : {}) }
-      : undefined;
+  let sonar: ConfiguredCiPollingTargets['sonar'];
+  if (configuredSonar) {
+    const providerUrl = sonarDashboardUrl(configuredSonar.projectKey, configuredSonar.branch);
+    sonar = { ...configuredSonar, ...(providerUrl ? { providerUrl } : {}) };
+  } else if (boundProjectKey && boundBranch) {
+    sonar = {
+      projectKey: boundProjectKey,
+      branch: boundBranch,
+      ...(sonarBinding?.url ? { providerUrl: sonarBinding.url } : {}),
+    };
+  }
   return {
     ...(jenkinsUrl ? { jenkinsUrl } : {}),
     ...(sonar ? { sonar } : {}),
