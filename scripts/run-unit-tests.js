@@ -3642,6 +3642,12 @@ test('extension activation registers the bounded surface and explicit launch com
     assert.equal(selectedSonarProject.config.sonar_project_key, 'fixture');
     assert.equal(selectedSonarProject.config.sonar_branch, 'feature/two', 'the chosen Attention branch becomes the monitored project target');
     assert.equal(selectedSonarProject.config.default_branch, 'main', 'Sonar branch selection does not change the GitLab target branch');
+    const missingUrlItem = groupedProjectItems.find(item => item.eventId === 'attention-same-project-event');
+    assert.equal(missingUrlItem.providerUrl, undefined);
+    assert.equal(missingUrlItem.command.command, 'kronos.configureProjectIntegrations');
+    assert.equal(missingUrlItem.command.arguments[0].projectName, 'fixture');
+    await commandHandlers.get(missingUrlItem.command.command)(missingUrlItem.command.arguments[0]);
+    assert.ok(createdWebviewPanels.some(panel => panel.viewType === 'kronosProjectIntegrationSetup'));
     workSessions.removeWorkSession(siblingProjectSession.id);
     workSessions.removeWorkSession(attentionSession.id);
 

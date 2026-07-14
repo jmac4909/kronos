@@ -2294,7 +2294,13 @@ class TerminalFirstRuntime implements vscode.Disposable {
       providerUrl = selected.url;
     }
     if (!providerUrl) {
-      void vscode.window.showWarningMessage('This Attention item has no validated provider URL.');
+      const projectName = stringProperty(argument, 'projectName');
+      const projectPath = stringProperty(argument, 'projectPath');
+      if (projectName && projectPath) {
+        this.configureProjectIntegrations({ projectName, projectPath });
+      } else {
+        await vscode.commands.executeCommand('kronos.doctor');
+      }
       return;
     }
     if (stringProperty(argument, 'source') === 'sonar') {

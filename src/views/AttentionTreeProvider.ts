@@ -21,6 +21,8 @@ export interface AttentionCommandTarget {
   source: MonitorEventSource;
   providerUrl: string | undefined;
   providerChoices?: AttentionProviderChoice[];
+  projectName?: string;
+  projectPath?: string;
 }
 
 export interface AttentionProviderChoice {
@@ -230,6 +232,8 @@ export class AttentionEventTreeItem extends vscode.TreeItem implements Attention
       source: this.source,
       providerUrl: this.providerUrl,
       ...(this.providerChoices.length > 1 ? { providerChoices: this.providerChoices } : {}),
+      ...(entry.session?.projectName ? { projectName: entry.session.projectName } : {}),
+      ...(entry.session?.projectPath ? { projectPath: entry.session.projectPath } : {}),
     };
 
     this.id = `attention-event:${entry.event.id}`;
@@ -243,11 +247,16 @@ export class AttentionEventTreeItem extends vscode.TreeItem implements Attention
         title: 'Open Provider Page',
         arguments: [target],
       }
-      : {
-        command: 'kronos.openWorkSessionAudit',
-        title: 'Open Work Session Audit',
-        arguments: [target],
-      };
+      : entry.session?.projectName && entry.session.projectPath
+        ? {
+          command: 'kronos.configureProjectIntegrations',
+          title: 'Repair Provider Setup',
+          arguments: [target],
+        }
+        : {
+          command: 'kronos.doctor',
+          title: 'Open Kronos Doctor',
+        };
   }
 }
 
@@ -365,6 +374,7 @@ function eventTooltip(entry: AttentionEntry): string {
     `Transition: ${metadataString(event, 'transitionKind') || 'provider state changed'}`,
     `Observed: ${event.at}`,
     `Provider URL: ${entry.providerUrl || 'not recorded'}`,
+    `Primary action: ${entry.providerUrl ? 'open the validated provider page' : entry.session?.projectName && entry.session.projectPath ? 'repair this project provider setup' : 'open Kronos Doctor'}`,
   ];
   for (const [key, label] of METADATA_TOOLTIP_FIELDS) {
     const value = event.metadata?.[key];
