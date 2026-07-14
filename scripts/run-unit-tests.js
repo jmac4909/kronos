@@ -2109,6 +2109,62 @@ test('terminal context insertion is shell-inert and never submits', () => {
   assert.equal(fs.readFileSync(gitArtifact.promptPath, 'utf8').includes(embeddedToken), false);
 });
 
+test('context placement verifies one exact attachment and remains exactly once after audit work', () => {
+  const promptPath = path.join(tempRoot, 'JIRA-123', `prompt-${'b'.repeat(24)}.md`);
+  const reference = insertion.buildJiraContextReference('JIRA-123', promptPath);
+  const calls = [];
+  const terminal = {
+    sendText(text, shouldExecute) { calls.push([text, shouldExecute]); },
+  };
+  const placement = insertion.captureTerminalContextPlacement({
+    terminal,
+    sessionId: 'session-placement',
+    bindingId: 'binding-placement',
+  });
+  const current = { terminal, sessionId: 'session-placement', bindingId: 'binding-placement' };
+  assert.equal(insertion.isTerminalContextPlacementCurrent(placement, current), true);
+  const placed = insertion.placeEditableTerminalContextReference(placement, current, reference, 'Review once.');
+  assert.equal(placed.kind, 'placed');
+  assert.deepEqual(calls, [[placed.text, false]]);
+  assert.deepEqual(
+    insertion.placeEditableTerminalContextReference(placement, current, reference, 'Do not place twice.'),
+    { kind: 'already-placed' },
+  );
+  assert.equal(calls.length, 1, 'late queued composer messages cannot place a second terminal line');
+
+  const reboundTerminal = { sendText() { throw new Error('wrong terminal must not receive context'); } };
+  const stale = insertion.captureTerminalContextPlacement({
+    terminal,
+    sessionId: 'session-placement',
+    bindingId: 'binding-stale',
+  });
+  assert.deepEqual(
+    insertion.placeEditableTerminalContextReference(stale, {
+      terminal: reboundTerminal,
+      sessionId: 'session-placement',
+      bindingId: 'binding-stale',
+    }, reference, ''),
+    { kind: 'target-changed' },
+  );
+  assert.equal(stale.phase, 'ready');
+
+  const throwingTerminal = { sendText() { throw new Error('terminal write failed'); } };
+  const retryable = insertion.captureTerminalContextPlacement({
+    terminal: throwingTerminal,
+    sessionId: 'session-retry',
+    bindingId: 'binding-retry',
+  });
+  assert.throws(
+    () => insertion.placeEditableTerminalContextReference(retryable, {
+      terminal: throwingTerminal,
+      sessionId: 'session-retry',
+      bindingId: 'binding-retry',
+    }, reference, ''),
+    /terminal write failed/,
+  );
+  assert.equal(retryable.phase, 'ready', 'a failed send may be retried after the target is verified again');
+});
+
 test('operator terminal registry attaches, resolves, and detaches objects without controlling them', () => {
   const registry = createOperatorTerminalRegistry();
   const terminal = { name: 'operator-owned' };
@@ -2943,6 +2999,7 @@ test('extension activation registers the bounded surface and explicit launch com
   const openedExternalUrls = [];
   let warningMessageResult;
   let lastWarningMessage;
+  const warningMessages = [];
   let failNextTerminalCreation = false;
   let deferNextProcessId = false;
   let resolveDeferredProcessId;
@@ -2985,6 +3042,7 @@ test('extension activation registers the bounded surface and explicit launch com
       createOutputChannel() { return { appendLine() {}, dispose() {} }; },
       showWarningMessage(message) {
         lastWarningMessage = message;
+        warningMessages.push(message);
         const result = warningMessageResult;
         warningMessageResult = undefined;
         return Promise.resolve(result);
@@ -3133,6 +3191,7 @@ test('extension activation registers the bounded surface and explicit launch com
   };
   const originalProviderMethods = {
     jiraSearchWorkList: jiraRestModule.jiraRestClient.searchWorkList,
+    jiraTicketContext: jiraRestModule.jiraRestClient.ticketContext,
     gitLabMergeRequestContext: gitLabRestModule.gitlabRestClient.mergeRequestContext,
     gitLabMergeRequestMonitor: gitLabRestModule.gitlabRestClient.mergeRequestMonitor,
     gitLabDiscoverOpenMergeRequest: gitLabRestModule.gitlabRestClient.discoverOpenMergeRequest,
@@ -3498,6 +3557,13 @@ test('extension activation registers the bounded surface and explicit launch com
     assert.equal(createdTerminals[1].actions.at(-1)[0], 'sendText');
     assert.equal(createdTerminals[1].actions.at(-1)[2], false);
     assert.match(createdTerminals[1].actions.at(-1)[1], /Operator focus:/);
+    const jiraWritesAfterPlacement = createdTerminals[1].actions.length;
+    await composerPanel.receive({ command: 'insertDraft', focus: 'A late queued duplicate.' });
+    assert.equal(
+      createdTerminals[1].actions.length,
+      jiraWritesAfterPlacement,
+      'a late composer message after successful placement must not write a second terminal line',
+    );
     singlePickHandler = items => items.find(item => item.label === 'JIRA-321');
     await commandHandlers.get('kronos.insertOtherTicket')({ workSessionId: ticketSession.id });
     assert.deepEqual(workSessions.getWorkSessionByTicket('JIRA-123').ticketKeys, ['JIRA-123', 'JIRA-321']);
@@ -3534,6 +3600,50 @@ test('extension activation registers the bounded surface and explicit launch com
     await Promise.all([racedLaunch, racedManage]);
     const racedSession = workSessions.getWorkSessionByTicket('JIRA-456');
     assert.equal(racedSession.terminals.length, 1, 'concurrent actions must reuse one durable binding for a terminal');
+
+    const racedTerminalRecord = createdTerminals.find(item => item.terminal.name.includes('JIRA-456'));
+    assert.ok(racedTerminalRecord);
+    let resolveJiraContextFetch;
+    jiraRestModule.jiraRestClient.ticketContext = async () => new Promise(resolve => {
+      resolveJiraContextFetch = resolve;
+    });
+    const previousJiraContextEnv = {
+      baseUrl: process.env.JIRA_BASE_URL,
+      email: process.env.JIRA_EMAIL,
+      token: process.env.JIRA_API_TOKEN,
+    };
+    process.env.JIRA_BASE_URL = 'https://jira.example';
+    process.env.JIRA_EMAIL = 'fixture@example.test';
+    process.env.JIRA_API_TOKEN = 'fixture-context-token';
+    try {
+      const panelCountBeforeFetchRace = createdWebviewPanels.length;
+      const writesBeforeFetchRace = racedTerminalRecord.actions.length;
+      const fetchingContext = commandHandlers.get('kronos.insertJiraContext')({ ticketKey: 'JIRA-456' });
+      for (let index = 0; index < 10 && !resolveJiraContextFetch; index += 1) { await Promise.resolve(); }
+      assert.equal(typeof resolveJiraContextFetch, 'function');
+      closeTerminalHandler(racedTerminalRecord.terminal);
+      resolveJiraContextFetch(jiraContext.buildFallbackJiraTicketContext(
+        'JIRA-456',
+        fixtureTicket({ summary: 'Attachment race fixture', linked_local_project: 'fixture' }),
+        [],
+      ));
+      await fetchingContext;
+      assert.equal(
+        createdWebviewPanels.slice(panelCountBeforeFetchRace).some(panel => panel.viewType === 'kronosContextComposer'),
+        false,
+        'a terminal detached during context fetch must cancel the stale composer',
+      );
+      assert.equal(racedTerminalRecord.actions.length, writesBeforeFetchRace);
+      assert.ok(warningMessages.some(message => /changed while context evidence was being fetched/i.test(message)));
+    } finally {
+      jiraRestModule.jiraRestClient.ticketContext = originalProviderMethods.jiraTicketContext;
+      if (previousJiraContextEnv.baseUrl === undefined) { delete process.env.JIRA_BASE_URL; }
+      else { process.env.JIRA_BASE_URL = previousJiraContextEnv.baseUrl; }
+      if (previousJiraContextEnv.email === undefined) { delete process.env.JIRA_EMAIL; }
+      else { process.env.JIRA_EMAIL = previousJiraContextEnv.email; }
+      if (previousJiraContextEnv.token === undefined) { delete process.env.JIRA_API_TOKEN; }
+      else { process.env.JIRA_API_TOKEN = previousJiraContextEnv.token; }
+    }
 
     resolveDeferredProcessId = undefined;
     deferNextProcessId = true;
@@ -3833,6 +3943,7 @@ test('extension activation registers the bounded surface and explicit launch com
     assert.equal(Object.keys(refreshedState.tickets).length, 5);
   } finally {
     jiraRestModule.jiraRestClient.searchWorkList = originalProviderMethods.jiraSearchWorkList;
+    jiraRestModule.jiraRestClient.ticketContext = originalProviderMethods.jiraTicketContext;
     gitLabRestModule.gitlabRestClient.mergeRequestContext = originalProviderMethods.gitLabMergeRequestContext;
     gitLabRestModule.gitlabRestClient.mergeRequestMonitor = originalProviderMethods.gitLabMergeRequestMonitor;
     gitLabRestModule.gitlabRestClient.discoverOpenMergeRequest = originalProviderMethods.gitLabDiscoverOpenMergeRequest;

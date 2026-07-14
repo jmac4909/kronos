@@ -5,6 +5,25 @@ export interface TerminalContextInsertionTarget {
   sendText(text: string, shouldExecute?: boolean): void;
 }
 
+export type TerminalContextPlacementPhase = 'ready' | 'placing' | 'placed';
+
+export interface TerminalContextAttachment<Terminal extends TerminalContextInsertionTarget> {
+  terminal: Terminal;
+  sessionId: string;
+  bindingId: string;
+}
+
+export interface TerminalContextPlacement<Terminal extends TerminalContextInsertionTarget>
+  extends TerminalContextAttachment<Terminal> {
+  phase: TerminalContextPlacementPhase;
+}
+
+export type TerminalContextPlacementResult =
+  | { kind: 'placed'; text: string }
+  | { kind: 'busy' }
+  | { kind: 'already-placed' }
+  | { kind: 'target-changed' };
+
 const REFERENCE_SUFFIX = ' before answering.';
 const MAX_REFERENCE_LENGTH = 8192;
 const MAX_OPERATOR_FOCUS_LENGTH = 2000;
@@ -78,6 +97,53 @@ export function insertEditableTerminalContextReference(
   const editableReference = buildEditableTerminalContextReference(reference, focusValue);
   sendNonSubmittingReference(terminal, editableReference);
   return editableReference;
+}
+
+/** Captures the exact managed terminal attachment selected before evidence fetch. */
+export function captureTerminalContextPlacement<Terminal extends TerminalContextInsertionTarget>(
+  attachment: TerminalContextAttachment<Terminal>,
+): TerminalContextPlacement<Terminal> {
+  return {
+    terminal: attachment.terminal,
+    sessionId: boundedPlacementId(attachment.sessionId, 'session'),
+    bindingId: boundedPlacementId(attachment.bindingId, 'terminal binding'),
+    phase: 'ready',
+  };
+}
+
+export function isTerminalContextPlacementCurrent<Terminal extends TerminalContextInsertionTarget>(
+  placement: TerminalContextPlacement<Terminal>,
+  current: TerminalContextAttachment<Terminal> | undefined,
+): boolean {
+  return Boolean(current
+    && current.terminal === placement.terminal
+    && current.sessionId === placement.sessionId
+    && current.bindingId === placement.bindingId);
+}
+
+/**
+ * Performs target verification and the only non-submitting send as one
+ * exactly-once state transition. A failed send can be retried; a successful
+ * send stays placed even when later local audit work fails.
+ */
+export function placeEditableTerminalContextReference<Terminal extends TerminalContextInsertionTarget>(
+  placement: TerminalContextPlacement<Terminal>,
+  current: TerminalContextAttachment<Terminal> | undefined,
+  reference: string,
+  focusValue: unknown,
+): TerminalContextPlacementResult {
+  if (placement.phase === 'placed') { return { kind: 'already-placed' }; }
+  if (placement.phase === 'placing') { return { kind: 'busy' }; }
+  if (!isTerminalContextPlacementCurrent(placement, current)) { return { kind: 'target-changed' }; }
+  placement.phase = 'placing';
+  try {
+    const text = insertEditableTerminalContextReference(placement.terminal, reference, focusValue);
+    placement.phase = 'placed';
+    return { kind: 'placed', text };
+  } catch (error: unknown) {
+    placement.phase = 'ready';
+    throw error;
+  }
 }
 
 export function isSafeTerminalContextReference(reference: string): boolean {
@@ -183,6 +249,14 @@ function normalizeGitContextId(value: string): string {
   const normalized = value.trim();
   if (!/^GIT-[A-Za-z0-9_.-]{1,100}$/.test(normalized)) {
     throw new Error('Git context id is missing or invalid.');
+  }
+  return normalized;
+}
+
+function boundedPlacementId(value: string, label: string): string {
+  const normalized = value.trim();
+  if (!normalized || normalized.length > 200 || /[\u0000-\u001f\u007f\u2028\u2029]/.test(normalized)) {
+    throw new Error(`Context placement ${label} id is missing or invalid.`);
   }
   return normalized;
 }

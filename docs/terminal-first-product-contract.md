@@ -143,8 +143,8 @@ Context insertion is always explicit and terminal-scoped. Jira, MR, and CI evide
 4. For Jira, it downloads attachment bytes without a file-type allowlist or parser, writes them as private files with sanitized local names, and records their paths and SHA-256 hashes. Raw files are not transformed or secret-redacted.
 5. It writes a private, content-addressed JSON artifact and Markdown prompt boundary.
 6. For Jira and GitLab MR context, it opens an interactive composer with escaped evidence previews, completeness warnings, an immutable artifact reference, and an editable operator-focus field.
-7. It verifies that the managed terminal attachment has not changed during the fetch.
-8. **Place in Terminal** or Ctrl/Cmd+Enter inserts one shell-quoted reference line with terminal execution disabled. Ordinary Enter only edits the composer text.
+7. It captures the exact session, terminal-binding, and VS Code terminal object selected before the fetch, then re-resolves that same attachment before opening the composer and again before placement. Detachment, close, or rebinding cancels the stale placement rather than guessing.
+8. **Place in Terminal** or Ctrl/Cmd+Enter performs one exactly-once shell-quoted reference insertion with terminal execution disabled. Ordinary Enter only edits the composer text. A successful terminal send consumes that composer even if a later local audit update fails or a late duplicate message arrives; a send that throws may be retried after target verification.
 9. The operator reviews the terminal line and submits it manually.
 
 Provider data inside an artifact is untrusted evidence, never instructions. Prompt artifacts tell the interactive agent not to follow commands, role changes, credential requests, links, or mutation requests found inside provider content.

@@ -31,7 +31,11 @@ import {
   buildGitLabMergeRequestContextReference,
   buildJiraContextReference,
   buildProjectGitContextReference,
-  insertEditableTerminalContextReference,
+  captureTerminalContextPlacement,
+  isTerminalContextPlacementCurrent,
+  placeEditableTerminalContextReference,
+  type TerminalContextAttachment,
+  type TerminalContextPlacement,
 } from './services/terminalContextInsertion';
 import { readProjectGitEvidence, renderProjectGitEvidence } from './services/vscodeGitReadService';
 import { writeProjectGitContextArtifact } from './services/projectGitContextStore';
@@ -188,11 +192,10 @@ interface OperationsPanelRecord {
 interface ContextComposerPanelRecord {
   panel: vscode.WebviewPanel;
   nonce: string;
-  selection: TerminalSelection;
+  placement: TerminalContextPlacement<vscode.Terminal>;
   reference: string;
   promptPath: string;
   onInserted: () => void | Promise<void>;
-  inserting: boolean;
 }
 
 interface ContextComposerRequest {
@@ -218,8 +221,8 @@ interface ProjectIntegrationPanelRecord {
 
 interface TerminalSelection {
   terminal: vscode.Terminal;
+  binding: OperatorTerminalBinding;
   workSession?: WorkSessionRecord;
-  binding?: OperatorTerminalBinding;
 }
 
 interface GitLabInsertionTarget {
@@ -1400,6 +1403,17 @@ class TerminalFirstRuntime implements vscode.Disposable {
   }
 
   private openContextComposer(request: ContextComposerRequest): void {
+    const placement = captureTerminalContextPlacement({
+      terminal: request.selection.terminal,
+      sessionId: request.selection.binding.sessionId,
+      bindingId: request.selection.binding.bindingId,
+    });
+    if (!isTerminalContextPlacementCurrent(placement, this.currentTerminalContextAttachment(placement))) {
+      void vscode.window.showWarningMessage(
+        'The managed terminal attachment changed while context evidence was being fetched. Reopen the action from the intended ticket or session.',
+      );
+      return;
+    }
     this.contextComposerPanels.get(request.key)?.panel.dispose();
     const panel = vscode.window.createWebviewPanel(
       'kronosContextComposer',
@@ -1415,11 +1429,10 @@ class TerminalFirstRuntime implements vscode.Disposable {
     const record: ContextComposerPanelRecord = {
       panel,
       nonce: createWebviewNonce(),
-      selection: request.selection,
+      placement,
       reference: request.reference,
       promptPath: request.promptPath,
       onInserted: request.onInserted,
-      inserting: false,
     };
     this.contextComposerPanels.set(request.key, record);
     panel.onDidDispose(() => {
@@ -1443,27 +1456,35 @@ class TerminalFirstRuntime implements vscode.Disposable {
         return;
       }
       if (message.command !== 'insertDraft') { return; }
-      if (record.inserting) { return; }
-      if (!this.insertionTerminalUnchanged(record.selection)) {
+      let result;
+      try {
+        result = placeEditableTerminalContextReference(
+          record.placement,
+          this.currentTerminalContextAttachment(record.placement),
+          record.reference,
+          message.focus,
+        );
+      } catch (error: unknown) {
+        const detail = unknownErrorMessage(error, 'Context insertion failed.');
+        this.log('Context composer insertion failed.', detail);
+        void vscode.window.showErrorMessage(detail);
+        return;
+      }
+      if (result.kind === 'busy' || result.kind === 'already-placed') { return; }
+      if (result.kind === 'target-changed') {
         void vscode.window.showWarningMessage('The managed terminal attachment changed while this context was being edited. Reopen the composer from the intended ticket or session.');
         return;
       }
-      record.inserting = true;
-      let inserted = false;
       try {
-        insertEditableTerminalContextReference(record.selection.terminal, record.reference, message.focus);
-        inserted = true;
         await record.onInserted();
         panel.dispose();
       } catch (error: unknown) {
         const detail = unknownErrorMessage(error, 'Context insertion failed.');
-        this.log(inserted ? 'Context was inserted but its local audit update failed.' : 'Context composer insertion failed.', detail);
-        void vscode.window.showErrorMessage(inserted
-          ? `The context was inserted without submission, but Kronos could not finish its local audit update: ${detail}`
-          : detail);
-        if (inserted) { panel.dispose(); }
-      } finally {
-        record.inserting = false;
+        this.log('Context was inserted but its local audit update failed.', detail);
+        void vscode.window.showErrorMessage(
+          `The context was inserted without submission, but Kronos could not finish its local audit update: ${detail}`,
+        );
+        panel.dispose();
       }
     });
     const scriptUri = panel.webview.asWebviewUri(
@@ -1818,10 +1839,17 @@ class TerminalFirstRuntime implements vscode.Disposable {
     return resolved.kind === 'resolved' ? { terminal: resolved.terminal, binding: resolved.binding } : undefined;
   }
 
-  private insertionTerminalUnchanged(selection: TerminalSelection): boolean {
-    if (!selection.binding) { return vscode.window.activeTerminal === selection.terminal; }
-    const resolved = this.operatorTerminals.resolve(selection.binding.sessionId, selection.binding.bindingId);
-    return resolved.kind === 'resolved' && resolved.terminal === selection.terminal;
+  private currentTerminalContextAttachment(
+    placement: TerminalContextPlacement<vscode.Terminal>,
+  ): TerminalContextAttachment<vscode.Terminal> | undefined {
+    const resolved = this.operatorTerminals.resolve(placement.sessionId, placement.bindingId);
+    return resolved.kind === 'resolved'
+      ? {
+        terminal: resolved.terminal,
+        sessionId: resolved.binding.sessionId,
+        bindingId: resolved.binding.bindingId,
+      }
+      : undefined;
   }
 
   private async pollProviders(showResult: boolean): Promise<void> {
