@@ -1,6 +1,10 @@
 import type { MergeRequest, Ticket } from '../state/types';
 import type { GitLabMergeRequestDigest } from './gitlabMergeRequestTransitions';
-import type { WorkSessionProviderBinding, WorkSessionRecord } from './workSessionStore';
+import {
+  newestWorkSessionProviderBinding,
+  type WorkSessionProviderBinding,
+  type WorkSessionRecord,
+} from './workSessionStore';
 
 /**
  * Returns the newest locally bound merge request. Provider discovery writes
@@ -9,12 +13,19 @@ import type { WorkSessionProviderBinding, WorkSessionRecord } from './workSessio
 export function latestGitLabMergeRequestBinding(
   workSession: WorkSessionRecord | null | undefined,
 ): WorkSessionProviderBinding | undefined {
-  const candidates = (workSession?.providerBindings || [])
-    .filter(binding => binding.provider === 'gitlab' && binding.resource === 'merge-request');
-  return candidates.reduce<WorkSessionProviderBinding | undefined>((newest, candidate) => {
-    if (!newest) { return candidate; }
-    return timestamp(candidate.attachedAt) >= timestamp(newest.attachedAt) ? candidate : newest;
-  }, undefined);
+  return newestWorkSessionProviderBinding(
+    workSession?.providerBindings || [],
+    binding => binding.provider === 'gitlab' && binding.resource === 'merge-request',
+  );
+}
+
+export function latestGitLabMergeRequestBindingAcrossSessions(
+  workSessions: readonly WorkSessionRecord[],
+): WorkSessionProviderBinding | undefined {
+  return newestWorkSessionProviderBinding(
+    workSessions.flatMap(session => session.providerBindings),
+    binding => binding.provider === 'gitlab' && binding.resource === 'merge-request',
+  );
 }
 
 /**
@@ -98,9 +109,4 @@ function positiveInteger(value: unknown): number | undefined {
     ? value
     : typeof value === 'string' && /^[1-9][0-9]*$/.test(value) ? Number(value) : Number.NaN;
   return Number.isSafeInteger(number) && number > 0 ? number : undefined;
-}
-
-function timestamp(value: string): number {
-  const parsed = Date.parse(value);
-  return Number.isFinite(parsed) ? parsed : 0;
 }

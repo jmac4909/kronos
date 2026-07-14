@@ -60,6 +60,7 @@ import { tryAcquireManagedMonitorLease } from './managedMonitorLease';
 import {
   listWorkSessions,
   addWorkSessionProviderBinding,
+  newestWorkSessionProviderBinding,
   recordWorkSessionMonitoringResult,
   type AddWorkSessionProviderBindingInput,
   type TicketWorkSessionRecord,
@@ -641,19 +642,12 @@ function newestProviderBinding(
   resource: AddWorkSessionProviderBindingInput['resource'],
   subjectId?: string,
 ) {
-  return session.providerBindings
-    .filter(binding => binding.provider === provider
+  return newestWorkSessionProviderBinding(
+    session.providerBindings,
+    binding => binding.provider === provider
       && binding.resource === resource
-      && (subjectId === undefined || binding.subjectId === subjectId))
-    .reduce<(typeof session.providerBindings)[number] | undefined>((newest, candidate) => {
-      if (!newest) { return candidate; }
-      return bindingTimestamp(candidate.attachedAt) >= bindingTimestamp(newest.attachedAt) ? candidate : newest;
-    }, undefined);
-}
-
-function bindingTimestamp(value: string): number {
-  const parsed = Date.parse(value);
-  return Number.isFinite(parsed) ? parsed : 0;
+      && (subjectId === undefined || binding.subjectId === subjectId),
+  );
 }
 
 function emptyResult(): ManagedProviderPollResult {
@@ -1368,9 +1362,14 @@ export function configuredCiPollingTargets(
 ): ConfiguredCiPollingTargets {
   const ticket = state?.tickets[session.ticketKey];
   const config = projectConfigurationForTicket(state, ticket);
-  const bindings = [...session.providerBindings].reverse();
-  const jenkinsBinding = bindings.find(candidate => candidate.provider === 'jenkins' && candidate.resource === 'build');
-  const sonarBinding = bindings.find(candidate => candidate.provider === 'sonar' && candidate.resource === 'quality-gate');
+  const jenkinsBinding = newestWorkSessionProviderBinding(
+    session.providerBindings,
+    candidate => candidate.provider === 'jenkins' && candidate.resource === 'build',
+  );
+  const sonarBinding = newestWorkSessionProviderBinding(
+    session.providerBindings,
+    candidate => candidate.provider === 'sonar' && candidate.resource === 'quality-gate',
+  );
   const jenkinsUrl = ticket?.build?.url
     || optionalTrimmedStringFromUnknown(config.jenkins_url)
     || jenkinsBinding?.url;

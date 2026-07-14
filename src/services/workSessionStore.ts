@@ -326,6 +326,19 @@ export function listWorkSessions(options: ListWorkSessionOptions = {}): WorkSess
     .slice(0, limit);
 }
 
+/** Selects the newest durable provider binding without relying on array order. */
+export function newestWorkSessionProviderBinding(
+  bindings: readonly WorkSessionProviderBinding[],
+  predicate: (binding: WorkSessionProviderBinding) => boolean = () => true,
+): WorkSessionProviderBinding | undefined {
+  return bindings.filter(predicate).reduce<WorkSessionProviderBinding | undefined>((newest, candidate) => {
+    if (!newest) { return candidate; }
+    return providerBindingTimestamp(candidate.attachedAt) >= providerBindingTimestamp(newest.attachedAt)
+      ? candidate
+      : newest;
+  }, undefined);
+}
+
 export function listWorkSessionStoreIssues(options: WorkSessionStoreOptions = {}): WorkSessionStoreIssue[] {
   const directory = workSessionsDirectory(options);
   if (!assertSafeDirectoryIfPresent(directory, 'work sessions directory')) { return []; }
@@ -765,6 +778,11 @@ function standaloneWorkSessionId(title: string): string {
 
 function providerBindingId(provider: WorkSessionProvider, resource: WorkSessionProviderResource, subject: string): string {
   return normalizeEntityId(safeFileStem(`${provider}-${resource}-${subject}`, { maxLength: 180 }), 'provider binding id');
+}
+
+function providerBindingTimestamp(value: string): number {
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 function normalizeTicketKey(value: string): string {

@@ -65,6 +65,8 @@ import {
 import { buildWorkSessionAuditMarkdown } from './services/workSessionAuditView';
 import {
   ManagedProviderMonitor,
+  configuredCiPollingTargets,
+  configuredGitLabPollingTarget,
   configuredSonarBranch,
   type ManagedProviderNotice,
   type ManagedProviderPollResult,
@@ -123,6 +125,7 @@ import {
 } from './services/projectIntegrationView';
 import { readGitLabMergeRequestMonitorSnapshot } from './services/gitlabMergeRequestMonitorStore';
 import {
+  latestGitLabMergeRequestBindingAcrossSessions,
   latestGitLabMergeRequestBinding,
   withEffectiveTicketMergeRequest,
 } from './services/ticketMergeRequestProjection';
@@ -1001,10 +1004,12 @@ class TerminalFirstRuntime implements vscode.Disposable {
     session: WorkSessionRecord | null,
   ): ProviderPollingViewStatus[] {
     const config = this.projectConfig(ticket) || {};
-    const polling = session?.kind === 'ticket' && session.status === 'active' && session.monitoring.enabled;
-    const mrBinding = session?.providerBindings.find(binding => binding.provider === 'gitlab' && binding.resource === 'merge-request');
+    const ticketSession = session?.kind === 'ticket' ? session : null;
+    const polling = ticketSession?.status === 'active' && ticketSession.monitoring.enabled;
+    const mrBinding = latestGitLabMergeRequestBinding(ticketSession);
     const mrIid = ticket.mr?.iid || (mrBinding && /^[1-9][0-9]*$/.test(mrBinding.subjectId) ? Number(mrBinding.subjectId) : undefined);
-    const gitLabConfigured = Boolean(config.gitlab_project_id || config.gitlab_project_path);
+    const gitLabTarget = ticketSession ? configuredGitLabPollingTarget(this.state.state, ticketSession) : null;
+    const gitLabConfigured = Boolean(gitLabTarget || config.gitlab_project_id || config.gitlab_project_path);
     const gitLab: ProviderPollingViewStatus = !gitLabConfigured
       ? { provider: 'GitLab', state: 'setup', detail: 'Add the project ID or group/project path.' }
       : !isGitLabRestConfigured()
@@ -1015,7 +1020,8 @@ class TerminalFirstRuntime implements vscode.Disposable {
             ? { provider: 'GitLab', state: 'active', detail: `Polling MR !${mrIid}, review, pipeline, jobs, and tests.` }
             : { provider: 'GitLab', state: 'discovering', detail: 'Polling is active; finding a unique open MR by branch or ticket key.' };
 
-    const jenkinsConfigured = Boolean(ticket.build?.url || config.jenkins_url);
+    const ciTargets = ticketSession ? configuredCiPollingTargets(this.state.state, ticketSession) : {};
+    const jenkinsConfigured = Boolean(ciTargets.jenkinsUrl || ticket.build?.url || config.jenkins_url);
     const jenkins: ProviderPollingViewStatus = !jenkinsConfigured
       ? { provider: 'Jenkins', state: 'setup', detail: 'Add the project Jenkins job URL.' }
       : !isJenkinsRestConfigured()
@@ -1024,8 +1030,9 @@ class TerminalFirstRuntime implements vscode.Disposable {
           ? { provider: 'Jenkins', state: 'active', detail: 'Polling the configured job, stages, and tests.' }
           : { provider: 'Jenkins', state: 'paused', detail: 'Starts automatically with an active monitored ticket session.' };
 
-    const sonarTarget = configuredSonarBranch(this.state.state, ticketKey);
-    const sonar: ProviderPollingViewStatus = !config.sonar_project_key
+    const sonarTarget = ciTargets.sonar || configuredSonarBranch(this.state.state, ticketKey);
+    const sonarConfigured = Boolean(sonarTarget || config.sonar_project_key);
+    const sonar: ProviderPollingViewStatus = !sonarConfigured
       ? { provider: 'SonarQube', state: 'setup', detail: 'Add the SonarQube project key.' }
       : !sonarTarget
         ? { provider: 'SonarQube', state: 'setup', detail: 'Add or discover the branch used for SonarQube polling.' }
@@ -1979,14 +1986,15 @@ class TerminalFirstRuntime implements vscode.Disposable {
   private async openProjectMergeRequest(argument: unknown): Promise<void> {
     const project = this.resolveRegisteredProject(argument);
     if (!project) { return; }
-    const projectSessions = listWorkSessions().filter(session => session.projectName === project.projectName);
-    const knownUrl = projectSessions.flatMap(session => session.providerBindings)
-      .slice().reverse()
-      .find(binding => binding.provider === 'gitlab' && binding.resource === 'merge-request' && binding.url)?.url;
-    const linkedTicket = Object.values(this.state.state?.tickets || {}).find(ticket =>
-      ticket.launch_project === project.projectName || ticket.projects.includes(project.projectName)
-    );
-    const ticketMrUrl = linkedTicket?.mr?.url;
+    const projectSessions = listWorkSessions({ kind: 'ticket', status: 'active' })
+      .filter(session => session.projectName === project.projectName);
+    const knownUrl = latestGitLabMergeRequestBindingAcrossSessions(projectSessions)?.url;
+    const linkedTickets = Object.entries(this.state.state?.tickets || {})
+      .filter(([, ticket]) => ticket.launch_project === project.projectName || ticket.projects.includes(project.projectName))
+      .sort(([, left], [, right]) => String(right.updated || '').localeCompare(String(left.updated || '')));
+    const ticketMrUrl = linkedTickets
+      .map(([ticketKey, ticket]) => this.effectiveTicket(ticketKey, ticket).mr)
+      .find(mr => mr?.state === 'opened' && mr.url)?.url;
     if (knownUrl || ticketMrUrl) {
       await this.openHttpUrl(knownUrl || ticketMrUrl || '');
       return;

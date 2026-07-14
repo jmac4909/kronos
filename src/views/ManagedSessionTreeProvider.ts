@@ -54,10 +54,11 @@ export class ManagedSessionTreeProvider implements vscode.TreeDataProvider<Sessi
       const state = this.safeLoadState();
       const projects = listLocalProjects(state);
       if (projects.length === 0) { return [new ManagedSessionMessageTreeItem('project')]; }
+      const sessions = this.safeLoadWorkSessions();
       return Promise.all(projects.map(async project => {
         const evidence = await readProjectGitEvidence(project.path, { includeDiff: false });
         const config = state?.projects[project.name]?.config || {};
-        const linkedSessionCount = this.safeLoadWorkSessions().filter(session =>
+        const linkedSessionCount = sessions.filter(session =>
           session.projectName === project.name && session.kind === 'ticket' && session.status === 'active' && session.monitoring.enabled
         ).length;
         return new RegisteredProjectTreeItem(

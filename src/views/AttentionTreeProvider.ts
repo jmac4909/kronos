@@ -8,6 +8,7 @@ import {
   WorkSessionProviderBinding,
   WorkSessionRecord,
   listWorkSessions,
+  newestWorkSessionProviderBinding,
 } from '../services/workSessionStore';
 
 export interface AttentionCommandTarget {
@@ -223,10 +224,14 @@ export class AttentionMessageTreeItem extends vscode.TreeItem {
 
 function providerUrlForEvent(event: MonitorEvent, session: WorkSessionRecord | undefined): string | undefined {
   if (!session || !isProviderSource(event.source)) { return undefined; }
-  const bindings = session.providerBindings.filter(binding => binding.provider === event.source);
-  const exact = bindings.find(binding => binding.subjectId === event.subject?.id && binding.url);
-  const resourceMatched = bindings.find(binding => binding.url && subjectMatchesResource(event.subject?.kind, binding));
-  const candidate = exact?.url || resourceMatched?.url || bindings.find(binding => binding.url)?.url;
+  const providerBinding = (predicate: (binding: WorkSessionProviderBinding) => boolean) =>
+    newestWorkSessionProviderBinding(
+      session.providerBindings,
+      binding => binding.provider === event.source && Boolean(binding.url) && predicate(binding),
+    );
+  const exact = providerBinding(binding => binding.subjectId === event.subject?.id);
+  const resourceMatched = providerBinding(binding => subjectMatchesResource(event.subject?.kind, binding));
+  const candidate = exact?.url || resourceMatched?.url || providerBinding(() => true)?.url;
   return candidate ? safePublicHttpUrl(candidate) : undefined;
 }
 
