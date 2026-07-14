@@ -15,7 +15,7 @@ All notable changes to the Kronos preview are documented here.
 
 ### Changed
 
-- Moved the Work catalog onto the shared bounded atomic state layer, including safe private-directory creation that rejects symbolic-link ancestors and recovery by replacing an oversized prior regular file with valid bounded state.
+- Moved the Work catalog, work-session directory creation, and provider-config template creation onto the shared bounded atomic state layer, including safe private-directory creation that rejects symbolic-link ancestors and recovery by replacing an oversized prior regular file with valid bounded state.
 - Moved durable work-session records onto the shared cross-platform private-file primitive and added an explicit 4 MiB record cap, so oversized or path-raced session state fails closed and remains visible in Doctor.
 - Made all Jira, MR, CI, and Git composer placement use one exact managed-terminal attachment guard and exactly-once non-submitting send transition; detachment/rebinding during fetch cancels the stale composer and late queued messages cannot place a second line.
 - Unified Setup, Doctor, Projects, and project integration around one secret-free provider-readiness model; added direct private-config editing with a comment-only private template, immediate Poll Now verification, and one bounded action on every readiness row.

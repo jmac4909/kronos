@@ -1576,6 +1576,11 @@ test('provider environment reads reject target and parent symbolic links', t => 
   const linkedParent = providerEnv.loadProviderEnv({ filePath: path.join(parentLink, '.env'), env: parentEnv });
   assert.match(linkedParent.error || '', /symbolic link/i);
   assert.deepEqual(parentEnv, {});
+  assert.throws(
+    () => providerEnv.ensureProviderEnvTemplate(path.join(parentLink, 'must-not-create.env')),
+    /symbolic link/i,
+  );
+  assert.equal(fs.existsSync(path.join(realParent, 'must-not-create.env')), false);
 });
 
 test('legacy ~/.claude/kronos state migrates once without helper scripts', t => {

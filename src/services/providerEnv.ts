@@ -1,7 +1,6 @@
-import * as fs from 'fs';
 import * as path from 'path';
 import { unknownErrorMessage } from './errorUtils';
-import { writePrivateTextFileAtomically } from './privateFilePrimitives';
+import { ensurePrivateDirectoryPath, writePrivateTextFileAtomically } from './privateFilePrimitives';
 import { KRONOS_DIR, readBoundedPrivateUtf8File } from './stateStore';
 
 export interface ProviderEnvLoadResult {
@@ -89,12 +88,7 @@ export function ensureProviderEnvTemplate(filePath = defaultProviderEnvPath()): 
     if (!hasErrorCode(error, 'ENOENT')) { throw error; }
   }
   const directoryPath = path.dirname(path.resolve(filePath));
-  fs.mkdirSync(directoryPath, { recursive: true, mode: 0o700 });
-  const directory = fs.lstatSync(directoryPath);
-  if (!directory.isDirectory() || directory.isSymbolicLink()) {
-    throw new Error('Kronos provider environment directory must be a real directory.');
-  }
-  if (process.platform !== 'win32') { fs.chmodSync(directoryPath, 0o700); }
+  ensurePrivateDirectoryPath(directoryPath, 'Kronos provider environment file');
   writePrivateTextFileAtomically(filePath, PROVIDER_ENV_TEMPLATE, {
     label: 'Kronos provider environment file',
     maxBytes: MAX_PROVIDER_ENV_BYTES,

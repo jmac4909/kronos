@@ -6,7 +6,11 @@ import { unknownErrorMessage } from './errorUtils';
 import { isRecord } from './records';
 import { redactSensitiveTokens } from './sensitiveText';
 import { normalizeProviderPublicUrl } from './providerUrls';
-import { readPrivateTextFileIfPresent, writePrivateTextFileAtomically } from './privateFilePrimitives';
+import {
+  ensurePrivateDirectoryPath,
+  readPrivateTextFileIfPresent,
+  writePrivateTextFileAtomically,
+} from './privateFilePrimitives';
 import { KRONOS_DIR } from './stateStore';
 
 export type WorkSessionStatus = 'active' | 'closed';
@@ -1030,31 +1034,7 @@ function requireActiveSession(record: WorkSessionRecord): void {
 }
 
 function ensurePrivateDirectory(directoryPath: string, label: string): void {
-  const resolved = path.resolve(directoryPath);
-  const parsed = path.parse(resolved);
-  let current = parsed.root;
-  assertSafeDirectory(current, `${label} root`);
-
-  for (const component of pathComponents(resolved)) {
-    const candidate = path.join(current, component);
-    const existing = inspectSafePathComponents(candidate, label);
-    if (!existing) {
-      assertSafeDirectory(current, `${label} parent`);
-      try {
-        fs.mkdirSync(candidate, { mode: DIRECTORY_MODE });
-      } catch (error: unknown) {
-        if (!hasErrorCode(error, 'EEXIST')) { throw error; }
-      }
-      assertSafeDirectory(candidate, label);
-      setPrivateMode(candidate, DIRECTORY_MODE);
-    } else if (!existing.isDirectory()) {
-      throw new Error(`${label} has a non-directory path component: ${candidate}`);
-    }
-    current = candidate;
-  }
-
-  assertSafeDirectory(resolved, label);
-  setPrivateMode(resolved, DIRECTORY_MODE);
+  ensurePrivateDirectoryPath(directoryPath, label, DIRECTORY_MODE);
 }
 
 function assertSafeDirectory(directoryPath: string, label: string): void {
@@ -1150,16 +1130,6 @@ function writePrivateFileAtomic(filePath: string, content: string): void {
     temporaryPrefix: 'work-session',
     fileMode: FILE_MODE,
   });
-}
-
-function setPrivateMode(filePath: string, mode: number): void {
-  if (process.platform !== 'win32') {
-    const stat = inspectSafePathComponents(filePath, 'private Kronos path');
-    if (!stat || (!stat.isDirectory() && !stat.isFile())) {
-      throw new Error(`Private Kronos path is unsafe: ${filePath}`);
-    }
-    fs.chmodSync(filePath, mode);
-  }
 }
 
 function boundedInteger(value: number | undefined, fallback: number, minimum: number, maximum: number): number {
