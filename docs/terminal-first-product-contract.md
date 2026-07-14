@@ -117,7 +117,7 @@ Eligible items include:
 - partial provider reads and monitoring blockers;
 - unsafe or unavailable local monitoring state.
 
-A ticket-linked item may open its ticket workspace. Applicable items may open a validated provider URL, open an editable composer for fresh MR/CI context, place the reviewed reference into the explicitly attached terminal without submission, or be acknowledged locally. If multiple retained SonarQube branch targets or Jenkins builds are available, opening the provider uses a native latest-first picker; otherwise it opens directly. SonarQube dashboard URLs may retain only the non-secret `id` and `branch` routing parameters. Acknowledgement never changes provider state.
+A ticket-linked item may open its ticket workspace. Applicable items may open a validated provider URL, open an editable composer for fresh MR/CI context, place the reviewed reference into the explicitly attached terminal without submission, or be acknowledged locally. If multiple retained SonarQube branch targets or Jenkins builds are available, opening the provider uses a native latest-first picker; otherwise it opens directly. Choosing a SonarQube branch also makes that branch the project's local monitoring target, records the operator decision, and refreshes read-only polling. SonarQube dashboard URLs may retain only the non-secret `id` and `branch` routing parameters. Acknowledgement never changes provider state.
 
 The first successful merge-request observation creates one durable transition in Attention: informational when healthy and warning-level when it already needs review. Its comparison baseline is recorded at the same time. Unchanged subsequent polling results do not create new Attention items.
 

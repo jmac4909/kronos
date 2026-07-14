@@ -43,7 +43,7 @@ export function setLocalProjectSonarTarget(
   }
   const branch = safeSingleLine(branchValue, 500);
   if (project.config.sonar_project_key === projectKey
-    && (!branch || project.config.default_branch === branch)) {
+    && (!branch || project.config.sonar_branch === branch)) {
     return state;
   }
   return {
@@ -55,7 +55,7 @@ export function setLocalProjectSonarTarget(
         config: {
           ...project.config,
           sonar_project_key: projectKey,
-          ...(branch ? { default_branch: branch } : {}),
+          ...(branch ? { sonar_branch: branch } : {}),
         },
       },
     },

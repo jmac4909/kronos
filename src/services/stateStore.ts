@@ -153,6 +153,7 @@ function normalizeProjectConfig(value: unknown): ProjectConfig {
   copyString(raw, config, 'gitlab_project_path');
   copyString(raw, config, 'jenkins_url');
   copyString(raw, config, 'sonar_project_key');
+  copyString(raw, config, 'sonar_branch');
   copyString(raw, config, 'base_branch');
   copyString(raw, config, 'default_branch');
   const gitlabProjectId = safePositiveInteger(raw['gitlab_project_id']);

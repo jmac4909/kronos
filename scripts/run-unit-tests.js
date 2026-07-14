@@ -2822,6 +2822,10 @@ test('extension activation registers the bounded surface and explicit launch com
     await commandHandlers.get('kronos.openProvider')(attentionItem);
     assert.deepEqual(lastSinglePickItems.map(item => item.label), ['feature/one', 'feature/two']);
     assert.equal(openedExternalUrls.at(-1), 'https://sonar.example/dashboard?id=fixture&branch=feature%2Ftwo');
+    const selectedSonarProject = stateStore.readStateFileWithIssues().state.projects.fixture;
+    assert.equal(selectedSonarProject.config.sonar_project_key, 'fixture');
+    assert.equal(selectedSonarProject.config.sonar_branch, 'feature/two', 'the chosen Attention branch becomes the monitored project target');
+    assert.equal(selectedSonarProject.config.default_branch, 'main', 'Sonar branch selection does not change the GitLab target branch');
     workSessions.removeWorkSession(siblingProjectSession.id);
     workSessions.removeWorkSession(attentionSession.id);
 

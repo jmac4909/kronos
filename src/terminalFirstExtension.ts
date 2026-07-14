@@ -2235,7 +2235,38 @@ class TerminalFirstRuntime implements vscode.Disposable {
       void vscode.window.showWarningMessage('This Attention item has no validated provider URL.');
       return;
     }
+    if (stringProperty(argument, 'source') === 'sonar') {
+      this.selectMonitoredSonarBranch(argument, providerUrl);
+    }
     await this.openHttpUrl(providerUrl);
+  }
+
+  private selectMonitoredSonarBranch(argument: unknown, providerUrl: string): void {
+    try {
+      const url = new URL(providerUrl);
+      const projectKey = url.searchParams.get('id')?.trim();
+      const branch = url.searchParams.get('branch')?.trim();
+      const sessionId = stringProperty(argument, 'workSessionId') || stringProperty(argument, 'sessionId');
+      const session = sessionId ? readWorkSession(sessionId) : null;
+      const projectName = session?.projectName;
+      if (!projectName || !projectKey || !branch || !this.state.state?.projects[projectName]) { return; }
+      const config = this.state.state.projects[projectName]?.config;
+      if (config?.sonar_project_key === projectKey && config.sonar_branch === branch) { return; }
+      this.state.setLocalProjectSonarTarget(projectName, projectKey, branch);
+      appendMonitorEvent({
+        sessionId: session.id,
+        type: 'decision.recorded',
+        source: 'operator',
+        summary: `${projectName} SonarQube monitoring branch changed to ${branch}.`,
+        subject: { kind: 'quality-gate', id: `${projectKey}:${branch}`, ...workSessionTicketMetadata(session) },
+        metadata: { projectName, projectKey, branch, monitoringTargetChanged: true },
+      });
+      this.refreshTerminalFirstViews();
+      void this.pollProviders(false);
+      void vscode.window.showInformationMessage(`${projectName} will now monitor SonarQube branch ${branch}.`);
+    } catch (error: unknown) {
+      this.log('Could not save the selected SonarQube branch.', unknownErrorMessage(error, 'Invalid SonarQube branch target.'));
+    }
   }
 
   private async openSetup(): Promise<void> {

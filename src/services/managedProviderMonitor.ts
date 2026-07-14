@@ -1526,7 +1526,8 @@ export function configuredCiPollingTargets(
     || jenkinsJobBinding?.url
     || ticket?.build?.url
     || jenkinsBuildBinding?.url;
-  const configuredBranch = ticket?.mr?.source_branch
+  const configuredBranch = optionalTrimmedStringFromUnknown(config.sonar_branch)
+    || ticket?.mr?.source_branch
     || ticket?.mr?.sourceBranch
     || ticket?.mr?.branch
     || ticket?.mr?.head_branch
@@ -1575,7 +1576,8 @@ export function configuredSonarBranchName(
 ): string | null {
   const ticket = state?.tickets[ticketKey];
   const config = projectConfigurationForTicket(state, ticket);
-  const branch = ticket?.mr?.source_branch
+  const branch = optionalTrimmedStringFromUnknown(config?.sonar_branch)
+    || ticket?.mr?.source_branch
     || ticket?.mr?.sourceBranch
     || ticket?.mr?.branch
     || ticket?.mr?.head_branch

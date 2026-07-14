@@ -19,6 +19,8 @@ export interface ProjectConfig {
   gitlab_project_path?: string;
   jenkins_url?: string;
   sonar_project_key?: string;
+  /** Explicit SonarQube monitoring branch, independent of the GitLab target branch. */
+  sonar_branch?: string;
   base_branch?: string;
   default_branch?: string;
   extra_dirs?: string[];
