@@ -462,6 +462,24 @@ export function detachWorkSessionTerminal(
   });
 }
 
+/** Records that the operator-owned VS Code terminal itself exited. */
+export function markWorkSessionTerminalClosed(
+  sessionId: string,
+  bindingId: string,
+  reason?: string,
+  options: WorkSessionStoreOptions = {},
+): WorkSessionRecord {
+  return mutateWorkSession(sessionId, options, (record, at) => {
+    const safeBindingId = normalizeEntityId(bindingId, 'terminal binding id');
+    const binding = record.terminals.find(candidate => candidate.id === safeBindingId);
+    if (!binding) { throw new Error(`Terminal binding not found: ${safeBindingId}`); }
+    binding.status = 'closed';
+    binding.detachedAt = at;
+    binding.detachReason = optionalSingleLine(reason, 'terminal close reason', 500)
+      || 'Terminal closed by the operator.';
+  });
+}
+
 export function addWorkSessionProviderBinding(
   sessionId: string,
   input: AddWorkSessionProviderBindingInput,
@@ -580,9 +598,9 @@ export function closeWorkSession(
     record.monitoring.enabled = false;
     for (const terminal of record.terminals) {
       if (terminal.status === 'attached') {
-        terminal.status = 'closed';
+        terminal.status = 'detached';
         terminal.detachedAt = at;
-        terminal.detachReason = 'Work session closed.';
+        terminal.detachReason = 'Work session management stopped; terminal remains operator-owned.';
       }
     }
   });

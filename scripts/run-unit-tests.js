@@ -33,6 +33,7 @@ const insertion = require('../out/services/terminalContextInsertion.js');
 const { createOperatorTerminalRegistry } = require('../out/services/operatorTerminalRegistry.js');
 const claudeTerminalLauncher = require('../out/services/claudeTerminalLauncher.js');
 const workSessions = require('../out/services/workSessionStore.js');
+const workSessionLifecycle = require('../out/services/workSessionLifecycle.js');
 const pipelineTransitions = require('../out/services/pipelineTransitions.js');
 const mergeRequestTransitions = require('../out/services/gitlabMergeRequestTransitions.js');
 const mergeRequestMonitorStore = require('../out/services/gitlabMergeRequestMonitorStore.js');
@@ -2008,13 +2009,39 @@ test('work-session lifecycle never requires a terminal process owner', () => {
     processId: 123,
   }, options);
   assert.equal(session.terminals[0].status, 'attached');
+  assert.deepEqual(workSessionLifecycle.workSessionLifecycle(session, 1), {
+    management: 'active',
+    terminal: 'attached',
+    monitoring: 'running',
+    canInsertContext: true,
+    canPollProviders: true,
+    canReconnect: false,
+  });
   session = workSessions.setWorkSessionMonitoring(session.id, false, undefined, options);
   assert.equal(session.monitoring.enabled, false);
+  assert.equal(workSessionLifecycle.workSessionLifecycle(session, 1).monitoring, 'paused');
   session = workSessions.detachWorkSessionTerminal(session.id, 'terminal-1', 'operator detached', options);
   assert.equal(session.terminals[0].status, 'detached');
+  assert.equal(workSessionLifecycle.workSessionLifecycle(session, 0).terminal, 'detached');
+  session = workSessions.markWorkSessionTerminalClosed(session.id, 'terminal-1', 'operator closed', options);
+  assert.equal(session.terminals[0].status, 'closed');
+  assert.equal(workSessionLifecycle.workSessionLifecycle(session, 0).terminal, 'closed');
+  session = workSessions.attachWorkSessionTerminal(session.id, {
+    bindingId: 'terminal-2',
+    name: 'still operator-owned',
+  }, options);
   session = workSessions.closeWorkSession(session.id, options);
   assert.equal(session.status, 'closed');
   assert.equal(session.monitoring.enabled, false);
+  assert.equal(session.terminals.find(binding => binding.id === 'terminal-2').status, 'detached');
+  assert.deepEqual(workSessionLifecycle.workSessionLifecycle(session, 0), {
+    management: 'stopped',
+    terminal: 'detached',
+    monitoring: 'stopped',
+    canInsertContext: false,
+    canPollProviders: false,
+    canReconnect: true,
+  });
   assert.equal(workSessions.listWorkSessions(options).length, 1);
 });
 
@@ -3344,6 +3371,11 @@ test('extension activation registers the bounded surface and explicit launch com
     assert.deepEqual(createdTerminals[1].actions.at(-1), ['show', false], 'selecting a Session must open its attached terminal');
 
     closeTerminalHandler(createdTerminals[1].terminal);
+    assert.equal(
+      workSessions.getWorkSessionByTicket('JIRA-123').terminals.at(-1).status,
+      'closed',
+      'a terminal exit is distinct from an operator detach or management stop',
+    );
     const reconnectedActions = [];
     const reconnectedTerminal = {
       name: 'Restored JIRA-123 terminal',

@@ -101,6 +101,8 @@ Selecting any Session means “open its terminal.” A live attachment is focuse
 
 Stopping management disables monitoring and detaches the in-memory association. It never closes the terminal.
 
+Session lifecycle has three independent axes: management is active or stopped; the terminal relationship is none, attached, detached, or closed; and monitoring is running, paused, ineligible, or stopped. Only a live in-memory VS Code Terminal binding is attached. A persisted attachment after reload is detached until explicit reconnect. A terminal close event records closed terminal history while leaving the Session available for a new explicit reconnect. Stopping management records stopped management and detached terminal metadata because Kronos did not close the operator-owned terminal.
+
 ### Projects
 
 Projects is the registered local repository inventory. It is a peer of Sessions rather than a nested session section, because repository state and terminal lifecycle are independent concerns.

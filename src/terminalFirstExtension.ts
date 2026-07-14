@@ -47,6 +47,7 @@ import {
   getWorkSessionForTicketContext,
   listWorkSessionStoreIssues,
   listWorkSessions,
+  markWorkSessionTerminalClosed,
   readWorkSession,
   recordWorkSessionContextArtifact,
   removeWorkSession,
@@ -58,6 +59,7 @@ import {
   workSessionEventContext,
   workSessionTicketMetadata,
 } from './services/workSessionStore';
+import { workSessionLifecycle } from './services/workSessionLifecycle';
 import {
   acknowledgeMonitorEvent,
   appendMonitorEvent,
@@ -1033,7 +1035,12 @@ class TerminalFirstRuntime implements vscode.Disposable {
     const monitoringSession = session?.ticketKeys.includes(ticketKey)
       ? { ...session, ticketKey }
       : null;
-    const polling = monitoringSession?.status === 'active' && monitoringSession.monitoring.enabled;
+    const polling = monitoringSession
+      ? workSessionLifecycle(
+        monitoringSession,
+        this.operatorTerminals.listBindings(monitoringSession.id).length,
+      ).canPollProviders
+      : false;
     const gitLabTarget = monitoringSession ? configuredGitLabPollingTarget(this.state.state, monitoringSession) : null;
     const gitLabConfigured = Boolean(gitLabTarget || config.gitlab_project_id || config.gitlab_project_path);
     const gitLab: ProviderPollingViewStatus = !gitLabConfigured
@@ -2210,7 +2217,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
       void vscode.window.showInformationMessage('Insert at least one Jira ticket context before enabling project provider monitoring.');
       return;
     }
-    if (session.status !== 'active') {
+    if (workSessionLifecycle(session, this.operatorTerminals.listBindings(session.id).length).management !== 'active') {
       void vscode.window.showWarningMessage(`Reattach ${workSessionEventContext(session).label} before enabling monitoring.`);
       return;
     }
@@ -2793,7 +2800,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
     const binding = this.operatorTerminals.detachTerminal(terminal);
     if (!binding) { return; }
     try {
-      detachWorkSessionTerminal(binding.sessionId, binding.bindingId, 'Terminal closed by the operator.');
+      markWorkSessionTerminalClosed(binding.sessionId, binding.bindingId, 'Terminal closed by the operator.');
       this.appendTerminalDetachedEvent(binding, 'closed-by-operator');
     } catch (error: unknown) {
       this.log('Could not persist a closed terminal attachment.', unknownErrorMessage(error, 'Terminal detach failed.'));

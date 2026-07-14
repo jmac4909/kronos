@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { OperatorTerminalRegistry } from '../services/operatorTerminalRegistry';
 import { WorkSessionRecord, listWorkSessions } from '../services/workSessionStore';
 import { readProjectGitBranch } from '../services/projectCatalog';
+import { workSessionLifecycle } from '../services/workSessionLifecycle';
 
 export interface ManagedSessionCommandTarget {
   workSessionId: string;
@@ -58,7 +59,8 @@ export class ManagedSessionTreeItem extends vscode.TreeItem implements ManagedSe
     if (session.kind === 'ticket') { this.ticketKey = session.ticketKey; }
     this.liveTerminalBindingIds = [...liveTerminalBindingIds].sort();
     const liveCount = this.liveTerminalBindingIds.length;
-    const attached = session.status === 'active' && liveCount > 0;
+    const lifecycle = workSessionLifecycle(session, liveCount);
+    const attached = lifecycle.terminal === 'attached';
     const commandTarget: ManagedSessionCommandTarget = {
       workSessionId: this.workSessionId,
       liveTerminalBindingIds: this.liveTerminalBindingIds,
@@ -99,20 +101,29 @@ function sessionSortOrder(left: WorkSessionRecord, right: WorkSessionRecord): nu
 }
 
 function sessionDescription(session: WorkSessionRecord, liveCount: number): string {
+  const lifecycle = workSessionLifecycle(session, liveCount);
   const branch = session.projectPath ? readProjectGitBranch(session.projectPath)?.branch : undefined;
   const project = branch ? `${session.projectName || 'project'} @ ${branch} • ` : '';
-  if (session.status === 'closed') { return `${project}management closed`; }
+  if (lifecycle.management === 'stopped') { return `${project}management stopped`; }
   const contexts = session.ticketKeys.length > 0
     ? `${session.ticketKeys.length} ticket context${session.ticketKeys.length === 1 ? '' : 's'} • `
     : 'no ticket context • ';
+  const terminal = lifecycle.terminal === 'attached'
+    ? `${liveCount} terminal${liveCount === 1 ? '' : 's'} attached`
+    : lifecycle.terminal === 'closed' ? 'terminal closed • reconnect available'
+      : lifecycle.terminal === 'none' ? 'no terminal attached'
+        : 'terminal detached';
   if (session.kind === 'standalone') {
-    return liveCount === 0 ? `${project}${contexts}terminal detached` : `${project}${contexts}${liveCount} terminal${liveCount === 1 ? '' : 's'} attached`;
+    return `${project}${contexts}${terminal}`;
   }
-  const monitoring = session.monitoring.enabled ? `auto-poll ${session.monitoring.lastState || 'waiting'}` : 'auto-poll paused';
-  return liveCount === 0 ? `${project}${contexts}terminal detached • ${monitoring}` : `${project}${contexts}${liveCount} terminal${liveCount === 1 ? '' : 's'} attached • ${monitoring}`;
+  const monitoring = lifecycle.monitoring === 'running'
+    ? `auto-poll ${session.monitoring.lastState || 'waiting'}`
+    : lifecycle.monitoring === 'paused' ? 'auto-poll paused' : 'auto-poll unavailable';
+  return `${project}${contexts}${terminal} • ${monitoring}`;
 }
 
 function sessionTooltip(session: WorkSessionRecord, liveCount: number): string {
+  const lifecycle = workSessionLifecycle(session, liveCount);
   const terminalCounts = { attached: 0, detached: 0, closed: 0 };
   for (const terminal of session.terminals) { terminalCounts[terminal.status] += 1; }
   const providerBindings = session.providerBindings.length > 0
@@ -123,7 +134,9 @@ function sessionTooltip(session: WorkSessionRecord, liveCount: number): string {
     `Work session: ${session.id}`,
     `Ticket contexts: ${session.ticketKeys.join(', ') || 'none'}`,
     `Title: ${session.title}`,
-    `Status: ${session.status}`,
+    `Management lifecycle: ${lifecycle.management}`,
+    `Terminal lifecycle: ${lifecycle.terminal}`,
+    `Monitoring lifecycle: ${lifecycle.monitoring}`,
     'Select this session to open its attached terminal. If detached, choose an open terminal to reconnect.',
     'Terminal ownership: operator',
     `Live terminal bindings: ${liveCount}`,
