@@ -2482,6 +2482,28 @@ test('extension activation registers the bounded surface and explicit launch com
       .contributes.commands.map(command => command.command);
     assert.deepEqual(registeredCommands, expectedCommands);
 
+    await commandHandlers.get('kronos.openJiraBoard')();
+    const jiraBoardPanel = createdWebviewPanels.find(panel => panel.viewType === 'kronosJiraWorkBoard');
+    assert.ok(jiraBoardPanel, 'the Jira board command must open its dedicated panel');
+    assert.match(jiraBoardPanel.webview.html, /Jira Work Board/);
+    await commandHandlers.get('kronos.openJiraBoard')();
+    assert.equal(createdWebviewPanels.filter(panel => panel.viewType === 'kronosJiraWorkBoard').length, 1);
+    assert.deepEqual(jiraBoardPanel.revealCalls, [vscode.ViewColumn.One]);
+
+    await commandHandlers.get('kronos.openTicketWorkspace')({ ticketKey: 'JIRA-123' });
+    const ticketWorkspacePanel = createdWebviewPanels.find(panel => panel.viewType === 'kronosTicketWorkspace');
+    assert.ok(ticketWorkspacePanel, 'the ticket workspace command must open its dedicated panel');
+    assert.match(ticketWorkspacePanel.webview.html, /JIRA-123/);
+    assert.match(ticketWorkspacePanel.webview.html, /Start Claude/);
+    const workProvider = registeredTreeProviders.get('kronosWork');
+    workProvider.setFilter({ query: 'fixture' });
+    singlePickHandler = items => items.find(item => item.id === 'clear');
+    await commandHandlers.get('kronos.filterWork')();
+    assert.deepEqual(workProvider.getFilter(), {});
+    workProvider.setFilter({ completion: 'completed' });
+    await commandHandlers.get('kronos.clearWorkFilter')();
+    assert.deepEqual(workProvider.getFilter(), {});
+
     const failureSession = workSessions.createOrGetWorkSessionByTicket({
       ticketKey: 'JIRA-654',
       title: 'Attention failure deduplication fixture',
@@ -2533,6 +2555,11 @@ test('extension activation registers the bounded surface and explicit launch com
       ['Jenkins build 32', 'Jenkins build 31'],
       'retained Jenkins build targets are available from Attention',
     );
+    await commandHandlers.get('kronos.acknowledgeAttention')(retainedFailureItems[0]);
+    assert.ok(monitorEventStore.listMonitorEvents({ sessionId: failureSession.id }).some(event =>
+      event.type === 'notification.acknowledged'
+      && event.metadata?.acknowledgedEventId === retainedFailureItems[0].eventId
+    ));
     workSessions.removeWorkSession(failureSession.id);
 
     const attentionSession = workSessions.createOrGetWorkSessionByTicket({
@@ -2588,8 +2615,18 @@ test('extension activation registers the bounded surface and explicit launch com
     assert.ok(doctorPanel);
     assert.match(doctorPanel.webview.html, /Kronos Doctor/);
     assert.match(doctorPanel.webview.html, /Claude launch settings/);
+    await commandHandlers.get('kronos.doctor')();
+    assert.equal(createdWebviewPanels.filter(panel => panel.viewType === 'kronosDoctor').length, 1);
+    assert.deepEqual(doctorPanel.revealCalls, [vscode.ViewColumn.One]);
     await setupPanel.receive({ command: 'openClaudeSettings' });
     assert.deepEqual(executedCommands.at(-1), ['workbench.action.openSettings', '@ext:jmacke01.kronos claude']);
+    await commandHandlers.get('kronos.settings')();
+    assert.deepEqual(executedCommands.at(-1), ['workbench.action.openSettings', 'Kronos Terminal Work Companion']);
+
+    singlePickHandler = items => items.find(item => item.project?.name === 'fixture');
+    await commandHandlers.get('kronos.chooseTicketProject')({ ticketKey: 'JIRA-123' });
+    assert.equal(stateStore.readStateFileWithIssues().state.tickets['JIRA-123'].launch_project, 'fixture');
+    assert.equal(workSessions.getWorkSessionByTicket('JIRA-123'), null, 'choosing a project before launch must not create a session');
 
     const ideaProjectsRoot = path.join(tempRoot, 'IdeaProjects');
     const pycharmProjectsRoot = path.join(tempRoot, 'PycharmProjects');
@@ -2620,6 +2657,11 @@ test('extension activation registers the bounded surface and explicit launch com
     assert.match(integrationPanel.webview.html, /Jenkins job URL/);
     assert.match(integrationPanel.webview.html, /SonarQube project key/);
     await integrationPanel.receive({ command: 'cancel' });
+    await commandHandlers.get('kronos.configureProjectIntegrations')({ projectName: 'python-service', projectPath: pycharmProject });
+    const reopenedIntegrationPanel = createdWebviewPanels.at(-1);
+    assert.equal(reopenedIntegrationPanel.viewType, 'kronosProjectIntegrationSetup');
+    assert.match(reopenedIntegrationPanel.webview.html, /python-service/);
+    await reopenedIntegrationPanel.receive({ command: 'cancel' });
 
     const unregisteredProject = path.join(ideaProjectsRoot, 'new-service');
     fs.mkdirSync(path.join(unregisteredProject, '.git'), { recursive: true });
@@ -2663,6 +2705,9 @@ test('extension activation registers the bounded surface and explicit launch com
       ['show', false],
       ['sendText', 'claude', true],
     ]);
+    await commandHandlers.get('kronos.openWorkSessionAudit')({ workSessionId: ticketSession.id });
+    assert.match(openedTextDocuments.at(-1).content, /JIRA\\-123/);
+    assert.match(openedTextDocuments.at(-1).content, /does not collect operator terminal input or output/);
     await commandHandlers.get('kronos.insertJiraContext')({ ticketKey: 'JIRA-123' });
     const composerPanel = createdWebviewPanels.find(panel => panel.viewType === 'kronosContextComposer');
     assert.ok(composerPanel, 'Jira insertion must open the editable context composer');
@@ -2772,6 +2817,10 @@ test('extension activation registers the bounded surface and explicit launch com
     assert.equal(reconnectedActions.length, reconnectActionsBeforeDetach, 'detaching must not write to or close the terminal');
     assert.ok(vscode.window.terminals.includes(reconnectedTerminal), 'the detached terminal remains open');
     assert.equal(workSessions.getWorkSessionByTicket('JIRA-123').terminals.at(-1).status, 'detached');
+    vscode.window.activeTerminal = reconnectedTerminal;
+    await commandHandlers.get('kronos.reattachWorkSessionTerminal')({ workSessionId: ticketSession.id });
+    assert.equal(workSessions.getWorkSessionByTicket('JIRA-123').terminals.at(-1).status, 'attached');
+    assert.equal(reconnectedActions.length, reconnectActionsBeforeDetach, 'reattaching must not write to the terminal');
 
     warningMessageResult = 'Stop Managing';
     await commandHandlers.get('kronos.closeWorkSession')({ workSessionId: racedSession.id });
