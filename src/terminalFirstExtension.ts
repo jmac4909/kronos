@@ -283,6 +283,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
     );
     this.registerCommands();
     this.startTimers();
+    void this.pollProviders(false);
     this.log('Kronos terminal-first runtime activated.', 'No agent, terminal, project command, or Git mutation was started automatically.');
   }
 

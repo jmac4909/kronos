@@ -280,6 +280,70 @@ test('managed provider polling automatically discovers and locally binds a proje
   }
 });
 
+test('managed provider polling backfills a durable binding from a catalog MR target', async () => {
+  const state = stateStore.emptyWorkCatalog();
+  state.projects.Application = { config: { gitlab_project_path: 'team/application' } };
+  state.tickets['JIRA-901'] = fixtureTicket({
+    summary: 'Catalog MR binding repair',
+    projects: ['Application'],
+    mr: {
+      iid: 91,
+      state: 'opened',
+      review_status: 'pending_review',
+      url: 'https://gitlab.example/team/application/-/merge_requests/91',
+    },
+  });
+  const session = workSessions.createOrGetWorkSessionByTicket({
+    ticketKey: 'JIRA-901',
+    title: 'Catalog MR binding repair',
+    projectName: 'Application',
+  });
+  const originalMonitor = gitLabRestModule.gitlabRestClient.mergeRequestMonitor;
+  gitLabRestModule.gitlabRestClient.mergeRequestMonitor = async () => ({
+    mr: {
+      iid: 91,
+      state: 'opened',
+      title: 'JIRA-901 Catalog MR binding repair',
+      source_branch: 'feature/JIRA-901',
+      target_branch: 'main',
+      web_url: 'https://gitlab.example/team/application/-/merge_requests/91',
+      reviewers: [],
+      updated_at: '2026-07-14T13:00:00.000Z',
+    },
+    notes: [],
+    discussions: [],
+    approvals: { approved: false, approvals_required: 1, approvals_left: 1, approved_by: [] },
+    pipelines: [],
+    jobs: [],
+    fetchedAt: '2026-07-14T13:00:00.000Z',
+    responseBytes: 0,
+    completeness: {
+      notesComplete: true,
+      discussionsComplete: true,
+      approvalsComplete: true,
+      pipelinesComplete: true,
+      jobsComplete: true,
+      testsComplete: true,
+      warnings: [],
+    },
+  });
+  try {
+    const result = await new managedProviderMonitor.ManagedProviderMonitor({ state: () => state }).poll();
+    assert.equal(result.polled, 1);
+    const updated = workSessions.readWorkSession(session.id);
+    assert.ok(updated.providerBindings.some(binding =>
+      binding.provider === 'gitlab'
+        && binding.resource === 'merge-request'
+        && binding.subjectId === '91'
+        && binding.projectId === 'team/application'
+        && binding.url === 'https://gitlab.example/team/application/-/merge_requests/91'
+    ));
+  } finally {
+    gitLabRestModule.gitlabRestClient.mergeRequestMonitor = originalMonitor;
+    workSessions.removeWorkSession(session.id);
+  }
+});
+
 test('effective ticket MR rejects stale catalog and monitor identities after a newer local binding', () => {
   const staleDigest = mergeRequestTransitions.normalizeGitLabMergeRequestDigest({
     mr: {

@@ -61,6 +61,7 @@ import {
   listWorkSessions,
   addWorkSessionProviderBinding,
   recordWorkSessionMonitoringResult,
+  type AddWorkSessionProviderBindingInput,
   type TicketWorkSessionRecord,
 } from './workSessionStore';
 import { optionalTrimmedStringFromUnknown } from './records';
@@ -202,6 +203,7 @@ export class ManagedProviderMonitor {
     const state = this.options.state();
     const ticket = state?.tickets[session.ticketKey];
     let target = configuredGitLabPollingTarget(state, session);
+    let discoveryDetail: string | undefined;
     if (!target) {
       const config = projectConfigurationForTicket(state, ticket);
       const configuredProject = config.gitlab_project_id || config.gitlab_project_path;
@@ -218,23 +220,12 @@ export class ManagedProviderMonitor {
             ...(sourceBranch && !sourceBranch.startsWith('detached@') ? { sourceBranch } : {}),
           });
           if (discovery.match) {
-            const bindingInput: Parameters<typeof addWorkSessionProviderBinding>[1] = {
-              provider: 'gitlab',
-              resource: 'merge-request',
-              subjectId: String(discovery.match.iid),
-              projectId: String(configuredProject),
-            };
-            if (discovery.match.webUrl) { bindingInput.url = discovery.match.webUrl; }
-            addWorkSessionProviderBinding(session.id, bindingInput);
             target = {
               iid: discovery.match.iid,
               projectIdOrPath: String(configuredProject),
               ...(discovery.match.webUrl ? { providerUrl: discovery.match.webUrl } : {}),
             };
-            this.log(
-              `GitLab monitoring found MR !${discovery.match.iid} for ${session.ticketKey}.`,
-              `Matched automatically by ${discovery.strategy === 'source-branch' ? 'current branch' : 'ticket key'}; the local session binding was updated.`,
-            );
+            discoveryDetail = `Matched automatically by ${discovery.strategy === 'source-branch' ? 'current branch' : 'ticket key'}.`;
           } else {
             const detail = discovery.ambiguous
               ? `Found ${discovery.candidateCount} possible open merge requests; Kronos will not guess.`
@@ -258,6 +249,27 @@ export class ManagedProviderMonitor {
       return { ...emptyResult(), skipped: 1 };
     }
     const { iid, projectIdOrPath, providerUrl } = target;
+    try {
+      session = reconcileProviderBinding(session, {
+        provider: 'gitlab',
+        resource: 'merge-request',
+        subjectId: String(iid),
+        projectId: projectIdOrPath,
+        ...(providerUrl ? { url: providerUrl } : {}),
+      });
+      if (discoveryDetail) {
+        this.log(
+          `GitLab monitoring found MR !${iid} for ${session.ticketKey}.`,
+          `${discoveryDetail} The durable local session binding is ready.`,
+        );
+      }
+    } catch (error: unknown) {
+      this.log(
+        `GitLab monitoring could not bind MR !${iid} to ${session.ticketKey}.`,
+        unknownErrorMessage(error, 'GitLab session binding write failed.'),
+      );
+      return { ...emptyResult(), failures: 1 };
+    }
 
     let snapshot;
     try {
@@ -327,6 +339,13 @@ export class ManagedProviderMonitor {
     try {
       const observedMr = normalizeGitLabMergeRequestDigest(snapshot);
       if (observedMr) {
+        session = reconcileProviderBinding(session, {
+          provider: 'gitlab',
+          resource: 'merge-request',
+          subjectId: String(iid),
+          projectId: projectIdOrPath,
+          ...((observedMr.url || providerUrl) ? { url: observedMr.url || providerUrl } : {}),
+        });
         const previousMr = safeReadGitLabMergeRequestBaseline(session, this.options.log);
         const mrDigest = previousMr
           ? mergeGitLabMergeRequestDigest(previousMr, observedMr) || observedMr
@@ -438,12 +457,43 @@ export class ManagedProviderMonitor {
     session: TicketWorkSessionRecord,
     retainLease: () => boolean,
   ): Promise<ManagedProviderPollResult> {
-    const targets = configuredCiPollingTargets(this.options.state(), session);
+    const state = this.options.state();
+    const targets = configuredCiPollingTargets(state, session);
     const jenkinsUrl = targets.jenkinsUrl;
     const sonarTarget = targets.sonar;
     if (!jenkinsUrl && !sonarTarget) { return emptyResult(); }
 
     let result = emptyResult();
+    try {
+      if (jenkinsUrl) {
+        const savedJenkins = newestProviderBinding(session, 'jenkins', 'build');
+        session = reconcileProviderBinding(session, {
+          id: 'jenkins-build',
+          provider: 'jenkins',
+          resource: 'build',
+          subjectId: state?.tickets[session.ticketKey]?.build
+            ? String(state.tickets[session.ticketKey]?.build?.number)
+            : savedJenkins?.subjectId || 'latest',
+          url: jenkinsUrl,
+        });
+      }
+      if (sonarTarget) {
+        session = reconcileProviderBinding(session, {
+          id: 'sonar-quality-gate',
+          provider: 'sonar',
+          resource: 'quality-gate',
+          subjectId: `${sonarTarget.projectKey}:${sonarTarget.branch}`,
+          projectId: sonarTarget.projectKey,
+          ...(sonarTarget.providerUrl ? { url: sonarTarget.providerUrl } : {}),
+        });
+      }
+    } catch (error: unknown) {
+      this.log(
+        `CI monitoring could not persist provider bindings for ${session.ticketKey}.`,
+        unknownErrorMessage(error, 'CI session binding write failed.'),
+      );
+      return { ...result, failures: 1 };
+    }
     const notices: ManagedProviderNotice[] = [];
     let jenkins: JenkinsBuildContext | undefined;
     let sonar: SonarBranchContext | undefined;
@@ -452,6 +502,13 @@ export class ManagedProviderMonitor {
     if (jenkinsUrl) {
       try {
         jenkins = await jenkinsRestClient.buildContext(jenkinsUrl);
+        session = reconcileProviderBinding(session, {
+          id: 'jenkins-build',
+          provider: 'jenkins',
+          resource: 'build',
+          subjectId: String(jenkins.build.number),
+          url: jenkins.jobOrBuildUrl || jenkinsUrl,
+        });
         result.polled += 1;
       } catch (error: unknown) {
         jenkinsReadFailure = providerReadFailureReason(error);
@@ -562,6 +619,41 @@ export class ManagedProviderMonitor {
   private log(message: string, detail?: string): void {
     this.options.log?.(message, detail);
   }
+}
+
+function reconcileProviderBinding(
+  session: TicketWorkSessionRecord,
+  input: AddWorkSessionProviderBindingInput,
+): TicketWorkSessionRecord {
+  const current = newestProviderBinding(session, input.provider, input.resource, input.subjectId);
+  const projectMatches = input.projectId === undefined || current?.projectId === input.projectId;
+  const urlMatches = input.url === undefined || current?.url === input.url;
+  const idMatches = input.id === undefined || current?.id === input.id;
+  if (current && projectMatches && urlMatches && idMatches) { return session; }
+  const updated = addWorkSessionProviderBinding(session.id, input);
+  if (updated.kind !== 'ticket') { throw new Error('Provider polling requires a ticket-linked work session.'); }
+  return updated;
+}
+
+function newestProviderBinding(
+  session: TicketWorkSessionRecord,
+  provider: AddWorkSessionProviderBindingInput['provider'],
+  resource: AddWorkSessionProviderBindingInput['resource'],
+  subjectId?: string,
+) {
+  return session.providerBindings
+    .filter(binding => binding.provider === provider
+      && binding.resource === resource
+      && (subjectId === undefined || binding.subjectId === subjectId))
+    .reduce<(typeof session.providerBindings)[number] | undefined>((newest, candidate) => {
+      if (!newest) { return candidate; }
+      return bindingTimestamp(candidate.attachedAt) >= bindingTimestamp(newest.attachedAt) ? candidate : newest;
+    }, undefined);
+}
+
+function bindingTimestamp(value: string): number {
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 function emptyResult(): ManagedProviderPollResult {
