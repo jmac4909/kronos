@@ -1,7 +1,11 @@
 import * as crypto from 'crypto';
-import * as fs from 'fs';
 import * as path from 'path';
 import { normalizeJiraIssueKey, type JiraAttachmentContentSnapshot } from './jiraRestClient';
+import {
+  ensureImmutablePrivateFile as ensureImmutablePrivateArtifact,
+  ensureImmutablePrivateFilePair,
+  ensurePrivateDirectoryPath,
+} from './privateFilePrimitives';
 import { KRONOS_DIR } from './stateStore';
 import { JiraTicketContext } from './jiraTicketContext';
 
@@ -18,7 +22,6 @@ export interface JiraContextStoreOptions {
   attachmentContents?: readonly JiraAttachmentContentSnapshot[];
 }
 
-const DIRECTORY_MODE = 0o700;
 const FILE_MODE = 0o600;
 const MAX_SERIALIZED_CONTEXT_BYTES = 12 * 1024 * 1024;
 const MAX_PROMPT_BYTES = 13 * 1024 * 1024;
@@ -60,42 +63,24 @@ export function writeJiraContextArtifacts(
 
   const jsonPath = path.join(directoryPath, `context-${nameHash}.json`);
   const promptPath = path.join(directoryPath, `prompt-${nameHash}.md`);
-  const existingJson = lstatIfPresent(jsonPath);
-  const existingPrompt = lstatIfPresent(promptPath);
-  if (Boolean(existingJson) !== Boolean(existingPrompt)) {
-    if (existingJson) {
-      verifyImmutableFile(jsonPath, Buffer.from(serializedContext, 'utf8'), MAX_SERIALIZED_CONTEXT_BYTES, 'Jira context JSON artifact');
-    }
-    if (existingPrompt) {
-      verifyImmutableFile(promptPath, Buffer.from(prompt, 'utf8'), MAX_PROMPT_BYTES, 'Jira context prompt artifact');
-    }
-    throw new Error(`Jira context artifact pair is incomplete for content ${nameHash}; existing files were not changed.`);
-  }
-  if (existingJson && existingPrompt) {
-    verifyImmutableFile(jsonPath, Buffer.from(serializedContext, 'utf8'), MAX_SERIALIZED_CONTEXT_BYTES, 'Jira context JSON artifact');
-    verifyImmutableFile(promptPath, Buffer.from(prompt, 'utf8'), MAX_PROMPT_BYTES, 'Jira context prompt artifact');
-    return { directoryPath, jsonPath, promptPath, contentSha256, attachmentPaths };
-  }
-
-  const jsonCreated = ensureImmutablePrivateFile(
+  ensureImmutablePrivateFilePair(
     jsonPath,
     serializedContext,
-    MAX_SERIALIZED_CONTEXT_BYTES,
-    'Jira context JSON artifact',
+    {
+      label: 'Kronos Jira context JSON artifact',
+      maxBytes: MAX_SERIALIZED_CONTEXT_BYTES,
+      temporaryPrefix: 'jira-context-json',
+      fileMode: FILE_MODE,
+    },
+    promptPath,
+    prompt,
+    {
+      label: 'Kronos Jira context prompt artifact',
+      maxBytes: MAX_PROMPT_BYTES,
+      temporaryPrefix: 'jira-context-prompt',
+      fileMode: FILE_MODE,
+    },
   );
-  const jsonIdentity = jsonCreated ? fileIdentity(jsonPath) : undefined;
-  try {
-    ensureImmutablePrivateFile(
-      promptPath,
-      prompt,
-      MAX_PROMPT_BYTES,
-      'Jira context prompt artifact',
-    );
-  } catch (error: unknown) {
-    if (jsonIdentity) { removeFileIfIdentityMatches(jsonPath, jsonIdentity); }
-    throw error;
-  }
-  syncDirectory(directoryPath);
   return { directoryPath, jsonPath, promptPath, contentSha256, attachmentPaths };
 }
 
@@ -135,11 +120,15 @@ function materializeCapturedAttachments(
       `${String(index + 1).padStart(3, '0')}-${expectedHash.slice(0, 16)}-${safeFilename}`,
     );
     assertContainedPath(attachmentsDirectory, filePath);
-    ensureImmutablePrivateFile(
+    ensureImmutablePrivateArtifact(
       filePath,
       capture.bytes,
-      MAX_STORED_ATTACHMENT_BYTES,
-      `Jira attachment ${index + 1}`,
+      {
+        label: `Kronos Jira attachment ${index + 1}`,
+        maxBytes: MAX_STORED_ATTACHMENT_BYTES,
+        temporaryPrefix: `jira-attachment-${index + 1}`,
+        fileMode: FILE_MODE,
+      },
     );
     attachment.localPath = filePath;
     attachmentPaths.push(filePath);
@@ -454,198 +443,7 @@ function ensurePrivateDirectoryTree(targetPath: string, privateRootPath: string)
   const target = path.resolve(targetPath);
   const privateRoot = path.resolve(privateRootPath);
   assertContainedPath(privateRoot, target);
-  const parsed = path.parse(target);
-  const components = target.slice(parsed.root.length).split(path.sep).filter(Boolean);
-  let current = parsed.root;
-  for (const component of components) {
-    const next = path.join(current, component);
-    let stat = lstatIfPresent(next);
-    if (!stat) {
-      try {
-        fs.mkdirSync(next, { mode: DIRECTORY_MODE });
-      } catch (error: unknown) {
-        if (!isAlreadyExistsError(error)) { throw error; }
-      }
-      stat = fs.lstatSync(next);
-      if (!stat.isDirectory() || stat.isSymbolicLink()) {
-        throw new Error(`Jira context artifact path is not a private directory: ${next}`);
-      }
-      syncDirectory(current);
-    }
-    if (stat.isSymbolicLink()) {
-      throw new Error(`Jira context artifact paths may not contain symbolic links: ${next}`);
-    }
-    if (!stat.isDirectory()) {
-      throw new Error(`Jira context artifact path component is not a directory: ${next}`);
-    }
-    if (isContainedPath(privateRoot, next)) {
-      setPrivateMode(next, DIRECTORY_MODE);
-    }
-    current = next;
-  }
-  assertNoSymbolicLinkComponents(target);
-}
-
-function assertNoSymbolicLinkComponents(targetPath: string): void {
-  const resolved = path.resolve(targetPath);
-  const parsed = path.parse(resolved);
-  const components = resolved.slice(parsed.root.length).split(path.sep).filter(Boolean);
-  let current = parsed.root;
-  for (const component of components) {
-    current = path.join(current, component);
-    const stat = lstatIfPresent(current);
-    if (!stat) { continue; }
-    if (stat.isSymbolicLink()) {
-      throw new Error(`Jira context artifact paths may not contain symbolic links: ${current}`);
-    }
-    if (!stat.isDirectory()) {
-      throw new Error(`Jira context artifact path component is not a directory: ${current}`);
-    }
-  }
-}
-
-function ensureImmutablePrivateFile(filePath: string, content: string | Buffer, maxBytes: number, label: string): boolean {
-  const contentBuffer = Buffer.isBuffer(content) ? Buffer.from(content) : Buffer.from(content, 'utf8');
-  if (contentBuffer.length > maxBytes) {
-    throw new Error(`${label} exceeds the ${maxBytes}-byte artifact safety limit.`);
-  }
-  assertNoSymbolicLinkComponents(path.dirname(filePath));
-  if (lstatIfPresent(filePath)) {
-    verifyImmutableFile(filePath, contentBuffer, maxBytes, label);
-    return false;
-  }
-
-  let temporaryPath: string | undefined;
-  let readyPath: string | undefined;
-  try {
-    temporaryPath = stagePrivateFile(filePath, contentBuffer);
-    readyPath = sealStagedFile(temporaryPath, filePath);
-    temporaryPath = undefined;
-    const created = publishPrivateFileNoReplace(readyPath, filePath, contentBuffer, maxBytes, label);
-    readyPath = undefined;
-    return created;
-  } finally {
-    if (temporaryPath) { removeFileIfPresent(temporaryPath); }
-    if (readyPath) { removeFileIfPresent(readyPath); }
-    syncDirectory(path.dirname(filePath));
-  }
-}
-
-function stagePrivateFile(filePath: string, content: Buffer): string {
-  assertNoSymbolicLinkComponents(path.dirname(filePath));
-  const suffix = crypto.randomBytes(12).toString('hex');
-  const temporaryPath = path.join(
-    path.dirname(filePath),
-    `.${path.basename(filePath)}.${process.pid}.${suffix}.tmp`,
-  );
-  let descriptor: number | undefined;
-  try {
-    descriptor = fs.openSync(temporaryPath, 'wx', FILE_MODE);
-    fs.writeFileSync(descriptor, content);
-    fs.fsyncSync(descriptor);
-    fs.closeSync(descriptor);
-    descriptor = undefined;
-    setPrivateMode(temporaryPath, FILE_MODE);
-    return temporaryPath;
-  } catch (error: unknown) {
-    if (descriptor !== undefined) { fs.closeSync(descriptor); }
-    removeFileIfPresent(temporaryPath);
-    throw error;
-  }
-}
-
-function sealStagedFile(temporaryPath: string, filePath: string): string {
-  assertNoSymbolicLinkComponents(path.dirname(filePath));
-  const readyPath = path.join(
-    path.dirname(filePath),
-    `.${path.basename(filePath)}.${process.pid}.${crypto.randomBytes(12).toString('hex')}.ready`,
-  );
-  if (lstatIfPresent(readyPath)) {
-    throw new Error(`Refusing to replace an existing Jira context staging file: ${readyPath}`);
-  }
-  fs.renameSync(temporaryPath, readyPath);
-  const stat = fs.lstatSync(readyPath);
-  if (!stat.isFile() || stat.isSymbolicLink()) {
-    throw new Error(`Jira context staging artifact is not a regular file: ${readyPath}`);
-  }
-  return readyPath;
-}
-
-function publishPrivateFileNoReplace(
-  readyPath: string,
-  filePath: string,
-  expectedContent: Buffer,
-  maxBytes: number,
-  label: string,
-): boolean {
-  assertNoSymbolicLinkComponents(path.dirname(filePath));
-  try {
-    fs.linkSync(readyPath, filePath);
-  } catch (error: unknown) {
-    if (!isAlreadyExistsError(error)) { throw error; }
-    verifyImmutableFile(filePath, expectedContent, maxBytes, label);
-    removeFileIfPresent(readyPath);
-    return false;
-  }
-  removeFileIfPresent(readyPath);
-  setPrivateMode(filePath, FILE_MODE);
-  verifyImmutableFile(filePath, expectedContent, maxBytes, label);
-  return true;
-}
-
-interface FileIdentity {
-  dev: number;
-  ino: number;
-}
-
-function fileIdentity(filePath: string): FileIdentity {
-  const stat = fs.lstatSync(filePath);
-  if (!stat.isFile() || stat.isSymbolicLink()) {
-    throw new Error(`Jira context artifact is not a regular file: ${filePath}`);
-  }
-  return { dev: stat.dev, ino: stat.ino };
-}
-
-function removeFileIfIdentityMatches(filePath: string, identity: FileIdentity): void {
-  const stat = lstatIfPresent(filePath);
-  if (!stat || !stat.isFile() || stat.isSymbolicLink()) { return; }
-  if (stat.dev === identity.dev && stat.ino === identity.ino) {
-    fs.unlinkSync(filePath);
-  }
-}
-
-function verifyImmutableFile(filePath: string, expectedContent: Buffer, maxBytes: number, label: string): void {
-  const stat = fs.lstatSync(filePath);
-  if (!stat.isFile() || stat.isSymbolicLink()) {
-    throw new Error(`${label} path must be a regular file: ${filePath}`);
-  }
-  if (stat.size > maxBytes || stat.size !== expectedContent.length) {
-    throw new Error(`${label} content-address collision or tampering detected: ${filePath}`);
-  }
-  const descriptor = fs.openSync(filePath, readOnlyNoFollowFlags());
-  let existingContent: Buffer;
-  try {
-    const openedStat = fs.fstatSync(descriptor);
-    if (!openedStat.isFile() || openedStat.size !== expectedContent.length) {
-      throw new Error(`${label} changed while it was being verified: ${filePath}`);
-    }
-    existingContent = fs.readFileSync(descriptor);
-  } finally {
-    fs.closeSync(descriptor);
-  }
-  if (existingContent.length !== expectedContent.length
-    || !crypto.timingSafeEqual(existingContent, expectedContent)) {
-    throw new Error(`${label} content-address collision or tampering detected: ${filePath}`);
-  }
-  setPrivateMode(filePath, FILE_MODE);
-}
-
-function readOnlyNoFollowFlags(): number {
-  return fs.constants.O_RDONLY | noFollowFlag();
-}
-
-function noFollowFlag(): number {
-  return typeof fs.constants.O_NOFOLLOW === 'number' ? fs.constants.O_NOFOLLOW : 0;
+  ensurePrivateDirectoryPath(target, 'Kronos Jira context');
 }
 
 function assertContainedPath(basePath: string, candidatePath: string): void {
@@ -658,56 +456,4 @@ function isContainedPath(basePath: string, candidatePath: string): boolean {
   const base = path.resolve(basePath);
   const candidate = path.resolve(candidatePath);
   return candidate === base || candidate.startsWith(`${base}${path.sep}`);
-}
-
-function setPrivateMode(filePath: string, mode: number): void {
-  if (process.platform !== 'win32') {
-    fs.chmodSync(filePath, mode);
-  }
-}
-
-function syncDirectory(directoryPath: string): void {
-  if (process.platform === 'win32' || !directoryPath) { return; }
-  let descriptor: number | undefined;
-  try {
-    descriptor = fs.openSync(directoryPath, fs.constants.O_RDONLY | directoryFlag() | noFollowFlag());
-    fs.fsyncSync(descriptor);
-  } finally {
-    if (descriptor !== undefined) { fs.closeSync(descriptor); }
-  }
-}
-
-function directoryFlag(): number {
-  return typeof fs.constants.O_DIRECTORY === 'number' ? fs.constants.O_DIRECTORY : 0;
-}
-
-function removeFileIfPresent(filePath: string): void {
-  try {
-    fs.unlinkSync(filePath);
-  } catch (error: unknown) {
-    if (!isMissingFileError(error)) { throw error; }
-  }
-}
-
-function lstatIfPresent(filePath: string): fs.Stats | undefined {
-  try {
-    return fs.lstatSync(filePath);
-  } catch (error: unknown) {
-    if (isMissingFileError(error)) { return undefined; }
-    throw error;
-  }
-}
-
-function isMissingFileError(error: unknown): boolean {
-  return errorCode(error) === 'ENOENT';
-}
-
-function isAlreadyExistsError(error: unknown): boolean {
-  return errorCode(error) === 'EEXIST';
-}
-
-function errorCode(error: unknown): string | undefined {
-  return error && typeof error === 'object' && typeof Reflect.get(error, 'code') === 'string'
-    ? Reflect.get(error, 'code') as string
-    : undefined;
 }

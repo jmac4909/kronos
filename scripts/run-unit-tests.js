@@ -2663,6 +2663,10 @@ test('Jira artifacts retain custom fields behind an untrusted-data boundary', ()
   const reused = jiraContextStore.writeJiraContextArtifacts(context, { kronosDir: path.join(tempRoot, 'artifacts') });
   assert.deepEqual(reused, artifact);
   if (process.platform !== 'win32') { assert.equal(fs.statSync(artifact.promptPath).mode & 0o777, 0o600); }
+  const source = fs.readFileSync(path.join(root, 'src', 'services', 'jiraContextStore.ts'), 'utf8');
+  assert.match(source, /ensureImmutablePrivateFilePair/);
+  assert.match(source, /ensureImmutablePrivateArtifact/);
+  assert.doesNotMatch(source, /fs\.|NO_FOLLOW/);
 });
 
 test('Jira artifacts recursively omit empty fields while retaining false, zero, and non-empty provider values', () => {

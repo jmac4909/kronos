@@ -159,7 +159,7 @@ Partial, unavailable, skipped, truncated, or failed provider components remain e
 
 Operator-visible failures use one bounded redacted vocabulary: configuration, authentication, permission, timeout, DNS, TLS, redirect/origin refusal, rate limit, not found, response bound, malformed response, pagination, lease contention, local state, network, or unavailable. Each classification includes one safe retry or repair action. Messages never display provider response bodies or credential values, and a failed refresh does not erase the last-known-good bounded evidence.
 
-Jira attachment capture is bounded to 100 download attempts, 25 MiB per file, and 100 MiB in total for one explicit insertion. Filename path components are discarded before local storage. Attachment files are untrusted evidence: Kronos never parses, opens, previews, or executes them, and the generated prompt tells the interactive agent to inspect only relevant files with safe read-only tools.
+Jira attachment capture is bounded to 100 download attempts, 25 MiB per file, and 100 MiB in total for one explicit insertion. Filename path components are discarded before local storage, and raw bytes are published through the shared bounded immutable-artifact primitive only after their declared length and SHA-256 match. Attachment files are untrusted evidence: Kronos never parses, opens, previews, or executes them, and the generated prompt tells the interactive agent to inspect only relevant files with safe read-only tools.
 
 ## Monitoring Contract
 
