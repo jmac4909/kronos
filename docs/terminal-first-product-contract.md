@@ -109,6 +109,7 @@ Attention is the session- and ticket-aware inbox for changes that merit operator
 
 Eligible items include:
 
+- the first successful observation of a merge request, even when its initial state is healthy and mergeable;
 - merge-request review or pipeline structural changes;
 - newly failing or recovered GitLab jobs/tests;
 - Jenkins build, stage, or test failures and recoveries;
@@ -118,7 +119,7 @@ Eligible items include:
 
 A ticket-linked item may open its ticket workspace. Applicable items may open a validated provider URL, insert fresh MR/CI context into the explicitly attached terminal, or be acknowledged locally. Acknowledgement never changes provider state.
 
-Unchanged polling results do not create new Attention items.
+The first successful merge-request observation creates one durable transition in Attention: informational when healthy and warning-level when it already needs review. Its comparison baseline is recorded at the same time. Unchanged subsequent polling results do not create new Attention items.
 
 ## Context Insertion Contract
 

@@ -54,7 +54,7 @@ After VS Code reloads, persisted history remains but the live terminal starts de
 
 ### Attention
 
-Attention is the session- and ticket-aware inbox for meaningful provider changes and monitoring problems: merge-request review changes, pipeline failures or recoveries, Jenkins test/stage changes, SonarQube gate or issue changes, partial provider reads, and monitoring blockers.
+Attention is the session- and ticket-aware inbox for meaningful provider changes and monitoring problems: the first successful observation of a merge request, later merge-request review changes, pipeline failures or recoveries, Jenkins test/stage changes, SonarQube gate or issue changes, partial provider reads, and monitoring blockers. The initial MR item is informational when healthy and a warning when it already needs review, so an MR first found in a mergeable state is still visible once.
 
 An attention item can open the originating provider page, open its ticket workspace when ticket-linked, insert applicable fresh MR or CI context into the managed terminal, or be acknowledged. Acknowledgement changes only the local audit state.
 

@@ -121,12 +121,13 @@ If GitLab and CI providers are safely configured:
 
 ## Attention View
 
-1. Confirm provider failures, recoveries, partial reads, and monitoring blockers are grouped by real ticket when linked, or by standalone session title when not linked, rather than scattered by provider.
-2. Open an attention item's provider page and confirm it points to the expected configured provider.
-3. For a ticket-linked item, open the related ticket workspace. Confirm a standalone item does not fabricate that action or a ticket key.
-4. Insert fresh MR or CI context from the item when applicable; confirm the reference goes only to the explicitly attached terminal and is not submitted.
-5. Acknowledge the item and confirm acknowledgement changes only local Attention/audit state.
-6. Confirm ordinary unchanged polls do not create repeated attention noise.
+1. Let Kronos discover an MR with no prior local baseline. Confirm its first successful observation appears once even when GitLab reports it healthy and mergeable; an MR already needing review should appear as a warning.
+2. Confirm provider failures, recoveries, partial reads, and monitoring blockers are grouped by real ticket when linked, or by standalone session title when not linked, rather than scattered by provider.
+3. Open an attention item's provider page and confirm it points to the expected configured provider.
+4. For a ticket-linked item, open the related ticket workspace. Confirm a standalone item does not fabricate that action or a ticket key.
+5. Insert fresh MR or CI context from the item when applicable; confirm the reference goes only to the explicitly attached terminal and is not submitted.
+6. Acknowledge the item and confirm acknowledgement changes only local Attention/audit state.
+7. Confirm ordinary unchanged polls do not create repeated attention noise.
 
 ## Reload and Recovery
 
