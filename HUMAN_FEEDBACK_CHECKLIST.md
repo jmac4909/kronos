@@ -26,8 +26,8 @@ Stop the review immediately if any boundary is crossed.
 3. Reload VS Code.
 4. Open the Kronos activity icon.
 5. Confirm exactly three views are visible: **Work**, **Sessions**, and **Attention**.
-6. Run **Kronos: Setup** and confirm its guidance is understandable and does not expose secrets.
-7. Run **Kronos: Doctor** and confirm Jira/provider/Claude launch readiness is reported without displaying credential values.
+6. Run **Kronos: Setup** and confirm its dedicated dashboard clearly groups Claude launch, discovery folders, registered projects, Jira, monitoring providers, and private state without exposing secrets. Exercise its Doctor, Jira Board, Settings, folder, and project buttons.
+7. Run **Kronos: Doctor** and confirm its dedicated dashboard shows ready/review/blocked totals, places actionable problems first, refreshes in place, and reports Jira/provider/Claude readiness without displaying credential values.
 8. Open **Kronos: Settings** and identify the Claude command, terminal-name, cwd behavior, and polling options. Keep the command at `claude` or a trusted `claude-*` wrapper with only approved interactive flags for the launch tests; provider credentials remain in the private environment-file path shown by Setup.
 
 For a safe synthetic local state, use:
@@ -66,14 +66,14 @@ Use a real ticket only when its provider data is approved for local context capt
 3. Confirm the Jira board shows the project name, absolute path, and the branch currently named by Git `HEAD`.
 4. Use **Add Project** in the top row of two Jira cards, attach projects from the selected roots, and confirm the control changes to the project name while each ticket workspace and Work row show the right branch and launch directory.
 5. Switch branches yourself in the terminal, refresh or reopen the board, and confirm Kronos reflects the new branch without running a Git command.
-6. Start Claude for the linked ticket and confirm its new terminal starts in the selected project directory.
+6. Start Claude for the linked ticket and confirm its new terminal starts in the selected project directory and its terminal tab shows both the ticket key and current Git branch, such as `Claude · JIRA-123 @ feature/name`.
 7. Choose **Manage Focused Terminal** on an existing terminal and confirm linking does not change that terminal's directory or send `cd`.
 8. Unlink the local project and confirm future ticket launches fall back to the configured workspace/home behavior while Jira/provider project tags remain.
 
 ## Start Claude for a Ticket
 
 1. Count the open terminals, then choose **Start Claude for Ticket** from the selected ticket.
-2. Confirm exactly one terminal is created and focused and the configured `claude`/`claude-*` command is executed exactly once.
+2. Confirm exactly one terminal is created and focused, its title contains the current branch when the launch directory is a Git project, and the configured `claude`/`claude-*` command is executed exactly once.
 3. Confirm no Jira context is submitted automatically and Kronos does not read or summarize Claude's output.
 4. In Sessions, confirm the new session shows the real ticket key and title.
 5. Choose **Insert `[TICKET-KEY]`**.

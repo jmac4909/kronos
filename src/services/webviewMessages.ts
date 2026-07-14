@@ -5,6 +5,10 @@ export interface TicketWorkspaceActionMessage {
   ticket: string;
 }
 
+export interface OperationsActionMessage {
+  command: string;
+}
+
 export function normalizeActionPanelMessage(
   raw: unknown,
   allowed: ReadonlySet<string>,
@@ -18,4 +22,13 @@ export function normalizeActionPanelMessage(
     command,
     ticket,
   };
+}
+
+export function normalizeOperationsActionMessage(
+  raw: unknown,
+  allowed: ReadonlySet<string>,
+): OperationsActionMessage | null {
+  const message = recordFromUnknown(raw);
+  const command = message['command'];
+  return typeof command === 'string' && allowed.has(command) ? { command } : null;
 }

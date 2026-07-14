@@ -6,14 +6,14 @@ const vm = require('node:vm');
 
 const actionPanelSource = fs.readFileSync(path.join(__dirname, '..', 'media', 'kronos-action-panel.js'), 'utf8');
 
-function createHarness() {
+function createHarness(options = {}) {
   const messages = [];
   const attributes = new Map();
   const listeners = new Map();
   const scriptAttributes = new Map([
-    ['data-kronos-webview-name', 'Kronos Ticket Workspace'],
+    ['data-kronos-webview-name', options.webviewName || 'Kronos Ticket Workspace'],
     ['data-kronos-ready-command', '__kronosWebviewReady'],
-    ['data-kronos-action-fields', JSON.stringify([
+    ['data-kronos-action-fields', JSON.stringify(options.fields || [
       { messageKey: 'ticket', dataAttribute: 'data-ticket' },
     ])],
   ]);
@@ -76,4 +76,19 @@ test('loading the action panel twice does not attach a duplicate click handler',
   vm.runInContext(actionPanelSource, harness.context, { filename: 'kronos-action-panel.js' });
   vm.runInContext(actionPanelSource, harness.context, { filename: 'kronos-action-panel.js' });
   assert.equal(harness.listeners.get('click').length, 1);
+});
+
+test('Setup and Doctor actions post only their allowlisted operation command field', () => {
+  const harness = createHarness({ webviewName: 'Kronos Setup', fields: [] });
+  vm.runInContext(actionPanelSource, harness.context, { filename: 'kronos-action-panel.js' });
+  const buttonAttributes = new Map([
+    ['data-action', 'openDoctor'],
+    ['data-ticket', 'JIRA-123'],
+  ]);
+  const button = { getAttribute: name => buttonAttributes.get(name) || null };
+  harness.listeners.get('click')[0]({
+    target: { closest: selector => selector === '[data-action]' ? button : null },
+    preventDefault() {},
+  });
+  assert.deepEqual(harness.messages.at(-1), { command: 'openDoctor' });
 });

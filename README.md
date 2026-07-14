@@ -42,7 +42,7 @@ Every insertion is one editable line and is sent with execution disabled. The op
 
 Sessions shows both standalone Claude sessions and ticket-linked work sessions with their ephemeral live-terminal attachment. **New Claude** creates and focuses a standalone terminal without inventing a Jira key or ticket link. **Start Claude for Ticket** creates the same operator-owned terminal experience but records the selected ticket association.
 
-Each session reports whether the terminal is attached, which providers are bound, context freshness, monitoring health, and the latest poll result where applicable. Selecting a Session opens its attached terminal immediately. If the live attachment was lost after reload, Kronos lets you choose which currently open terminal to reconnect and then opens it.
+Each session reports whether the terminal is attached, which providers are bound, context freshness, monitoring health, and the latest poll result where applicable. Selecting a Session opens its attached terminal immediately. If the live attachment was lost after reload, Kronos lets you choose which currently open terminal to reconnect and then opens it. A Kronos-created terminal tab includes the Git branch read from its actual launch directory—for example, `Claude · JIRA-123 @ feature/context` or `Claude @ main`—without invoking Git or renaming an existing terminal.
 
 From Sessions, the operator can focus or reattach the terminal, poll providers, pause or resume monitoring, inspect the audit, detach the terminal, or stop management. Detaching and stopping management never close the terminal.
 
@@ -83,7 +83,7 @@ Common read-only configuration variables are:
 
 Structured context artifacts are bounded, normalized, secret-redacted, wrapped as untrusted provider data, and stored in private per-user files where the platform supports private file permissions. Jira attachments are downloaded byte-for-byte without a MIME allowlist or bundled parser, stored separately as private files, and referenced by a sanitized local path plus SHA-256. Raw attachments are intentionally not transformed or secret-redacted, may contain sensitive or malicious content, and must never be executed. One explicit Jira insertion reads at most 100 files, 25 MiB per file, and 100 MiB total. Provider reads remain pinned to the configured origin when credentials are sent. Kronos does not fetch GitLab job traces or Jenkins console logs.
 
-Use **Kronos: Setup** for guided first-run and private provider-environment guidance, **Kronos: Doctor** to inspect missing or invalid provider/Claude settings without displaying credential values, and **Kronos: Settings** to change:
+Use **Kronos: Setup** for a guided dashboard covering Claude, discovery folders, registered projects, Jira, monitoring providers, and private local state. **Kronos: Doctor** opens a dedicated readiness dashboard with blocked and warning checks first, safe repair links, and no credential values. Both panels can refresh in place and link to the Jira board or relevant Settings. Use **Kronos: Settings** to change:
 
 - project discovery roots selected through the native multi-folder picker, plus depth and result limit;
 - whether completed Jira work is hidden by default and any team-specific completed status names;

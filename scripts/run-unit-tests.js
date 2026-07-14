@@ -30,6 +30,7 @@ const mergeRequestTransitions = require('../out/services/gitlabMergeRequestTrans
 const mergeRequestMonitorStore = require('../out/services/gitlabMergeRequestMonitorStore.js');
 const ciTransitions = require('../out/services/ciTransitions.js');
 const { buildTicketWorkspaceHtml } = require('../out/services/ticketWorkspaceView.js');
+const { buildDoctorPanelHtml, buildSetupPanelHtml } = require('../out/services/operationsPanelView.js');
 
 function createSymlinkOrSkip(t, target, linkPath, type = 'file') {
   try {
@@ -43,7 +44,7 @@ function createSymlinkOrSkip(t, target, linkPath, type = 'file') {
     throw error;
   }
 }
-const { normalizeActionPanelMessage } = require('../out/services/webviewMessages.js');
+const { normalizeActionPanelMessage, normalizeOperationsActionMessage } = require('../out/services/webviewMessages.js');
 
 function fixtureTicket(overrides = {}) {
   return {
@@ -1254,6 +1255,49 @@ test('ticket workspace messages retain only the allowed command and ticket', () 
   assert.equal(normalizeActionPanelMessage({ command: 'insertJiraContext', ticket: '__proto__' }, new Set(['insertJiraContext'])), null);
 });
 
+test('Setup and Doctor render bounded operation dashboards with allowlisted actions', () => {
+  const setup = buildSetupPanelHtml({
+    steps: [{
+      title: 'Claude <terminal>',
+      detail: 'Ready & operator-owned',
+      status: 'pass',
+      action: 'openClaudeSettings',
+      actionLabel: 'Claude Settings',
+    }],
+    providerEnvPath: '/private/<kronos>/.env',
+    nonce: 'setup-nonce',
+    actionScriptUri: 'vscode-webview://fixture/kronos-action-panel.js',
+  });
+  assert.match(setup, /Kronos Setup/);
+  assert.match(setup, /data-action="openDoctor"/);
+  assert.match(setup, /data-action="openClaudeSettings"/);
+  assert.match(setup, /Claude &lt;terminal&gt;/);
+  assert.match(setup, /\/private\/&lt;kronos&gt;\/\.env/);
+  assert.doesNotMatch(setup, /Claude <terminal>/);
+
+  const doctor = buildDoctorPanelHtml({
+    checks: [
+      { name: 'Ready check', status: 'pass', detail: 'available' },
+      { name: 'Blocked check', status: 'fail', detail: 'repair this' },
+      { name: 'Review check', status: 'warn', detail: 'optional configuration' },
+    ],
+    nonce: 'doctor-nonce',
+    actionScriptUri: 'vscode-webview://fixture/kronos-action-panel.js',
+  });
+  assert.match(doctor, /Kronos Doctor/);
+  assert.match(doctor, /<strong>1<\/strong><span>Ready<\/span>/);
+  assert.match(doctor, /<strong>1<\/strong><span>Review<\/span>/);
+  assert.match(doctor, /<strong>1<\/strong><span>Blocked<\/span>/);
+  assert.ok(doctor.indexOf('Blocked check') < doctor.indexOf('Review check'));
+  assert.ok(doctor.indexOf('Review check') < doctor.indexOf('Ready check'));
+
+  assert.deepEqual(
+    normalizeOperationsActionMessage({ command: 'openDoctor', ticket: 'JIRA-123', runId: 'legacy' }, new Set(['openDoctor'])),
+    { command: 'openDoctor' },
+  );
+  assert.equal(normalizeOperationsActionMessage({ command: 'runAnything' }, new Set(['openDoctor'])), null);
+});
+
 test('runtime dependency surface is Node and VS Code only', () => {
   const manifest = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
   assert.deepEqual(manifest.dependencies || {}, {});
@@ -1274,6 +1318,8 @@ test('extension activation registers the bounded surface and explicit launch com
   const createdTerminals = [];
   const configurationValues = new Map();
   const configurationUpdates = [];
+  const createdWebviewPanels = [];
+  const executedCommands = [];
   let openDialogResult;
   let lastOpenDialogOptions;
   let multiPickHandler;
@@ -1324,6 +1370,29 @@ test('extension activation registers the bounded surface and explicit launch com
       },
       showInformationMessage() { return Promise.resolve(undefined); },
       showErrorMessage() { return Promise.resolve(undefined); },
+      createWebviewPanel(viewType, title, column, options) {
+        const messageHandlers = [];
+        const disposeHandlers = [];
+        const panel = {
+          viewType,
+          title,
+          column,
+          options,
+          revealCalls: [],
+          webview: {
+            html: '',
+            cspSource: 'vscode-webview://fixture',
+            asWebviewUri(uri) { return { toString: () => `vscode-webview://fixture${uri.path || ''}` }; },
+            onDidReceiveMessage(handler) { messageHandlers.push(handler); return disposable(); },
+          },
+          reveal(value) { this.revealCalls.push(value); },
+          onDidDispose(handler) { disposeHandlers.push(handler); return disposable(); },
+          async receive(message) { for (const handler of messageHandlers) { await handler(message); } },
+          dispose() { for (const handler of disposeHandlers.splice(0)) { handler(); } },
+        };
+        createdWebviewPanels.push(panel);
+        return panel;
+      },
       showOpenDialog(options) {
         lastOpenDialogOptions = options;
         const result = openDialogResult;
@@ -1379,7 +1448,7 @@ test('extension activation registers the bounded surface and explicit launch com
     },
     commands: {
       registerCommand(id, handler) { registeredCommands.push(id); commandHandlers.set(id, handler); return disposable(); },
-      executeCommand() { return Promise.resolve(); },
+      executeCommand(...args) { executedCommands.push(args); return Promise.resolve(); },
     },
     env: { openExternal() { return Promise.resolve(true); } },
     Uri: {
@@ -1414,6 +1483,23 @@ test('extension activation registers the bounded surface and explicit launch com
     const expectedCommands = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
       .contributes.commands.map(command => command.command);
     assert.deepEqual(registeredCommands, expectedCommands);
+
+    await commandHandlers.get('kronos.setup')();
+    const setupPanel = createdWebviewPanels.find(panel => panel.viewType === 'kronosSetup');
+    assert.ok(setupPanel);
+    assert.match(setupPanel.webview.html, /Kronos Setup/);
+    assert.match(setupPanel.webview.html, /Choose Folders/);
+    assert.match(setupPanel.webview.html, /Private provider environment guide/);
+    await commandHandlers.get('kronos.setup')();
+    assert.equal(createdWebviewPanels.filter(panel => panel.viewType === 'kronosSetup').length, 1);
+    assert.deepEqual(setupPanel.revealCalls, [vscode.ViewColumn.One]);
+    await setupPanel.receive({ command: 'openDoctor' });
+    const doctorPanel = createdWebviewPanels.find(panel => panel.viewType === 'kronosDoctor');
+    assert.ok(doctorPanel);
+    assert.match(doctorPanel.webview.html, /Kronos Doctor/);
+    assert.match(doctorPanel.webview.html, /Claude launch settings/);
+    await setupPanel.receive({ command: 'openClaudeSettings' });
+    assert.deepEqual(executedCommands.at(-1), ['workbench.action.openSettings', '@ext:jmacke01.kronos claude']);
 
     const ideaProjectsRoot = path.join(tempRoot, 'IdeaProjects');
     const pycharmProjectsRoot = path.join(tempRoot, 'PycharmProjects');
@@ -1461,6 +1547,7 @@ test('extension activation registers the bounded surface and explicit launch com
       ['show', false],
       ['sendText', 'claude', true],
     ]);
+    assert.equal(createdTerminals[0].options.name, 'Claude @ feature/runtime-project');
     const standalone = workSessions.listWorkSessions().find(session => session.kind === 'standalone');
     assert.ok(standalone);
     assert.equal(Object.hasOwn(standalone, 'ticketKey'), false);
@@ -1472,7 +1559,7 @@ test('extension activation registers the bounded surface and explicit launch com
     const ticketSession = workSessions.getWorkSessionByTicket('JIRA-123');
     assert.equal(ticketSession.kind, 'ticket');
     assert.equal(ticketSession.ticketKey, 'JIRA-123');
-    assert.match(createdTerminals[1].options.name, /JIRA-123/);
+    assert.equal(createdTerminals[1].options.name, 'Claude · JIRA-123 @ feature/runtime-project');
     assert.equal(createdTerminals[1].options.cwd, tempRoot);
     assert.equal(ticketSession.projectName, 'fixture');
     assert.equal(ticketSession.projectPath, tempRoot);

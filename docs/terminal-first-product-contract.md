@@ -96,7 +96,7 @@ Supported actions are focus, explicit reattach, detach, pause monitoring, resume
 
 Selecting any Session means “open its terminal.” A live attachment is focused immediately. When VS Code has discarded the ephemeral attachment, Kronos never guesses from a saved process ID or duplicate terminal name: it reconnects the only unclaimed open terminal or asks the operator to choose one, then focuses it.
 
-**New Claude** creates a standalone session with a workspace-derived title, validates the configured Claude command/name/cwd, creates and focuses one terminal, and starts Claude. The persisted record contains no fake or placeholder ticket key. **Start Claude for Ticket** performs the same launch but creates a ticket-linked session from the selected ticket path.
+**New Claude** creates a standalone session with a workspace-derived title, validates the configured Claude command/name/cwd, creates and focuses one terminal, and starts Claude. The created terminal tab includes the branch read from the actual launch directory when Git `HEAD` is available. **Start Claude for Ticket** also includes the real ticket key in that title. This is launch-time display metadata only: Kronos does not invoke Git and does not write to or rename an existing terminal. The persisted standalone record contains no fake or placeholder ticket key. **Start Claude for Ticket** creates a ticket-linked session from the selected ticket path.
 
 Stopping management disables monitoring and detaches the in-memory association. It never closes the terminal.
 
@@ -175,7 +175,7 @@ Provider credentials are inherited from approved local configuration. They are n
 
 Credentialed requests are constrained to configured provider origins. Redirects and provider-returned URLs do not silently move credentials to another host. Response sizes, pagination, item counts, text sizes, and request timeouts are bounded.
 
-Setup provides the guided first-run path. Doctor reports missing or invalid provider and Claude-launch configuration with safe repair guidance without displaying credential values. Settings exposes the supported Claude command/name/cwd behavior and polling configuration; provider credentials remain in the private environment-file path described by Setup. Settings cannot authorize a generic shell command.
+Setup is a dedicated guided dashboard for Claude launch, project discovery and registration, Jira work, optional monitoring providers, and private state. Doctor is a dedicated status dashboard that places blocked and warning checks first and links only to bounded setup, settings, and board actions. Both refresh in place and report configuration without displaying credential values. Settings exposes the supported Claude command/name/cwd behavior and polling configuration; provider credentials remain in the private environment-file path described by Setup. Settings cannot authorize a generic shell command.
 
 ## Runtime Dependency Boundary
 
