@@ -2159,6 +2159,80 @@ test('runtime dependency surface is Node and VS Code only', () => {
   assert.equal(crypto.createHash('sha256').update(source).digest('hex').length, 64);
 });
 
+test('project Git evidence reads only the bounded VS Code Git model', async () => {
+  const Module = require('node:module');
+  const originalLoad = Module._load;
+  const servicePath = require.resolve('../out/services/vscodeGitReadService.js');
+  delete require.cache[servicePath];
+  const projectPath = path.join(tempRoot, 'git-evidence-project');
+  const changes = Array.from({ length: 502 }, (_, index) => ({
+    uri: { fsPath: path.join(projectPath, 'src', `file-${index}.ts`) },
+    status: index === 0 ? 0 : index === 1 ? 7 : 5,
+  }));
+  let openRepositoryCalls = 0;
+  const repository = {
+    rootUri: { fsPath: projectPath },
+    state: {
+      HEAD: { name: 'feature/git-evidence' },
+      mergeChanges: [],
+      indexChanges: [changes[0]],
+      workingTreeChanges: changes.slice(2),
+      untrackedChanges: [changes[1]],
+    },
+    async diffWithHEAD() { return `diff --git a/file b/file\n${'x'.repeat((512 * 1024) + 50)}`; },
+  };
+  const vscode = {
+    extensions: {
+      getExtension(id) {
+        assert.equal(id, 'vscode.git');
+        return {
+          isActive: true,
+          exports: {
+            enabled: true,
+            getAPI(version) {
+              assert.equal(version, 1);
+              return {
+                repositories: [repository],
+                getRepository() { return repository; },
+                async openRepository() { openRepositoryCalls += 1; },
+              };
+            },
+          },
+        };
+      },
+    },
+    Uri: { file(value) { return { fsPath: value }; } },
+  };
+  Module._load = function(request, parent, isMain) {
+    if (request === 'vscode') { return vscode; }
+    return originalLoad.call(this, request, parent, isMain);
+  };
+  let gitEvidence;
+  try { gitEvidence = require(servicePath); }
+  finally { Module._load = originalLoad; }
+
+  try {
+    const evidence = await gitEvidence.readProjectGitEvidence(projectPath, { openRepositoryIfNeeded: true });
+    assert.equal(openRepositoryCalls, 0, 'an already-known repository is never reopened');
+    assert.equal(evidence.available, true);
+    assert.equal(evidence.branch, 'feature/git-evidence');
+    assert.equal(evidence.changeCount, 502);
+    assert.equal(evidence.changes.length, 500);
+    assert.deepEqual(evidence.changes.slice(0, 2), [
+      { path: path.join('src', 'file-0.ts'), status: 'index modified', staged: true },
+      { path: path.join('src', 'file-2.ts'), status: 'modified', staged: false },
+    ]);
+    assert.match(evidence.warning, /first 500 changed paths/);
+    assert.equal(evidence.diffTruncated, true);
+    assert.match(evidence.diff, /Diff truncated by Kronos at 524288 characters/);
+    const rendered = gitEvidence.renderProjectGitEvidence('Fixture', evidence);
+    assert.match(rendered, /VS Code built-in Git model \(read-only\)/);
+    assert.match(rendered, /Branch: feature\/git-evidence/);
+  } finally {
+    delete require.cache[servicePath];
+  }
+});
+
 test('extension activation registers the bounded surface and explicit launch commands create the right session kinds', async () => {
   const Module = require('node:module');
   const originalLoad = Module._load;
