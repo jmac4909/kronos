@@ -15,7 +15,8 @@ const providerEnv = require('../out/services/providerEnv.js');
 const stateStore = require('../out/services/stateStore.js');
 const projectCatalog = require('../out/services/projectCatalog.js');
 const projectDiscovery = require('../out/services/projectDiscovery.js');
-const { JiraRestClient } = require('../out/services/jiraRestClient.js');
+const jiraRestModule = require('../out/services/jiraRestClient.js');
+const { JiraRestClient } = jiraRestModule;
 const gitLabRestModule = require('../out/services/gitlabRestClient.js');
 const { GitLabRestClient } = gitLabRestModule;
 const jenkinsRestModule = require('../out/services/jenkinsRestClient.js');
@@ -2445,6 +2446,14 @@ test('extension activation registers the bounded surface and explicit launch com
     if (request === 'vscode') { return vscode; }
     return originalLoad.call(this, request, parent, isMain);
   };
+  const originalProviderMethods = {
+    jiraSearchWorkList: jiraRestModule.jiraRestClient.searchWorkList,
+    gitLabMergeRequestContext: gitLabRestModule.gitlabRestClient.mergeRequestContext,
+    gitLabMergeRequestMonitor: gitLabRestModule.gitlabRestClient.mergeRequestMonitor,
+    gitLabDiscoverOpenMergeRequest: gitLabRestModule.gitlabRestClient.discoverOpenMergeRequest,
+    jenkinsBuildContext: jenkinsRestModule.jenkinsRestClient.buildContext,
+    sonarBranchContext: sonarRestModule.sonarRestClient.branchContext,
+  };
   const modulePath = require.resolve('../out/terminalFirstExtension.js');
   delete require.cache[modulePath];
   const context = { subscriptions: [], extensionUri: { path: root } };
@@ -2808,6 +2817,152 @@ test('extension activation registers the bounded surface and explicit launch com
     await commandHandlers.get('kronos.openProjectMergeRequest')({ projectName: 'fixture', projectPath: tempRoot });
     assert.equal(openedExternalUrls.at(-1), 'https://gitlab.example/group/fixture/-/merge_requests/88');
 
+    const gitLabSnapshot = {
+      mr: {
+        iid: 88,
+        title: 'Provider command fixture MR',
+        description: 'Read-only fixture context.',
+        state: 'opened',
+        source_branch: 'feature/runtime-project',
+        target_branch: 'main',
+        detailed_merge_status: 'mergeable',
+        web_url: 'https://gitlab.example/group/fixture/-/merge_requests/88',
+      },
+      notes: [{ id: 1, body: 'Review the bounded fixture.', created_at: '2026-07-14T12:00:00.000Z' }],
+      discussions: [],
+      approvals: {
+        approved: true,
+        approvals_required: 1,
+        approvals_left: 0,
+        approved_by: [{ user: { id: 9, name: 'Fixture Reviewer' } }],
+      },
+      diffs: [{ old_path: 'src/changed.ts', new_path: 'src/changed.ts', diff: '-old\n+new\n' }],
+      pipelines: [],
+      jobs: [],
+      fetchedAt: '2026-07-14T12:00:00.000Z',
+      responseBytes: 512,
+      completeness: {
+        notesComplete: true,
+        discussionsComplete: true,
+        approvalsComplete: true,
+        diffsComplete: true,
+        pipelinesComplete: true,
+        jobsComplete: true,
+        testsComplete: true,
+        warnings: [],
+      },
+    };
+    const jenkinsContext = {
+      schemaVersion: 1,
+      provider: 'jenkins',
+      fetchedAt: '2026-07-14T12:00:00.000Z',
+      jobOrBuildUrl: 'https://jenkins.example/job/fixture/',
+      build: {
+        number: 32,
+        status: 'SUCCESS',
+        url: 'https://jenkins.example/job/fixture/32/',
+        building: false,
+        causes: [],
+        artifacts: [],
+        changes: [],
+      },
+      completeness: {
+        complete: true,
+        buildComplete: true,
+        testReport: 'complete',
+        stages: 'complete',
+        configuration: 'complete',
+        logsIncluded: false,
+        warnings: [],
+      },
+    };
+    const sonarContext = {
+      schemaVersion: 1,
+      provider: 'sonarqube',
+      fetchedAt: '2026-07-14T12:00:00.000Z',
+      projectKey: 'fixture',
+      branch: 'feature/runtime-project',
+      dashboardUrl: 'https://sonar.example/dashboard?id=fixture&branch=feature%2Fruntime-project',
+      qualityGate: { status: 'OK', conditions: [] },
+      measures: [{ metric: 'coverage', value: '91.2' }],
+      issues: [],
+      completeness: {
+        complete: true,
+        qualityGateComplete: true,
+        measuresComplete: true,
+        issuesComplete: true,
+        issuesFetched: 0,
+        issuePages: 1,
+        issueResponseBytes: 2,
+        warnings: [],
+      },
+    };
+    gitLabRestModule.gitlabRestClient.mergeRequestContext = async () => gitLabSnapshot;
+    gitLabRestModule.gitlabRestClient.mergeRequestMonitor = async () => gitLabSnapshot;
+    gitLabRestModule.gitlabRestClient.discoverOpenMergeRequest = async () => ({
+      strategy: 'source-branch',
+      match: undefined,
+      ambiguous: false,
+      candidateCount: 0,
+    });
+    jenkinsRestModule.jenkinsRestClient.buildContext = async () => jenkinsContext;
+    sonarRestModule.sonarRestClient.branchContext = async () => sonarContext;
+    workSessions.addWorkSessionProviderBinding(ticketSession.id, {
+      id: 'jenkins-job',
+      provider: 'jenkins',
+      resource: 'job',
+      subjectId: 'configured',
+      url: 'https://jenkins.example/job/fixture/',
+    });
+    workSessions.addWorkSessionProviderBinding(ticketSession.id, {
+      provider: 'sonar',
+      resource: 'quality-gate',
+      subjectId: 'fixture:feature/runtime-project',
+      projectId: 'fixture',
+      url: 'https://sonar.example/dashboard?id=fixture&branch=feature%2Fruntime-project',
+    });
+
+    let providerPanelStart = createdWebviewPanels.length;
+    await commandHandlers.get('kronos.insertGitLabContext')({ ticketKey: 'JIRA-123' });
+    let providerComposer = createdWebviewPanels.slice(providerPanelStart)
+      .find(panel => panel.viewType === 'kronosContextComposer');
+    assert.ok(providerComposer, 'direct MR insertion must open an editable context composer');
+    assert.match(providerComposer.webview.html, /Provider command fixture MR/);
+    let providerWrites = reconnectedActions.length;
+    await providerComposer.receive({ command: 'insertDraft', focus: 'Review the MR fixture.' });
+    assert.equal(reconnectedActions.length, providerWrites + 1);
+    assert.equal(reconnectedActions.at(-1)[2], false);
+    assert.match(reconnectedActions.at(-1)[1], /^\[MR-88\]/);
+
+    singlePickHandler = items => items.find(item => item.label === 'JIRA-123');
+    providerPanelStart = createdWebviewPanels.length;
+    await commandHandlers.get('kronos.insertProjectGitLabContext')({ projectName: 'fixture', projectPath: tempRoot });
+    providerComposer = createdWebviewPanels.slice(providerPanelStart)
+      .find(panel => panel.viewType === 'kronosContextComposer');
+    assert.ok(providerComposer, 'project MR insertion must route to a linked ticket composer');
+    providerWrites = reconnectedActions.length;
+    await providerComposer.receive({ command: 'insertDraft', focus: 'Review project MR evidence.' });
+    assert.equal(reconnectedActions.length, providerWrites + 1);
+    assert.equal(reconnectedActions.at(-1)[2], false);
+    assert.match(reconnectedActions.at(-1)[1], /^\[MR-88\]/);
+
+    providerWrites = reconnectedActions.length;
+    await commandHandlers.get('kronos.insertCiContext')({ ticketKey: 'JIRA-123' });
+    assert.equal(reconnectedActions.length, providerWrites + 1);
+    assert.equal(reconnectedActions.at(-1)[2], false);
+    assert.match(reconnectedActions.at(-1)[1], /^\[CI-JIRA-123\]/);
+    singlePickHandler = items => items.find(item => item.label === 'JIRA-123');
+    providerWrites = reconnectedActions.length;
+    await commandHandlers.get('kronos.insertProjectCiContext')({ projectName: 'fixture', projectPath: tempRoot });
+    assert.equal(reconnectedActions.length, providerWrites + 1);
+    assert.equal(reconnectedActions.at(-1)[2], false);
+    assert.match(reconnectedActions.at(-1)[1], /^\[CI-JIRA-123\]/);
+
+    await commandHandlers.get('kronos.pollManagedWorkSessions')();
+    const manuallyPolledSession = workSessions.getWorkSessionByTicket('JIRA-123');
+    assert.equal(manuallyPolledSession.monitoring.lastState, 'healthy');
+    assert.ok(manuallyPolledSession.monitoring.lastPolledAt);
+
     await commandHandlers.get('kronos.pauseWorkSessionMonitoring')({ workSessionId: ticketSession.id });
     assert.equal(workSessions.getWorkSessionByTicket('JIRA-123').monitoring.enabled, false);
     await commandHandlers.get('kronos.resumeWorkSessionMonitoring')({ workSessionId: ticketSession.id });
@@ -2844,7 +2999,51 @@ test('extension activation registers the bounded surface and explicit launch com
     assert.equal(unregisteredFixtureState.tickets['JIRA-123'].launch_project, undefined);
     assert.equal(workSessions.getWorkSessionByTicket('JIRA-123').projectName, undefined);
     assert.equal(workSessions.getWorkSessionByTicket('JIRA-123').projectPath, undefined);
+
+    jiraRestModule.jiraRestClient.searchWorkList = async () => ({
+      issues: [
+        jiraIssue('JIRA-123', 'Refreshed fixture 123'),
+        jiraIssue('JIRA-321', 'Refreshed fixture 321'),
+        jiraIssue('JIRA-456', 'Refreshed fixture 456'),
+        jiraIssue('JIRA-789', 'Refreshed fixture 789'),
+        jiraIssue('JIRA-999', 'Refreshed fixture 999'),
+      ],
+      fetchedAt: '2026-07-14T13:00:00.000Z',
+      jql: 'project = JIRA ORDER BY updated DESC',
+      jqlSource: 'configured',
+      complete: true,
+      pageCount: 1,
+      responseBytes: 1024,
+      warnings: [],
+    });
+    const previousJiraEnv = {
+      baseUrl: process.env.JIRA_BASE_URL,
+      email: process.env.JIRA_EMAIL,
+      token: process.env.JIRA_API_TOKEN,
+    };
+    process.env.JIRA_BASE_URL = 'https://jira.example';
+    process.env.JIRA_EMAIL = 'fixture@example.test';
+    process.env.JIRA_API_TOKEN = 'fixture-test-token';
+    try {
+      await commandHandlers.get('kronos.refreshTickets')();
+    } finally {
+      if (previousJiraEnv.baseUrl === undefined) { delete process.env.JIRA_BASE_URL; }
+      else { process.env.JIRA_BASE_URL = previousJiraEnv.baseUrl; }
+      if (previousJiraEnv.email === undefined) { delete process.env.JIRA_EMAIL; }
+      else { process.env.JIRA_EMAIL = previousJiraEnv.email; }
+      if (previousJiraEnv.token === undefined) { delete process.env.JIRA_API_TOKEN; }
+      else { process.env.JIRA_API_TOKEN = previousJiraEnv.token; }
+    }
+    const refreshedState = stateStore.readStateFileWithIssues().state;
+    assert.equal(refreshedState.refreshedAt, '2026-07-14T13:00:00.000Z');
+    assert.equal(Object.keys(refreshedState.tickets).length, 5);
   } finally {
+    jiraRestModule.jiraRestClient.searchWorkList = originalProviderMethods.jiraSearchWorkList;
+    gitLabRestModule.gitlabRestClient.mergeRequestContext = originalProviderMethods.gitLabMergeRequestContext;
+    gitLabRestModule.gitlabRestClient.mergeRequestMonitor = originalProviderMethods.gitLabMergeRequestMonitor;
+    gitLabRestModule.gitlabRestClient.discoverOpenMergeRequest = originalProviderMethods.gitLabDiscoverOpenMergeRequest;
+    jenkinsRestModule.jenkinsRestClient.buildContext = originalProviderMethods.jenkinsBuildContext;
+    sonarRestModule.sonarRestClient.branchContext = originalProviderMethods.sonarBranchContext;
     for (const item of [...context.subscriptions].reverse()) { item.dispose(); }
     Module._load = originalLoad;
     delete require.cache[modulePath];
