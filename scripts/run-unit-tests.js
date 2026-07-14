@@ -2222,6 +2222,21 @@ test('work-session lifecycle never requires a terminal process owner', () => {
   assert.equal(workSessions.listWorkSessions(options).length, 1);
 });
 
+test('work-session records use the shared private primitive and reject oversized state', () => {
+  const options = { kronosDir: path.join(tempRoot, 'bounded-session-store') };
+  const session = workSessions.createStandaloneWorkSession({ title: 'Bounded session' }, options);
+  const filePath = workSessions.workSessionRecordPath(session.id, options);
+  fs.truncateSync(filePath, workSessions.MAX_WORK_SESSION_RECORD_BYTES + 1);
+  assert.throws(() => workSessions.readWorkSession(session.id, options), /exceeds the .*byte limit/i);
+  assert.equal(workSessions.listWorkSessions(options).length, 0);
+  assert.match(workSessions.listWorkSessionStoreIssues(options)[0].detail, /exceeds the .*byte limit/i);
+
+  const source = fs.readFileSync(path.join(root, 'src', 'services', 'workSessionStore.ts'), 'utf8');
+  assert.match(source, /readPrivateTextFileIfPresent/);
+  assert.match(source, /writePrivateTextFileAtomically/);
+  assert.doesNotMatch(source, /NO_FOLLOW|fs\.openSync/);
+});
+
 test('removing a work session deletes its record and colocated snapshots without touching external artifacts', () => {
   const options = { kronosDir: path.join(tempRoot, 'removed-session-store') };
   const session = workSessions.createStandaloneWorkSession({ title: 'Disposable session' }, options);

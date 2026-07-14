@@ -6,6 +6,7 @@ import { unknownErrorMessage } from './errorUtils';
 import { isRecord } from './records';
 import { redactSensitiveTokens } from './sensitiveText';
 import { normalizeProviderPublicUrl } from './providerUrls';
+import { readPrivateTextFileIfPresent, writePrivateTextFileAtomically } from './privateFilePrimitives';
 import { KRONOS_DIR } from './stateStore';
 
 export type WorkSessionStatus = 'active' | 'closed';
@@ -188,11 +189,10 @@ const MAX_TERMINALS = 64;
 const MAX_PROVIDER_BINDINGS = 64;
 const MAX_ARTIFACTS = 200;
 const MAX_WARNINGS = 32;
+export const MAX_WORK_SESSION_RECORD_BYTES = 4 * 1024 * 1024;
 const SAFE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,179}$/;
 const TICKET_KEY_PATTERN = /^[A-Z][A-Z0-9_]{0,127}-[1-9][0-9]*$/;
 const CONTROL_PATTERN = /[\u0000-\u001f\u007f\u2028\u2029]/;
-const NO_FOLLOW_VALUE = Reflect.get(fs.constants, 'O_NOFOLLOW');
-const NO_FOLLOW_FLAG = typeof NO_FOLLOW_VALUE === 'number' ? NO_FOLLOW_VALUE : 0;
 
 export function workSessionsDirectory(options: WorkSessionStoreOptions = {}): string {
   return path.resolve(options.kronosDir || KRONOS_DIR, 'work-sessions');
@@ -1135,58 +1135,21 @@ function hasErrorCode(error: unknown, code: string): boolean {
 }
 
 function readSafeRegularFile(filePath: string, label: string): string {
-  assertSafeRegularFile(filePath, label);
-  const descriptor = fs.openSync(filePath, fs.constants.O_RDONLY | NO_FOLLOW_FLAG);
-  try {
-    const stat = fs.fstatSync(descriptor);
-    if (!stat.isFile()) {
-      throw new Error(`${label} is not a safe regular file: ${filePath}`);
-    }
-    return fs.readFileSync(descriptor, 'utf8');
-  } finally {
-    fs.closeSync(descriptor);
-  }
+  const content = readPrivateTextFileIfPresent(filePath, {
+    label,
+    maxBytes: MAX_WORK_SESSION_RECORD_BYTES,
+  });
+  if (content === null) { throw new Error(`${label} is unavailable: ${filePath}`); }
+  return content;
 }
 
 function writePrivateFileAtomic(filePath: string, content: string): void {
-  const directoryPath = path.dirname(filePath);
-  const temporaryPath = path.join(
-    directoryPath,
-    `.${path.basename(filePath)}.${process.pid}.${crypto.randomBytes(8).toString('hex')}.tmp`,
-  );
-  let descriptor: number | undefined;
-  try {
-    assertSafeDirectory(directoryPath, 'work session record parent');
-    assertSafeRegularFileIfPresent(temporaryPath, 'temporary work session record');
-    descriptor = fs.openSync(
-      temporaryPath,
-      fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | NO_FOLLOW_FLAG,
-      FILE_MODE,
-    );
-    if (!fs.fstatSync(descriptor).isFile()) {
-      throw new Error(`Temporary work session record is not a regular file: ${temporaryPath}`);
-    }
-    if (process.platform !== 'win32') { fs.fchmodSync(descriptor, FILE_MODE); }
-    fs.writeFileSync(descriptor, content, 'utf8');
-    fs.fsyncSync(descriptor);
-    fs.closeSync(descriptor);
-    descriptor = undefined;
-    assertSafeRegularFile(temporaryPath, 'temporary work session record');
-    assertSafeDirectory(directoryPath, 'work session record parent');
-    assertSafeRegularFileIfPresent(filePath, 'work session record');
-    fs.renameSync(temporaryPath, filePath);
-    assertSafeRegularFile(filePath, 'work session record');
-    setPrivateMode(filePath, FILE_MODE);
-  } catch (error: unknown) {
-    if (descriptor !== undefined) { fs.closeSync(descriptor); }
-    try {
-      assertSafeDirectory(directoryPath, 'work session record parent');
-      if (assertSafeRegularFileIfPresent(temporaryPath, 'temporary work session record')) {
-        fs.unlinkSync(temporaryPath);
-      }
-    } catch { /* best effort */ }
-    throw error;
-  }
+  writePrivateTextFileAtomically(filePath, content, {
+    label: 'Kronos work session record',
+    maxBytes: MAX_WORK_SESSION_RECORD_BYTES,
+    temporaryPrefix: 'work-session',
+    fileMode: FILE_MODE,
+  });
 }
 
 function setPrivateMode(filePath: string, mode: number): void {

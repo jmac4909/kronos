@@ -15,6 +15,7 @@ All notable changes to the Kronos preview are documented here.
 
 ### Changed
 
+- Moved durable work-session records onto the shared cross-platform private-file primitive and added an explicit 4 MiB record cap, so oversized or path-raced session state fails closed and remains visible in Doctor.
 - Made all Jira, MR, CI, and Git composer placement use one exact managed-terminal attachment guard and exactly-once non-submitting send transition; detachment/rebinding during fetch cancels the stale composer and late queued messages cannot place a second line.
 - Unified Setup, Doctor, Projects, and project integration around one secret-free provider-readiness model; added direct private-config editing with a comment-only private template, immediate Poll Now verification, and one bounded action on every readiness row.
 - Added one redacted actionable failure vocabulary for provider reads and common operator workflows, distinguishing configuration, authentication, permission, timeout, DNS, TLS, redirect, rate limit, not found, response bound, malformed response, pagination, lease contention, local state, network, and unknown availability failures.
