@@ -15,7 +15,7 @@ All notable changes to the Kronos preview are documented here.
 
 ### Changed
 
-- Added a shared bounded immutable-artifact primitive with content verification and no-replace publication, and moved local Git context evidence onto it for consistent Windows/POSIX path safety.
+- Added shared bounded immutable-artifact and two-file pair primitives with content verification, incomplete-pair refusal, and no-replace publication; local Git, GitLab, and CI context evidence now use them for consistent Windows/POSIX path safety.
 - Moved the append-only monitor-event ledger onto shared identity-checked append and bounded-tail primitives, eliminating its separate Windows/POSIX open-flag implementation while retaining complete-line tail reads.
 - Moved the Work catalog, work-session directory creation, and provider-config template creation onto the shared bounded atomic state layer, including safe private-directory creation that rejects symbolic-link ancestors and recovery by replacing an oversized prior regular file with valid bounded state.
 - Moved durable work-session records onto the shared cross-platform private-file primitive and added an explicit 4 MiB record cap, so oversized or path-raced session state fails closed and remains visible in Doctor.

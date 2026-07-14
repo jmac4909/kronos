@@ -24,6 +24,11 @@ export interface ImmutablePrivateFileResult {
   created: boolean;
 }
 
+export interface ImmutablePrivateFilePairResult {
+  first: ImmutablePrivateFileResult;
+  second: ImmutablePrivateFileResult;
+}
+
 interface FileIdentity {
   dev: number;
   ino: number;
@@ -301,6 +306,61 @@ export function ensureImmutablePrivateFile(
   }
 }
 
+/** Publishes or verifies two immutable files without accepting a pre-existing partial pair. */
+export function ensureImmutablePrivateFilePair(
+  firstPath: string,
+  firstContent: string | Buffer,
+  firstOptions: PrivateImmutableFileOptions,
+  secondPath: string,
+  secondContent: string | Buffer,
+  secondOptions: PrivateImmutableFileOptions,
+): ImmutablePrivateFilePairResult {
+  const firstData = immutableContentBuffer(firstContent);
+  const secondData = immutableContentBuffer(secondContent);
+  assertBoundedSize(firstData.length, firstOptions);
+  assertBoundedSize(secondData.length, secondOptions);
+  const firstExisting = inspectSafePathComponents(firstPath, firstOptions.label);
+  const secondExisting = inspectSafePathComponents(secondPath, secondOptions.label);
+  if (Boolean(firstExisting) !== Boolean(secondExisting)) {
+    if (firstExisting) {
+      verifyImmutablePrivateFile(firstPath, firstData, firstOptions, firstOptions.fileMode ?? 0o600);
+    }
+    if (secondExisting) {
+      verifyImmutablePrivateFile(secondPath, secondData, secondOptions, secondOptions.fileMode ?? 0o600);
+    }
+    throw new Error('Immutable private artifact pair is incomplete; existing files were not changed.');
+  }
+  if (firstExisting && secondExisting) {
+    verifyImmutablePrivateFile(firstPath, firstData, firstOptions, firstOptions.fileMode ?? 0o600);
+    verifyImmutablePrivateFile(secondPath, secondData, secondOptions, secondOptions.fileMode ?? 0o600);
+    return {
+      first: { path: firstPath, created: false },
+      second: { path: secondPath, created: false },
+    };
+  }
+
+  const first = ensureImmutablePrivateFile(firstPath, firstData, firstOptions);
+  try {
+    const second = ensureImmutablePrivateFile(secondPath, secondData, secondOptions);
+    return { first, second };
+  } catch (error: unknown) {
+    const firstAtFailure = inspectSafePathComponents(firstPath, firstOptions.label);
+    const secondAtFailure = inspectSafePathComponents(secondPath, secondOptions.label);
+    if (firstAtFailure && secondAtFailure) {
+      verifyImmutablePrivateFile(firstPath, firstData, firstOptions, firstOptions.fileMode ?? 0o600);
+      verifyImmutablePrivateFile(secondPath, secondData, secondOptions, secondOptions.fileMode ?? 0o600);
+      return {
+        first: { path: firstPath, created: first.created },
+        second: { path: secondPath, created: false },
+      };
+    }
+    if (first.created && !secondAtFailure) {
+      removeImmutablePrivateFileIfMatches(firstPath, firstData, firstOptions);
+    }
+    throw error;
+  }
+}
+
 /** Appends one bounded record with one O_APPEND write after path and identity checks. */
 export function appendPrivateTextRecord(
   filePath: string,
@@ -480,6 +540,28 @@ function verifyImmutablePrivateFile(
     const before = inspectSafePathComponents(filePath, options.label);
     if (!before) { throw new Error(`${options.label} disappeared while its permissions were secured.`); }
     enforceRegularFileMode(filePath, before, options.label, fileMode);
+  }
+}
+
+function immutableContentBuffer(content: string | Buffer): Buffer {
+  return Buffer.isBuffer(content) ? Buffer.from(content) : Buffer.from(content, 'utf8');
+}
+
+function removeImmutablePrivateFileIfMatches(
+  filePath: string,
+  expected: Buffer,
+  options: PrivateFileReadOptions,
+): void {
+  const before = inspectSafePathComponents(filePath, options.label);
+  if (!before) { return; }
+  const actual = readPrivateBufferFileIfPresent(filePath, options);
+  if (!actual?.equals(expected)) { return; }
+  const after = inspectSafePathComponents(filePath, options.label);
+  if (!after || !sameIdentity(fileIdentity(before), fileIdentity(after))) { return; }
+  try {
+    fs.unlinkSync(filePath);
+  } catch (error: unknown) {
+    if (errorCode(error) !== 'ENOENT') { throw error; }
   }
 }
 

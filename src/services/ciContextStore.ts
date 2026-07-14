@@ -1,7 +1,7 @@
 import * as crypto from 'crypto';
-import * as fs from 'fs';
 import * as path from 'path';
 import type { JenkinsBuildContext } from './jenkinsRestClient';
+import { ensureImmutablePrivateFilePair, ensurePrivateDirectoryPath } from './privateFilePrimitives';
 import { redactSensitiveTokens } from './sensitiveText';
 import type { SonarBranchContext } from './sonarRestClient';
 import { KRONOS_DIR } from './stateStore';
@@ -37,7 +37,6 @@ export interface CiContextStoreOptions {
   kronosDir?: string;
 }
 
-const DIRECTORY_MODE = 0o700;
 const FILE_MODE = 0o600;
 const MAX_PROVIDER_STRING_CHARS = 32 * 1024;
 const MAX_PROVIDER_ARRAY_ITEMS = 2_500;
@@ -45,6 +44,7 @@ const MAX_PROVIDER_OBJECT_KEYS = 2_500;
 const MAX_PROVIDER_DEPTH = 24;
 const MAX_TOTAL_TEXT_CHARS = 8 * 1024 * 1024;
 const MAX_SERIALIZED_BYTES = 12 * 1024 * 1024;
+const MAX_PROMPT_BYTES = 13 * 1024 * 1024;
 const SENSITIVE_KEY_PATTERN = /^(?:authorization|cookie|set-cookie|credential|password|passwd|secret|token|api[_-]?key|private[_-]?key|access[_-]?token|client[_-]?secret)$/i;
 
 export function buildCiContext(ticketKey: string, input: BuildCiContextInput): KronosCiContext {
@@ -108,9 +108,7 @@ export function writeCiContextArtifacts(
   const ticketKey = normalizeCiTicketKey(context.ticketKey);
   const rootPath = path.resolve(options.kronosDir || KRONOS_DIR, 'ci-context');
   const directoryPath = path.join(rootPath, ticketKey);
-  ensurePrivateDirectory(path.resolve(options.kronosDir || KRONOS_DIR));
-  ensurePrivateDirectory(rootPath);
-  ensurePrivateDirectory(directoryPath);
+  ensurePrivateDirectoryPath(directoryPath, 'Kronos CI context');
   const serialized = `${JSON.stringify(context, null, 2)}\n`;
   if (Buffer.byteLength(serialized, 'utf8') > MAX_SERIALIZED_BYTES) {
     throw new Error(`CI context exceeds the ${MAX_SERIALIZED_BYTES}-byte artifact safety limit.`);
@@ -120,52 +118,24 @@ export function writeCiContextArtifacts(
   const jsonPath = path.join(directoryPath, `context-${contentId}.json`);
   const promptPath = path.join(directoryPath, `prompt-${contentId}.md`);
   const prompt = renderCiContextPrompt(context, serialized);
-
-  const jsonStat = lstatIfPresent(jsonPath);
-  const promptStat = lstatIfPresent(promptPath);
-  if (jsonStat && promptStat) {
-    assertExistingArtifactMatches(jsonPath, jsonStat, serialized);
-    assertExistingArtifactMatches(promptPath, promptStat, prompt);
-    return { directoryPath, jsonPath, promptPath, contentSha256 };
-  }
-  if (jsonStat || promptStat) {
-    if (jsonStat) { assertSafePrivateFile(jsonPath, jsonStat); }
-    if (promptStat) { assertSafePrivateFile(promptPath, promptStat); }
-    throw new Error(`CI context artifact pair is incomplete for content ${contentId}; existing files were not changed.`);
-  }
-
-  const stagedJson = stagePrivateFile(jsonPath, serialized);
-  let stagedPrompt: string | undefined;
-  let jsonCommitted = false;
-  try {
-    stagedPrompt = stagePrivateFile(promptPath, prompt);
-    assertArtifactPairAbsent(jsonPath, promptPath, contentId);
-    commitPrivateFileExclusive(stagedJson, jsonPath);
-    jsonCommitted = true;
-    commitPrivateFileExclusive(stagedPrompt, promptPath);
-  } catch (error: unknown) {
-    let concurrentPairMatches = false;
-    let pairValidationError: unknown;
-    const concurrentJsonStat = lstatIfPresent(jsonPath);
-    const concurrentPromptStat = lstatIfPresent(promptPath);
-    if (concurrentJsonStat && concurrentPromptStat) {
-      try {
-        assertExistingArtifactMatches(jsonPath, concurrentJsonStat, serialized);
-        assertExistingArtifactMatches(promptPath, concurrentPromptStat, prompt);
-        concurrentPairMatches = true;
-      } catch (validationError: unknown) {
-        pairValidationError = validationError;
-      }
-    }
-    if (!concurrentPairMatches && jsonCommitted) { removeIfPresent(jsonPath); }
-    removeIfPresent(stagedJson);
-    if (stagedPrompt) { removeIfPresent(stagedPrompt); }
-    if (concurrentPairMatches) {
-      return { directoryPath, jsonPath, promptPath, contentSha256 };
-    }
-    if (pairValidationError) { throw pairValidationError; }
-    throw error;
-  }
+  ensureImmutablePrivateFilePair(
+    jsonPath,
+    serialized,
+    {
+      label: 'Kronos CI context JSON artifact',
+      maxBytes: MAX_SERIALIZED_BYTES,
+      temporaryPrefix: 'ci-context-json',
+      fileMode: FILE_MODE,
+    },
+    promptPath,
+    prompt,
+    {
+      label: 'Kronos CI context prompt artifact',
+      maxBytes: MAX_PROMPT_BYTES,
+      temporaryPrefix: 'ci-context-prompt',
+      fileMode: FILE_MODE,
+    },
+  );
   return { directoryPath, jsonPath, promptPath, contentSha256 };
 }
 
@@ -226,145 +196,4 @@ function injectionBoundary(payload: string): string {
     boundary += '_X';
   }
   return boundary;
-}
-
-function ensurePrivateDirectory(directoryPath: string): void {
-  assertNoSymbolicLinkComponents(directoryPath);
-  if (fs.existsSync(directoryPath)) {
-    const stat = fs.lstatSync(directoryPath);
-    if (!stat.isDirectory() || stat.isSymbolicLink()) {
-      throw new Error(`CI context path is not a safe private directory: ${directoryPath}`);
-    }
-  } else {
-    fs.mkdirSync(directoryPath, { recursive: true, mode: DIRECTORY_MODE });
-  }
-  assertNoSymbolicLinkComponents(directoryPath);
-  if (process.platform !== 'win32') { fs.chmodSync(directoryPath, DIRECTORY_MODE); }
-}
-
-function assertNoSymbolicLinkComponents(targetPath: string): void {
-  const resolved = path.resolve(targetPath);
-  const parsed = path.parse(resolved);
-  const components = resolved.slice(parsed.root.length).split(path.sep).filter(Boolean);
-  let current = parsed.root;
-  for (const component of components) {
-    current = path.join(current, component);
-    if (!fs.existsSync(current)) { continue; }
-    const stat = fs.lstatSync(current);
-    if (stat.isSymbolicLink()) {
-      throw new Error(`CI context paths may not contain symbolic links: ${current}`);
-    }
-    if (!stat.isDirectory()) {
-      throw new Error(`CI context path component is not a directory: ${current}`);
-    }
-  }
-}
-
-function stagePrivateFile(filePath: string, content: string): string {
-  assertNoSymbolicLinkComponents(path.dirname(filePath));
-  if (lstatIfPresent(filePath)) {
-    throw new Error(`CI context artifact already exists and will not be overwritten: ${filePath}`);
-  }
-  const temporaryPath = path.join(path.dirname(filePath), `.${path.basename(filePath)}.${process.pid}.${crypto.randomBytes(8).toString('hex')}.tmp`);
-  let descriptor: number | undefined;
-  try {
-    descriptor = fs.openSync(temporaryPath, 'wx', FILE_MODE);
-    fs.writeFileSync(descriptor, content, 'utf8');
-    fs.fsyncSync(descriptor);
-    fs.closeSync(descriptor);
-    descriptor = undefined;
-    if (process.platform !== 'win32') { fs.chmodSync(temporaryPath, FILE_MODE); }
-    return temporaryPath;
-  } catch (error: unknown) {
-    if (descriptor !== undefined) { fs.closeSync(descriptor); }
-    removeIfPresent(temporaryPath);
-    throw error;
-  }
-}
-
-function commitPrivateFileExclusive(temporaryPath: string, filePath: string): void {
-  assertNoSymbolicLinkComponents(path.dirname(filePath));
-  if (lstatIfPresent(filePath)) {
-    throw new Error(`CI context artifact already exists and will not be overwritten: ${filePath}`);
-  }
-  let linked = false;
-  try {
-    fs.linkSync(temporaryPath, filePath);
-    linked = true;
-    fs.unlinkSync(temporaryPath);
-    const stat = fs.lstatSync(filePath);
-    assertSafePrivateFile(filePath, stat);
-    if (process.platform !== 'win32') { fs.chmodSync(filePath, FILE_MODE); }
-  } catch (error: unknown) {
-    if (linked) { removeIfPresent(filePath); }
-    removeIfPresent(temporaryPath);
-    throw error;
-  }
-}
-
-function assertArtifactPairAbsent(jsonPath: string, promptPath: string, contentId: string): void {
-  const jsonStat = lstatIfPresent(jsonPath);
-  const promptStat = lstatIfPresent(promptPath);
-  if (!jsonStat && !promptStat) { return; }
-  if (jsonStat) { assertSafePrivateFile(jsonPath, jsonStat); }
-  if (promptStat) { assertSafePrivateFile(promptPath, promptStat); }
-  throw new Error(`CI context artifact pair already exists or is incomplete for content ${contentId}; existing files were not changed.`);
-}
-
-function assertExistingArtifactMatches(filePath: string, stat: fs.Stats, expected: string): void {
-  assertSafePrivateFile(filePath, stat);
-  const expectedBytes = Buffer.from(expected, 'utf8');
-  if (stat.size !== expectedBytes.length) {
-    throw new Error(`CI context content-addressed artifact does not match its expected bytes: ${filePath}`);
-  }
-  const noFollow = typeof fs.constants.O_NOFOLLOW === 'number' ? fs.constants.O_NOFOLLOW : 0;
-  const descriptor = fs.openSync(filePath, fs.constants.O_RDONLY | noFollow);
-  try {
-    const openedStat = fs.fstatSync(descriptor);
-    assertSafePrivateFile(filePath, openedStat);
-    if (!sameFileIdentity(stat, openedStat) || openedStat.size !== expectedBytes.length) {
-      throw new Error(`CI context content-addressed artifact changed while being validated: ${filePath}`);
-    }
-    const actualBytes = fs.readFileSync(descriptor);
-    if (!actualBytes.equals(expectedBytes)) {
-      throw new Error(`CI context content-addressed artifact does not match its expected bytes: ${filePath}`);
-    }
-    const finalStat = fs.lstatSync(filePath);
-    assertSafePrivateFile(filePath, finalStat);
-    if (!sameFileIdentity(openedStat, finalStat)) {
-      throw new Error(`CI context content-addressed artifact changed while being validated: ${filePath}`);
-    }
-  } finally {
-    fs.closeSync(descriptor);
-  }
-}
-
-function sameFileIdentity(left: fs.Stats, right: fs.Stats): boolean {
-  return left.dev === right.dev && left.ino === right.ino;
-}
-
-function assertSafePrivateFile(filePath: string, stat: fs.Stats): void {
-  if (!stat.isFile() || stat.isSymbolicLink()) {
-    throw new Error(`CI context artifact path is not a safe regular file: ${filePath}`);
-  }
-  if (process.platform !== 'win32' && (stat.mode & 0o777) !== FILE_MODE) {
-    throw new Error(`CI context artifact does not have private permissions: ${filePath}`);
-  }
-}
-
-function lstatIfPresent(filePath: string): fs.Stats | null {
-  try {
-    return fs.lstatSync(filePath);
-  } catch (error: unknown) {
-    if (error && typeof error === 'object' && Reflect.get(error, 'code') === 'ENOENT') { return null; }
-    throw error;
-  }
-}
-
-function removeIfPresent(filePath: string): void {
-  try {
-    fs.unlinkSync(filePath);
-  } catch (error: unknown) {
-    if (!error || typeof error !== 'object' || Reflect.get(error, 'code') !== 'ENOENT') { throw error; }
-  }
 }

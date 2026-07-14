@@ -59,9 +59,13 @@ for (const source of [
   read('src/services/gitlabContextStore.ts'),
   read('src/services/ciContextStore.ts'),
 ]) {
-  if (!/0o600/.test(source) || !/0o700/.test(source)) {
-    failures.push('Every context store must request private file and directory modes.');
+  if (!/0o600/.test(source) || !/ensurePrivateDirectory(?:Path|Tree)/.test(source)) {
+    failures.push('Every context store must request private files and a governed private directory boundary.');
   }
+}
+const privateFiles = read('src/services/privateFilePrimitives.ts');
+if (!/ensurePrivateDirectoryPath/.test(privateFiles) || !/0o700/.test(privateFiles)) {
+  failures.push('The shared private directory boundary must retain mode 0o700.');
 }
 
 if (failures.length > 0) {

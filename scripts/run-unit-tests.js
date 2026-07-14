@@ -28,6 +28,9 @@ const jiraValuePruning = require('../out/services/jiraValuePruning.js');
 const jiraWorkCatalog = require('../out/services/jiraWorkCatalog.js');
 const workTicketFilters = require('../out/services/workTicketFilters.js');
 const jiraContextStore = require('../out/services/jiraContextStore.js');
+const gitlabMergeRequestContext = require('../out/services/gitlabMergeRequestContext.js');
+const gitlabContextStore = require('../out/services/gitlabContextStore.js');
+const ciContextStore = require('../out/services/ciContextStore.js');
 const projectGitContextStore = require('../out/services/projectGitContextStore.js');
 const insertion = require('../out/services/terminalContextInsertion.js');
 const { createOperatorTerminalRegistry } = require('../out/services/operatorTerminalRegistry.js');
@@ -247,6 +250,50 @@ test('immutable private artifacts verify content and own local Git context persi
     /symbolic link/i,
   );
   assert.equal(fs.existsSync(path.join(outside, 'git-context')), false);
+});
+
+test('GitLab and CI context pairs share immutable publication and reject incomplete evidence', () => {
+  const gitlabContext = gitlabMergeRequestContext.normalizeGitLabMergeRequestContext('JIRA-87', 87, {
+    fetchedAt: '2026-07-14T19:00:00.000Z',
+    mr: {
+      iid: 87,
+      title: 'JIRA-87 Shared immutable context',
+      description: 'Verify the pair boundary.',
+      state: 'opened',
+      source_branch: 'feature/JIRA-87',
+      target_branch: 'main',
+    },
+    notes: [],
+    discussions: [],
+    diffs: [],
+    pipelines: [],
+    jobs: [],
+    completeness: {},
+  });
+  const gitlabRoot = path.join(tempRoot, 'shared-gitlab-context');
+  const gitlabArtifact = gitlabContextStore.writeGitLabContextArtifacts(gitlabContext, { kronosDir: gitlabRoot });
+  const gitlabReused = gitlabContextStore.writeGitLabContextArtifacts(gitlabContext, { kronosDir: gitlabRoot });
+  assert.equal(gitlabReused.contentSha256, gitlabArtifact.contentSha256);
+  assert.equal(fs.existsSync(gitlabArtifact.jsonPath), true);
+  assert.equal(fs.existsSync(gitlabArtifact.promptPath), true);
+
+  const ciContext = ciContextStore.buildCiContext('JIRA-87', { warnings: ['No provider evidence in fixture.'] });
+  const ciRoot = path.join(tempRoot, 'shared-ci-context');
+  const ciArtifact = ciContextStore.writeCiContextArtifacts(ciContext, { kronosDir: ciRoot });
+  assert.equal(ciContextStore.writeCiContextArtifacts(ciContext, { kronosDir: ciRoot }).contentSha256, ciArtifact.contentSha256);
+  fs.unlinkSync(ciArtifact.promptPath);
+  assert.throws(
+    () => ciContextStore.writeCiContextArtifacts(ciContext, { kronosDir: ciRoot }),
+    /artifact pair is incomplete/i,
+  );
+  assert.equal(fs.existsSync(ciArtifact.jsonPath), true);
+  assert.equal(fs.existsSync(ciArtifact.promptPath), false, 'an existing partial pair is never silently completed');
+
+  for (const sourceName of ['gitlabContextStore.ts', 'ciContextStore.ts']) {
+    const source = fs.readFileSync(path.join(root, 'src', 'services', sourceName), 'utf8');
+    assert.match(source, /ensureImmutablePrivateFilePair/);
+    assert.doesNotMatch(source, /fs\.|NO_FOLLOW/);
+  }
 });
 
 test('Attention stream identity is stable by project, provider, resource, logical subject, and facet', () => {
