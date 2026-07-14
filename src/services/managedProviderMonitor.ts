@@ -65,7 +65,7 @@ import {
   type WorkSessionRecord,
 } from './workSessionStore';
 import { optionalTrimmedStringFromUnknown } from './records';
-import { unknownErrorMessage } from './errorUtils';
+import { boundedOperationFailure, unknownErrorMessage } from './errorUtils';
 import { projectConfigurationForTicket, readProjectGitBranch } from './projectCatalog';
 import {
   configuredGitLabProjectIdentity,
@@ -1407,31 +1407,37 @@ function mergeRequestReadStatusSummary(
 }
 
 function providerReadFailureReason(error: unknown): string {
-  const message = unknownErrorMessage(error, '').toLowerCase();
-  const httpMatch = /\bhttp\s+(\d{3})\b/.exec(message);
-  const status = httpMatch?.[1] ? Number(httpMatch[1]) : undefined;
-  if (status === 401 || status === 403) { return 'authentication'; }
-  if (status === 404) { return 'not_found'; }
-  if (status === 429) { return 'rate_limited'; }
+  const failure = boundedOperationFailure(error, 'Provider read unavailable.');
+  if (failure.kind === 'authentication' || failure.kind === 'permission') { return failure.kind; }
+  if (failure.kind === 'not_found') { return 'not_found'; }
+  if (failure.kind === 'rate_limit') { return 'rate_limited'; }
+  if (failure.kind === 'response_limit') { return 'safety_limit'; }
+  if (failure.kind === 'configuration') { return 'configuration'; }
+  if (failure.kind === 'timeout' || failure.kind === 'dns' || failure.kind === 'tls' || failure.kind === 'network') {
+    return failure.kind;
+  }
+  const message = failure.summary.toLowerCase();
+  const statusMatch = /\bhttp\s+(\d{3})\b/.exec(message);
+  const status = statusMatch?.[1] ? Number(statusMatch[1]) : undefined;
   if (status !== undefined && status >= 500) { return 'provider_5xx'; }
   if (status !== undefined) { return 'provider_4xx'; }
-  if (message.includes('timed out') || message.includes('timeout')) { return 'timeout'; }
-  if (message.includes('safety limit') || message.includes('exceeded')) { return 'safety_limit'; }
-  if (message.includes('configuration') || message.includes('missing')) { return 'configuration'; }
-  if (message.includes('network')) { return 'network'; }
-  return 'unavailable';
+  return failure.kind === 'malformed_response' ? 'malformed_response' : 'unavailable';
 }
 
 function readFailureLabel(reason: string): string {
   if (reason === 'authentication') { return 'authentication unavailable'; }
+  if (reason === 'permission') { return 'read permission unavailable'; }
   if (reason === 'not_found') { return 'merge request not found'; }
   if (reason === 'rate_limited') { return 'provider rate limited'; }
   if (reason === 'provider_5xx') { return 'provider server error'; }
   if (reason === 'provider_4xx') { return 'provider request refused'; }
   if (reason === 'timeout') { return 'request timed out'; }
+  if (reason === 'dns') { return 'provider hostname unavailable'; }
+  if (reason === 'tls') { return 'provider TLS verification failed'; }
   if (reason === 'safety_limit') { return 'bounded read limit reached'; }
   if (reason === 'configuration') { return 'provider configuration unavailable'; }
   if (reason === 'network') { return 'network unavailable'; }
+  if (reason === 'malformed_response') { return 'provider response was malformed'; }
   return 'provider unavailable';
 }
 

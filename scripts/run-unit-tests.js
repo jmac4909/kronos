@@ -48,6 +48,7 @@ const { buildProjectIntegrationPanelHtml } = require('../out/services/projectInt
 const managedProviderMonitor = require('../out/services/managedProviderMonitor.js');
 const managedMonitorLease = require('../out/services/managedMonitorLease.js');
 const privateFilePrimitives = require('../out/services/privateFilePrimitives.js');
+const errorUtils = require('../out/services/errorUtils.js');
 const sensitiveText = require('../out/services/sensitiveText.js');
 const providerUrls = require('../out/services/providerUrls.js');
 
@@ -231,6 +232,42 @@ test('all provider evidence paths share the complete credential redaction vocabu
   for (const secret of Object.values(credentialFixtures)) {
     assert.equal(redacted.includes(secret), false);
   }
+});
+
+test('bounded operation failures use one redacted actionable vocabulary', () => {
+  const withCode = (message, code) => Object.assign(new Error(message), { code });
+  const cases = [
+    [new Error('Provider configuration missing GITLAB_TOKEN.'), 'configuration'],
+    [new Error('Provider request failed with HTTP 401.'), 'authentication'],
+    [new Error('Provider request failed with HTTP 403.'), 'permission'],
+    [withCode('connect timed out', 'ETIMEDOUT'), 'timeout'],
+    [withCode('getaddrinfo failed', 'ENOTFOUND'), 'dns'],
+    [new Error('TLS certificate verification failed.'), 'tls'],
+    [new Error('Refused to send credentials outside the configured provider origin.'), 'redirect'],
+    [new Error('Provider request failed with HTTP 429.'), 'rate_limit'],
+    [new Error('Provider request failed with HTTP 404.'), 'not_found'],
+    [new Error('Provider response exceeded the response safety limit.'), 'response_limit'],
+    [new Error('Provider returned invalid JSON.'), 'malformed_response'],
+    [new Error('Provider pagination next page failed.'), 'pagination'],
+    [new Error('Another Kronos window owns the monitoring lease.'), 'lease_busy'],
+    [withCode('Could not write private state.', 'EACCES'), 'local_state'],
+    [withCode('connect refused', 'ECONNREFUSED'), 'network'],
+    [new Error('Provider unavailable for an unknown reason.'), 'unavailable'],
+  ];
+  for (const [error, kind] of cases) {
+    const failure = errorUtils.boundedOperationFailure(error, 'Fallback operation failed.');
+    assert.equal(failure.kind, kind);
+    assert.ok(failure.nextAction.length > 20);
+    assert.match(failure.display, new RegExp(`\\[${kind.replace(/_/g, ' ')}\\]`));
+  }
+  const token = ['glpat-', 'operationfailurefixture'].join('');
+  const redacted = errorUtils.boundedOperationFailure(
+    new Error(`Authorization: Bearer ${token}`),
+    'Provider failed.',
+  );
+  assert.equal(redacted.display.includes(token), false);
+  assert.match(redacted.display, /REDACTED/);
+  assert.ok(redacted.summary.length <= 800);
 });
 
 test('provider URLs retain only the SonarQube dashboard routing query', () => {

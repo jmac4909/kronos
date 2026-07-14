@@ -7,7 +7,7 @@ import { ManagedSessionTreeProvider } from './views/ManagedSessionTreeProvider';
 import { ProjectTreeProvider, type RegisteredProjectCommandTarget } from './views/ProjectTreeProvider';
 import { AttentionTreeProvider } from './views/AttentionTreeProvider';
 import { defaultProviderEnvPath, loadProviderEnv } from './services/providerEnv';
-import { unknownErrorMessage } from './services/errorUtils';
+import { boundedOperationFailure, unknownErrorMessage } from './services/errorUtils';
 import { buildFallbackJiraTicketContext, normalizeJiraTicketContext, type JiraTicketContext } from './services/jiraTicketContext';
 import { isJiraRestConfigured, jiraRestClient, type JiraAttachmentContentSnapshot } from './services/jiraRestClient';
 import { writeJiraContextArtifacts } from './services/jiraContextStore';
@@ -632,7 +632,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
         vscode.ConfigurationTarget.Global,
       );
     } catch (error: unknown) {
-      const detail = unknownErrorMessage(error, 'Kronos could not save the selected discovery folders.');
+      const detail = boundedOperationFailure(error, 'Kronos could not save the selected discovery folders.').display;
       this.log('Could not save project discovery folders.', detail);
       void vscode.window.showErrorMessage(detail);
       return;
@@ -724,7 +724,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
           `Saved read-only provider polling setup for ${message.projects.length} project${message.projects.length === 1 ? '' : 's'}. Run Doctor to verify credentials and remaining prerequisites.`,
         );
       } catch (error: unknown) {
-        const detail = unknownErrorMessage(error, 'Project integration setup could not be saved.');
+        const detail = boundedOperationFailure(error, 'Project integration setup could not be saved.').display;
         this.log('Project integration setup could not be saved.', detail);
         void vscode.window.showErrorMessage(detail);
       }
@@ -852,9 +852,9 @@ class TerminalFirstRuntime implements vscode.Disposable {
       }
       void this.pollProviders(false);
     } catch (error: unknown) {
-      const detail = unknownErrorMessage(error, 'Jira ticket refresh failed.');
+      const detail = boundedOperationFailure(error, 'Jira ticket refresh failed.').display;
       this.log('Jira ticket refresh failed.', detail);
-      if (showResult) { void vscode.window.showWarningMessage(`${detail} Run Kronos: Doctor for configuration details.`); }
+      if (showResult) { void vscode.window.showWarningMessage(detail); }
     } finally {
       this.ticketRefreshRunning = false;
     }
@@ -961,7 +961,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
     try {
       await vscode.commands.executeCommand(`kronos.${action}`, { ticketKey });
     } catch (error: unknown) {
-      const detail = unknownErrorMessage(error, `${ticketKey} action failed.`);
+      const detail = boundedOperationFailure(error, `${ticketKey} action failed.`).display;
       this.log(`${ticketKey} ${action} failed.`, detail);
       void vscode.window.showErrorMessage(detail);
     } finally {
@@ -1241,9 +1241,9 @@ class TerminalFirstRuntime implements vscode.Disposable {
           this.log('Could not close the failed pre-submission work session.', unknownErrorMessage(compensationError, 'Session compensation failed.'));
         }
       }
-      const detail = unknownErrorMessage(error, commandSubmitted
+      const detail = boundedOperationFailure(error, commandSubmitted
         ? 'The Claude command was submitted, but Kronos could not attach its session.'
-        : 'Claude terminal launch failed.');
+        : 'Claude terminal launch failed.').display;
       this.log(commandSubmitted ? 'Claude command submitted but session attachment failed.' : 'Claude terminal launch failed.', detail);
       void vscode.window.showErrorMessage(
         commandSubmitted
@@ -1497,7 +1497,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
           jiraContext = normalizeJiraTicketContext(ticketKey, snapshot, { ...ticket });
           attachmentContents = snapshot.attachmentContents;
         } catch (error: unknown) {
-          warnings.push(`${unknownErrorMessage(error, 'Native Jira REST read failed.')} Cached ticket data was inserted instead.`);
+          warnings.push(`${boundedOperationFailure(error, 'Native Jira REST read failed.').display} Cached ticket data was inserted instead.`);
         }
       } else {
         warnings.push('Native Jira REST credentials are unavailable. Cached ticket data was inserted instead.');
@@ -1659,7 +1659,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
             jenkinsBranch ? { branch: jenkinsBranch } : {},
           );
         }
-        catch (error: unknown) { warnings.push(unknownErrorMessage(error, 'Jenkins context was unavailable.')); }
+        catch (error: unknown) { warnings.push(boundedOperationFailure(error, 'Jenkins context was unavailable.').display); }
       }
       if (jenkins?.sonarProjectKey && (!sonarTarget || sonarTarget.projectKey !== jenkins.sonarProjectKey)) {
         const branch = jenkins.sonarBranch || configuredSonarBranchName(this.state.state, ticketKey);
@@ -1679,7 +1679,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
       if (sonarTarget) {
         progress.report({ message: 'Reading SonarQube gate, measures, and issues...' });
         try { sonar = await sonarRestClient.branchContext(sonarTarget.projectKey, sonarTarget.branch); }
-        catch (error: unknown) { warnings.push(unknownErrorMessage(error, 'SonarQube context was unavailable.')); }
+        catch (error: unknown) { warnings.push(boundedOperationFailure(error, 'SonarQube context was unavailable.').display); }
       }
       if (!jenkins && !sonar) { throw new Error('Neither Jenkins nor SonarQube context could be read. Run Kronos: Doctor.'); }
       const input: { jenkins?: JenkinsBuildContext; sonar?: SonarBranchContext; warnings: string[] } = { warnings };
@@ -1820,7 +1820,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
     try {
       result = await this.monitor.poll();
     } catch (error: unknown) {
-      const detail = unknownErrorMessage(error, 'Managed provider poll failed.');
+      const detail = boundedOperationFailure(error, 'Managed provider poll failed.').display;
       this.log('Managed provider poll failed.', detail);
       if (showResult) { void vscode.window.showWarningMessage(detail); }
       return;
@@ -2380,7 +2380,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
       this.renderSetupPanel();
       this.renderDoctorPanel();
     } catch (error: unknown) {
-      const detail = unknownErrorMessage(error, `Kronos ${source} action failed.`);
+      const detail = boundedOperationFailure(error, `Kronos ${source} action failed.`).display;
       this.log(`Kronos ${source} action failed.`, detail);
       void vscode.window.showErrorMessage(detail);
     } finally {
@@ -2727,9 +2727,9 @@ class TerminalFirstRuntime implements vscode.Disposable {
         ...(sourceBranch ? { sourceBranch } : {}),
       });
     } catch (error: unknown) {
-      const detail = unknownErrorMessage(error, 'GitLab merge-request discovery failed.');
+      const detail = boundedOperationFailure(error, 'GitLab merge-request discovery failed.').display;
       this.log(`Could not discover a GitLab MR for ${ticketKey}.`, detail);
-      void vscode.window.showWarningMessage(`${detail} Run Kronos: Doctor to verify GitLab polling.`);
+      void vscode.window.showWarningMessage(detail);
       return undefined;
     }
     if (!discovery.match) {
@@ -2826,7 +2826,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
     try {
       await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title }, task);
     } catch (error: unknown) {
-      const detail = unknownErrorMessage(error, `${title} failed.`);
+      const detail = boundedOperationFailure(error, `${title} failed.`).display;
       this.log(title, detail);
       void vscode.window.showErrorMessage(detail);
     }
