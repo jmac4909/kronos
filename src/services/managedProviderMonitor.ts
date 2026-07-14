@@ -468,14 +468,11 @@ export class ManagedProviderMonitor {
     let result = emptyResult();
     try {
       if (jenkinsUrl) {
-        const savedJenkins = newestProviderBinding(session, 'jenkins', 'build');
         session = reconcileProviderBinding(session, {
-          id: 'jenkins-build',
+          id: 'jenkins-job',
           provider: 'jenkins',
-          resource: 'build',
-          subjectId: state?.tickets[session.ticketKey]?.build
-            ? String(state.tickets[session.ticketKey]?.build?.number)
-            : savedJenkins?.subjectId || 'latest',
+          resource: 'job',
+          subjectId: 'configured',
           url: jenkinsUrl,
         });
       }
@@ -506,11 +503,10 @@ export class ManagedProviderMonitor {
       try {
         jenkins = await jenkinsRestClient.buildContext(jenkinsUrl);
         session = reconcileProviderBinding(session, {
-          id: 'jenkins-build',
           provider: 'jenkins',
           resource: 'build',
           subjectId: String(jenkins.build.number),
-          url: jenkins.jobOrBuildUrl || jenkinsUrl,
+          url: jenkins.build.url || jenkins.jobOrBuildUrl || jenkinsUrl,
         });
         result.polled += 1;
         if (!sonarTarget && jenkins.sonarProjectKey) {
@@ -547,7 +543,7 @@ export class ManagedProviderMonitor {
           'jenkins',
           jenkinsReadFailure ? 'failed' : jenkins?.completeness.complete ? 'complete' : 'partial',
           jenkinsReadFailure || (jenkins?.completeness.complete ? 'complete' : 'bounded_read_incomplete'),
-          jenkins?.jobOrBuildUrl || jenkinsUrl,
+          jenkins?.build.url || jenkins?.jobOrBuildUrl || jenkinsUrl,
           jenkins ? jenkinsIncompleteReadComponents(jenkins) : [],
         );
         if (readNotice) { notices.push(readNotice); }
@@ -1423,7 +1419,11 @@ export function configuredCiPollingTargets(
 ): ConfiguredCiPollingTargets {
   const ticket = state?.tickets[session.ticketKey];
   const config = projectConfigurationForTicket(state, ticket);
-  const jenkinsBinding = newestWorkSessionProviderBinding(
+  const jenkinsJobBinding = newestWorkSessionProviderBinding(
+    session.providerBindings,
+    candidate => candidate.provider === 'jenkins' && candidate.resource === 'job',
+  );
+  const jenkinsBuildBinding = newestWorkSessionProviderBinding(
     session.providerBindings,
     candidate => candidate.provider === 'jenkins' && candidate.resource === 'build',
   );
@@ -1431,9 +1431,10 @@ export function configuredCiPollingTargets(
     session.providerBindings,
     candidate => candidate.provider === 'sonar' && candidate.resource === 'quality-gate',
   );
-  const jenkinsUrl = ticket?.build?.url
-    || optionalTrimmedStringFromUnknown(config.jenkins_url)
-    || jenkinsBinding?.url;
+  const jenkinsUrl = optionalTrimmedStringFromUnknown(config.jenkins_url)
+    || jenkinsJobBinding?.url
+    || ticket?.build?.url
+    || jenkinsBuildBinding?.url;
   const configuredSonar = configuredSonarBranch(state, session.ticketKey);
   const boundProjectKey = sonarBinding?.projectId;
   const boundPrefix = boundProjectKey ? `${boundProjectKey}:` : '';

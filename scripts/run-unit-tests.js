@@ -185,6 +185,7 @@ function gitLabDiscoveryClient(handler) {
 
 test('Jenkins context extracts only literal SonarQube configuration from bounded config.xml', async () => {
   const requests = [];
+  let configXml = '<flow-definition><properties><sonar.projectKey>${SONAR_PROJECT_KEY}</sonar.projectKey><sonar.branch.name>${BRANCH_NAME}</sonar.branch.name></properties><script>sh &apos;sonar-scanner -Dsonar.projectKey=team:application -Dsonar.branch.name=feature/JIRA-930&apos;</script></flow-definition>';
   const client = new JenkinsRestClient({
     env: { JENKINS_URL: 'https://jenkins.example' },
     transport: async request => {
@@ -193,7 +194,7 @@ test('Jenkins context extracts only literal SonarQube configuration from bounded
       if (url.pathname.endsWith('/config.xml')) {
         return {
           statusCode: 200,
-          body: '<flow-definition><script>sh &apos;sonar-scanner -Dsonar.projectKey=team:application -Dsonar.branch.name=feature/JIRA-930&apos;</script></flow-definition>',
+          body: configXml,
           headers: {},
         };
       }
@@ -223,6 +224,10 @@ test('Jenkins context extracts only literal SonarQube configuration from bounded
   assert.equal(context.completeness.configuration, 'complete');
   assert.ok(requests.includes('https://jenkins.example/job/application/config.xml'));
   assert.equal(JSON.stringify(context).includes('sonar-scanner'), false, 'raw Jenkins XML must not enter retained context');
+  configXml = '<flow-definition><properties><sonar.projectKey>${SONAR_PROJECT_KEY}</sonar.projectKey><sonar.branch.name>${BRANCH_NAME}</sonar.branch.name></properties></flow-definition>';
+  const expressionOnly = await client.buildContext('https://jenkins.example/job/application');
+  assert.equal(expressionOnly.sonarProjectKey, undefined);
+  assert.equal(expressionOnly.sonarBranch, undefined);
 });
 
 test('GitLab discovery selects a unique current-branch MR before ticket search', async () => {
@@ -639,6 +644,76 @@ test('managed polling discovers the SonarQube target from Jenkins config.xml evi
   } finally {
     jenkinsRestModule.jenkinsRestClient.buildContext = originalBuildContext;
     sonarRestModule.sonarRestClient.branchContext = originalBranchContext;
+    workSessions.removeWorkSession(session.id);
+  }
+});
+
+test('managed Jenkins polling retains branch-build targets for Attention choices', async () => {
+  const state = stateStore.emptyWorkCatalog();
+  state.projects.Application = {
+    config: {
+      jira_project_key: 'JIRA',
+      jenkins_url: 'https://jenkins.example/job/application',
+    },
+  };
+  state.tickets['JIRA-905'] = fixtureTicket({
+    summary: 'Jenkins build target history',
+    projects: ['Application'],
+  });
+  const session = workSessions.createOrGetWorkSessionByTicket({
+    ticketKey: 'JIRA-905',
+    title: 'Jenkins build target history',
+    projectName: 'Application',
+  });
+  const originalBuildContext = jenkinsRestModule.jenkinsRestClient.buildContext;
+  let buildNumber = 31;
+  jenkinsRestModule.jenkinsRestClient.buildContext = async jobOrBuildUrl => ({
+    schemaVersion: 1,
+    provider: 'jenkins',
+    fetchedAt: `2026-07-14T15:${buildNumber}:00.000Z`,
+    jobOrBuildUrl,
+    build: {
+      number: buildNumber,
+      status: 'SUCCESS',
+      building: false,
+      url: `https://jenkins.example/job/application/${buildNumber}/`,
+      causes: [],
+      artifacts: [],
+      changes: [],
+    },
+    completeness: {
+      complete: true,
+      buildComplete: true,
+      testReport: 'complete',
+      stages: 'complete',
+      configuration: 'complete',
+      logsIncluded: false,
+      warnings: [],
+    },
+  });
+  try {
+    const monitor = new managedProviderMonitor.ManagedProviderMonitor({ state: () => state });
+    assert.equal((await monitor.poll()).polled, 1);
+    buildNumber = 32;
+    assert.ok((await monitor.poll()).transitions > 0, 'a new Jenkins build is a real transition');
+    assert.equal((await monitor.poll()).transitions, 0, 'an unchanged Jenkins build creates no repeated transition');
+    const updated = workSessions.readWorkSession(session.id);
+    assert.ok(updated.providerBindings.some(binding =>
+      binding.provider === 'jenkins'
+        && binding.resource === 'job'
+        && binding.url === 'https://jenkins.example/job/application'
+    ));
+    assert.deepEqual(
+      updated.providerBindings
+        .filter(binding => binding.provider === 'jenkins' && binding.resource === 'build')
+        .map(binding => [binding.subjectId, binding.url]),
+      [
+        ['31', 'https://jenkins.example/job/application/31/'],
+        ['32', 'https://jenkins.example/job/application/32/'],
+      ],
+    );
+  } finally {
+    jenkinsRestModule.jenkinsRestClient.buildContext = originalBuildContext;
     workSessions.removeWorkSession(session.id);
   }
 });
@@ -2287,6 +2362,18 @@ test('extension activation registers the bounded surface and explicit launch com
       ticketKey: 'JIRA-654',
       title: 'Attention failure deduplication fixture',
     });
+    workSessions.addWorkSessionProviderBinding(failureSession.id, {
+      provider: 'jenkins',
+      resource: 'build',
+      subjectId: '31',
+      url: 'https://jenkins.example/job/application/31/',
+    });
+    workSessions.addWorkSessionProviderBinding(failureSession.id, {
+      provider: 'jenkins',
+      resource: 'build',
+      subjectId: '32',
+      url: 'https://jenkins.example/job/application/32/',
+    });
     const failureEvent = (id, at, state, reason, generation) => monitorEventStore.appendMonitorEvent({
       id,
       at,
@@ -2316,6 +2403,11 @@ test('extension activation registers the bounded surface and explicit launch com
       retainedFailureItems.map(item => item.entry.event.id),
       ['attention-failure-after-recovery', 'attention-read-recovery', 'attention-repeat-failure-1'],
       'a recovery makes the same later failure a real new transition',
+    );
+    assert.deepEqual(
+      retainedFailureItems[0].providerChoices.map(choice => choice.label),
+      ['Jenkins build 32', 'Jenkins build 31'],
+      'retained Jenkins build targets are available from Attention',
     );
     workSessions.removeWorkSession(failureSession.id);
 

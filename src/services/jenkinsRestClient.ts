@@ -787,14 +787,23 @@ function sonarConfigurationFromJenkinsXml(value: string): { projectKey?: string;
 
 function literalSonarProperty(value: string, property: string, allowed: RegExp): string | undefined {
   const escaped = property.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const tagMatch = new RegExp(`<${escaped}>\\s*([^<]+?)\\s*</${escaped}>`, 'i').exec(value);
-  const assignmentMatch = new RegExp(
+  const candidates: Array<{ index: number; value: string }> = [];
+  for (const match of value.matchAll(new RegExp(`<${escaped}>\\s*([^<]+?)\\s*</${escaped}>`, 'gi'))) {
+    if (match[1]) { candidates.push({ index: match.index, value: match[1] }); }
+  }
+  const assignmentPattern = new RegExp(
     `(?:^|[\\s'"<>;])(?:-D)?${escaped}\\s*(?:=|:)\\s*(?:"([^"]+)"|'([^']+)'|([^\\s<>"';&]+))`,
-    'im',
-  ).exec(value);
-  const candidate = (tagMatch?.[1] || assignmentMatch?.[1] || assignmentMatch?.[2] || assignmentMatch?.[3] || '').trim();
-  if (!candidate || !allowed.test(candidate) || redactSensitiveTokens(candidate) !== candidate) { return undefined; }
-  return candidate;
+    'gim',
+  );
+  for (const match of value.matchAll(assignmentPattern)) {
+    const candidate = match[1] || match[2] || match[3];
+    if (candidate) { candidates.push({ index: match.index, value: candidate }); }
+  }
+  for (const candidate of candidates.sort((left, right) => left.index - right.index)) {
+    const literal = candidate.value.trim();
+    if (literal && allowed.test(literal) && redactSensitiveTokens(literal) === literal) { return literal; }
+  }
+  return undefined;
 }
 
 function decodeBasicXmlEntities(value: string): string {

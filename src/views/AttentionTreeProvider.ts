@@ -259,7 +259,9 @@ function providerChoicesForEvent(
   if (!session || (event.source !== 'sonar' && event.source !== 'jenkins')) { return []; }
   const source = event.source;
   const candidates = session.providerBindings
-    .filter(binding => binding.provider === source && Boolean(binding.url))
+    .filter(binding => binding.provider === source
+      && Boolean(binding.url)
+      && (source !== 'jenkins' || binding.resource === 'build'))
     .map(binding => {
       const url = normalizeProviderPublicUrl(binding.url, source);
       return url ? { binding, url } : undefined;
@@ -268,7 +270,10 @@ function providerChoicesForEvent(
     .sort((left, right) => {
       const leftExact = left.binding.subjectId === event.subject?.id ? 1 : 0;
       const rightExact = right.binding.subjectId === event.subject?.id ? 1 : 0;
-      return rightExact - leftExact || right.binding.attachedAt.localeCompare(left.binding.attachedAt);
+      return rightExact - leftExact
+        || right.binding.attachedAt.localeCompare(left.binding.attachedAt)
+        || right.binding.subjectId.localeCompare(left.binding.subjectId, undefined, { numeric: true, sensitivity: 'base' })
+        || right.binding.id.localeCompare(left.binding.id);
     });
   const choices: AttentionProviderChoice[] = [];
   const seen = new Set<string>();

@@ -1317,14 +1317,21 @@ class TerminalFirstRuntime implements vscode.Disposable {
       if (ticket.mr.url) { binding.url = ticket.mr.url; }
       updated = this.requireTicketSession(addWorkSessionProviderBinding(updated.id, binding));
     }
-    const jenkinsUrl = ticket.build?.url || config?.jenkins_url;
-    if (jenkinsUrl) {
+    if (config?.jenkins_url) {
       updated = this.requireTicketSession(addWorkSessionProviderBinding(updated.id, {
-        id: 'jenkins-build',
+        id: 'jenkins-job',
+        provider: 'jenkins',
+        resource: 'job',
+        subjectId: 'configured',
+        url: config.jenkins_url,
+      }));
+    }
+    if (ticket.build?.url) {
+      updated = this.requireTicketSession(addWorkSessionProviderBinding(updated.id, {
         provider: 'jenkins',
         resource: 'build',
-        subjectId: ticket.build ? String(ticket.build.number) : 'latest',
-        url: jenkinsUrl,
+        subjectId: String(ticket.build.number),
+        url: ticket.build.url,
       }));
     }
     const sonarTarget = configuredSonarBranch(this.state.state, session.ticketKey);
@@ -1630,13 +1637,14 @@ class TerminalFirstRuntime implements vscode.Disposable {
       if (selection.workSession) {
         let session = selection.workSession;
         if (jenkins) {
-          session = addWorkSessionProviderBinding(session.id, {
-            id: 'jenkins-build',
+          const binding: Parameters<typeof addWorkSessionProviderBinding>[1] = {
             provider: 'jenkins',
             resource: 'build',
             subjectId: String(jenkins.build.number),
-            url: jenkinsUrl || jenkins.build.url,
-          });
+          };
+          const buildUrl = jenkins.build.url || jenkinsUrl;
+          if (buildUrl) { binding.url = buildUrl; }
+          session = addWorkSessionProviderBinding(session.id, binding);
         }
         if (sonar && sonarTarget) {
           session = addWorkSessionProviderBinding(session.id, {
