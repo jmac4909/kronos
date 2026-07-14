@@ -159,7 +159,7 @@ function buildTicketSummary(ticket: Ticket): string {
       ${fact('Type', singleLine(ticket.type, 120) || 'unknown')}
       ${fact('Priority', singleLine(ticket.priority, 120) || 'unknown')}
       ${fact('Jira project', singleLine(ticket.jira_project_key, 200) || 'unknown')}
-      ${fact('Local project', singleLine(ticket.launch_project, 200) || 'not linked')}
+      ${fact('Local project', singleLine(ticket.linked_local_project, 200) || 'not linked')}
       ${fact('Labels', labels.join(', ') || 'none')}
     </div>
     ${description ? `<div class="kronos-section"><h3>Description</h3><div class="description">${escapeHtml(description)}</div></div>` : ''}

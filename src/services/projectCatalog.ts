@@ -80,7 +80,7 @@ export function projectTicketProviderState(
     ...state,
     tickets: {
       ...state.tickets,
-      [ticketKey]: { ...ticket, projects: [], mr, build },
+      [ticketKey]: { ...ticket, mr, build },
     },
   };
 }
@@ -106,7 +106,7 @@ export function registerLocalProject(
 
 /**
  * Makes the checked project paths the complete local-registration set.
- * Provider-only project metadata is retained, while removed launch bindings
+ * Provider-only project metadata is retained, while removed explicit links
  * are cleared so tickets cannot point at an unregistered directory.
  */
 export function replaceRegisteredLocalProjects(
@@ -137,11 +137,11 @@ export function replaceRegisteredLocalProjects(
     ...state,
     projects,
     tickets: Object.fromEntries(Object.entries(state.tickets).map(([key, ticket]) => {
-      if (!ticket.launch_project || !removedNames.has(ticket.launch_project)) {
-        return [key, { ...ticket, projects: [] }];
+      if (!ticket.linked_local_project || !removedNames.has(ticket.linked_local_project)) {
+        return [key, { ...ticket }];
       }
-      const unlinked: Ticket = { ...ticket, projects: [] };
-      delete unlinked.launch_project;
+      const unlinked: Ticket = { ...ticket };
+      delete unlinked.linked_local_project;
       return [key, unlinked];
     })),
   };
@@ -175,9 +175,9 @@ export function setTicketLocalProject(
     if (!project?.path) { throw new Error(`Local project is not registered: ${projectName}`); }
     requiredProjectDirectory(project.path);
   }
-  const nextTicket: Ticket = { ...ticket, projects: [] };
-  if (projectName) { nextTicket.launch_project = projectName; }
-  else { delete nextTicket.launch_project; }
+  const nextTicket: Ticket = { ...ticket };
+  if (projectName) { nextTicket.linked_local_project = projectName; }
+  else { delete nextTicket.linked_local_project; }
   return {
     ...state,
     tickets: {
@@ -234,10 +234,7 @@ export function setLocalProjectIntegrations(
   return {
     ...state,
     projects,
-    tickets: Object.fromEntries(Object.entries(state.tickets).map(([key, ticket]) => [
-      key,
-      { ...ticket, projects: [] },
-    ])),
+    tickets: Object.fromEntries(Object.entries(state.tickets).map(([key, ticket]) => [key, { ...ticket }])),
   };
 }
 
@@ -246,8 +243,8 @@ export function projectConfigurationForTicket(
   state: KronosState | null | undefined,
   ticket: Ticket | null | undefined,
 ): ProjectConfig {
-  if (!state || !ticket?.launch_project) { return {}; }
-  return { ...(state.projects[ticket.launch_project]?.config || {}) };
+  if (!state || !ticket?.linked_local_project) { return {}; }
+  return { ...(state.projects[ticket.linked_local_project]?.config || {}) };
 }
 
 export function listLocalProjects(state: KronosState | null | undefined): LocalProjectSummary[] {
@@ -264,7 +261,7 @@ export function ticketLocalProject(
   ticket: Ticket | null | undefined,
 ): LocalProjectSummary | undefined {
   if (!state || !ticket) { return undefined; }
-  const name = ticket.launch_project;
+  const name = ticket.linked_local_project;
   const projectPath = name ? state.projects[name]?.path : undefined;
   if (!name || !projectPath) { return undefined; }
   const summary = localProjectSummary(name, projectPath);

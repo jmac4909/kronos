@@ -19,7 +19,6 @@ function ticket(status, overrides = {}) {
     jira_status: status,
     jira_project_key: 'KRONOS',
     source: 'jira',
-    projects: [],
     labels: ['terminal-first'],
     mr: null,
     build: null,
@@ -29,7 +28,7 @@ function ticket(status, overrides = {}) {
 
 function state(tickets) {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     refreshedAt: '2026-07-14T02:00:00.000Z',
     projects: { Kronos: { config: { repo_name: 'Kronos' } } },
     tickets,
@@ -101,7 +100,7 @@ test('board lists registered local project paths and current Git branches', () =
   try {
     fs.mkdirSync(path.join(projectRoot, '.git'));
     fs.writeFileSync(path.join(projectRoot, '.git', 'HEAD'), 'ref: refs/heads/feature/board-projects\n');
-    const fixtureState = state({ 'KRONOS-1': ticket('In Progress', { launch_project: 'Kronos' }) });
+    const fixtureState = state({ 'KRONOS-1': ticket('In Progress', { linked_local_project: 'Kronos' }) });
     fixtureState.projects.Kronos.path = projectRoot;
     const html = buildJiraWorkBoardHtml({
       state: fixtureState,

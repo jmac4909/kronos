@@ -36,7 +36,6 @@ export function catalogFromJiraWorkList(
       priority: nestedProviderText(fields['priority'], 'name') || previous?.priority || 'Unknown',
       jira_status: statusName || previous?.jira_status || 'Unknown',
       source: 'jira',
-      projects: [],
       mr: previous?.mr || null,
       build: previous?.build || null,
       jira_url: `${baseUrl}/browse/${encodeURIComponent(key)}`,
@@ -45,8 +44,8 @@ export function catalogFromJiraWorkList(
     const statusCategory = jiraStatusCategory(rawStatus)
       || (!statusName ? previous?.jira_status_category : undefined);
     if (statusCategory) { ticket.jira_status_category = statusCategory; }
-    if (previous?.launch_project && projects[previous.launch_project]?.path) {
-      ticket.launch_project = previous.launch_project;
+    if (previous?.linked_local_project && projects[previous.linked_local_project]?.path) {
+      ticket.linked_local_project = previous.linked_local_project;
     }
     const updated = providerText(fields['updated']);
     const labels = Array.isArray(fields['labels'])
@@ -78,7 +77,7 @@ export function catalogFromJiraWorkList(
     }
   }
   return {
-    state: { schemaVersion: 1, refreshedAt: snapshot.fetchedAt, projects, tickets },
+    state: { schemaVersion: 2, refreshedAt: snapshot.fetchedAt, projects, tickets },
     retainedFromPrevious,
   };
 }

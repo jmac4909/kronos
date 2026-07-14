@@ -49,7 +49,7 @@ export function workTicketMatchesFilter(
 ): boolean {
   const normalized = normalizeWorkTicketFilter(filter);
   if (normalized.source && ticket.source !== normalized.source) { return false; }
-  if (normalized.project && ![ticket.jira_project_key, ticket.launch_project]
+  if (normalized.project && ![ticket.jira_project_key, ticket.linked_local_project]
     .some(project => comparable(project || '') === comparable(normalized.project || ''))) {
     return false;
   }
@@ -78,7 +78,7 @@ export function workTicketMatchesFilter(
     ticket.jira_status_category,
     ticket.source,
     ticket.jira_project_key,
-    ticket.launch_project,
+    ticket.linked_local_project,
     ...(ticket.labels || []),
     ticket.mr?.title,
     ticket.mr?.state,
@@ -109,7 +109,7 @@ export function collectWorkTicketFilterOptions(
   const statuses = new Map<string, string>();
   for (const ticket of Object.values(tickets)) {
     if (ticket.jira_project_key) { retainDisplayValue(projects, ticket.jira_project_key); }
-    if (ticket.launch_project) { retainDisplayValue(projects, ticket.launch_project); }
+    if (ticket.linked_local_project) { retainDisplayValue(projects, ticket.linked_local_project); }
     for (const label of ticket.labels || []) { retainDisplayValue(labels, label); }
     retainDisplayValue(statuses, ticket.jira_status);
   }

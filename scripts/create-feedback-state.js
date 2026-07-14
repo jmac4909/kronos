@@ -49,7 +49,7 @@ function writePrivate(filePath, content) {
 function fixture(now, targetDir) {
   const projectPath = path.join(targetDir, 'fixture-repo');
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     refreshedAt: now,
     projects: {
       'fixture-service': {
@@ -75,8 +75,7 @@ function fixture(now, targetDir) {
         description: 'Use this ticket to evaluate Manage Focused Terminal and explicit context insertion.',
         labels: ['terminal-first', 'safe-fixture'],
         jira_url: 'https://jira.example.invalid/browse/JIRA-123',
-        launch_project: 'fixture-service',
-        projects: [],
+        linked_local_project: 'fixture-service',
         mr: {
           iid: 77,
           state: 'opened',
@@ -104,8 +103,7 @@ function fixture(now, targetDir) {
         description: 'Provider URLs intentionally use .invalid and must never be mutated.',
         labels: ['terminal-first', 'needs-attention'],
         jira_url: 'https://jira.example.invalid/browse/JIRA-456',
-        launch_project: 'fixture-service',
-        projects: [],
+        linked_local_project: 'fixture-service',
         mr: {
           iid: 78,
           state: 'opened',
@@ -133,7 +131,6 @@ function fixture(now, targetDir) {
         description: 'Use this row to verify completed filtering and graceful unavailable-provider states.',
         labels: ['terminal-first', 'unlinked', 'completed-fixture'],
         jira_url: 'https://jira.example.invalid/browse/JIRA-789',
-        projects: [],
         mr: null,
         build: null,
       },

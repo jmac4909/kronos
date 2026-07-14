@@ -195,7 +195,7 @@ function normalizeBoardTicket(
   const key = normalizeTicketKey(keyValue);
   if (!key) { return null; }
   const status = safeSingleLine(ticket.jira_status, 160) || 'Unknown';
-  const projects = uniqueFacet([ticket.jira_project_key || '', ticket.launch_project || '']);
+  const projects = uniqueFacet([ticket.jira_project_key || '', ticket.linked_local_project || '']);
   const labels = uniqueFacet(ticket.labels || []);
   return {
     key,
@@ -284,7 +284,7 @@ function buildTicketCardHtml(ticket: BoardTicket): string {
   const type = safeSingleLine(value.type, 120) || 'Issue';
   const typeKind = /bug|defect/i.test(type) ? 'bug' : 'issue';
   const jiraProject = safeSingleLine(value.jira_project_key, 200);
-  const launchProject = safeSingleLine(value.launch_project, 200);
+  const launchProject = safeSingleLine(value.linked_local_project, 200);
   const projectChips = [
     jiraProject ? chip(`Jira: ${jiraProject}`, 'project') : '',
     launchProject ? chip(`Project: ${launchProject}`, 'project') : '',

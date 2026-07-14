@@ -569,7 +569,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
     const removedProjects = registeredProjects.filter(project => !selectedPathKeys.has(localProjectPathKey(project.path)));
     const removedNames = new Set(removedProjects.map(project => project.name));
     const linkedTicketKeys = Object.entries(this.state.state?.tickets || {})
-      .filter(([, ticket]) => Boolean(ticket.launch_project && removedNames.has(ticket.launch_project)))
+      .filter(([, ticket]) => Boolean(ticket.linked_local_project && removedNames.has(ticket.linked_local_project)))
       .map(([ticketKey]) => ticketKey);
     if (linkedTicketKeys.length > 0) {
       const action = await vscode.window.showWarningMessage(
@@ -1654,7 +1654,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
             branch,
             ...(providerUrl ? { providerUrl } : {}),
           };
-          const projectName = selection.workSession?.projectName || ticket.launch_project;
+          const projectName = selection.workSession?.projectName || ticket.linked_local_project;
           if (projectName) {
             this.state.setLocalProjectSonarTarget(projectName, jenkins.sonarProjectKey, branch);
           }
@@ -2090,7 +2090,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
       .filter(session => session.projectName === project.projectName);
     const knownUrl = latestGitLabMergeRequestBindingAcrossSessions(projectSessions)?.url;
     const linkedTickets = Object.entries(this.state.state?.tickets || {})
-      .filter(([, ticket]) => ticket.launch_project === project.projectName)
+      .filter(([, ticket]) => ticket.linked_local_project === project.projectName)
       .sort(([, left], [, right]) => String(right.updated || '').localeCompare(String(left.updated || '')));
     const ticketMrUrl = linkedTickets
       .map(([ticketKey, ticket]) => this.effectiveTicket(ticketKey, ticket).mr)
@@ -2641,7 +2641,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
     const pick = await vscode.window.showQuickPick(entries.map(([ticketKey, ticket]) => ({
       label: ticketKey,
       description: ticket.summary,
-      detail: `${ticket.jira_status} • Jira ${ticket.jira_project_key || 'unknown'} • local ${ticket.launch_project || 'unlinked'}`,
+      detail: `${ticket.jira_status} • Jira ${ticket.jira_project_key || 'unknown'} • local ${ticket.linked_local_project || 'unlinked'}`,
       ticketKey,
     })), { title: 'Choose the Jira work item for this terminal action', matchOnDescription: true, matchOnDetail: true });
     return pick?.ticketKey;

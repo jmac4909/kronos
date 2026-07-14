@@ -26,13 +26,14 @@ The repository is ready for the operator-owned human feedback pass in `HUMAN_FEE
 ## Changes Found During This Audit
 
 - Repeated provider-read failures create durable transitions only when the normalized source state or error changes.
+- Work catalog schema v2 stores one explicit `linked_local_project`; schema-v1 links migrate, legacy inferred project tags are discarded, unavailable links are cleared with a load issue, and future schemas fail closed.
 - Attention now shows only the newest transition for each project/provider/facet. Recoveries, later failures, builds, pipelines, and gate results replace stale rows; acknowledging the newest row cannot resurrect an older one. The append-only audit history is unchanged.
 - Clearing an open MR now snoozes it until the next successful GitLab poll. That poll records one fresh reminder; unchanged polls do not duplicate an uncleared reminder, and merged or closed MRs stay cleared.
 - Jenkins job configuration and observed build targets are stored separately, so multiple real builds remain available from Attention.
 - Jenkins build choices are deterministically latest-first even when bindings share a timestamp.
 - Jenkins XML discovery skips expression-valued Sonar settings while still accepting a later safe literal setting.
 - Direct command coverage now exercises project Git/MR actions and the session pause, resume, detach, stop, and remove workflow.
-- The activation harness now exercises all 35 contributed commands, including adding another Jira context to a managed terminal, synthetic successful Jira refresh, editable MR/CI context insertion, project-routed provider context, and manual provider polling without using a live endpoint.
+- The activation harness now exercises all 36 contributed commands, including adding another Jira context to a managed terminal, synthetic successful Jira refresh, editable MR/CI context insertion, project-routed provider context, and manual provider polling without using a live endpoint.
 - The safe feedback state now includes validated paused/detached ticket and standalone Sessions plus synthetic MR, Jenkins, SonarQube, and repeated-failure Attention evidence. This supports visual review without launching a terminal or contacting a provider.
 - The public-surface gate now rejects local-state paths, machine-specific home paths, known employer identifiers, private-key material, and high-confidence token shapes before the remaining test suite runs.
 - VS Code types are pinned to the advertised 1.85 minimum. Optional terminal shell-integration metadata is read through a compatibility shim so newer editors retain the extra CWD detail without making that later API mandatory.

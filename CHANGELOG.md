@@ -15,6 +15,7 @@ All notable changes to the Kronos preview are documented here.
 
 ### Changed
 
+- Migrated the Work catalog to schema v2 with `linked_local_project` as the only ticket-to-repository identity; schema-v1 `launch_project` records migrate safely and legacy project tags are discarded.
 - Separated Jira namespace metadata from local repository links; tickets now use only explicit operator-selected projects for launch and provider configuration.
 - Generalized repository instructions so they do not assume a specific machine or workspace path.
 - Clarified that the public source is available for portfolio and security review under an all-rights-reserved evaluation license.

@@ -5,6 +5,8 @@ const ENTRY_FILE = 'src/extension.ts';
 const TERMINAL_FIRST_RUNTIME_FILE = 'src/terminalFirstExtension.ts';
 const TERMINAL_INSERTION_FILE = 'src/services/terminalContextInsertion.ts';
 const CLAUDE_LAUNCHER_FILE = 'src/services/claudeTerminalLauncher.ts';
+const STATE_TYPES_FILE = 'src/state/types.ts';
+const STATE_STORE_FILE = 'src/services/stateStore.ts';
 const PACKAGED_WEBVIEW_FILES = [
   'media/kronos-action-panel.js',
   'media/kronos-context-composer.js',
@@ -71,6 +73,7 @@ for (const [file, source] of runtimeFiles) {
 checkTerminalInsertionContract();
 checkClaudeLauncherContract();
 checkFocusedInsertionContract();
+checkCanonicalWorkIdentityContract();
 checkPackagedWebviewAssets();
 
 violations.sort((left, right) => left.file.localeCompare(right.file)
@@ -333,6 +336,32 @@ function checkFocusedInsertionContract() {
       'NO_SUBMIT',
       'context insertion must require the active terminal to carry the selected work session binding.',
     );
+  }
+}
+
+function checkCanonicalWorkIdentityContract() {
+  const typeSource = fs.existsSync(STATE_TYPES_FILE) ? fs.readFileSync(STATE_TYPES_FILE, 'utf8') : '';
+  const ticketInterface = /export interface Ticket\s*\{([\s\S]*?)\n\}/.exec(typeSource)?.[1] || '';
+  if (!/schemaVersion:\s*2;/.test(typeSource)
+    || !/linked_local_project\?:\s*string;/.test(ticketInterface)
+    || /\b(?:launch_project|projects)\??\s*:/.test(ticketInterface)) {
+    addGlobalViolation(
+      'EXPLICIT_PROJECT_LINK',
+      'Work schema v2 must expose only linked_local_project as the ticket-to-local-project identity.',
+    );
+  }
+  for (const [file, source] of runtimeFiles) {
+    if (file === STATE_STORE_FILE) { continue; }
+    const match = /\blaunch_project\b/.exec(maskComments(source));
+    if (match) {
+      addViolation(
+        'EXPLICIT_PROJECT_LINK',
+        file,
+        source,
+        match.index,
+        'uses the retired launch_project identity outside the schema-v1 migration boundary.',
+      );
+    }
   }
 }
 

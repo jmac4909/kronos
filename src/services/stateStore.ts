@@ -19,6 +19,7 @@ const READ_CHUNK_BYTES = 64 * 1024;
 const NO_FOLLOW_VALUE = Reflect.get(fs.constants, 'O_NOFOLLOW');
 const NO_FOLLOW_FLAG = typeof NO_FOLLOW_VALUE === 'number' ? NO_FOLLOW_VALUE : 0;
 export const MAX_WORK_CATALOG_BYTES = 32 * 1024 * 1024;
+export const WORK_CATALOG_SCHEMA_VERSION = 2;
 
 export interface StateFileLoadIssue {
   filePath: string;
@@ -31,7 +32,7 @@ export interface StateFileReadResult {
 }
 
 export function emptyWorkCatalog(): KronosState {
-  return { schemaVersion: 1, refreshedAt: null, projects: {}, tickets: {} };
+  return { schemaVersion: WORK_CATALOG_SCHEMA_VERSION, refreshedAt: null, projects: {}, tickets: {} };
 }
 
 export function readStateFileWithIssues(): StateFileReadResult {
@@ -55,13 +56,15 @@ export function readStateFileWithIssues(): StateFileReadResult {
 }
 
 export function writeStateFile(state: KronosState): void {
+  const canonicalState = normalizeWorkCatalog({ ...state, schemaVersion: WORK_CATALOG_SCHEMA_VERSION }, STATE_FILE).state
+    || emptyWorkCatalog();
   ensurePrivateDirectory(KRONOS_DIR);
   rejectUnsafeExistingFile(STATE_FILE);
   const temporaryPath = `${STATE_FILE}.${process.pid}.${Date.now()}.tmp`;
   let descriptor: number | undefined;
   try {
     descriptor = fs.openSync(temporaryPath, 'wx', FILE_MODE);
-    fs.writeFileSync(descriptor, `${JSON.stringify(state, null, 2)}\n`, 'utf8');
+    fs.writeFileSync(descriptor, `${JSON.stringify(canonicalState, null, 2)}\n`, 'utf8');
     fs.fsyncSync(descriptor);
     fs.closeSync(descriptor);
     descriptor = undefined;
@@ -80,6 +83,16 @@ export function normalizeWorkCatalog(raw: unknown, filePath = STATE_FILE): State
     return { state: emptyWorkCatalog(), issues: [{ filePath, detail: 'Work catalog root must be an object.' }] };
   }
   const issues: StateFileLoadIssue[] = [];
+  const sourceSchemaVersion = safeNonNegativeInteger(raw['schemaVersion']);
+  if (sourceSchemaVersion !== undefined && sourceSchemaVersion > WORK_CATALOG_SCHEMA_VERSION) {
+    return {
+      state: emptyWorkCatalog(),
+      issues: [{
+        filePath,
+        detail: `Work catalog schema ${sourceSchemaVersion} is newer than supported schema ${WORK_CATALOG_SCHEMA_VERSION}.`,
+      }],
+    };
+  }
   const state = emptyWorkCatalog();
   state.refreshedAt = safeString(raw['refreshedAt']) || safeString(raw['last_updated']) || null;
 
@@ -93,9 +106,15 @@ export function normalizeWorkCatalog(raw: unknown, filePath = STATE_FILE): State
   const rawTickets = isRecord(raw['tickets']) ? raw['tickets'] : {};
   for (const [rawKey, value] of Object.entries(rawTickets)) {
     const key = normalizeTicketKey(rawKey);
-    const ticket = normalizeTicket(value);
+    const ticket = normalizeTicket(value, sourceSchemaVersion);
     if (key && ticket) { state.tickets[key] = ticket; }
     else { issues.push({ filePath, detail: `Ignored invalid Jira ticket ${safeKey(rawKey)}.` }); }
+  }
+  for (const [ticketKey, ticket] of Object.entries(state.tickets)) {
+    const projectName = ticket.linked_local_project;
+    if (!projectName || state.projects[projectName]?.path) { continue; }
+    delete ticket.linked_local_project;
+    issues.push({ filePath, detail: `Cleared unavailable local project link for ${ticketKey}.` });
   }
   return { state, issues };
 }
@@ -162,7 +181,7 @@ function normalizeProjectConfig(value: unknown): ProjectConfig {
   return config;
 }
 
-function normalizeTicket(value: unknown): Ticket | undefined {
+function normalizeTicket(value: unknown, sourceSchemaVersion?: number): Ticket | undefined {
   if (!isRecord(value) || value['source'] === 'adhoc') { return undefined; }
   const summary = safeString(value['summary']);
   if (!summary) { return undefined; }
@@ -172,7 +191,6 @@ function normalizeTicket(value: unknown): Ticket | undefined {
     priority: safeString(value['priority']) || 'Unknown',
     jira_status: safeString(value['jira_status']) || safeString(value['status']) || 'Unknown',
     source: 'jira',
-    projects: [],
     mr: normalizeMergeRequest(value['mr']),
     build: normalizeBuild(value['build']),
   };
@@ -181,7 +199,8 @@ function normalizeTicket(value: unknown): Ticket | undefined {
   const jiraProjectKey = safeString(value['jira_project_key']);
   const description = safeMultilineString(value['description']);
   const jiraUrl = safeHttpUrl(value['jira_url']);
-  const launchProject = safeString(value['launch_project']);
+  const linkedLocalProject = safeString(value['linked_local_project'])
+    || (sourceSchemaVersion !== WORK_CATALOG_SCHEMA_VERSION ? safeString(value['launch_project']) : undefined);
   const labels = safeStringArray(value['labels']);
   const attachments = normalizeAttachments(value['attachments']);
   if (updated) { ticket.updated = updated; }
@@ -189,7 +208,7 @@ function normalizeTicket(value: unknown): Ticket | undefined {
   if (jiraProjectKey) { ticket.jira_project_key = jiraProjectKey; }
   if (description) { ticket.description = description; }
   if (jiraUrl) { ticket.jira_url = jiraUrl; }
-  if (launchProject) { ticket.launch_project = launchProject; }
+  if (linkedLocalProject) { ticket.linked_local_project = linkedLocalProject; }
   if (labels.length > 0) { ticket.labels = labels; }
   if (attachments.length > 0) { ticket.attachments = attachments; }
   return ticket;

@@ -16,7 +16,7 @@ run(process.execPath, ['scripts/create-feedback-state.js', '--force']);
 run('npm', ['test']);
 
 const work = JSON.parse(fs.readFileSync(path.join(fixtureDir, 'work.json'), 'utf8'));
-assert.equal(work.schemaVersion, 1);
+assert.equal(work.schemaVersion, 2);
 assert.deepEqual(Object.keys(work.tickets).sort(), ['JIRA-123', 'JIRA-456', 'JIRA-789']);
 assert.equal(fs.existsSync(path.join(fixtureDir, 'queue.json')), false);
 assert.equal(fs.existsSync(path.join(fixtureDir, 'runs')), false);
@@ -30,7 +30,7 @@ assert.deepEqual(packageJson.contributes.views.kronos.map(view => view.id), [
 ]);
 assert.equal(packageJson.contributes.commands.length, 36);
 assert.equal(Object.keys(packageJson.contributes.configuration.properties).length, 10);
-assert.equal(work.tickets['JIRA-123'].launch_project, 'fixture-service');
+assert.equal(work.tickets['JIRA-123'].linked_local_project, 'fixture-service');
 assert.equal(
   fs.readFileSync(path.join(fixtureDir, 'fixture-repo', '.git', 'HEAD'), 'utf8').trim(),
   'ref: refs/heads/feature/kronos-feedback',

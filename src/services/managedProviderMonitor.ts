@@ -707,7 +707,7 @@ function monitoringProjectName(
   state: KronosStateSnapshot | null,
   session: TicketWorkSessionRecord,
 ): string | undefined {
-  return session.projectName || state?.tickets[session.ticketKey]?.launch_project;
+  return session.projectName || state?.tickets[session.ticketKey]?.linked_local_project;
 }
 
 function sonarProjectKeyHeuristic(

@@ -1,6 +1,6 @@
 /** The small, provider-oriented catalog rendered by the terminal-first product. */
 export interface KronosState {
-  schemaVersion: 1;
+  schemaVersion: 2;
   refreshedAt: string | null;
   projects: Record<string, Project>;
   tickets: Record<string, Ticket>;
@@ -41,9 +41,7 @@ export interface Ticket {
   attachments?: Array<{ filename: string; size: number; mimeType: string }>;
   jira_url?: string;
   /** Sole explicit ticket-to-local-project link; controls launch directory and project provider config. */
-  launch_project?: string;
-  /** Legacy provider-project tags retained only for record compatibility; never a local repository link. */
-  projects: string[];
+  linked_local_project?: string;
   mr: MergeRequest | null;
   build: BuildStatus | null;
 }
