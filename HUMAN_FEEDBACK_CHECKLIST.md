@@ -45,6 +45,8 @@ $env:KRONOS_DIR = "$PWD\.kronos\feedback-state"
 code .
 ```
 
+The synthetic state includes one detached ticket session, one detached standalone session, retained MR/Jenkins/Sonar targets, and several Attention transitions. Polling is paused, every provider URL uses the reserved `.invalid` domain, and no terminal is started. Use these rows to review grouping, target pickers, and duplicate-failure collapse before creating your own live terminal sessions. Do not resume this fixture's monitoring unless you specifically want to exercise unavailable-provider behavior.
+
 Use a real ticket only when its provider data is approved for local context capture. The fixture is synthetic and must not be used to post or mutate provider state.
 
 ## Jira Work Board

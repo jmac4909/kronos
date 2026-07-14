@@ -32,6 +32,7 @@ The repository is ready for the operator-owned human feedback pass in `HUMAN_FEE
 - Jenkins XML discovery skips expression-valued Sonar settings while still accepting a later safe literal setting.
 - Direct command coverage now exercises project Git/MR actions and the session pause, resume, detach, stop, and remove workflow.
 - The activation harness now exercises all 34 contributed commands, including synthetic successful Jira refresh, MR/CI context insertion, project-routed provider context, and manual provider polling without using a live endpoint.
+- The safe feedback state now includes validated paused/detached ticket and standalone Sessions plus synthetic MR, Jenkins, SonarQube, and repeated-failure Attention evidence. This supports visual review without launching a terminal or contacting a provider.
 
 ## Operator-Only Signoff Still Required
 

@@ -120,7 +120,7 @@ $env:KRONOS_DIR = "$PWD\.kronos\feedback-state"
 code .
 ```
 
-Fixture data is synthetic. Do not use it to post or mutate real provider state.
+Fixture data is synthetic. It includes paused, detached ticket/standalone Sessions and retained MR/Jenkins/Sonar Attention evidence, including one repeated provider failure for visual deduplication review. Provider URLs use `.invalid`; no terminal or provider request starts automatically. Do not use the fixture to post or mutate real provider state.
 
 ## Developer Validation
 

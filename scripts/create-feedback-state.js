@@ -139,6 +139,183 @@ function fixture(now, targetDir) {
   };
 }
 
+function sessionFixtures(now, targetDir) {
+  const projectPath = path.join(targetDir, 'fixture-repo');
+  const createdAt = new Date(Date.parse(now) - 10_000).toISOString();
+  const ticketSession = {
+    schemaVersion: 1,
+    id: 'jira-jira-456',
+    kind: 'ticket',
+    ticketKey: 'JIRA-456',
+    title: 'Attention-state fixture with requested changes',
+    status: 'active',
+    createdAt,
+    updatedAt: now,
+    terminals: [],
+    providerBindings: [
+      {
+        id: 'gitlab-merge-request-78',
+        provider: 'gitlab',
+        resource: 'merge-request',
+        subjectId: '78',
+        projectId: 'group/fixture-service',
+        url: 'https://gitlab.example.invalid/group/fixture-service/-/merge_requests/78',
+        attachedAt: new Date(Date.parse(now) - 8_000).toISOString(),
+      },
+      {
+        id: 'jenkins-build-142',
+        provider: 'jenkins',
+        resource: 'build',
+        subjectId: '142',
+        url: 'https://jenkins.example.invalid/job/fixture-service/142',
+        attachedAt: new Date(Date.parse(now) - 7_000).toISOString(),
+      },
+      {
+        id: 'jenkins-build-143',
+        provider: 'jenkins',
+        resource: 'build',
+        subjectId: '143',
+        url: 'https://jenkins.example.invalid/job/fixture-service/143',
+        attachedAt: new Date(Date.parse(now) - 6_000).toISOString(),
+      },
+      {
+        id: 'sonar-quality-gate-feature',
+        provider: 'sonar',
+        resource: 'quality-gate',
+        subjectId: 'fixture-service:feature/jira-456',
+        projectId: 'fixture-service',
+        url: 'https://sonar.example.invalid/dashboard?id=fixture-service&branch=feature%2Fjira-456',
+        attachedAt: new Date(Date.parse(now) - 5_000).toISOString(),
+      },
+      {
+        id: 'sonar-quality-gate-main',
+        provider: 'sonar',
+        resource: 'quality-gate',
+        subjectId: 'fixture-service:main',
+        projectId: 'fixture-service',
+        url: 'https://sonar.example.invalid/dashboard?id=fixture-service&branch=main',
+        attachedAt: new Date(Date.parse(now) - 4_000).toISOString(),
+      },
+    ],
+    artifacts: [],
+    monitoring: {
+      enabled: false,
+      lastAttemptAt: new Date(Date.parse(now) - 1_000).toISOString(),
+      lastState: 'partial',
+      lastSummary: 'Synthetic feedback evidence loaded; automatic provider polling is paused.',
+      lastFailureCount: 1,
+      lastSkippedCount: 0,
+    },
+    projectName: 'fixture-service',
+    projectPath,
+  };
+  const standaloneSession = {
+    schemaVersion: 1,
+    id: 'session-feedback-standalone',
+    kind: 'standalone',
+    title: 'Standalone feedback session',
+    status: 'active',
+    createdAt,
+    updatedAt: new Date(Date.parse(now) - 9_000).toISOString(),
+    terminals: [],
+    providerBindings: [],
+    artifacts: [],
+    monitoring: { enabled: false },
+    projectName: 'fixture-service',
+    projectPath,
+  };
+  return [ticketSession, standaloneSession];
+}
+
+function monitorFixtures(now) {
+  const at = offset => new Date(Date.parse(now) + offset).toISOString();
+  const sessionId = 'jira-jira-456';
+  return [
+    {
+      schemaVersion: 1,
+      id: 'feedback-session-created',
+      at: at(-9_000),
+      sessionId,
+      type: 'session.created',
+      source: 'operator',
+      summary: 'JIRA-456 synthetic feedback session recorded without opening a terminal.',
+      subject: { kind: 'work-session', id: sessionId, ticketKey: 'JIRA-456' },
+    },
+    {
+      schemaVersion: 1,
+      id: 'feedback-initial-mr-observed',
+      at: at(-4_000),
+      sessionId,
+      type: 'provider.transition',
+      source: 'gitlab',
+      summary: 'JIRA-456 MR !78 first observed (opened/mergeable).',
+      subject: { kind: 'merge-request', id: '78', ticketKey: 'JIRA-456' },
+      after: { state: 'opened/mergeable', fingerprint: 'feedback-mr-78-mergeable' },
+      metadata: { transitionKind: 'initial_mr_observed', mergeRequestIid: 78 },
+    },
+    {
+      schemaVersion: 1,
+      id: 'feedback-jenkins-failed',
+      at: at(-3_000),
+      sessionId,
+      type: 'provider.transition',
+      source: 'jenkins',
+      summary: 'JIRA-456 Jenkins build #143 failed in the synthetic feedback evidence.',
+      subject: { kind: 'build', id: '143', ticketKey: 'JIRA-456' },
+      after: { state: 'FAILURE', fingerprint: 'feedback-jenkins-143-failed' },
+      metadata: { transitionKind: 'initial_unhealthy', buildNumber: 143 },
+    },
+    {
+      schemaVersion: 1,
+      id: 'feedback-sonar-failed',
+      at: at(-2_000),
+      sessionId,
+      type: 'provider.transition',
+      source: 'sonar',
+      summary: 'JIRA-456 SonarQube quality gate failed for feature/jira-456.',
+      subject: { kind: 'quality-gate', id: 'fixture-service:feature/jira-456', ticketKey: 'JIRA-456' },
+      after: { state: 'ERROR', fingerprint: 'feedback-sonar-feature-jira-456-error' },
+      metadata: { transitionKind: 'sonar_gate_failed', projectKey: 'fixture-service', branch: 'feature/jira-456' },
+    },
+    {
+      schemaVersion: 1,
+      id: 'feedback-provider-failure-first',
+      at: at(-1_000),
+      sessionId,
+      type: 'provider.transition',
+      source: 'gitlab',
+      summary: 'JIRA-456 GitLab provider read failed (request timed out).',
+      subject: { kind: 'provider-read', id: 'gitlab', ticketKey: 'JIRA-456' },
+      after: { state: 'monitoring/failed', fingerprint: 'feedback-timeout-generation-1' },
+      metadata: {
+        transitionKind: 'provider_read_failed',
+        readState: 'failed',
+        readReason: 'timeout',
+        readComponents: 'none',
+        readGeneration: 1,
+      },
+    },
+    {
+      schemaVersion: 1,
+      id: 'feedback-provider-failure-repeat',
+      at: at(0),
+      sessionId,
+      type: 'provider.transition',
+      source: 'gitlab',
+      summary: 'JIRA-456 GitLab provider read failed (request timed out).',
+      subject: { kind: 'provider-read', id: 'gitlab', ticketKey: 'JIRA-456' },
+      after: { state: 'monitoring/failed', fingerprint: 'feedback-timeout-generation-2' },
+      metadata: {
+        transitionKind: 'provider_read_failed',
+        readState: 'failed',
+        readReason: 'timeout',
+        readComponents: 'none',
+        readGeneration: 2,
+      },
+    },
+  ];
+}
+
 const options = parseArgs(process.argv.slice(2));
 const targetDir = assertSafeTarget(options.targetDir);
 if (fs.existsSync(targetDir)) {
@@ -149,6 +326,13 @@ fs.mkdirSync(targetDir, { recursive: true, mode: 0o700 });
 const now = new Date().toISOString();
 const state = fixture(now, targetDir);
 writePrivate(path.join(targetDir, 'work.json'), `${JSON.stringify(state, null, 2)}\n`);
+for (const session of sessionFixtures(now, targetDir)) {
+  writePrivate(path.join(targetDir, 'work-sessions', session.id, 'session.json'), `${JSON.stringify(session, null, 2)}\n`);
+}
+writePrivate(
+  path.join(targetDir, 'monitor-events.jsonl'),
+  `${monitorFixtures(now).map(event => JSON.stringify(event)).join('\n')}\n`,
+);
 writePrivate(path.join(targetDir, 'fixture-repo', 'README.md'), '# Kronos terminal-first feedback fixture\n\nNo provider or project command should run here.\n');
 writePrivate(path.join(targetDir, 'fixture-repo', '.git', 'HEAD'), 'ref: refs/heads/feature/kronos-feedback\n');
 writePrivate(path.join(targetDir, '.env.example'), [
@@ -163,3 +347,4 @@ writePrivate(path.join(targetDir, '.env.example'), [
 console.log('Kronos terminal-first feedback state created.');
 console.log(`KRONOS_DIR=${targetDir}`);
 console.log(`Work catalog: ${path.join(targetDir, 'work.json')}`);
+console.log('Synthetic detached Sessions and Attention evidence are included with polling paused.');
