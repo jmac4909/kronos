@@ -2763,10 +2763,28 @@ test('extension activation registers the bounded surface and explicit launch com
     await commandHandlers.get('kronos.openProjectMergeRequest')({ projectName: 'fixture', projectPath: tempRoot });
     assert.equal(openedExternalUrls.at(-1), 'https://gitlab.example/group/fixture/-/merge_requests/88');
 
+    await commandHandlers.get('kronos.pauseWorkSessionMonitoring')({ workSessionId: ticketSession.id });
+    assert.equal(workSessions.getWorkSessionByTicket('JIRA-123').monitoring.enabled, false);
+    await commandHandlers.get('kronos.resumeWorkSessionMonitoring')({ workSessionId: ticketSession.id });
+    assert.equal(workSessions.getWorkSessionByTicket('JIRA-123').monitoring.enabled, true);
+    const reconnectActionsBeforeDetach = reconnectedActions.length;
+    await commandHandlers.get('kronos.detachWorkSessionTerminal')({ workSessionId: ticketSession.id });
+    assert.equal(reconnectedActions.length, reconnectActionsBeforeDetach, 'detaching must not write to or close the terminal');
+    assert.ok(vscode.window.terminals.includes(reconnectedTerminal), 'the detached terminal remains open');
+    assert.equal(workSessions.getWorkSessionByTicket('JIRA-123').terminals.at(-1).status, 'detached');
+
+    warningMessageResult = 'Stop Managing';
+    await commandHandlers.get('kronos.closeWorkSession')({ workSessionId: racedSession.id });
+    assert.equal(workSessions.getWorkSessionByTicket('JIRA-456').status, 'closed');
+    assert.ok(createdTerminals.some(item => item.terminal.name.includes('JIRA-456')), 'stopping management leaves its terminal object intact');
+
     failNextTerminalCreation = true;
     await commandHandlers.get('kronos.startClaudeForTicket')({ ticketKey: 'JIRA-999' });
     const failedSession = workSessions.getWorkSessionByTicket('JIRA-999');
     assert.equal(failedSession.status, 'closed', 'a new session must be compensated when launch fails before submission');
+    warningMessageResult = 'Remove Session';
+    await commandHandlers.get('kronos.removeWorkSession')({ workSessionId: failedSession.id });
+    assert.equal(workSessions.getWorkSessionByTicket('JIRA-999'), null, 'removing an old session deletes its local session record');
 
     multiPickHandler = items => items.filter(item => item.registered && item.label !== 'fixture');
     warningMessageResult = 'Unregister and Unlink';
