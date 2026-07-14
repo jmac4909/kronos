@@ -7,6 +7,7 @@ import {
   workTicketMatchesFilter,
   type WorkTicketFilter,
   type WorkTicketFilterOptions,
+  type WorkTicketCompletionPreferences,
 } from '../services/workTicketFilters';
 import { ticketLocalProject, type LocalProjectSummary } from '../services/projectCatalog';
 
@@ -20,13 +21,26 @@ export interface WorkTreeStateSource {
 
 type WorkTreeItem = WorkTicketTreeItem | WorkTreeMessageItem;
 
+export interface WorkTreePreferencesSource {
+  hideCompletedByDefault(): boolean;
+  doneStatusNames(): readonly string[];
+}
+
+const DEFAULT_PREFERENCES: WorkTreePreferencesSource = {
+  hideCompletedByDefault: () => true,
+  doneStatusNames: () => [],
+};
+
 export class WorkTreeProvider implements vscode.TreeDataProvider<WorkTreeItem>, vscode.Disposable {
   private readonly changeEmitter = new vscode.EventEmitter<WorkTreeItem | undefined>();
   readonly onDidChangeTreeData = this.changeEmitter.event;
   private readonly stateSubscription: vscode.Disposable;
   private filter: WorkTicketFilter = {};
 
-  constructor(private readonly stateSource: WorkTreeStateSource) {
+  constructor(
+    private readonly stateSource: WorkTreeStateSource,
+    private readonly preferences: WorkTreePreferencesSource = DEFAULT_PREFERENCES,
+  ) {
     this.stateSubscription = stateSource.onDidChange(() => this.changeEmitter.fire(undefined));
   }
 
@@ -49,14 +63,16 @@ export class WorkTreeProvider implements vscode.TreeDataProvider<WorkTreeItem>, 
       )];
     }
 
+    const completionPreferences = this.completionPreferences();
     const visibleTickets = allTickets
-      .filter(([ticketKey, ticket]) => workTicketMatchesFilter(ticketKey, ticket, this.filter))
+      .filter(([ticketKey, ticket]) => workTicketMatchesFilter(ticketKey, ticket, this.filter, completionPreferences))
       .sort(compareWorkTickets);
     if (visibleTickets.length === 0) {
       const normalized = normalizeWorkTicketFilter(this.filter);
       if (!normalized.query && !normalized.project && !normalized.label && !normalized.jiraStatus
-        && (normalized.completion === undefined || normalized.completion === 'active')
-        && allTickets.every(([, ticket]) => isCompletedWorkTicket(ticket))) {
+        && (normalized.completion === 'active'
+          || (normalized.completion === undefined && completionPreferences.hideCompletedByDefault !== false))
+        && allTickets.every(([, ticket]) => isCompletedWorkTicket(ticket, completionPreferences.additionalDoneStatuses))) {
         return [new WorkTreeMessageItem(
           'No active tickets — change filters to show completed work.',
           'filter',
@@ -69,6 +85,7 @@ export class WorkTreeProvider implements vscode.TreeDataProvider<WorkTreeItem>, 
       ticketKey,
       ticket,
       ticketLocalProject(state, ticket),
+      isCompletedWorkTicket(ticket, completionPreferences.additionalDoneStatuses),
     ));
   }
 
@@ -90,6 +107,10 @@ export class WorkTreeProvider implements vscode.TreeDataProvider<WorkTreeItem>, 
     return { ...this.filter };
   }
 
+  defaultCompletion(): 'active' | 'all' {
+    return this.preferences.hideCompletedByDefault() ? 'active' : 'all';
+  }
+
   getFilterOptions(): WorkTicketFilterOptions {
     return collectWorkTicketFilterOptions(this.stateSource.state?.tickets || {});
   }
@@ -102,6 +123,13 @@ export class WorkTreeProvider implements vscode.TreeDataProvider<WorkTreeItem>, 
     this.stateSubscription.dispose();
     this.changeEmitter.dispose();
   }
+
+  private completionPreferences(): WorkTicketCompletionPreferences {
+    return {
+      hideCompletedByDefault: this.preferences.hideCompletedByDefault(),
+      additionalDoneStatuses: new Set(this.preferences.doneStatusNames().map(comparableStatus).filter(Boolean)),
+    };
+  }
 }
 
 export class WorkTicketTreeItem extends vscode.TreeItem {
@@ -111,6 +139,7 @@ export class WorkTicketTreeItem extends vscode.TreeItem {
     public readonly ticketKey: string,
     public readonly ticket: Ticket,
     localProject?: LocalProjectSummary,
+    completed = isCompletedWorkTicket(ticket),
   ) {
     const key = safeSingleLine(ticketKey, 160) || 'Ticket';
     const summary = safeSingleLine(ticket.summary, 400) || 'Untitled ticket';
@@ -130,7 +159,7 @@ export class WorkTicketTreeItem extends vscode.TreeItem {
     this.iconPath = new vscode.ThemeIcon(
       ticket.type.toLowerCase().includes('bug') || ticket.type.toLowerCase().includes('defect')
         ? 'bug'
-        : isCompletedWorkTicket(ticket) ? 'issue-closed' : 'issue-opened',
+        : completed ? 'issue-closed' : 'issue-opened',
     );
     this.command = {
       command: 'kronos.openTicketWorkspace',
@@ -188,6 +217,10 @@ function safeSingleLine(value: unknown, maxLength: number): string {
   return typeof value === 'string'
     ? value.replace(/[\u0000-\u001f\u007f\u2028\u2029]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, maxLength)
     : '';
+}
+
+function comparableStatus(value: string): string {
+  return safeSingleLine(value, 200).toLocaleLowerCase();
 }
 
 class WorkTreeMessageItem extends vscode.TreeItem {

@@ -214,7 +214,7 @@
         setControlValue(document, 'jira-board-project', '');
         setControlValue(document, 'jira-board-label', '');
         var hideDone = document.getElementById('jira-board-hide-done');
-        if (hideDone) { hideDone.checked = true; }
+        if (hideDone) { hideDone.checked = hideDone.getAttribute('data-default-checked') !== 'false'; }
         persistFilters(document, vscodeApi);
         applyFilters(document);
       });

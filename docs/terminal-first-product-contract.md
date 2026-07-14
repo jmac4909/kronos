@@ -38,7 +38,7 @@ An explicit Claude-start action validates its configured executable, approved in
 
 `Manage Focused Terminal` records a private association between a work session and the terminal object the operator explicitly focused. It does not grant Kronos general control of that terminal.
 
-Persisted terminal names and process IDs are descriptive metadata, not durable identity. After extension reload, live attachment starts detached. The operator must focus and explicitly reattach the intended terminal before insertion is allowed.
+Persisted terminal names and process IDs are descriptive metadata, not durable identity. After extension reload, live attachment starts detached. Selecting the Session is the explicit reconnect action: Kronos reconnects the sole unclaimed open terminal, or requires the operator to choose when more than one is available. Context insertion remains blocked until that live object association exists.
 
 ## Navigation Contract
 
@@ -52,9 +52,10 @@ It supports:
 
 - refreshing Jira work metadata;
 - searching tickets and filtering by status, project, and label;
-- hiding completed work by default, explicitly showing it, and clearing filters reversibly;
+- hiding or showing completed work by the configured default, explicitly overriding it, and clearing filters reversibly;
 - opening one canonical ticket workspace;
-- registering an explicitly open local workspace folder and reading its current Git branch without invoking Git;
+- explicitly discovering local projects from open workspace folders and configured roots, within configured depth/result limits, then registering only selected folders;
+- reading a registered project's current Git branch without invoking Git;
 - choosing or unlinking one primary local launch project for a ticket while preserving Jira/provider project associations;
 - managing the explicitly focused terminal for that ticket;
 - explicitly creating and focusing a Claude terminal linked to that ticket;
@@ -70,6 +71,8 @@ The ticket workspace prioritizes either terminal-first sequence:
 4. continue working in the operator-owned terminal.
 
 Project linking changes local Kronos metadata only. A new ticket-launched terminal may use the linked project folder as its starting directory. Linking never changes branch, index, worktree, or repository state, and never changes the current directory of an existing terminal.
+
+Project discovery roots, scan depth, and result limit are operator settings. Discovery runs only after the explicit Work/Setup action, inspects at most the bounded configured surface, skips symbolic child directories and dependency trees, reads only directory and Git `HEAD` metadata, and registers nothing until the operator selects candidates. Jira completed-work visibility and additional completed status names are also mapped settings shared by the Work tree and Jira board.
 
 It does not plan or execute software-delivery work.
 
@@ -90,6 +93,8 @@ Each session presents:
 - the linked local project path and currently observed branch when available.
 
 Supported actions are focus, explicit reattach, detach, pause monitoring, resume monitoring, poll now, open audit, and stop management.
+
+Selecting any Session means “open its terminal.” A live attachment is focused immediately. When VS Code has discarded the ephemeral attachment, Kronos never guesses from a saved process ID or duplicate terminal name: it reconnects the only unclaimed open terminal or asks the operator to choose one, then focuses it.
 
 **New Claude** creates a standalone session with a workspace-derived title, validates the configured Claude command/name/cwd, creates and focuses one terminal, and starts Claude. The persisted record contains no fake or placeholder ticket key. **Start Claude for Ticket** performs the same launch but creates a ticket-linked session from the selected ticket path.
 

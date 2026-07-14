@@ -53,7 +53,7 @@ test('board builder exposes useful Jira filters and only ticket-scoped terminal-
   for (const id of ['jira-board-search', 'jira-board-status', 'jira-board-project', 'jira-board-label']) {
     assert.match(html, new RegExp(`id="${id}"`));
   }
-  assert.match(html, /id="jira-board-hide-done" type="checkbox" checked/);
+  assert.match(html, /id="jira-board-hide-done" type="checkbox" data-default-checked="true" checked/);
   assert.match(html, /data-completed-column="true" hidden/);
   assert.match(html, /data-ticket="KRONOS-3"[^>]+data-completed="false"/);
   assert.doesNotMatch(html, /<script>must escape<\/script>/);
@@ -75,6 +75,23 @@ test('completed status detection supports common names and explicit team statuse
   assert.equal(isCompletedJiraStatus('QA Done'), false);
   assert.equal(isCompletedJiraStatus('In Progress'), false);
   assert.equal(isCompletedJiraStatus('Shipped to Customer', new Set(['shipped to customer'])), true);
+});
+
+test('board settings map custom completed statuses and the initial visibility default', () => {
+  const html = buildJiraWorkBoardHtml({
+    state: state({
+      'KRONOS-1': ticket('Shipped to Customer', { jira_status_category: 'indeterminate' }),
+    }),
+    nonce: 'abcdef1234567890',
+    scriptUri: 'vscode-resource://kronos/media/kronos-jira-work-board.js',
+    doneStatusNames: ['Shipped to Customer'],
+    hideCompletedByDefault: false,
+  });
+  assert.match(html, /data-completed="true"/);
+  assert.match(html, /data-default-checked="false"/);
+  assert.doesNotMatch(html, /data-completed-column="true" hidden/);
+  assert.match(html, />1 of 1 shown</);
+  assert.doesNotMatch(html, /completed hidden/);
 });
 
 test('board lists registered local project paths and current Git branches', () => {
@@ -157,6 +174,15 @@ test('board filters survive a webview HTML rerender through VS Code webview stat
   assert.equal(rerendered.hideDone.checked, false);
 });
 
+test('board reset returns to the configured completed-work default', () => {
+  const harness = createDomHarness('complete');
+  harness.hideDone.setAttribute('data-default-checked', 'false');
+  assert.equal(boardRuntime.initialize(harness.document, { postMessage() {} }), true);
+  harness.hideDone.checked = true;
+  harness.reset.dispatch('click', {});
+  assert.equal(harness.hideDone.checked, false);
+});
+
 test('board boot waits for DOMContentLoaded before attaching handlers', () => {
   const harness = createDomHarness('loading');
   const readyMessages = [];
@@ -235,7 +261,7 @@ function createDomHarness(readyState) {
     },
     querySelector() { return null; },
   });
-  return { board, document, doneCard, doneColumn, hideDone, label, openCard, openColumn, project, search, status, summary };
+  return { board, document, doneCard, doneColumn, hideDone, label, openCard, openColumn, project, reset, search, status, summary };
 }
 
 function column(cards) {

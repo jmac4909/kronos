@@ -61,13 +61,14 @@ Use a real ticket only when its provider data is approved for local context capt
 
 ## Local Projects and Branches
 
-1. Open a Git-backed workspace folder and choose **Register Workspace Project** from the Work toolbar.
-2. Confirm the Jira board shows the project name, absolute path, and the branch currently named by Git `HEAD`.
-3. From a ticket, choose **Project / Branch**, select that project, and confirm the ticket workspace and Work row show the same branch and launch directory.
-4. Switch branches yourself in the terminal, refresh or reopen the board, and confirm Kronos reflects the new branch without running a Git command.
-5. Start Claude for the linked ticket and confirm its new terminal starts in the selected project directory.
-6. Choose **Manage Focused Terminal** on an existing terminal and confirm linking does not change that terminal's directory or send `cd`.
-7. Unlink the local project and confirm future ticket launches fall back to the configured workspace/home behavior while Jira/provider project tags remain.
+1. Add one safe parent folder to `Kronos: Project Discovery Roots`, set a bounded depth, then choose **Discover and Register Local Projects** from the Work toolbar.
+2. Confirm open workspace folders and Git projects under that root appear, deeper/out-of-limit folders do not, and nothing is registered until selected.
+3. Confirm the Jira board shows the project name, absolute path, and the branch currently named by Git `HEAD`.
+4. From a ticket, choose **Project / Branch**, select that project, and confirm the ticket workspace and Work row show the same branch and launch directory.
+5. Switch branches yourself in the terminal, refresh or reopen the board, and confirm Kronos reflects the new branch without running a Git command.
+6. Start Claude for the linked ticket and confirm its new terminal starts in the selected project directory.
+7. Choose **Manage Focused Terminal** on an existing terminal and confirm linking does not change that terminal's directory or send `cd`.
+8. Unlink the local project and confirm future ticket launches fall back to the configured workspace/home behavior while Jira/provider project tags remain.
 
 ## Start Claude for a Ticket
 
@@ -95,9 +96,9 @@ If GitLab and CI providers are safely configured:
 1. Choose **New Claude** and confirm exactly one new terminal is created and focused without asking for a Jira ticket.
 2. Confirm the configured Claude command is executed exactly once and the session appears using its workspace-derived standalone title with no fake ticket key or ticket link.
 3. Confirm the ticket-linked session separately shows its real ticket key, attached terminal state, provider bindings, monitoring state, last attempt, and latest result without showing terminal content.
-4. Focus each managed terminal from Sessions and confirm the correct terminal receives focus.
-5. Detach the standalone terminal and confirm it remains open and Claude remains operator-controlled.
-6. Focus the intended terminal and explicitly reattach it.
+4. Select each attached Session and confirm its correct terminal opens immediately.
+5. Reload VS Code, select a detached Session, and confirm Kronos reconnects the sole unclaimed terminal or asks which open terminal belongs to the Session before opening it.
+6. Detach the standalone terminal and confirm it remains open and Claude remains operator-controlled.
 7. Pause monitoring on the ticket-linked session and confirm provider polling stops for that work session.
 8. Resume monitoring and run **Poll Managed Providers** once.
 9. Open each available work-session audit. Confirm it uses the standalone title or real ticket identity as appropriate and contains no terminal transcript.
@@ -125,8 +126,8 @@ If GitLab and CI providers are safely configured:
 1. With standalone and ticket-linked sessions present, reload VS Code.
 2. Confirm both durable sessions and their audit history remain with the same standalone/title versus ticket identity distinction.
 3. Confirm Kronos does not launch another terminal or Claude process during reload.
-4. Confirm each live terminal is shown as detached after reload; Kronos must not restore it from a saved name or process ID.
-5. Explicitly reattach the focused terminal and confirm ticket context insertion works again.
+4. Confirm each live terminal is shown as detached after reload; Kronos must not restore it from a saved name or process ID alone.
+5. Select the Session, confirm the sole unclaimed terminal reconnects or a terminal chooser appears, then confirm ticket context insertion works again.
 6. Temporarily make one provider unavailable or use a safe invalid test configuration. Confirm the other providers remain usable, the result is marked partial/blocked, and no stale success is reported as current.
 
 ## Feedback Questions
@@ -170,7 +171,7 @@ The terminal-first trial is ready for broader feedback when:
 - explicit Claude starts create/focus one terminal and execute only the validated Claude command once;
 - standalone sessions remain ticket-free while ticket-triggered sessions retain their real Jira identity;
 - every insertion is editable and non-submitting;
-- terminal focus, detach, reattach, pause, resume, audit, and stop-management behavior is clear;
+- one-click Session terminal open/reconnect, detach, pause, resume, audit, and stop-management behavior is clear;
 - meaningful MR/pipeline/CI changes reach Attention without duplicate unchanged noise;
 - context and audit records expose provenance and partial completeness without terminal contents or credentials;
 - recursively empty Jira values are absent while meaningful `false` and `0` values remain;

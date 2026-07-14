@@ -17,6 +17,11 @@ export interface WorkTicketFilterOptions {
   jiraStatuses: string[];
 }
 
+export interface WorkTicketCompletionPreferences {
+  hideCompletedByDefault?: boolean;
+  additionalDoneStatuses?: ReadonlySet<string>;
+}
+
 export function normalizeWorkTicketFilter(filter: WorkTicketFilter): WorkTicketFilter {
   const normalized: WorkTicketFilter = {};
   const query = safeSingleLine(filter.query, 500);
@@ -40,6 +45,7 @@ export function workTicketMatchesFilter(
   ticketKey: string,
   ticket: Ticket,
   filter: WorkTicketFilter,
+  preferences: WorkTicketCompletionPreferences = {},
 ): boolean {
   const normalized = normalizeWorkTicketFilter(filter);
   if (normalized.source && ticket.source !== normalized.source) { return false; }
@@ -53,8 +59,10 @@ export function workTicketMatchesFilter(
   if (normalized.jiraStatus) {
     if (comparable(ticket.jira_status) !== comparable(normalized.jiraStatus)) { return false; }
   }
-  const completion = normalized.completion || (normalized.jiraStatus ? 'all' : 'active');
-  const completed = isCompletedWorkTicket(ticket);
+  const completion = normalized.completion || (normalized.jiraStatus
+    ? 'all'
+    : preferences.hideCompletedByDefault === false ? 'all' : 'active');
+  const completed = isCompletedWorkTicket(ticket, preferences.additionalDoneStatuses);
   if (completion === 'active' && completed) { return false; }
   if (completion === 'completed' && !completed) { return false; }
 
@@ -83,7 +91,11 @@ export function workTicketMatchesFilter(
   return searchable.some(value => value.includes(query));
 }
 
-export function isCompletedWorkTicket(ticket: Pick<Ticket, 'jira_status' | 'jira_status_category'>): boolean {
+export function isCompletedWorkTicket(
+  ticket: Pick<Ticket, 'jira_status' | 'jira_status_category'>,
+  additionalDoneStatuses: ReadonlySet<string> = new Set(),
+): boolean {
+  if (additionalDoneStatuses.has(comparable(ticket.jira_status))) { return true; }
   const category = comparable(ticket.jira_status_category || '');
   if (category) { return category === 'done'; }
   return ['done', 'closed', 'resolved'].includes(comparable(ticket.jira_status));

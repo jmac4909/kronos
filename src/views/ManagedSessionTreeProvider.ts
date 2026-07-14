@@ -95,8 +95,8 @@ export class ManagedSessionTreeItem extends vscode.TreeItem implements ManagedSe
     this.tooltip = sessionTooltip(session, liveCount);
     this.iconPath = sessionIcon(session, attached);
     this.command = {
-      command: attached ? 'kronos.focusWorkSessionTerminal' : 'kronos.reattachWorkSessionTerminal',
-      title: attached ? 'Focus Managed Terminal' : 'Reattach Active Terminal',
+      command: 'kronos.focusWorkSessionTerminal',
+      title: 'Open Session Terminal',
       arguments: [commandTarget],
     };
   }
@@ -153,6 +153,7 @@ function sessionTooltip(session: WorkSessionRecord, liveCount: number): string {
     ...(session.kind === 'ticket' ? [`Ticket: ${session.ticketKey}`] : ['Ticket: none (standalone session)']),
     `Title: ${session.title}`,
     `Status: ${session.status}`,
+    'Select this session to open its attached terminal. If detached, choose an open terminal to reconnect.',
     'Terminal ownership: operator',
     `Live terminal bindings: ${liveCount}`,
     `Durable terminal history: ${terminalCounts.attached} attached, ${terminalCounts.detached} detached, ${terminalCounts.closed} closed`,

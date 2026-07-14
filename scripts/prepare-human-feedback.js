@@ -42,7 +42,7 @@ for (const name of Object.keys(manifest.devDependencies || {})) {
 }
 if (manifest.contributes.commands.length !== 26) { fail('expected exactly 26 terminal-first commands'); }
 if (manifest.contributes.views.kronos.length !== 3) { fail('expected exactly Work, Sessions, and Attention'); }
-if (Object.keys(manifest.contributes.configuration.properties || {}).length !== 5) { fail('expected exactly five terminal-first settings'); }
+if (Object.keys(manifest.contributes.configuration.properties || {}).length !== 10) { fail('expected exactly ten mapped terminal-first settings'); }
 
 requireMarkers('README.md', ['zero third-party runtime dependencies', 'Work', 'Sessions', 'Attention']);
 requireMarkers('docs/terminal-first-product-contract.md', ['Ownership Invariants', 'Context Insertion Contract', 'Monitoring Contract']);
@@ -79,6 +79,7 @@ for (const expected of [
   'out/views/AttentionTreeProvider.js',
   'out/services/claudeTerminalLauncher.js',
   'out/services/projectCatalog.js',
+  'out/services/projectDiscovery.js',
   'out/services/jiraWorkBoardView.js',
   'media/kronos-action-panel.js',
   'media/kronos-jira-work-board.js',

@@ -27,6 +27,7 @@ export interface JiraWorkBoardInput {
   nonce: string;
   scriptUri: string;
   doneStatusNames?: readonly string[];
+  hideCompletedByDefault?: boolean;
 }
 
 interface BoardTicket {
@@ -63,7 +64,8 @@ export function buildJiraWorkBoardHtml(input: JiraWorkBoardInput): string {
   const projects = uniqueFacet(tickets.flatMap(ticket => ticket.projects));
   const labels = uniqueFacet(tickets.flatMap(ticket => ticket.labels));
   const completedCount = tickets.filter(ticket => ticket.completed).length;
-  const initiallyVisibleCount = tickets.length - completedCount;
+  const hideCompletedByDefault = input.hideCompletedByDefault !== false;
+  const initiallyVisibleCount = hideCompletedByDefault ? tickets.length - completedCount : tickets.length;
   const refreshedAt = safeSingleLine(input.state?.refreshedAt, 100);
   const localProjects = listLocalProjects(input.state);
 
@@ -148,7 +150,7 @@ ${webviewRuntimeScriptTag(input.nonce, webviewRuntimeScriptUri(input.scriptUri))
     <div class="jira-projects-header"><h2>Local Projects</h2><span class="kronos-subtitle">Branch is read locally from Git HEAD</span></div>
     ${localProjects.length > 0
     ? `<div class="jira-projects-grid">${localProjects.map(project => `<div class="jira-project"><div class="jira-project-heading"><span class="jira-project-name">${escapeHtml(project.name)}</span><span class="jira-project-branch">${escapeHtml(project.branch || (project.available ? 'branch unavailable' : 'folder unavailable'))}</span></div><div class="jira-project-path">${escapeHtml(project.path)}</div></div>`).join('')}</div>`
-    : '<div class="kronos-empty">No local projects registered. Open a project folder and use Register Workspace Project from the Work toolbar.</div>'}
+    : '<div class="kronos-empty">No local projects registered. Open a project folder or configure discovery roots, then use Discover Local Projects from the Work toolbar.</div>'}
   </section>
 
   <section class="jira-board-filters" aria-label="Jira board filters">
@@ -160,15 +162,15 @@ ${webviewRuntimeScriptTag(input.nonce, webviewRuntimeScriptUri(input.scriptUri))
     ${selectFilter('jira-board-project', 'Project', projects)}
     ${selectFilter('jira-board-label', 'Label', labels)}
     <label class="jira-board-toggle" for="jira-board-hide-done">
-      <input id="jira-board-hide-done" type="checkbox" checked>
+      <input id="jira-board-hide-done" type="checkbox" data-default-checked="${hideCompletedByDefault ? 'true' : 'false'}"${hideCompletedByDefault ? ' checked' : ''}>
       <span class="jira-board-toggle-label">Hide completed</span>
     </label>
     <button id="jira-board-reset" class="kronos-button jira-board-reset" type="button">Reset</button>
   </section>
-  <div id="jira-board-filter-summary" class="jira-board-summary" aria-live="polite">${initiallyVisibleCount} of ${tickets.length} shown${completedCount > 0 ? ` · ${completedCount} completed hidden` : ''}</div>
+  <div id="jira-board-filter-summary" class="jira-board-summary" aria-live="polite">${initiallyVisibleCount} of ${tickets.length} shown${hideCompletedByDefault && completedCount > 0 ? ` · ${completedCount} completed hidden` : ''}</div>
 
   <section id="jira-work-board" class="jira-board" aria-label="Jira tickets by status">
-    ${columns.map(buildColumnHtml).join('')}
+    ${columns.map(column => buildColumnHtml(column, hideCompletedByDefault)).join('')}
     ${tickets.length === 0 ? '<div class="kronos-empty jira-board-empty">No Jira tickets are loaded. Refresh Work after configuring Jira in Kronos Doctor.</div>' : ''}
   </section>
   <div id="jira-board-no-matches" class="kronos-empty jira-board-empty" hidden>No tickets match these filters.</div>
@@ -257,9 +259,7 @@ function statusRank(status: string): number {
 }
 
 function isCompletedBoardTicket(ticket: Ticket, additionalDoneStatuses: ReadonlySet<string>): boolean {
-  const category = safeSingleLine(ticket.jira_status_category, 100);
-  if (category) { return isCompletedWorkTicket(ticket); }
-  return isCompletedJiraStatus(ticket.jira_status, additionalDoneStatuses);
+  return isCompletedWorkTicket(ticket, additionalDoneStatuses);
 }
 
 function compareBoardTickets(left: BoardTicket, right: BoardTicket): number {
@@ -267,8 +267,8 @@ function compareBoardTickets(left: BoardTicket, right: BoardTicket): number {
   return updatedDifference || left.key.localeCompare(right.key);
 }
 
-function buildColumnHtml(column: BoardColumn): string {
-  const visibleByDefault = !column.completed;
+function buildColumnHtml(column: BoardColumn, hideCompletedByDefault: boolean): string {
+  const visibleByDefault = !hideCompletedByDefault || !column.completed;
   return `<section class="jira-board-column" data-status-column="${escapeAttr(column.statusToken)}" data-completed-column="${column.completed ? 'true' : 'false'}"${visibleByDefault ? '' : ' hidden'}>
     <header class="jira-board-column-header"><span>${escapeHtml(column.status)}</span><span class="jira-board-column-count" data-column-count>${visibleByDefault ? column.tickets.length : 0}</span></header>
     <div class="jira-board-cards">${column.tickets.map(buildTicketCardHtml).join('')}</div>

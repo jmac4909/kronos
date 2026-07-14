@@ -26,7 +26,7 @@ The normative boundary and navigation model are in [docs/terminal-first-product-
 
 Work is a Jira board with search, status, project, and label filters. Completed work is hidden by default and can be shown explicitly. Refresh the board, combine or clear filters, open one ticket workspace, then either attach an existing focused terminal or choose **Start Claude for Ticket**. Ticket association is created only from this ticket path, never by standalone **New Claude**.
 
-Use **Register Workspace Project** from the Work toolbar to save an open workspace folder in the private local catalog. A ticket's **Project / Branch** action selects one primary local launch project while retaining its Jira/provider project associations. Kronos shows the project's current Git branch by reading `.git/HEAD` with Node built-ins; it never invokes Git or changes the repository. Future ticket-launched Claude terminals start in the linked folder. Existing terminals are never moved or sent a `cd` command.
+Use **Discover and Register Local Projects** from the Work toolbar to choose open workspace folders or Git projects found under configured discovery roots. Settings control the roots, scan depth, and result limit. Discovery is bounded and read-only, and nothing is registered until you select it. A ticket's **Project / Branch** action selects one primary local launch project while retaining its Jira/provider project associations. Kronos shows the project's current Git branch by reading `.git/HEAD` with Node built-ins; it never invokes Git or changes the repository. Future ticket-launched Claude terminals start in the linked folder. Existing terminals are never moved or sent a `cd` command.
 
 From a ticket workspace, explicitly insert the context needed for the next instruction:
 
@@ -42,11 +42,11 @@ Every insertion is one editable line and is sent with execution disabled. The op
 
 Sessions shows both standalone Claude sessions and ticket-linked work sessions with their ephemeral live-terminal attachment. **New Claude** creates and focuses a standalone terminal without inventing a Jira key or ticket link. **Start Claude for Ticket** creates the same operator-owned terminal experience but records the selected ticket association.
 
-Each session reports whether the terminal is attached, which providers are bound, context freshness, monitoring health, and the latest poll result where applicable.
+Each session reports whether the terminal is attached, which providers are bound, context freshness, monitoring health, and the latest poll result where applicable. Selecting a Session opens its attached terminal immediately. If the live attachment was lost after reload, Kronos lets you choose which currently open terminal to reconnect and then opens it.
 
 From Sessions, the operator can focus or reattach the terminal, poll providers, pause or resume monitoring, inspect the audit, detach the terminal, or stop management. Detaching and stopping management never close the terminal.
 
-After VS Code reloads, persisted history remains but the live terminal starts detached. Kronos does not trust a saved terminal name or process ID as proof of identity; the operator must focus and explicitly reattach the intended terminal.
+After VS Code reloads, persisted history remains but the live terminal starts detached. Kronos does not trust a saved terminal name or process ID as proof of identity. Select the Session: if exactly one unclaimed terminal is open it reconnects and opens it; otherwise choose the intended terminal from the list.
 
 ### Attention
 
@@ -83,7 +83,12 @@ Common read-only configuration variables are:
 
 Context artifacts are bounded, normalized, secret-redacted, wrapped as untrusted provider data, and stored in private per-user files where the platform supports private file permissions. Provider reads are pinned to configured origins when credentials are sent. Kronos does not fetch GitLab job traces, Jenkins console logs, or unsupported Jira attachment bodies.
 
-Use **Kronos: Setup** for guided first-run and private provider-environment guidance, **Kronos: Doctor** to inspect missing or invalid provider/Claude settings without displaying credential values, and **Kronos: Settings** to change the validated Claude command, terminal name, working-directory behavior, and polling options.
+Use **Kronos: Setup** for guided first-run and private provider-environment guidance, **Kronos: Doctor** to inspect missing or invalid provider/Claude settings without displaying credential values, and **Kronos: Settings** to change:
+
+- project discovery roots, depth, and result limit;
+- whether completed Jira work is hidden by default and any team-specific completed status names;
+- the validated Claude command, terminal name, and launch-directory behavior;
+- Jira refresh and managed-provider polling intervals.
 
 ## Install for Local Evaluation
 

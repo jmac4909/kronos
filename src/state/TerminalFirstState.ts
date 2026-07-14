@@ -92,6 +92,15 @@ export class TerminalFirstState implements vscode.Disposable {
     this.reloadAndNotify();
   }
 
+  registerLocalProjects(projects: readonly { name: string; path: string }[]): void {
+    let next = this.snapshot || emptyWorkCatalog();
+    for (const project of projects) {
+      next = registerLocalProject(next, project.name, project.path);
+    }
+    writeStateFile(next);
+    this.reloadAndNotify();
+  }
+
   setTicketLocalProject(ticketKey: string, projectName?: string): void {
     const next = setTicketLocalProject(this.snapshot || emptyWorkCatalog(), ticketKey, projectName);
     writeStateFile(next);

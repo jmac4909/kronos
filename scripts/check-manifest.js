@@ -39,6 +39,11 @@ const EXPECTED_VIEWS = [
 const EXPECTED_SETTINGS = [
   'kronos.refreshIntervalSec',
   'kronos.managedProviderPollIntervalSec',
+  'kronos.projectDiscoveryRoots',
+  'kronos.projectDiscoveryDepth',
+  'kronos.projectDiscoveryLimit',
+  'kronos.hideCompletedJiraWork',
+  'kronos.completedJiraStatuses',
   'kronos.claudeCommand',
   'kronos.claudeTerminalName',
   'kronos.claudeLaunchCwd',
@@ -185,6 +190,28 @@ function checkSettings() {
     if (setting?.type !== 'number' || typeof setting.default !== 'number' || setting.minimum !== 15) {
       fail(`${id} must be a numeric interval with a numeric default and a 15-second minimum.`);
     }
+  }
+  const roots = properties?.['kronos.projectDiscoveryRoots'];
+  if (roots?.type !== 'array' || roots?.items?.type !== 'string'
+    || JSON.stringify(roots.default) !== '[]' || roots?.scope !== 'machine') {
+    fail('kronos.projectDiscoveryRoots must be a machine-scoped string array with an empty default.');
+  }
+  const depth = properties?.['kronos.projectDiscoveryDepth'];
+  if (depth?.type !== 'integer' || depth?.default !== 2 || depth?.minimum !== 0 || depth?.maximum !== 5) {
+    fail('kronos.projectDiscoveryDepth must be an integer from 0 through 5 and default to 2.');
+  }
+  const limit = properties?.['kronos.projectDiscoveryLimit'];
+  if (limit?.type !== 'integer' || limit?.default !== 100 || limit?.minimum !== 1 || limit?.maximum !== 500) {
+    fail('kronos.projectDiscoveryLimit must be an integer from 1 through 500 and default to 100.');
+  }
+  if (properties?.['kronos.hideCompletedJiraWork']?.type !== 'boolean'
+    || properties?.['kronos.hideCompletedJiraWork']?.default !== true) {
+    fail('kronos.hideCompletedJiraWork must be boolean and default to true.');
+  }
+  const statuses = properties?.['kronos.completedJiraStatuses'];
+  if (statuses?.type !== 'array' || statuses?.items?.type !== 'string'
+    || JSON.stringify(statuses.default) !== '[]') {
+    fail('kronos.completedJiraStatuses must be a string array with an empty default.');
   }
   if (properties?.['kronos.claudeCommand']?.type !== 'string'
     || properties?.['kronos.claudeCommand']?.default !== 'claude'

@@ -88,7 +88,7 @@
       },
       {
         "command": "kronos.registerWorkspaceProject",
-        "title": "Kronos: Register Workspace Project",
+        "title": "Kronos: Discover and Register Local Projects",
         "icon": "$(folder-library)"
       },
       {
@@ -138,12 +138,12 @@
       },
       {
         "command": "kronos.focusWorkSessionTerminal",
-        "title": "Kronos: Focus Managed Terminal",
+        "title": "Kronos: Open Session Terminal",
         "icon": "$(terminal)"
       },
       {
         "command": "kronos.reattachWorkSessionTerminal",
-        "title": "Kronos: Reattach Focused Terminal",
+        "title": "Kronos: Connect Focused Terminal to Session",
         "icon": "$(link)"
       },
       {
@@ -236,17 +236,17 @@
         },
         {
           "command": "kronos.setup",
-          "when": "view == kronosSessions || view == kronosAttention",
+          "when": "view == kronosWork || view == kronosSessions || view == kronosAttention",
           "group": "navigation@8"
         },
         {
           "command": "kronos.doctor",
-          "when": "view == kronosSessions || view == kronosAttention",
+          "when": "view == kronosWork || view == kronosSessions || view == kronosAttention",
           "group": "navigation@9"
         },
         {
           "command": "kronos.settings",
-          "when": "view == kronosSessions || view == kronosAttention",
+          "when": "view == kronosWork || view == kronosSessions || view == kronosAttention",
           "group": "navigation@10"
         }
       ],
@@ -362,6 +362,44 @@
           "default": 300,
           "minimum": 15,
           "description": "How often Kronos reads GitLab, Jenkins, and SonarQube status for monitored work sessions, in seconds."
+        },
+        "kronos.projectDiscoveryRoots": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "scope": "machine",
+          "description": "Absolute folders Kronos may inspect for local Git projects when Discover and Register Local Projects is explicitly opened. Open workspace folders are always offered. Use ~ for the current home folder."
+        },
+        "kronos.projectDiscoveryDepth": {
+          "type": "integer",
+          "default": 2,
+          "minimum": 0,
+          "maximum": 5,
+          "scope": "machine",
+          "description": "Maximum child-directory depth inspected below each configured project discovery root. Discovery is bounded and read-only."
+        },
+        "kronos.projectDiscoveryLimit": {
+          "type": "integer",
+          "default": 100,
+          "minimum": 1,
+          "maximum": 500,
+          "scope": "machine",
+          "description": "Maximum number of local project candidates shown by one explicit discovery action."
+        },
+        "kronos.hideCompletedJiraWork": {
+          "type": "boolean",
+          "default": true,
+          "description": "Hide completed Jira tickets by default in both the Work tree and Jira board. Explicit filters and saved board choices still take precedence."
+        },
+        "kronos.completedJiraStatuses": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Additional Jira status names that Kronos should treat as completed, for teams whose workflow does not use Jira's Done status category."
         },
         "kronos.claudeCommand": {
           "type": "string",

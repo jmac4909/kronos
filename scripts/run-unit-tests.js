@@ -14,6 +14,7 @@ test.after(() => fs.rmSync(tempRoot, { recursive: true, force: true }));
 const providerEnv = require('../out/services/providerEnv.js');
 const stateStore = require('../out/services/stateStore.js');
 const projectCatalog = require('../out/services/projectCatalog.js');
+const projectDiscovery = require('../out/services/projectDiscovery.js');
 const { JiraRestClient } = require('../out/services/jiraRestClient.js');
 const jiraContext = require('../out/services/jiraTicketContext.js');
 const jiraValuePruning = require('../out/services/jiraValuePruning.js');
@@ -148,6 +149,36 @@ test('Git worktree pointers are bounded and symbolic Git metadata is ignored', t
   fs.mkdirSync(unsafe, { recursive: true });
   if (!createSymlinkOrSkip(t, gitDirectory, path.join(unsafe, '.git'), 'dir')) { return; }
   assert.equal(projectCatalog.readProjectGitBranch(unsafe), undefined);
+});
+
+test('project discovery honors configured roots, depth, limits, and workspace folders', () => {
+  const discoveryRoot = path.join(tempRoot, 'project-discovery');
+  const direct = path.join(discoveryRoot, 'direct-project');
+  const nested = path.join(discoveryRoot, 'group', 'nested-project');
+  const ignored = path.join(discoveryRoot, 'node_modules', 'ignored-project');
+  const workspace = path.join(tempRoot, 'open-workspace-without-git');
+  for (const directory of [direct, nested, ignored, workspace]) { fs.mkdirSync(directory, { recursive: true }); }
+  for (const [directory, branch] of [[direct, 'feature/direct'], [nested, 'feature/nested'], [ignored, 'ignored']]) {
+    fs.mkdirSync(path.join(directory, '.git'));
+    fs.writeFileSync(path.join(directory, '.git', 'HEAD'), `ref: refs/heads/${branch}\n`);
+  }
+
+  const shallow = projectDiscovery.discoverLocalProjects({
+    workspaceFolders: [{ name: 'Open Workspace', path: workspace }],
+    roots: [discoveryRoot, path.join(discoveryRoot, 'missing')],
+    depth: 1,
+    limit: 100,
+  });
+  assert.deepEqual(shallow.projects.map(project => project.name), ['direct-project', 'Open Workspace']);
+  assert.match(shallow.warnings.join(' '), /unavailable/i);
+  assert.equal(shallow.projects.find(project => project.name === 'direct-project').branch, 'feature/direct');
+
+  const deep = projectDiscovery.discoverLocalProjects({ roots: [discoveryRoot], depth: 2, limit: 100 });
+  assert.deepEqual(deep.projects.map(project => project.name), ['direct-project', 'nested-project']);
+  assert.equal(deep.projects.some(project => project.name === 'ignored-project'), false);
+  const limited = projectDiscovery.discoverLocalProjects({ roots: [discoveryRoot], depth: 2, limit: 1 });
+  assert.equal(limited.projects.length, 1);
+  assert.equal(limited.truncated, true);
 });
 
 test('provider environment parsing preserves values and rejects malformed keys', () => {
@@ -436,6 +467,11 @@ test('Work filtering hides completed Jira work by default and exposes explicit c
   assert.equal(workTicketFilters.workTicketMatchesFilter('JIRA-2', shipped, {}), false);
   assert.equal(workTicketFilters.workTicketMatchesFilter('JIRA-3', legacyClosed, {}), false);
   assert.equal(workTicketFilters.workTicketMatchesFilter('JIRA-4', misleadingName, {}), true);
+  assert.equal(workTicketFilters.workTicketMatchesFilter('JIRA-2', shipped, {}, { hideCompletedByDefault: false }), true);
+  assert.equal(workTicketFilters.isCompletedWorkTicket(
+    fixtureTicket({ jira_status: 'Shipped to Customer', jira_status_category: 'indeterminate' }),
+    new Set(['shipped to customer']),
+  ), true);
   assert.equal(workTicketFilters.workTicketMatchesFilter('JIRA-2', shipped, { completion: 'all' }), true);
   assert.equal(workTicketFilters.workTicketMatchesFilter('JIRA-2', shipped, { completion: 'completed' }), true);
   assert.equal(workTicketFilters.workTicketMatchesFilter('JIRA-1', active, { completion: 'completed' }), false);
@@ -1094,6 +1130,7 @@ test('extension activation registers the bounded surface and explicit launch com
     ViewColumn: { One: 1 },
     window: {
       activeTerminal: undefined,
+      terminals: [],
       registerTreeDataProvider(id) { registeredViews.push(id); return disposable(); },
       onDidCloseTerminal(handler) { closeTerminalHandler = handler; return disposable(); },
       createOutputChannel() { return { appendLine() {}, dispose() {} }; },
@@ -1120,6 +1157,7 @@ test('extension activation registers the bounded surface and explicit launch com
           sendText(text, shouldExecute) { actions.push(['sendText', text, shouldExecute]); },
         };
         createdTerminals.push({ options, terminal, actions });
+        vscode.window.terminals.push(terminal);
         vscode.window.activeTerminal = terminal;
         return terminal;
       },
@@ -1197,6 +1235,22 @@ test('extension activation registers the bounded surface and explicit launch com
       ['show', false],
       ['sendText', 'claude', true],
     ]);
+    await commandHandlers.get('kronos.focusWorkSessionTerminal')({ workSessionId: ticketSession.id });
+    assert.deepEqual(createdTerminals[1].actions.at(-1), ['show', false], 'selecting a Session must open its attached terminal');
+
+    closeTerminalHandler(createdTerminals[1].terminal);
+    const reconnectedActions = [];
+    const reconnectedTerminal = {
+      name: 'Restored JIRA-123 terminal',
+      processId: Promise.resolve(2900),
+      show(preserveFocus) { reconnectedActions.push(['show', preserveFocus]); },
+      sendText() { throw new Error('reconnecting a Session must not write to its terminal'); },
+    };
+    vscode.window.terminals = [reconnectedTerminal];
+    vscode.window.activeTerminal = undefined;
+    await commandHandlers.get('kronos.focusWorkSessionTerminal')({ workSessionId: ticketSession.id });
+    assert.deepEqual(reconnectedActions, [['show', false]], 'selecting a detached Session must reconnect and open the sole unclaimed terminal');
+    assert.equal(workSessions.getWorkSessionByTicket('JIRA-123').terminals.at(-1).name, 'Restored JIRA-123 terminal');
 
     deferNextProcessId = true;
     const racedLaunch = commandHandlers.get('kronos.startClaudeForTicket')({ ticketKey: 'JIRA-456' });
