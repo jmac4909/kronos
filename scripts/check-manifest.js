@@ -14,6 +14,7 @@ const EXPECTED_COMMANDS = [
   'kronos.startClaudeForTicket',
   'kronos.manageActiveTerminal',
   'kronos.insertJiraContext',
+  'kronos.insertOtherTicket',
   'kronos.insertGitLabContext',
   'kronos.insertCiContext',
   'kronos.pollManagedWorkSessions',

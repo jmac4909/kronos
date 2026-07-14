@@ -103,11 +103,11 @@ If GitLab and CI providers are safely configured:
 
 1. Choose **New Claude** and confirm exactly one new terminal is created and focused without asking for a Jira ticket.
 2. Confirm the configured Claude command is executed exactly once and the session appears using its workspace-derived standalone title with no fake ticket key or ticket link.
-3. Confirm the ticket-linked session separately shows its real ticket key, attached terminal state, provider bindings, monitoring state, last attempt, and latest result without showing terminal content.
+3. Confirm the project session shows its real Jira context(s), attached terminal state, provider bindings, monitoring state, last attempt, and latest result without showing terminal content.
 4. Select each attached Session and confirm its correct terminal opens immediately.
 5. Reload VS Code, select a detached Session, and confirm Kronos reconnects the sole unclaimed terminal or asks which open terminal belongs to the Session before opening it.
 6. Detach the standalone terminal and confirm it remains open and Claude remains operator-controlled.
-7. Pause monitoring on the ticket-linked session and confirm provider polling stops for that work session.
+7. Pause monitoring on the project session with Jira context and confirm provider polling stops for that work session.
 8. Resume monitoring and run **Poll Managed Providers** once.
 9. Open the ticket workspace and confirm GitLab, Jenkins, and SonarQube each show active, discovering, paused, or setup state. Confirm GitLab discovers a unique open MR by current branch/ticket key without a manual connect prompt and refuses an ambiguous fixture.
 10. Open each available work-session audit. Confirm it uses the standalone title or real ticket identity as appropriate and contains no terminal transcript.
@@ -124,10 +124,10 @@ If GitLab and CI providers are safely configured:
 ## Attention View
 
 1. Let Kronos discover an MR with no prior local baseline. Confirm its first successful observation appears once even when GitLab reports it healthy and mergeable; an MR already needing review should appear as a warning.
-2. Confirm provider failures, recoveries, partial reads, and monitoring blockers are grouped by real ticket when linked, or by standalone session title when not linked, rather than scattered by provider.
+2. Confirm provider failures, recoveries, partial reads, and monitoring blockers are grouped by registered project when known, with real Jira context retained, rather than scattered by provider.
 3. Open an attention item's provider page and confirm it points to the expected configured provider. For a SonarQube item, confirm its dashboard link keeps the expected project and branch routing. If the session retains multiple SonarQube branches or Jenkins builds, confirm a native picker appears and opens the selected target.
 4. For a ticket-linked item, open the related ticket workspace. Confirm a standalone item does not fabricate that action or a ticket key.
-5. Insert fresh MR or CI context from the item when applicable; confirm the reference goes only to the explicitly attached terminal and is not submitted.
+5. Insert fresh MR or CI context from the item when applicable; confirm an editable composer opens first, then the reference goes only to the explicitly attached terminal and is not submitted.
 6. Acknowledge the item and confirm acknowledgement changes only local Attention/audit state.
 7. Confirm ordinary unchanged polls do not create repeated attention noise.
 8. With Jenkins configured and no explicit SonarQube project key, use a safe fixture job whose `/config.xml` contains a literal `sonar.projectKey`. Confirm polling discovers SonarQube without retaining raw XML; confirm an expression value such as `${SONAR_PROJECT_KEY}` is ignored.

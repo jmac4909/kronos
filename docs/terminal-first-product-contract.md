@@ -85,7 +85,7 @@ Sessions is the durable operational view with two ordered sections: interactive 
 
 Each session presents:
 
-- its operator-facing title and, only when actually linked, its ticket identity;
+- its operator-facing project/title identity and every explicitly attached Jira context;
 - attached, detached, paused, or closed management state;
 - the live terminal attachment count without terminal contents;
 - provider bindings;
@@ -99,13 +99,13 @@ Each registered Project exposes branch and read-only status, an explicit bounded
 
 Selecting any Session means “open its terminal.” A live attachment is focused immediately. When VS Code has discarded the ephemeral attachment, Kronos never guesses from a saved process ID or duplicate terminal name: it reconnects the only unclaimed open terminal or asks the operator to choose one, then focuses it.
 
-**New Claude** creates a standalone session with a workspace-derived title, validates the configured Claude command/name/cwd, creates and focuses one terminal, and starts Claude. The created terminal tab includes the branch read from the actual launch directory when Git `HEAD` is available. **Start Claude for Ticket** also includes the real ticket key in that title. This is launch-time display metadata only: Kronos does not invoke Git and does not write to or rename an existing terminal. The persisted standalone record contains no fake or placeholder ticket key. **Start Claude for Ticket** creates a ticket-linked session from the selected ticket path.
+**New Claude** creates a project-oriented session with a workspace-derived title, validates the configured Claude command/name/cwd, creates and focuses one terminal, and starts Claude. The created terminal tab includes the branch read from the actual launch directory when Git `HEAD` is available. **Start Claude for Ticket** also includes the initiating ticket key in that title. This is launch-time display metadata only: Kronos does not invoke Git and does not write to or rename an existing terminal. A new project session contains no fake or placeholder ticket key. An operator may later attach one or more real Jira contexts to any explicitly managed terminal; this never creates or submits terminal input automatically. Legacy ticket-keyed records remain readable for migration compatibility, but Sessions and monitoring are presented and deduplicated by project when a project is known.
 
 Stopping management disables monitoring and detaches the in-memory association. It never closes the terminal.
 
 ### Attention
 
-Attention is the session- and ticket-aware inbox for changes that merit operator review. A standalone session is labeled by its session title; ticket-linked items retain their real ticket identity.
+Attention is the project-aware inbox for changes that merit operator review. Items are grouped by registered project when known, with their real Jira contexts retained inside the group; sessions without a project fall back to their session identity.
 
 Eligible items include:
 
@@ -117,13 +117,13 @@ Eligible items include:
 - partial provider reads and monitoring blockers;
 - unsafe or unavailable local monitoring state.
 
-A ticket-linked item may open its ticket workspace. Applicable items may open a validated provider URL, insert fresh MR/CI context into the explicitly attached terminal, or be acknowledged locally. If multiple retained SonarQube branch targets or Jenkins builds are available, opening the provider uses a native picker; otherwise it opens directly. SonarQube dashboard URLs may retain only the non-secret `id` and `branch` routing parameters. Acknowledgement never changes provider state.
+A ticket-linked item may open its ticket workspace. Applicable items may open a validated provider URL, open an editable composer for fresh MR/CI context, place the reviewed reference into the explicitly attached terminal without submission, or be acknowledged locally. If multiple retained SonarQube branch targets or Jenkins builds are available, opening the provider uses a native latest-first picker; otherwise it opens directly. SonarQube dashboard URLs may retain only the non-secret `id` and `branch` routing parameters. Acknowledgement never changes provider state.
 
 The first successful merge-request observation creates one durable transition in Attention: informational when healthy and warning-level when it already needs review. Its comparison baseline is recorded at the same time. Unchanged subsequent polling results do not create new Attention items.
 
 ## Context Insertion Contract
 
-Context insertion is always explicit and terminal-scoped. Jira, MR, and CI evidence remain ticket-scoped. A `[GIT-project]` working-tree snapshot is project-scoped and may be inserted into an explicitly attached standalone or ticket session for that project. Creating a standalone Claude session does not silently create ticket context or a ticket association.
+Context insertion is always explicit and terminal-scoped. Jira, MR, and CI evidence remain ticket-scoped, but the operator may choose any active explicitly managed terminal and may associate multiple real tickets with one project session. A `[GIT-project]` working-tree snapshot is project-scoped and may be inserted into an explicitly attached session for that project. Creating a Claude session does not silently create ticket context or a ticket association.
 
 1. Kronos resolves the selected ticket and the explicitly managed terminal.
 2. It reads the configured provider through bounded read-only APIs.
@@ -196,7 +196,7 @@ The installed extension has zero third-party runtime dependencies. Kronos uses t
 The public terminal-first command surface is intentionally limited to:
 
 - Work: refresh the Jira board; search/filter/show completed/clear filters; open ticket workspace; start Claude for the selected ticket; manage a focused terminal; insert Jira/MR/CI context;
-- Sessions: create a standalone Claude session; poll providers; open audit; focus/reattach/detach terminal; stop or remove local management; pause/resume monitoring; view registered project status/diff; insert project Git/MR/CI evidence; open an existing or prefilled new MR page; configure project providers;
+- Sessions: create a project-oriented Claude session; add another Jira context; poll providers; open audit; focus/reattach/detach terminal; stop or remove local management; pause/resume monitoring; view registered project status/diff; insert project Git/MR/CI evidence; open an existing or prefilled new MR page; configure project providers;
 - Attention: acknowledge item and open provider;
 - Operations: Setup, Doctor, and Settings.
 

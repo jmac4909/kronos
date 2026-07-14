@@ -327,7 +327,7 @@ function checkFocusedInsertionContract() {
     addGlobalViolation('NO_SUBMIT', `${TERMINAL_FIRST_RUNTIME_FILE} must be reachable from ${ENTRY_FILE}.`);
     return;
   }
-  const focusedBindingContract = /private async chooseInsertionTerminal[\s\S]{0,2400}vscode\.window\.activeTerminal[\s\S]{0,2400}bindingForTerminal\(terminal\)[\s\S]{0,1600}binding\?\.sessionId !== session\.id/;
+  const focusedBindingContract = /private async chooseInsertionTerminal[\s\S]{0,2600}vscode\.window\.activeTerminal[\s\S]{0,800}bindingForTerminal\(activeTerminal\)[\s\S]{0,1400}activeBinding\?\.sessionId === session\.id[\s\S]{0,1000}chooseLiveTerminal\(session\.id\)/;
   if (!focusedBindingContract.test(maskComments(source))) {
     addGlobalViolation(
       'NO_SUBMIT',

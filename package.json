@@ -142,6 +142,11 @@
         "icon": "$(symbol-keyword)"
       },
       {
+        "command": "kronos.insertOtherTicket",
+        "title": "Kronos: Insert Other Ticket into Session",
+        "icon": "$(symbol-keyword)"
+      },
+      {
         "command": "kronos.insertGitLabContext",
         "title": "Kronos: Insert Merge Request and Pipeline Context",
         "icon": "$(git-merge)"
@@ -365,6 +370,11 @@
           "command": "kronos.openWorkSessionAudit",
           "when": "viewItem == work_session_attached || viewItem == work_session_detached || viewItem == work_session_attached_paused || viewItem == work_session_detached_paused || viewItem == work_session_closed || viewItem == standalone_session_attached || viewItem == standalone_session_detached || viewItem == standalone_session_closed",
           "group": "audit@1"
+        },
+        {
+          "command": "kronos.insertOtherTicket",
+          "when": "viewItem == work_session_attached || viewItem == work_session_attached_paused || viewItem == standalone_session_attached",
+          "group": "context@1"
         },
         {
           "command": "kronos.pauseWorkSessionMonitoring",

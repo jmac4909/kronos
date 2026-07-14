@@ -10,7 +10,7 @@ export function buildWorkSessionAuditMarkdown(
   const providers = [...new Set(session.providerBindings.map(binding => binding.provider))];
   const attachedTerminals = session.terminals.filter(terminal => terminal.status === 'attached').length;
   const heading = session.kind === 'ticket'
-    ? `${session.ticketKey} managed work session`
+    ? `${session.projectName || session.ticketKey} managed work session`
     : `${session.title} managed session`;
   const lines = [
     `# ${markdownText(heading)}`,
@@ -23,6 +23,7 @@ export function buildWorkSessionAuditMarkdown(
     '',
     `- Session: \`${inlineCode(session.id)}\``,
     `- Kind: ${session.kind === 'ticket' ? `ticket-linked (${markdownText(session.ticketKey)})` : 'standalone'}`,
+    `- Ticket contexts: ${session.ticketKeys.length > 0 ? session.ticketKeys.map(markdownText).join(', ') : 'none'}`,
     `- Status: ${markdownText(session.status)}`,
     `- Operator terminals currently recorded as attached: ${attachedTerminals}`,
     `- Monitoring: ${session.monitoring.enabled ? 'enabled' : 'disabled'}`,

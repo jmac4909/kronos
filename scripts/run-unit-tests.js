@@ -1730,14 +1730,20 @@ test('standalone work sessions persist without fake Jira identities and preserve
   assert.deepEqual(workSessions.workSessionEventContext(standalone), {
     sessionId: standalone.id,
     sessionTitle: 'Explore terminal workflow',
-    label: 'Explore terminal workflow',
+    label: 'Kronos: Explore terminal workflow',
   });
+  assert.deepEqual(standalone.ticketKeys, []);
+  const withTicketContext = workSessions.addWorkSessionTicketContext(standalone.id, 'JIRA-789', options);
+  assert.deepEqual(withTicketContext.ticketKeys, ['JIRA-789']);
+  assert.equal(withTicketContext.monitoring.enabled, true);
+  assert.equal(workSessions.getWorkSessionForTicketContext('JIRA-789', options).id, standalone.id);
+  assert.equal(Object.hasOwn(withTicketContext, 'ticketKey'), false);
   assert.deepEqual(workSessions.workSessionTicketMetadata(standalone), {});
   const reopenedStandalone = workSessions.reopenWorkSession(
     workSessions.closeWorkSession(standalone.id, options).id,
     options,
   );
-  assert.equal(reopenedStandalone.monitoring.enabled, false);
+  assert.equal(reopenedStandalone.monitoring.enabled, true);
 
   const rawStandalone = JSON.parse(fs.readFileSync(
     workSessions.workSessionRecordPath(standalone.id, options),
@@ -1757,6 +1763,7 @@ test('standalone work sessions persist without fake Jira identities and preserve
   const restored = workSessions.readWorkSession(ticket.id, options);
   assert.equal(restored.kind, 'ticket');
   assert.equal(restored.ticketKey, 'JIRA-456');
+  assert.deepEqual(restored.ticketKeys, ['JIRA-456']);
   assert.deepEqual(workSessions.workSessionTicketMetadata(restored), { ticketKey: 'JIRA-456' });
   workSessions.createStandaloneWorkSession({ title: 'Newer standalone' }, {
     ...options,
@@ -2789,13 +2796,33 @@ test('extension activation registers the bounded surface and explicit launch com
       after: { state: 'ERROR', fingerprint: 'attention-branch-picker-fingerprint' },
       metadata: { transitionKind: 'sonar_gate_failed', projectKey: 'fixture', branch: 'feature/one' },
     });
-    const attentionGroup = attentionProvider.getChildren().find(item => item.ticketKey === 'JIRA-321');
-    const attentionItem = attentionProvider.getChildren(attentionGroup)[0];
+    const siblingProjectSession = workSessions.createOrGetWorkSessionByTicket({
+      ticketKey: 'JIRA-322',
+      title: 'Same project attention fixture',
+      projectName: 'fixture',
+      projectPath: tempRoot,
+    });
+    monitorEventStore.appendMonitorEvent({
+      id: 'attention-same-project-event',
+      sessionId: siblingProjectSession.id,
+      type: 'provider.transition',
+      source: 'gitlab',
+      summary: 'JIRA-322 same project fixture.',
+      subject: { kind: 'merge-request', id: '322', ticketKey: 'JIRA-322' },
+      after: { state: 'opened', fingerprint: 'attention-same-project-fingerprint' },
+      metadata: { transitionKind: 'initial_observation' },
+    });
+    const attentionGroup = attentionProvider.getChildren().find(item => item.label === 'fixture');
+    assert.equal(attentionGroup.label, 'fixture', 'Attention groups use the registered project identity');
+    const groupedProjectItems = attentionProvider.getChildren(attentionGroup);
+    assert.equal(groupedProjectItems.length, 2, 'provider transitions from separate sessions share one project group');
+    const attentionItem = groupedProjectItems.find(item => item.eventId === 'attention-branch-picker-event');
     assert.deepEqual(attentionItem.providerChoices.map(choice => choice.label), ['feature/one', 'feature/two']);
     singlePickHandler = items => items.find(item => item.label === 'feature/two');
     await commandHandlers.get('kronos.openProvider')(attentionItem);
     assert.deepEqual(lastSinglePickItems.map(item => item.label), ['feature/one', 'feature/two']);
     assert.equal(openedExternalUrls.at(-1), 'https://sonar.example/dashboard?id=fixture&branch=feature%2Ftwo');
+    workSessions.removeWorkSession(siblingProjectSession.id);
     workSessions.removeWorkSession(attentionSession.id);
 
     await commandHandlers.get('kronos.setup')();
@@ -2918,6 +2945,10 @@ test('extension activation registers the bounded surface and explicit launch com
     assert.equal(createdTerminals[1].actions.at(-1)[0], 'sendText');
     assert.equal(createdTerminals[1].actions.at(-1)[2], false);
     assert.match(createdTerminals[1].actions.at(-1)[1], /Operator focus:/);
+    singlePickHandler = items => items.find(item => item.label === 'JIRA-321');
+    await commandHandlers.get('kronos.insertOtherTicket')({ workSessionId: ticketSession.id });
+    assert.deepEqual(workSessions.getWorkSessionByTicket('JIRA-123').ticketKeys, ['JIRA-123', 'JIRA-321']);
+    assert.ok(createdWebviewPanels.filter(panel => panel.viewType === 'kronosContextComposer').length >= 2);
     await commandHandlers.get('kronos.focusWorkSessionTerminal')({ workSessionId: ticketSession.id });
     assert.deepEqual(createdTerminals[1].actions.at(-1), ['show', false], 'selecting a Session must open its attached terminal');
 
@@ -3134,14 +3165,26 @@ test('extension activation registers the bounded surface and explicit launch com
     assert.equal(reconnectedActions.at(-1)[2], false);
     assert.match(reconnectedActions.at(-1)[1], /^\[MR-88\]/);
 
-    providerWrites = reconnectedActions.length;
+    providerPanelStart = createdWebviewPanels.length;
     await commandHandlers.get('kronos.insertCiContext')({ ticketKey: 'JIRA-123' });
+    providerComposer = createdWebviewPanels.slice(providerPanelStart)
+      .find(panel => panel.viewType === 'kronosContextComposer');
+    assert.ok(providerComposer, 'direct CI insertion must open an editable context composer');
+    assert.match(providerComposer.webview.html, /Jenkins #32 SUCCESS/);
+    assert.match(providerComposer.webview.html, /SonarQube.*OK/);
+    providerWrites = reconnectedActions.length;
+    await providerComposer.receive({ command: 'insertDraft', focus: 'Review CI fixture evidence.' });
     assert.equal(reconnectedActions.length, providerWrites + 1);
     assert.equal(reconnectedActions.at(-1)[2], false);
     assert.match(reconnectedActions.at(-1)[1], /^\[CI-JIRA-123\]/);
     singlePickHandler = items => items.find(item => item.label === 'JIRA-123');
-    providerWrites = reconnectedActions.length;
+    providerPanelStart = createdWebviewPanels.length;
     await commandHandlers.get('kronos.insertProjectCiContext')({ projectName: 'fixture', projectPath: tempRoot });
+    providerComposer = createdWebviewPanels.slice(providerPanelStart)
+      .find(panel => panel.viewType === 'kronosContextComposer');
+    assert.ok(providerComposer, 'project CI insertion must route to a linked ticket composer');
+    providerWrites = reconnectedActions.length;
+    await providerComposer.receive({ command: 'insertDraft', focus: 'Review project CI evidence.' });
     assert.equal(reconnectedActions.length, providerWrites + 1);
     assert.equal(reconnectedActions.at(-1)[2], false);
     assert.match(reconnectedActions.at(-1)[1], /^\[CI-JIRA-123\]/);

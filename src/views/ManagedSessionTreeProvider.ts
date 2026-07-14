@@ -59,7 +59,10 @@ export class ManagedSessionTreeProvider implements vscode.TreeDataProvider<Sessi
         const evidence = await readProjectGitEvidence(project.path, { includeDiff: false });
         const config = state?.projects[project.name]?.config || {};
         const linkedSessionCount = sessions.filter(session =>
-          session.projectName === project.name && session.kind === 'ticket' && session.status === 'active' && session.monitoring.enabled
+          session.projectName === project.name
+            && session.ticketKeys.length > 0
+            && session.status === 'active'
+            && session.monitoring.enabled
         ).length;
         return new RegisteredProjectTreeItem(
           { projectName: project.name, projectPath: project.path },
@@ -125,7 +128,10 @@ export class ManagedSessionTreeItem extends vscode.TreeItem implements ManagedSe
     };
     if (this.ticketKey) { commandTarget.ticketKey = this.ticketKey; }
     this.id = `work-session:${session.id}`;
-    this.contextValue = session.kind === 'standalone'
+    const projectMonitoringSession = session.kind === 'standalone'
+      && session.ticketKeys.length > 0
+      && Boolean(session.projectName || session.projectPath);
+    this.contextValue = session.kind === 'standalone' && !projectMonitoringSession
       ? session.status === 'closed' ? 'standalone_session_closed' : attached ? 'standalone_session_attached' : 'standalone_session_detached'
       : session.status === 'closed' ? 'work_session_closed'
         : !session.monitoring.enabled ? attached ? 'work_session_attached_paused' : 'work_session_detached_paused'
@@ -222,11 +228,14 @@ function sessionDescription(session: WorkSessionRecord, liveCount: number): stri
   const branch = session.projectPath ? readProjectGitBranch(session.projectPath)?.branch : undefined;
   const project = branch ? `${session.projectName || 'project'} @ ${branch} • ` : '';
   if (session.status === 'closed') { return `${project}management closed`; }
+  const contexts = session.ticketKeys.length > 0
+    ? `${session.ticketKeys.length} ticket context${session.ticketKeys.length === 1 ? '' : 's'} • `
+    : 'no ticket context • ';
   if (session.kind === 'standalone') {
-    return liveCount === 0 ? `${project}standalone • terminal detached` : `${project}standalone • ${liveCount} terminal${liveCount === 1 ? '' : 's'} attached`;
+    return liveCount === 0 ? `${project}${contexts}terminal detached` : `${project}${contexts}${liveCount} terminal${liveCount === 1 ? '' : 's'} attached`;
   }
   const monitoring = session.monitoring.enabled ? `auto-poll ${session.monitoring.lastState || 'waiting'}` : 'auto-poll paused';
-  return liveCount === 0 ? `${project}terminal detached • ${monitoring}` : `${project}${liveCount} terminal${liveCount === 1 ? '' : 's'} attached • ${monitoring}`;
+  return liveCount === 0 ? `${project}${contexts}terminal detached • ${monitoring}` : `${project}${contexts}${liveCount} terminal${liveCount === 1 ? '' : 's'} attached • ${monitoring}`;
 }
 
 function sessionTooltip(session: WorkSessionRecord, liveCount: number): string {
@@ -238,7 +247,7 @@ function sessionTooltip(session: WorkSessionRecord, liveCount: number): string {
   const completeArtifacts = session.artifacts.filter(artifact => artifact.complete).length;
   const lines = [
     `Work session: ${session.id}`,
-    ...(session.kind === 'ticket' ? [`Ticket: ${session.ticketKey}`] : ['Ticket: none (standalone session)']),
+    `Ticket contexts: ${session.ticketKeys.join(', ') || 'none'}`,
     `Title: ${session.title}`,
     `Status: ${session.status}`,
     'Select this session to open its attached terminal. If detached, choose an open terminal to reconnect.',
@@ -265,7 +274,10 @@ function sessionTooltip(session: WorkSessionRecord, liveCount: number): string {
   return lines.join('\n');
 }
 
-function sessionLabel(session: WorkSessionRecord): string { return session.kind === 'ticket' ? `${session.ticketKey}: ${session.title}` : session.title; }
+function sessionLabel(session: WorkSessionRecord): string {
+  if (session.projectName) { return `${session.projectName}: ${session.title}`; }
+  return session.kind === 'ticket' ? `${session.ticketKey}: ${session.title}` : session.title;
+}
 
 function sessionIcon(session: WorkSessionRecord, attached: boolean): vscode.ThemeIcon {
   if (session.status === 'closed') { return new vscode.ThemeIcon('circle-slash', new vscode.ThemeColor('disabledForeground')); }

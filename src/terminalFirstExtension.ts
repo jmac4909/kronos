@@ -27,7 +27,6 @@ import {
   buildJiraContextReference,
   buildProjectGitContextReference,
   insertEditableTerminalContextReference,
-  insertTerminalContextReference,
 } from './services/terminalContextInsertion';
 import { readProjectGitEvidence, renderProjectGitEvidence } from './services/vscodeGitReadService';
 import { writeProjectGitContextArtifact } from './services/projectGitContextStore';
@@ -38,12 +37,14 @@ import {
 } from './services/operatorTerminalRegistry';
 import {
   addWorkSessionProviderBinding,
+  addWorkSessionTicketContext,
   attachWorkSessionTerminal,
   closeWorkSession,
   createOrGetWorkSessionByTicket,
   createStandaloneWorkSession,
   detachWorkSessionTerminal,
   getWorkSessionByTicket,
+  getWorkSessionForTicketContext,
   listWorkSessionStoreIssues,
   listWorkSessions,
   readWorkSession,
@@ -332,6 +333,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
     this.command('kronos.startClaudeForTicket', async argument => this.startClaudeForTicket(argument));
     this.command('kronos.manageActiveTerminal', async argument => this.manageFocusedTerminal(argument));
     this.command('kronos.insertJiraContext', async argument => this.insertJiraContext(argument));
+    this.command('kronos.insertOtherTicket', async argument => this.insertOtherTicket(argument));
     this.command('kronos.insertGitLabContext', async argument => this.insertGitLabContext(argument));
     this.command('kronos.insertCiContext', async argument => this.insertCiContext(argument));
     this.command('kronos.pollManagedWorkSessions', async () => this.pollProviders(true));
@@ -573,7 +575,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
     const newlyRegistered = registrations.filter(project => !registeredPathKeys.has(localProjectPathKey(project.path)));
     this.state.replaceRegisteredLocalProjects(registrations);
     for (const ticketKey of linkedTicketKeys) {
-      const session = getWorkSessionByTicket(ticketKey);
+      const session = getWorkSessionForTicketContext(ticketKey);
       if (session) { setWorkSessionProject(session.id, {}); }
     }
     this.refreshTerminalFirstViews();
@@ -791,7 +793,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
     if (!choice) { return; }
     this.state.setTicketLocalProject(ticketKey, choice.unlink ? undefined : choice.project?.name);
     const selected = choice.unlink ? undefined : choice.project;
-    const existingSession = getWorkSessionByTicket(ticketKey);
+    const existingSession = getWorkSessionForTicketContext(ticketKey);
     if (existingSession) {
       let updated = setWorkSessionProject(existingSession.id, selected
         ? { projectName: selected.name, projectPath: selected.path }
@@ -953,7 +955,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
       record.panel.webview.html = '<!DOCTYPE html><html><body><p>This ticket is no longer present in the local Work state.</p></body></html>';
       return;
     }
-    const session = getWorkSessionByTicket(ticketKey);
+    const session = getWorkSessionForTicketContext(ticketKey);
     const actionScriptUri = record.panel.webview.asWebviewUri(
       vscode.Uri.joinPath(this.context.extensionUri, 'media', WEBVIEW_ACTION_PANEL_SCRIPT),
     ).toString();
@@ -986,7 +988,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
   }
 
   private effectiveTicket(ticketKey: string, ticket: Ticket): Ticket {
-    const session = getWorkSessionByTicket(ticketKey);
+    const session = getWorkSessionForTicketContext(ticketKey);
     if (!session) { return ticket; }
     try {
       return withEffectiveTicketMergeRequest(
@@ -1009,23 +1011,25 @@ class TerminalFirstRuntime implements vscode.Disposable {
     session: WorkSessionRecord | null,
   ): ProviderPollingViewStatus[] {
     const config = this.projectConfig(ticket) || {};
-    const ticketSession = session?.kind === 'ticket' ? session : null;
-    const polling = ticketSession?.status === 'active' && ticketSession.monitoring.enabled;
-    const mrBinding = latestGitLabMergeRequestBinding(ticketSession);
+    const monitoringSession = session?.ticketKeys.includes(ticketKey)
+      ? { ...session, ticketKey }
+      : null;
+    const polling = monitoringSession?.status === 'active' && monitoringSession.monitoring.enabled;
+    const mrBinding = latestGitLabMergeRequestBinding(monitoringSession);
     const mrIid = ticket.mr?.iid || (mrBinding && /^[1-9][0-9]*$/.test(mrBinding.subjectId) ? Number(mrBinding.subjectId) : undefined);
-    const gitLabTarget = ticketSession ? configuredGitLabPollingTarget(this.state.state, ticketSession) : null;
+    const gitLabTarget = monitoringSession ? configuredGitLabPollingTarget(this.state.state, monitoringSession) : null;
     const gitLabConfigured = Boolean(gitLabTarget || config.gitlab_project_id || config.gitlab_project_path);
     const gitLab: ProviderPollingViewStatus = !gitLabConfigured
       ? { provider: 'GitLab', state: 'setup', detail: 'Add the project ID or group/project path.' }
       : !isGitLabRestConfigured()
         ? { provider: 'GitLab', state: 'setup', detail: 'Project linked; credentials need Doctor.' }
         : !polling
-          ? { provider: 'GitLab', state: 'paused', detail: 'Starts automatically with an active monitored ticket session.' }
+          ? { provider: 'GitLab', state: 'paused', detail: 'Starts automatically with an active project session carrying this ticket context.' }
           : mrIid
             ? { provider: 'GitLab', state: 'active', detail: `Polling MR !${mrIid}, review, pipeline, jobs, and tests.` }
             : { provider: 'GitLab', state: 'discovering', detail: 'Polling is active; finding a unique open MR by branch or ticket key.' };
 
-    const ciTargets = ticketSession ? configuredCiPollingTargets(this.state.state, ticketSession) : {};
+    const ciTargets = monitoringSession ? configuredCiPollingTargets(this.state.state, monitoringSession) : {};
     const jenkinsConfigured = Boolean(ciTargets.jenkinsUrl || ticket.build?.url || config.jenkins_url);
     const jenkins: ProviderPollingViewStatus = !jenkinsConfigured
       ? { provider: 'Jenkins', state: 'setup', detail: 'Add the project Jenkins job URL.' }
@@ -1033,7 +1037,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
         ? { provider: 'Jenkins', state: 'setup', detail: 'Job linked; credentials need Doctor.' }
         : polling
           ? { provider: 'Jenkins', state: 'active', detail: 'Polling the configured job, stages, and tests.' }
-          : { provider: 'Jenkins', state: 'paused', detail: 'Starts automatically with an active monitored ticket session.' };
+          : { provider: 'Jenkins', state: 'paused', detail: 'Starts automatically with an active project session carrying this ticket context.' };
 
     const sonarTarget = ciTargets.sonar || configuredSonarBranch(this.state.state, ticketKey);
     const sonarConfigured = Boolean(sonarTarget || config.sonar_project_key);
@@ -1045,7 +1049,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
           ? { provider: 'SonarQube', state: 'setup', detail: 'Project linked; credentials need Doctor.' }
           : polling
             ? { provider: 'SonarQube', state: 'active', detail: `Polling ${sonarTarget.projectKey}:${sonarTarget.branch}.` }
-            : { provider: 'SonarQube', state: 'paused', detail: 'Starts automatically with an active monitored ticket session.' };
+            : { provider: 'SonarQube', state: 'paused', detail: 'Starts automatically with an active project session carrying this ticket context.' };
     return [gitLab, jenkins, sonar];
   }
 
@@ -1293,7 +1297,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
       subject: { kind: 'work-session', id: updated.id, ...workSessionTicketMetadata(updated) },
       metadata: { terminalBindingId: persisted.id },
     });
-    if (updated.kind === 'ticket' && updated.monitoring.enabled) { void this.pollProviders(false); }
+    if (updated.monitoring.enabled && updated.ticketKeys.length > 0) { void this.pollProviders(false); }
     return updated;
   }
 
@@ -1454,7 +1458,8 @@ class TerminalFirstRuntime implements vscode.Disposable {
       void vscode.window.showWarningMessage(`${ticketKey} is not a Jira ticket.`);
       return;
     }
-    const selection = await this.chooseInsertionTerminal(ticketKey);
+    const requestedSessionId = stringProperty(argument, 'workSessionId') || stringProperty(argument, 'sessionId');
+    const selection = await this.chooseInsertionTerminal(ticketKey, requestedSessionId);
     if (!selection) { return; }
 
     await this.runProgress(`Kronos: Preparing ${ticketKey} Jira context...`, async progress => {
@@ -1515,6 +1520,14 @@ class TerminalFirstRuntime implements vscode.Disposable {
         },
       });
     });
+  }
+
+  private async insertOtherTicket(argument: unknown): Promise<void> {
+    const session = await this.resolveWorkSession(argument, true);
+    if (!session || session.status !== 'active') { return; }
+    const ticketKey = await this.resolveTicketKey(undefined, true);
+    if (!ticketKey) { return; }
+    await this.insertJiraContext({ ticketKey, workSessionId: session.id });
   }
 
   private async insertGitLabContext(argument: unknown): Promise<void> {
@@ -1597,8 +1610,10 @@ class TerminalFirstRuntime implements vscode.Disposable {
     if (!ticketKey || !ticket) { return; }
     const selection = await this.chooseInsertionTerminal(ticketKey);
     if (!selection) { return; }
-    const ticketSession = selection.workSession?.kind === 'ticket' ? selection.workSession : undefined;
-    const savedTargets = ticketSession ? configuredCiPollingTargets(this.state.state, ticketSession) : {};
+    const monitoringSession = selection.workSession
+      ? { ...selection.workSession, ticketKey }
+      : undefined;
+    const savedTargets = monitoringSession ? configuredCiPollingTargets(this.state.state, monitoringSession) : {};
     const config = this.projectConfig(ticket);
     const jenkinsUrl = savedTargets.jenkinsUrl || ticket.build?.url || config?.jenkins_url;
     let sonarTarget = savedTargets.sonar || configuredSonarBranch(this.state.state, ticketKey) || undefined;
@@ -1648,73 +1663,101 @@ class TerminalFirstRuntime implements vscode.Disposable {
       if (sonar) { input.sonar = sonar; }
       const context = buildCiContext(ticketKey, input);
       const artifact = writeCiContextArtifacts(context);
-      if (!this.insertionTerminalUnchanged(selection)) {
-        void vscode.window.showWarningMessage(`${ticketKey} CI context was saved, but the terminal attachment changed. Reattach and insert again.`);
-        return;
-      }
-      insertTerminalContextReference(selection.terminal, buildCiContextReference(ticketKey, artifact.promptPath));
-      if (selection.workSession) {
-        let session = selection.workSession;
-        if (jenkins) {
-          const binding: Parameters<typeof addWorkSessionProviderBinding>[1] = {
-            provider: 'jenkins',
-            resource: 'build',
-            subjectId: String(jenkins.build.number),
-          };
-          const buildUrl = jenkins.build.url || jenkinsUrl;
-          if (buildUrl) { binding.url = buildUrl; }
-          session = addWorkSessionProviderBinding(session.id, binding);
-        }
-        if (sonar && sonarTarget) {
-          session = addWorkSessionProviderBinding(session.id, {
-            provider: 'sonar',
-            resource: 'quality-gate',
-            subjectId: `${sonarTarget.projectKey}:${sonarTarget.branch}`,
-            projectId: sonarTarget.projectKey,
-            url: sonar.dashboardUrl,
-          });
-        }
-        recordWorkSessionContextArtifact(session.id, {
-          id: `ci-${ticketKey}`,
-          kind: 'ci-evidence',
-          label: `[CI-${ticketKey}] Jenkins and SonarQube context`,
-          promptPath: artifact.promptPath,
-          fetchedAt: context.fetchedAt,
-          complete: context.completeness.complete,
-          warnings: context.completeness.warnings,
-          contentSha256: artifact.contentSha256,
-        });
-        this.appendContextEvent(session, 'kronos', ticketKey, artifact.promptPath, artifact.contentSha256);
-      }
-      this.refreshTerminalFirstViews();
-      const message = `Inserted [CI-${ticketKey}] into ${selection.terminal.name} without submitting it.`;
-      if (context.completeness.complete) {
-        void vscode.window.showInformationMessage(`${message} Review it, then press Enter yourself.`);
-      } else {
-        void vscode.window.showWarningMessage(`${message} One or more provider components were partial; review the saved warnings.`);
-      }
+      const providerSummary = [
+        jenkins ? `Jenkins #${jenkins.build.number} ${jenkins.build.status}` : '',
+        sonar ? `SonarQube ${sonar.qualityGate.status}` : '',
+      ].filter(Boolean).join(' • ');
+      this.openContextComposer({
+        key: `ci:${ticketKey}`,
+        panelTitle: `${ticketKey} — Compose CI Context`,
+        title: `${ticketKey}: ${providerSummary || 'CI evidence'}`,
+        subtitle: 'Review the latest build and quality evidence, edit the focus instruction, then insert one non-submitting line.',
+        sourceLabel: context.completeness.complete ? 'CI ready' : 'CI partial',
+        reference: buildCiContextReference(ticketKey, artifact.promptPath),
+        promptPath: artifact.promptPath,
+        suggestedFocus: 'Review the Jenkins build, failed tests and stages, SonarQube quality gate, metrics, and unresolved issues before making changes.',
+        evidence: ciComposerEvidence(jenkins, sonar),
+        warnings: context.completeness.warnings,
+        selection,
+        onInserted: () => {
+          if (selection.workSession) {
+            let session = selection.workSession;
+            if (jenkins) {
+              const binding: Parameters<typeof addWorkSessionProviderBinding>[1] = {
+                provider: 'jenkins',
+                resource: 'build',
+                subjectId: String(jenkins.build.number),
+              };
+              const buildUrl = jenkins.build.url || jenkinsUrl;
+              if (buildUrl) { binding.url = buildUrl; }
+              session = addWorkSessionProviderBinding(session.id, binding);
+            }
+            if (sonar && sonarTarget) {
+              session = addWorkSessionProviderBinding(session.id, {
+                provider: 'sonar',
+                resource: 'quality-gate',
+                subjectId: `${sonarTarget.projectKey}:${sonarTarget.branch}`,
+                projectId: sonarTarget.projectKey,
+                url: sonar.dashboardUrl,
+              });
+            }
+            recordWorkSessionContextArtifact(session.id, {
+              id: `ci-${ticketKey}`,
+              kind: 'ci-evidence',
+              label: `[CI-${ticketKey}] Jenkins and SonarQube context`,
+              promptPath: artifact.promptPath,
+              fetchedAt: context.fetchedAt,
+              complete: context.completeness.complete,
+              warnings: context.completeness.warnings,
+              contentSha256: artifact.contentSha256,
+            });
+            this.appendContextEvent(session, 'kronos', ticketKey, artifact.promptPath, artifact.contentSha256);
+          }
+          this.refreshTerminalFirstViews();
+          const message = `Inserted edited [CI-${ticketKey}] context into ${selection.terminal.name} without submitting it.`;
+          if (context.completeness.complete) {
+            void vscode.window.showInformationMessage(`${message} Review the terminal line, then press Enter yourself.`);
+          } else {
+            void vscode.window.showWarningMessage(`${message} One or more provider components were partial; review the saved warnings.`);
+          }
+        },
+      });
     });
   }
 
-  private async chooseInsertionTerminal(ticketKey: string): Promise<TerminalSelection | undefined> {
-    const session = getWorkSessionByTicket(ticketKey);
+  private async chooseInsertionTerminal(ticketKey: string, requestedSessionId?: string): Promise<TerminalSelection | undefined> {
+    let session: WorkSessionRecord | null = null;
+    if (requestedSessionId) {
+      try { session = readWorkSession(requestedSessionId); } catch { session = null; }
+      if (!session || session.status !== 'active') {
+        void vscode.window.showWarningMessage('Choose an active managed session before inserting Jira context.');
+        return undefined;
+      }
+    }
+    const activeTerminal = vscode.window.activeTerminal;
+    const activeBinding = activeTerminal ? this.operatorTerminals.bindingForTerminal(activeTerminal) : undefined;
+    if (!session && activeBinding) {
+      session = readWorkSession(activeBinding.sessionId);
+    }
+    if (!session) { session = getWorkSessionForTicketContext(ticketKey); }
     if (session?.status === 'active') {
-      const terminal = vscode.window.activeTerminal;
-      if (!terminal) {
-        void vscode.window.showWarningMessage(`Focus the terminal managed for ${ticketKey} before inserting context.`);
-        return undefined;
+      if (activeTerminal && activeBinding?.sessionId === session.id) {
+        const updated = addWorkSessionTicketContext(session.id, ticketKey);
+        if (updated.monitoring.enabled) { void this.pollProviders(false); }
+        return { terminal: activeTerminal, workSession: updated, binding: activeBinding };
       }
-      const binding = this.operatorTerminals.bindingForTerminal(terminal);
-      if (binding?.sessionId !== session.id) {
-        void vscode.window.showWarningMessage(
-          `The focused terminal is not managed for ${ticketKey}. Focus its attached terminal or explicitly reattach this one before inserting context.`,
-        );
-        return undefined;
+      const selected = await this.chooseLiveTerminal(session.id);
+      if (selected) {
+        selected.terminal.show(false);
+        const updated = addWorkSessionTicketContext(session.id, ticketKey);
+        if (updated.monitoring.enabled) { void this.pollProviders(false); }
+        return { terminal: selected.terminal, workSession: updated, binding: selected.binding };
       }
-      return { terminal, workSession: session, binding };
+      void vscode.window.showWarningMessage(`Focus or reconnect the terminal for ${workSessionEventContext(session).label} before inserting context.`);
+      return undefined;
     }
     void vscode.window.showWarningMessage(
-      `Manage the focused operator-owned terminal for ${ticketKey} before inserting context. This explicit association prevents insertion into the wrong terminal.`,
+      `Manage an operator-owned terminal before inserting ${ticketKey}. This explicit association prevents insertion into the wrong terminal.`,
     );
     return undefined;
   }
@@ -2093,22 +2136,23 @@ class TerminalFirstRuntime implements vscode.Disposable {
     project: RegisteredProjectCommandTarget,
     actionLabel: string,
   ): Promise<string | undefined> {
-    const sessions = listWorkSessions({ kind: 'ticket', status: 'active' }).filter((session): session is TicketWorkSessionRecord =>
-      session.kind === 'ticket' && session.projectName === project.projectName
+    const sessions = listWorkSessions({ status: 'active' }).filter(session =>
+      session.projectName === project.projectName && session.ticketKeys.length > 0
     );
-    if (sessions.length === 0) {
+    const ticketContexts = [...new Set(sessions.flatMap(session => session.ticketKeys))];
+    if (ticketContexts.length === 0) {
       void vscode.window.showWarningMessage(
-        `Start or attach a ticket session for ${project.projectName} before inserting ${actionLabel}. Project-only Git context does not require a Jira ticket.`,
+        `Add a Jira context to a ${project.projectName} session before inserting ${actionLabel}. Project-only Git context does not require a Jira ticket.`,
       );
       return undefined;
     }
-    if (sessions.length === 1) { return sessions[0]?.ticketKey; }
-    const pick = await vscode.window.showQuickPick(sessions.map(session => ({
-      label: session.ticketKey,
-      description: session.title,
-      session,
+    if (ticketContexts.length === 1) { return ticketContexts[0]; }
+    const pick = await vscode.window.showQuickPick(ticketContexts.map(ticketKey => ({
+      label: ticketKey,
+      description: this.state.state?.tickets[ticketKey]?.summary || project.projectName,
+      ticketKey,
     })), { title: `Choose the ${project.projectName} ticket for ${actionLabel}` });
-    return pick?.session.ticketKey;
+    return pick?.ticketKey;
   }
 
   private async chooseProjectInsertionTerminal(project: RegisteredProjectCommandTarget): Promise<TerminalSelection | undefined> {
@@ -2144,12 +2188,12 @@ class TerminalFirstRuntime implements vscode.Disposable {
   private async setMonitoring(argument: unknown, enabled: boolean): Promise<void> {
     const session = await this.resolveWorkSession(argument, true);
     if (!session) { return; }
-    if (session.kind !== 'ticket') {
-      void vscode.window.showInformationMessage('Standalone sessions do not poll Jira, merge-request, or CI providers.');
+    if (session.ticketKeys.length === 0) {
+      void vscode.window.showInformationMessage('Insert at least one Jira ticket context before enabling project provider monitoring.');
       return;
     }
     if (session.status !== 'active') {
-      void vscode.window.showWarningMessage(`Reattach ${session.ticketKey} before enabling monitoring.`);
+      void vscode.window.showWarningMessage(`Reattach ${workSessionEventContext(session).label} before enabling monitoring.`);
       return;
     }
     setWorkSessionMonitoring(session.id, enabled);
@@ -2157,8 +2201,8 @@ class TerminalFirstRuntime implements vscode.Disposable {
       sessionId: session.id,
       type: 'decision.recorded',
       source: 'operator',
-      summary: `${session.ticketKey} monitoring ${enabled ? 'resumed' : 'paused'} by the operator.`,
-      subject: { kind: 'work-session', id: session.id, ticketKey: session.ticketKey },
+      summary: `${workSessionEventContext(session).label} monitoring ${enabled ? 'resumed' : 'paused'} by the operator.`,
+      subject: { kind: 'work-session', id: session.id, ...(session.kind === 'ticket' ? { ticketKey: session.ticketKey } : {}) },
       metadata: { monitoringEnabled: enabled },
     });
     this.refreshTerminalFirstViews();
@@ -2518,13 +2562,16 @@ class TerminalFirstRuntime implements vscode.Disposable {
     sonar: number;
     detail: string;
   } {
-    const sessions = listWorkSessions({ kind: 'ticket', status: 'active', monitoringEnabled: true })
-      .filter((session): session is TicketWorkSessionRecord => session.kind === 'ticket');
+    const sessions = [...new Map(listWorkSessions({ status: 'active', monitoringEnabled: true })
+      .filter(session => session.ticketKeys.length > 0)
+      .map(session => [session.projectPath || session.projectName || session.id, session])).values()];
     const counts = { sessions: sessions.length, gitlab: 0, jenkins: 0, sonar: 0 };
     for (const session of sessions) {
-      const ticket = this.state.state?.tickets[session.ticketKey];
+      const ticketKey = session.kind === 'ticket' ? session.ticketKey : session.ticketKeys[0];
+      if (!ticketKey) { continue; }
+      const ticket = this.state.state?.tickets[ticketKey];
       if (!ticket) { continue; }
-      for (const status of this.providerPollingViewStatus(session.ticketKey, ticket, session)) {
+      for (const status of this.providerPollingViewStatus(ticketKey, ticket, session)) {
         if (status.provider === 'GitLab' && (status.state === 'active' || status.state === 'discovering')) { counts.gitlab += 1; }
         if (status.provider === 'Jenkins' && status.state === 'active') { counts.jenkins += 1; }
         if (status.provider === 'SonarQube' && status.state === 'active') { counts.sonar += 1; }
@@ -2533,8 +2580,8 @@ class TerminalFirstRuntime implements vscode.Disposable {
     return {
       ...counts,
       detail: counts.sessions === 0
-        ? 'No active monitored ticket sessions. Polling starts automatically after a configured ticket session is attached.'
-        : `${counts.sessions} monitored ticket session${counts.sessions === 1 ? '' : 's'}; GitLab ${counts.gitlab} active/discovering, Jenkins ${counts.jenkins} active, SonarQube ${counts.sonar} active.`,
+        ? 'No active monitored project sessions. Polling starts after a project session carries an explicit Jira context.'
+        : `${counts.sessions} monitored project session${counts.sessions === 1 ? '' : 's'}; GitLab ${counts.gitlab} active/discovering, Jenkins ${counts.jenkins} active, SonarQube ${counts.sonar} active.`,
     };
   }
 
@@ -2574,7 +2621,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
     }
     const ticketKey = normalizeTicketKey(stringProperty(argument, 'ticketKey'));
     if (ticketKey) {
-      const session = getWorkSessionByTicket(ticketKey);
+      const session = getWorkSessionForTicketContext(ticketKey);
       if (session) { return session; }
     }
     if (!allowPick) { return undefined; }
@@ -2601,7 +2648,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
     ticketKey: string,
     ticket: Ticket,
   ): Promise<GitLabInsertionTarget | undefined> {
-    const session = getWorkSessionByTicket(ticketKey);
+    const session = getWorkSessionForTicketContext(ticketKey);
     const savedBinding = latestGitLabMergeRequestBinding(session);
     const configuredProject = this.gitLabProjectId(ticket);
     if (savedBinding && /^[1-9][0-9]*$/.test(savedBinding.subjectId)) {
@@ -2895,6 +2942,50 @@ function gitLabComposerEvidence(context: GitLabMergeRequestContext): ContextComp
     });
   }
   return evidence.slice(0, 20);
+}
+
+function ciComposerEvidence(
+  jenkins: JenkinsBuildContext | undefined,
+  sonar: SonarBranchContext | undefined,
+): ContextComposerEvidenceItem[] {
+  const evidence: ContextComposerEvidenceItem[] = [];
+  if (jenkins) {
+    const testSummary = jenkins.tests
+      ? `${jenkins.tests.passCount} passed • ${jenkins.tests.failCount} failed • ${jenkins.tests.skipCount} skipped`
+      : `test report ${jenkins.completeness.testReport}`;
+    evidence.push({
+      label: `Jenkins #${jenkins.build.number} • ${jenkins.build.status}`,
+      detail: `${testSummary} • ${jenkins.stages?.length || 0} stages • fetched ${jenkins.fetchedAt}`,
+    });
+    for (const failedCase of jenkins.tests?.failedCases.slice(0, 8) || []) {
+      evidence.push({
+        label: `Failed test • ${failedCase.className ? `${failedCase.className}.` : ''}${failedCase.name}`,
+        detail: contextComposerPreview(failedCase.errorDetails || failedCase.errorStackTrace || failedCase.status),
+      });
+    }
+    for (const stage of (jenkins.stages || []).filter(stage => !['SUCCESS', 'NOT_BUILT'].includes(stage.status.toUpperCase())).slice(0, 8)) {
+      evidence.push({ label: `Jenkins stage • ${stage.name}`, detail: stage.status });
+    }
+  }
+  if (sonar) {
+    evidence.push({
+      label: `SonarQube • ${sonar.projectKey} • ${sonar.branch}`,
+      detail: `Quality gate ${sonar.qualityGate.status} • ${sonar.issues.length} issues fetched • fetched ${sonar.fetchedAt}`,
+    });
+    if (sonar.measures.length > 0) {
+      evidence.push({
+        label: 'SonarQube measures',
+        detail: sonar.measures.slice(0, 20).map(measure => `${measure.metric}: ${measure.value ?? measure.periodValue ?? 'unavailable'}`).join('\n'),
+      });
+    }
+    for (const issue of sonar.issues.slice(0, 8)) {
+      evidence.push({
+        label: `SonarQube issue${issue.severity ? ` • ${issue.severity}` : ''}${issue.line ? ` • line ${issue.line}` : ''}`,
+        detail: contextComposerPreview(issue.message),
+      });
+    }
+  }
+  return evidence.slice(0, 24);
 }
 
 function contextComposerPreview(value: string, maxLength = 4_000): string {

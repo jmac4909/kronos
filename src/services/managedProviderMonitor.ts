@@ -63,7 +63,7 @@ import {
   newestWorkSessionProviderBinding,
   recordWorkSessionMonitoringResult,
   type AddWorkSessionProviderBindingInput,
-  type TicketWorkSessionRecord,
+  type WorkSessionRecord,
 } from './workSessionStore';
 import { optionalTrimmedStringFromUnknown } from './records';
 import { unknownErrorMessage } from './errorUtils';
@@ -82,7 +82,7 @@ export interface ManagedProviderPollResult {
 
 export interface ManagedProviderNotice {
   event: MonitorEvent;
-  session: TicketWorkSessionRecord;
+  session: MonitoredWorkSessionRecord;
   severity: 'warning' | 'information';
   providerUrl?: string;
   contextCommand?: 'kronos.insertGitLabContext' | 'kronos.insertCiContext';
@@ -115,6 +115,8 @@ const LEASE_RENEWAL_MS = 60 * 1000;
 const FAILURE_PIPELINE_STATUSES = new Set(['failed', 'failure', 'error', 'canceled', 'cancelled']);
 const FAILURE_BUILD_STATUSES = new Set(['failed', 'failure', 'error', 'unstable', 'aborted']);
 const PASSING_SONAR_GATES = new Set(['ok', 'pass', 'passed', 'success']);
+type MonitoredWorkSessionRecord = WorkSessionRecord & { ticketKey: string };
+type TicketWorkSessionRecord = MonitoredWorkSessionRecord;
 
 export class ManagedProviderMonitor {
   private inFlight: Promise<ManagedProviderPollResult> | undefined;
@@ -150,13 +152,20 @@ export class ManagedProviderMonitor {
     try {
       // Filter before the store's bounded slice so standalone history cannot
       // crowd active monitored ticket sessions out of the polling set.
+      const monitoredProjects = new Set<string>();
       for (const session of listWorkSessions({
-        kind: 'ticket',
         status: 'active',
         monitoringEnabled: true,
-      }).filter((candidate): candidate is TicketWorkSessionRecord =>
-        candidate.kind === 'ticket' && candidate.status === 'active' && candidate.monitoring.enabled
-      )) {
+      }).map(monitorableWorkSession)
+        .filter((candidate): candidate is MonitoredWorkSessionRecord => Boolean(candidate))
+        .filter(candidate => {
+          const projectKey = candidate.projectPath || candidate.projectName;
+          if (!projectKey || !monitoredProjects.has(projectKey)) {
+            if (projectKey) { monitoredProjects.add(projectKey); }
+            return true;
+          }
+          return false;
+        })) {
         if (!renew()) {
           total.leaseUnavailable = true;
           total.leaseReason = 'renewal-failed';
@@ -206,7 +215,7 @@ export class ManagedProviderMonitor {
   }
 
   private async pollGitLab(
-    session: TicketWorkSessionRecord,
+    session: MonitoredWorkSessionRecord,
     retainLease: () => boolean,
   ): Promise<ManagedProviderPollResult> {
     const binding = latestGitLabMergeRequestBinding(session);
@@ -215,7 +224,7 @@ export class ManagedProviderMonitor {
     let target = configuredGitLabPollingTarget(state, session);
     let discoveryDetail: string | undefined;
     if (!target) {
-      const config = projectConfigurationForTicket(state, ticket);
+      const config = projectConfigurationForMonitoringSession(state, session);
       const configuredProject = config.gitlab_project_id || config.gitlab_project_path;
       if (configuredProject) {
         const sourceBranch = ticket?.mr?.source_branch
@@ -471,7 +480,7 @@ export class ManagedProviderMonitor {
   }
 
   private async pollCi(
-    session: TicketWorkSessionRecord,
+    session: MonitoredWorkSessionRecord,
     retainLease: () => boolean,
   ): Promise<ManagedProviderPollResult> {
     const state = this.options.state();
@@ -694,8 +703,7 @@ function sonarProjectKeyHeuristic(
   state: KronosStateSnapshot | null,
   session: TicketWorkSessionRecord,
 ): string | undefined {
-  const ticket = state?.tickets[session.ticketKey];
-  const config = projectConfigurationForTicket(state, ticket);
+  const config = projectConfigurationForMonitoringSession(state, session);
   const candidate = optionalTrimmedStringFromUnknown(config.repo_name)
     || optionalTrimmedStringFromUnknown(session.projectName);
   return candidate && /^[A-Za-z0-9_.:-]{1,400}$/.test(candidate) ? candidate : undefined;
@@ -714,8 +722,9 @@ function reconcileProviderBinding(
     ...input,
     ...(!input.id && current ? { id: current.id } : {}),
   });
-  if (updated.kind !== 'ticket') { throw new Error('Provider polling requires a ticket-linked work session.'); }
-  return updated;
+  const monitored = monitorableWorkSession(updated);
+  if (!monitored) { throw new Error('Provider polling requires at least one explicit ticket context.'); }
+  return monitored;
 }
 
 function newestProviderBinding(
@@ -734,6 +743,22 @@ function newestProviderBinding(
 
 function emptyResult(): ManagedProviderPollResult {
   return { polled: 0, transitions: 0, failures: 0, skipped: 0, leaseUnavailable: false };
+}
+
+function monitorableWorkSession(session: WorkSessionRecord): MonitoredWorkSessionRecord | undefined {
+  const ticketKey = session.kind === 'ticket' ? session.ticketKey : session.ticketKeys[0];
+  return ticketKey ? { ...session, ticketKey } : undefined;
+}
+
+function projectConfigurationForMonitoringSession(
+  state: KronosStateSnapshot | null,
+  session: MonitoredWorkSessionRecord,
+) {
+  const ticket = state?.tickets[session.ticketKey];
+  const config = projectConfigurationForTicket(state, ticket);
+  return session.projectName
+    ? { ...config, ...(state?.projects[session.projectName]?.config || {}) }
+    : config;
 }
 
 function combine(left: ManagedProviderPollResult, right: ManagedProviderPollResult): ManagedProviderPollResult {
@@ -1463,7 +1488,7 @@ export function configuredGitLabPollingTarget(
   const boundIid = Number(binding?.subjectId);
   const useBinding = Number.isSafeInteger(boundIid) && boundIid > 0;
   const iid = Number(useBinding ? boundIid : ticketIid);
-  const config = projectConfigurationForTicket(state, ticket);
+  const config = projectConfigurationForMonitoringSession(state, session);
   const configuredProject = config.gitlab_project_id || config.gitlab_project_path;
   const catalogMatches = Number.isSafeInteger(ticketIid) && ticketIid === iid;
   const projectIdOrPath = (useBinding ? binding?.projectId : undefined)
@@ -1484,7 +1509,7 @@ export function configuredCiPollingTargets(
   session: TicketWorkSessionRecord,
 ): ConfiguredCiPollingTargets {
   const ticket = state?.tickets[session.ticketKey];
-  const config = projectConfigurationForTicket(state, ticket);
+  const config = projectConfigurationForMonitoringSession(state, session);
   const jenkinsJobBinding = newestWorkSessionProviderBinding(
     session.providerBindings,
     candidate => candidate.provider === 'jenkins' && candidate.resource === 'job',
@@ -1501,7 +1526,16 @@ export function configuredCiPollingTargets(
     || jenkinsJobBinding?.url
     || ticket?.build?.url
     || jenkinsBuildBinding?.url;
-  const configuredSonar = configuredSonarBranch(state, session.ticketKey);
+  const configuredBranch = ticket?.mr?.source_branch
+    || ticket?.mr?.sourceBranch
+    || ticket?.mr?.branch
+    || ticket?.mr?.head_branch
+    || optionalTrimmedStringFromUnknown(config.default_branch)
+    || optionalTrimmedStringFromUnknown(config.base_branch);
+  const configuredProjectKey = optionalTrimmedStringFromUnknown(config.sonar_project_key);
+  const configuredSonar = configuredProjectKey && configuredBranch
+    ? { projectKey: configuredProjectKey, branch: configuredBranch }
+    : null;
   const boundProjectKey = sonarBinding?.projectId;
   const boundPrefix = boundProjectKey ? `${boundProjectKey}:` : '';
   const boundBranch = boundPrefix && sonarBinding?.subjectId.startsWith(boundPrefix)

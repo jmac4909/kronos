@@ -12,7 +12,7 @@
   <img alt="TypeScript strict" src="https://img.shields.io/badge/TypeScript-strict-3178C6">
   <img alt="VS Code 1.85 or newer" src="https://img.shields.io/badge/VS%20Code-%5E1.85-23A8F2">
   <img alt="Zero third-party runtime dependencies" src="https://img.shields.io/badge/runtime%20dependencies-0-22C55E">
-  <img alt="65 automated local tests" src="https://img.shields.io/badge/test%20suite-65%20local-22C55E">
+  <img alt="71 automated local tests" src="https://img.shields.io/badge/test%20suite-71%20local-22C55E">
   <img alt="Preview status" src="https://img.shields.io/badge/status-preview-F59E0B">
 </p>
 
@@ -27,8 +27,8 @@ Kronos solves a narrow enterprise-development problem: the evidence needed for a
 | Surface | Outcome |
 | --- | --- |
 | **Work** | Search and filter Jira work, link a local project and branch, then open a focused ticket workspace. |
-| **Sessions** | Track standalone and ticket-linked Claude terminals without reading terminal contents or taking ownership away from the operator. |
-| **Attention** | Surface meaningful MR review, pipeline, Jenkins, and SonarQube transitions with a private local audit trail. |
+| **Sessions** | Organize operator-owned Claude terminals by local project, attach multiple Jira contexts when useful, and never read terminal contents. |
+| **Attention** | Group meaningful MR review, pipeline, Jenkins, and SonarQube transitions by project with a private local audit trail. |
 | **Context composer** | Review fetched evidence, edit the focus, and place one shell-inert line in the chosen terminal with submission disabled. |
 
 ### A 60-second workflow
@@ -96,11 +96,11 @@ The installed extension uses the VS Code API and Node built-ins only. It has **z
 | Enterprise provider integrations | 4 |
 | Focused VS Code views | 3 |
 | Audited terminal-write paths | 2 |
-| Manifest-covered commands | 34 |
+| Manifest-covered commands | 35 |
 | Manifest-covered settings | 10 |
-| Reachable runtime modules checked for cycles/dead exports | 59 |
+| Reachable runtime modules checked for cycles/dead exports | 60 |
 | Third-party runtime dependencies | 0 |
-| Automated Node/DOM/board tests | 65 |
+| Automated Node/DOM/board tests | 71 |
 
 Automated gates also cover the runtime graph, security boundary, context governance, activation surface, provider transitions, private state, credential redaction, and packaged extension contents.
 

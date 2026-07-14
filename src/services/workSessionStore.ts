@@ -61,6 +61,8 @@ interface WorkSessionRecordBase {
   id: string;
   kind: WorkSessionKind;
   title: string;
+  /** Jira contexts explicitly associated with this terminal session. */
+  ticketKeys: string[];
   status: WorkSessionStatus;
   createdAt: string;
   updatedAt: string;
@@ -88,7 +90,8 @@ export interface TicketWorkSessionRecord extends WorkSessionRecordBase {
 
 export interface StandaloneWorkSessionRecord extends WorkSessionRecordBase {
   kind: 'standalone';
-  ticketKey?: never;
+  /** Never persisted; monitor adapters may expose the first ticket context transiently. */
+  ticketKey?: string;
 }
 
 export type WorkSessionRecord = TicketWorkSessionRecord | StandaloneWorkSessionRecord;
@@ -218,6 +221,7 @@ export function createOrGetWorkSessionByTicket(
     id,
     kind: 'ticket',
     ticketKey,
+    ticketKeys: [ticketKey],
     title: optionalSingleLine(input.title, 'work session title', 300) || ticketKey,
     status: 'active',
     createdAt: at,
@@ -246,6 +250,7 @@ export function createStandaloneWorkSession(
     id: standaloneWorkSessionId(title),
     kind: 'standalone',
     title,
+    ticketKeys: [],
     status: 'active',
     createdAt: at,
     updatedAt: at,
@@ -266,7 +271,9 @@ export function workSessionEventContext(record: WorkSessionRecord): WorkSessionE
   const context: WorkSessionEventContext = {
     sessionId: record.id,
     sessionTitle: record.title,
-    label: record.kind === 'ticket' ? `${record.ticketKey}: ${record.title}` : record.title,
+    label: record.projectName
+      ? `${record.projectName}: ${record.title}`
+      : record.kind === 'ticket' ? `${record.ticketKey}: ${record.title}` : record.title,
   };
   if (record.kind === 'ticket') { context.ticketKey = record.ticketKey; }
   return context;
@@ -288,6 +295,17 @@ export function getWorkSessionByTicket(
     throw new Error(`Work session ${id} is not linked to ${normalizedTicketKey}.`);
   }
   return record;
+}
+
+/** Resolves a legacy ticket record or a project session explicitly carrying this Jira context. */
+export function getWorkSessionForTicketContext(
+  ticketKey: string,
+  options: WorkSessionStoreOptions = {},
+): WorkSessionRecord | null {
+  const normalizedTicketKey = normalizeTicketKey(ticketKey);
+  const legacy = getWorkSessionByTicket(normalizedTicketKey, options);
+  if (legacy) { return legacy; }
+  return listWorkSessions(options).find(session => session.ticketKeys.includes(normalizedTicketKey)) || null;
 }
 
 export function readWorkSession(
@@ -407,6 +425,22 @@ export function setWorkSessionProject(
     const projectPath = optionalAbsolutePath(input.projectPath, 'project path');
     if (projectName) { record.projectName = projectName; }
     if (projectPath) { record.projectPath = projectPath; }
+  });
+}
+
+export function addWorkSessionTicketContext(
+  sessionId: string,
+  ticketKeyValue: string,
+  options: WorkSessionStoreOptions = {},
+): WorkSessionRecord {
+  const ticketKey = normalizeTicketKey(ticketKeyValue);
+  return mutateWorkSession(sessionId, options, record => {
+    requireActiveSession(record);
+    record.ticketKeys = [...new Set([...record.ticketKeys, ticketKey])].slice(-100);
+    if (record.kind === 'standalone' && (record.projectName || record.projectPath)) { record.monitoring.enabled = true; }
+    if (record.kind === 'ticket' && !record.ticketKeys.includes(record.ticketKey)) {
+      record.ticketKeys.unshift(record.ticketKey);
+    }
   });
 }
 
@@ -596,7 +630,8 @@ export function reopenWorkSession(
     if (record.status === 'active') { return; }
     record.status = 'active';
     delete record.closedAt;
-    record.monitoring.enabled = record.kind === 'ticket';
+    record.monitoring.enabled = record.kind === 'ticket'
+      || (record.ticketKeys.length > 0 && Boolean(record.projectName || record.projectPath));
   });
 }
 
@@ -608,6 +643,7 @@ export function normalizeWorkSessionRecord(value: unknown): WorkSessionRecord {
     schemaVersion: SCHEMA_VERSION,
     id: normalizeEntityId(value['id'], 'work session id'),
     title: requiredSingleLine(value['title'], 'work session title', 300),
+    ticketKeys: normalizeWorkSessionTicketKeys(value['ticketKeys'], value['ticketKey']),
     status: normalizeSessionStatus(value['status']),
     createdAt: normalizeTimestamp(value['createdAt'], 'work session createdAt'),
     updatedAt: normalizeTimestamp(value['updatedAt'], 'work session updatedAt'),
@@ -619,6 +655,9 @@ export function normalizeWorkSessionRecord(value: unknown): WorkSessionRecord {
   const record: WorkSessionRecord = kind === 'ticket'
     ? { ...base, kind, ticketKey: normalizeTicketKeyValue(value['ticketKey']) }
     : { ...base, kind };
+  if (record.kind === 'ticket' && !record.ticketKeys.includes(record.ticketKey)) {
+    record.ticketKeys.unshift(record.ticketKey);
+  }
   if (kind === 'standalone' && value['ticketKey'] !== undefined && value['ticketKey'] !== null && value['ticketKey'] !== '') {
     throw new Error('Standalone work session must not include a ticket key.');
   }
@@ -666,6 +705,12 @@ function normalizeTerminalBindings(value: unknown): WorkSessionTerminalBinding[]
   if (!Array.isArray(value)) { throw new Error('Work session terminals must be an array.'); }
   if (value.length > MAX_TERMINALS) { throw new Error(`Work session terminals exceed the ${MAX_TERMINALS}-entry limit.`); }
   return value.map(normalizeTerminalBinding);
+}
+
+function normalizeWorkSessionTicketKeys(value: unknown, legacyTicketKey: unknown): string[] {
+  const source = Array.isArray(value) ? value : legacyTicketKey ? [legacyTicketKey] : [];
+  if (source.length > 100) { throw new Error('Work session ticket contexts exceed the 100-ticket limit.'); }
+  return [...new Set(source.map(normalizeTicketKeyValue))];
 }
 
 function normalizeTerminalBinding(value: unknown): WorkSessionTerminalBinding {

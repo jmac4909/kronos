@@ -42,7 +42,7 @@ interface AttentionEntry {
   providerChoices: AttentionProviderChoice[];
 }
 
-/** Shows only unacknowledged durable provider transitions, grouped by session. */
+/** Shows only unacknowledged durable provider transitions, grouped by project when known. */
 export class AttentionTreeProvider implements vscode.TreeDataProvider<AttentionTreeItem>, vscode.Disposable {
   private readonly changeEmitter = new vscode.EventEmitter<AttentionTreeItem | undefined>();
   private readonly loadMonitorEvents: () => MonitorEvent[];
@@ -75,11 +75,14 @@ export class AttentionTreeProvider implements vscode.TreeDataProvider<AttentionT
 
     const grouped = new Map<string, AttentionEntry[]>();
     for (const entry of entries) {
-      const existing = grouped.get(entry.event.sessionId);
+      const groupKey = entry.session?.projectName
+        ? `project:${entry.session.projectName}`
+        : `session:${entry.event.sessionId}`;
+      const existing = grouped.get(groupKey);
       if (existing) {
         existing.push(entry);
       } else {
-        grouped.set(entry.event.sessionId, [entry]);
+        grouped.set(groupKey, [entry]);
       }
     }
 
@@ -183,21 +186,25 @@ export class AttentionGroupTreeItem extends vscode.TreeItem {
     const newest = entries[0];
     if (!newest) { throw new Error('Attention groups require at least one event.'); }
     const session = newest.session;
-    const ticketKey = newest.ticketKey;
-    const label = ticketKey
-      ? `${ticketKey}: ${session?.title || 'Provider changes'}`
-      : session?.title || `Work session ${newest.event.sessionId}`;
+    const ticketKeys = [...new Set(entries.map(entry => entry.ticketKey).filter((value): value is string => Boolean(value)))];
+    const ticketKey = ticketKeys.length === 1 ? ticketKeys[0] : undefined;
+    const projectName = session?.projectName;
+    const label = projectName
+      ? projectName
+      : ticketKey ? `${ticketKey}: ${session?.title || 'Provider changes'}`
+        : session?.title || `Work session ${newest.event.sessionId}`;
     super(label, vscode.TreeItemCollapsibleState.Expanded);
     this.newestAt = newest.event.at;
     this.labelText = label;
     this.workSessionId = newest.event.sessionId;
     this.ticketKey = ticketKey;
-    this.id = `attention-group:${this.workSessionId}`;
+    this.id = `attention-group:${projectName || this.workSessionId}`;
     this.contextValue = 'attention_group';
     this.description = `${entries.length} unacknowledged • newest ${displayTimestamp(this.newestAt)}`;
     this.tooltip = [
       `Work session: ${this.workSessionId}`,
-      `Ticket: ${ticketKey || 'none'}`,
+      `Project: ${projectName || 'none'}`,
+      `Ticket contexts: ${ticketKeys.join(', ') || 'none'}`,
       `Unacknowledged provider transitions: ${entries.length}`,
       `Newest transition: ${this.newestAt}`,
     ].join('\n');
@@ -284,13 +291,13 @@ function providerChoicesForEvent(
       const branch = sonarBindingBranch(binding, url);
       choices.push({
         label: branch || binding.subjectId,
-        description: binding.projectId ? `SonarQube ${binding.projectId}` : 'SonarQube branch',
+        description: `${binding.projectId ? `SonarQube ${binding.projectId}` : 'SonarQube branch'} • saved ${displayTimestamp(binding.attachedAt)}`,
         url,
       });
     } else {
       choices.push({
         label: binding.subjectId === 'latest' ? 'Latest Jenkins build' : `Jenkins build ${binding.subjectId}`,
-        description: binding.projectId || 'Jenkins',
+        description: `${binding.projectId || 'Jenkins'} • saved ${displayTimestamp(binding.attachedAt)}`,
         url,
       });
     }
