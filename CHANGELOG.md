@@ -19,7 +19,7 @@ All notable changes to the Kronos preview are documented here.
 - Corrected informational pills to use the information color rather than the success color.
 - Reworked realistic credential-shaped test literals so public secret scanners do not mistake fixtures for live values.
 
-## 0.1.0-preview - Unreleased
+## 0.1.0 - Unreleased preview
 
 ### Added
 

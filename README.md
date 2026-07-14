@@ -12,11 +12,11 @@
   <img alt="TypeScript strict" src="https://img.shields.io/badge/TypeScript-strict-3178C6">
   <img alt="VS Code 1.85 or newer" src="https://img.shields.io/badge/VS%20Code-%5E1.85-23A8F2">
   <img alt="Zero third-party runtime dependencies" src="https://img.shields.io/badge/runtime%20dependencies-0-22C55E">
-  <img alt="65 automated tests" src="https://img.shields.io/badge/automated%20tests-65-22C55E">
+  <img alt="65 automated local tests" src="https://img.shields.io/badge/test%20suite-65%20local-22C55E">
   <img alt="Preview status" src="https://img.shields.io/badge/status-preview-F59E0B">
 </p>
 
-> **Preview software.** Kronos is ready for local evaluation, not represented as a Marketplace release or production service. The repository is source-available for portfolio review under the included all-rights-reserved [license](LICENSE).
+> **Preview software.** Kronos is ready for local evaluation, not represented as a Marketplace release or production service. The repository is source-available for portfolio review under the included [source-review license](LICENSE).
 
 ![Kronos Jira Work Board with synthetic tickets, sessions, and provider state](docs/assets/kronos-work-board.png)
 
@@ -40,9 +40,9 @@ Kronos solves a narrow enterprise-development problem: the evidence needed for a
 5. Choose **Place in Terminal**. Kronos inserts the line with execution disabled.
 6. Decide whether to press Enter yourself; later provider changes appear in **Attention** and the session audit.
 
-![Kronos context composer beside an operator-owned terminal, using synthetic data](docs/assets/kronos-context-composer.png)
+![Kronos two-step context review and post-insertion terminal sequence, using synthetic data](docs/assets/kronos-context-composer.png)
 
-The product renders above use deliberately synthetic `DEMO-*` records and example-only provider state. They contain no live credentials, employer data, usernames, or machine paths.
+The second render is an explicitly labeled interaction sequence: the composer is shown before insertion, and the terminal panel shows the state after the composer closes. Both renders use deliberately synthetic `DEMO-*` records and example-only provider state. They contain no live credentials, employer data, usernames, or machine paths.
 
 ## Human-in-the-Loop by Construction
 
@@ -113,7 +113,7 @@ Requirements:
 - the Claude CLI only if you choose to exercise explicit terminal launch
 
 ```bash
-git clone https://github.com/jmac4909/Kronos.git
+git clone <repository-url>
 cd Kronos
 npm ci
 npm test
@@ -191,6 +191,7 @@ docs/                                    product contract, audit, and preview as
 - Real VS Code/Claude, provider, focus/reattachment, and Windows checks require recorded human feedback.
 - Raw Jira attachments are stored byte-for-byte under strict count and size limits; they are never parsed or executed by Kronos.
 - This repository is source-available for review, not open source.
+- The public repository is a sanitized source snapshot; private development-history metadata is intentionally excluded from the portfolio release.
 
 ## Project Information
 
@@ -200,4 +201,4 @@ docs/                                    product contract, audit, and preview as
 - [Contribution guide](CONTRIBUTING.md)
 - [Human feedback checklist](HUMAN_FEEDBACK_CHECKLIST.md)
 
-Copyright © 2026 Kronos authors. All rights reserved.
+Copyright © 2026 Jeremy Mackey. All rights reserved.

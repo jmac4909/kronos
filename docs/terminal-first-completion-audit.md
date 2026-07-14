@@ -36,6 +36,8 @@ The repository is ready for the operator-owned human feedback pass in `HUMAN_FEE
 - The public-surface gate now rejects local-state paths, machine-specific home paths, known employer identifiers, private-key material, and high-confidence token shapes before the remaining test suite runs.
 - VS Code types are pinned to the advertised 1.85 minimum. Optional terminal shell-integration metadata is read through a compatibility shim so newer editors retain the extra CWD detail without making that later API mandatory.
 - Recruiter-facing product renders use only synthetic `DEMO-*` records, generic project names, and example-only provider state; their editable SVG sources are excluded from the packaged VSIX.
+- The board render shows an achievable unfiltered state, while the context-composer render labels its composer and terminal views as consecutive interaction steps rather than simultaneous UI.
+- Packaged README links are pinned to the intended public `main` branch so image and documentation URLs remain stable after release.
 
 ## Operator-Only Signoff Still Required
 

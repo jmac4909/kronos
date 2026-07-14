@@ -4,7 +4,7 @@ Kronos is preview software with a deliberately narrow runtime boundary. Security
 
 ## Reporting a Vulnerability
 
-Use GitHub's **Security** tab and choose **Report a vulnerability** to start a private security advisory for this repository. Include:
+If this repository's **Security** tab offers **Report a vulnerability**, use it to start a private security advisory. Include:
 
 - the affected Kronos version or commit;
 - the operating system and VS Code version;
@@ -14,7 +14,7 @@ Use GitHub's **Security** tab and choose **Report a vulnerability** to start a p
 
 Do not include real tokens, provider payloads, terminal transcripts, employer identifiers, or private repository content. Replace them with clearly synthetic values before sending the report.
 
-If private reporting is unavailable, open a public issue containing only a request for a private contact channel. Do not disclose vulnerability details in that issue.
+If private reporting is unavailable, open a public issue containing only a request for a private contact channel. Do not disclose vulnerability details, affected paths, reproduction steps, or suspected secrets in that issue.
 
 ## Security Boundary
 

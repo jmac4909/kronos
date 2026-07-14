@@ -198,7 +198,7 @@ function projectActions(target: RegisteredProjectCommandTarget): ProjectActionTr
   return [
     new ProjectActionTreeItem('View Git status and diff', 'diff', 'kronos.openProjectGitStatus', target),
     new ProjectActionTreeItem('Insert working diff in context', 'symbol-keyword', 'kronos.insertProjectGitContext', target, 'non-submitting'),
-    new ProjectActionTreeItem('Open or create merge request', 'git-merge', 'kronos.openProjectMergeRequest', target),
+    new ProjectActionTreeItem('Open merge request page', 'git-merge', 'kronos.openProjectMergeRequest', target),
     new ProjectActionTreeItem('Insert MR evidence', 'git-merge', 'kronos.insertProjectGitLabContext', target),
     new ProjectActionTreeItem('Insert Jenkins / Sonar evidence', 'beaker', 'kronos.insertProjectCiContext', target),
     new ProjectActionTreeItem('Configure provider polling', 'settings-gear', 'kronos.configureProjectIntegrations', target),

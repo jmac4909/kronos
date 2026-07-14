@@ -75,7 +75,7 @@ Use a real ticket only when its provider data is approved for local context capt
 10. Poll the linked ticket and confirm its selected local project's GitLab/Jenkins/SonarQube identifiers are used. Then unlink the local project and confirm future ticket launches fall back to the configured workspace/home behavior while Jira/provider project tags remain.
 11. In Sessions, expand **Projects** below the session list. Confirm every registered project shows branch and change count; open its status/diff and verify the repository is unchanged.
 12. Insert the project's `[GIT-project]` context into its explicitly attached session. Confirm the composer previews changed paths, potential credential material is redacted from the private artifact, and the terminal line is not submitted.
-13. Use **Open or create merge request**. Confirm an existing MR opens when known; otherwise a prefilled GitLab new-MR browser page opens and no MR is created until you act in GitLab.
+13. Use **Open merge request page**. Confirm an existing MR opens when known; otherwise a prefilled GitLab new-MR browser page opens and no MR is created until you act in GitLab.
 
 ## Start Claude for a Ticket
 

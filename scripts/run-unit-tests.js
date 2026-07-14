@@ -71,21 +71,31 @@ test('managed monitoring lease omits unsupported open flags on Windows and fails
 });
 
 test('all provider evidence paths share the complete credential redaction vocabulary', () => {
+  const credentialFixtures = {
+    bearer: ['abcdefgh', 'ijklmnop'].join(''),
+    jira: ['ATATT', 'abcdefgh1234'].join(''),
+    gitlab: ['glpat-', 'abcdefgh1234'].join(''),
+    sonar: ['sqp_', 'abcdefgh1234'].join(''),
+    aws: ['AKIA', 'ABCDEFGHIJKLMNOP'].join(''),
+    access: ['secret', '-value'].join(''),
+    client: ['do-not', '-keep'].join(''),
+  };
   const redacted = sensitiveText.redactSensitiveTokens([
-    'Authorization: Bearer abcdefghijklmnop',
-    'jira=ATATTabcdefgh1234',
-    'gitlab=glpat-abcdefgh1234',
-    'sonar=sqp_abcdefgh1234',
-    `AWS=${['AKIA', 'ABCDEFGHIJKLMNOP'].join('')}`,
-    'token=https://example.test/?access_token=secret-value',
-    'CLIENT_SECRET = "do-not-keep"',
+    `Authorization: Bearer ${credentialFixtures.bearer}`,
+    `jira=${credentialFixtures.jira}`,
+    `gitlab=${credentialFixtures.gitlab}`,
+    `sonar=${credentialFixtures.sonar}`,
+    `AWS=${credentialFixtures.aws}`,
+    `token=https://example.test/?access_token=${credentialFixtures.access}`,
+    `CLIENT_SECRET = "${credentialFixtures.client}"`,
   ].join('\n'));
-  for (const secret of ['abcdefghijklmnop', 'ATATTabcdefgh1234', 'glpat-abcdefgh1234', 'sqp_abcdefgh1234', ['AKIA', 'ABCDEFGHIJKLMNOP'].join(''), 'secret-value', 'do-not-keep']) {
+  for (const secret of Object.values(credentialFixtures)) {
     assert.equal(redacted.includes(secret), false);
   }
 });
 
 test('provider URLs retain only the SonarQube dashboard routing query', () => {
+  const gitLabToken = ['glpat-', 'supersecrettoken'].join('');
   assert.equal(
     providerUrls.normalizeProviderPublicUrl(
       'https://sonar.example/dashboard?id=team%3Aapp&branch=feature%2FJIRA-123&token=secret#noise',
@@ -98,7 +108,7 @@ test('provider URLs retain only the SonarQube dashboard routing query', () => {
     'https://jenkins.example/job/app/',
   );
   assert.equal(
-    providerUrls.normalizeProviderPublicUrl('https://sonar.example/dashboard?id=glpat-supersecrettoken&branch=main', 'sonar'),
+    providerUrls.normalizeProviderPublicUrl(`https://sonar.example/dashboard?id=${gitLabToken}&branch=main`, 'sonar'),
     'https://sonar.example/dashboard?branch=main',
   );
 });
@@ -909,7 +919,7 @@ test('project integration setup validates provider identifiers and launch-projec
   });
   assert.throws(() => projectCatalog.setLocalProjectIntegrations(initial, [{
     name: 'Application',
-    jenkinsUrl: 'https://user:secret@jenkins.example/job/application/',
+    jenkinsUrl: `https://${['synthetic-user', 'synthetic-password'].join(':')}@jenkins.example/job/application/`,
   }]), /without embedded credentials/i);
   assert.throws(() => projectCatalog.setLocalProjectIntegrations(initial, [{
     name: 'Application',
@@ -1497,16 +1507,17 @@ test('terminal context insertion is shell-inert and never submits', () => {
     /shell-active|prompt artifact/i,
   );
 
+  const embeddedToken = ['glpat-', 'supersecrettoken'].join('');
   const gitArtifact = projectGitContextStore.writeProjectGitContextArtifact(
     'Kronos',
-    '# Git working tree\n\n-token = glpat-supersecrettoken\n+safe = true\n',
+    `# Git working tree\n\n-token = ${embeddedToken}\n+safe = true\n`,
     { kronosDir: path.join(tempRoot, 'git-context-runtime') },
   );
   const gitReference = insertion.buildProjectGitContextReference(gitArtifact.contextId, gitArtifact.promptPath);
   assert.match(gitReference, /^\[GIT-Kronos\]/);
   assert.equal(insertion.isSafeTerminalContextReference(gitReference), true);
   assert.equal(gitArtifact.redacted, true);
-  assert.doesNotMatch(fs.readFileSync(gitArtifact.promptPath, 'utf8'), /glpat-supersecrettoken/);
+  assert.equal(fs.readFileSync(gitArtifact.promptPath, 'utf8').includes(embeddedToken), false);
 });
 
 test('operator terminal registry attaches, resolves, and detaches objects without controlling them', () => {
