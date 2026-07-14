@@ -1,4 +1,3 @@
-import * as crypto from 'crypto';
 import { JiraTicketSnapshot, normalizeJiraIssueKey } from './jiraRestClient';
 import { arrayFromUnknown, isRecord, optionalFiniteNumberFromUnknown, optionalTrimmedStringFromUnknown } from './records';
 import {
@@ -14,7 +13,6 @@ const MAX_NORMALIZED_CONTEXT_BYTES = 10 * 1024 * 1024;
 const GLOBAL_CONTEXT_TRUNCATION = '[Truncated by Kronos global context safety limit]';
 const SENSITIVE_FIELD_PATTERN = /^(?:authorization|cookie|set-cookie|credential|password|passwd|secret|token|api[_-]?key|private[_-]?key|access[_-]?token|client[_-]?secret)$/i;
 const SENSITIVE_FIELD_LABEL_PATTERN = /(?:authorization|cookie|credential|password|passwd|secret|token|api[ _-]?key|private[ _-]?key|access[ _-]?token|client[ _-]?secret)/i;
-const UNSAFE_ATTACHMENT_TEXT_PATTERN = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/;
 
 export type JiraContextValue = JiraArtifactValue;
 
@@ -39,8 +37,7 @@ export interface JiraAttachmentContext {
   contentMimeType?: string;
   contentBytes?: number;
   contentSha256?: string;
-  textSha256?: string;
-  textContent?: string;
+  localPath?: string;
   metadata: { [key: string]: JiraContextValue };
 }
 
@@ -187,7 +184,7 @@ export function normalizeJiraTicketContext(
   }
   if (!attachmentsComplete) {
     warnings.push(
-      `Jira attachment bodies were partial: ${attachmentBodiesCaptured} captured, ${attachmentBodiesSkipped} skipped, and ${attachmentBodiesFailed} failed. Attachment metadata is included for all ${attachments.length}.`,
+      `Jira attachment downloads were partial: ${attachmentBodiesCaptured} downloaded, ${attachmentBodiesSkipped} skipped, and ${attachmentBodiesFailed} failed. Attachment metadata is included for all ${attachments.length}.`,
     );
   }
   const completeness: JiraTicketContextCompleteness = {
@@ -331,7 +328,6 @@ function enforceNormalizedContextBudget(context: JiraTicketContext): JiraTicketC
   pruneCommentsToGlobalBudget(context);
   truncateDerivedFieldTextToGlobalBudget(context);
   truncateFieldPayloadsToGlobalBudget(context);
-  discardAttachmentBodiesToGlobalBudget(context);
   compactAncillaryContextToGlobalBudget(context);
   synchronizeCompleteness(context);
   if (serializedContextBytes(context) > MAX_NORMALIZED_CONTEXT_BYTES) {
@@ -414,26 +410,6 @@ function truncateFieldPayloadsToGlobalBudget(context: JiraTicketContext): void {
   }
   if (valuesChanged || schemasChanged) {
     addContextWarning(context, 'One or more Jira field values or schemas were truncated by the global normalized artifact safety limit; field IDs and names were retained.');
-  }
-}
-
-function discardAttachmentBodiesToGlobalBudget(context: JiraTicketContext): void {
-  if (serializedContextBytes(context) <= MAX_NORMALIZED_CONTEXT_BYTES) { return; }
-  const captured = context.attachments
-    .filter(attachment => attachment.contentStatus === 'captured')
-    .sort((left, right) => serializedValueBytes(right.textContent) - serializedValueBytes(left.textContent)
-      || left.filename.localeCompare(right.filename));
-  let changed = false;
-  for (const attachment of captured) {
-    if (serializedContextBytes(context) <= MAX_NORMALIZED_CONTEXT_BYTES) { break; }
-    attachment.contentStatus = 'skipped';
-    attachment.contentReason = 'normalized-context-byte-limit';
-    delete attachment.textContent;
-    delete attachment.textSha256;
-    changed = true;
-  }
-  if (changed) {
-    addContextWarning(context, 'One or more captured Jira attachment bodies were omitted from the artifact by the global normalized-size safety limit; metadata and source hashes were retained.');
   }
 }
 
@@ -674,15 +650,6 @@ function applyAttachmentCapture(
     attachment.contentReason = 'invalid-content-hash';
     return;
   }
-  if (typeof capture['text'] !== 'string' || UNSAFE_ATTACHMENT_TEXT_PATTERN.test(capture['text'])) {
-    attachment.contentStatus = 'failed';
-    attachment.contentReason = 'invalid-captured-text';
-    delete attachment.contentSha256;
-    return;
-  }
-  const textContent = redactProviderText(capture['text'].replace(/\r\n?/g, '\n'));
-  attachment.textContent = textContent;
-  attachment.textSha256 = sha256(textContent);
   delete attachment.contentReason;
 }
 
@@ -1018,8 +985,4 @@ function normalizedSha256(value: unknown): string | undefined {
   return typeof value === 'string' && /^[a-f0-9]{64}$/i.test(value.trim())
     ? value.trim().toLowerCase()
     : undefined;
-}
-
-function sha256(value: string): string {
-  return crypto.createHash('sha256').update(value, 'utf8').digest('hex');
 }

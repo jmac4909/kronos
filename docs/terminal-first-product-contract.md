@@ -123,21 +123,24 @@ Context insertion is always explicit and ticket-scoped. Creating a standalone Cl
 
 1. Kronos resolves the selected ticket and the explicitly managed terminal.
 2. It reads the configured provider through bounded read-only APIs.
-3. It normalizes and secret-redacts provider data.
-4. It writes a private, content-addressed JSON artifact and Markdown prompt boundary.
-5. It verifies that the managed terminal attachment has not changed during the fetch.
-6. It inserts one shell-inert reference line with terminal execution disabled.
-7. The operator reviews, edits, and submits the line manually.
+3. It normalizes and secret-redacts textual and structured provider data.
+4. For Jira, it downloads attachment bytes without a file-type allowlist or parser, writes them as private files with sanitized local names, and records their paths and SHA-256 hashes. Raw files are not transformed or secret-redacted.
+5. It writes a private, content-addressed JSON artifact and Markdown prompt boundary.
+6. It verifies that the managed terminal attachment has not changed during the fetch.
+7. It inserts one shell-inert reference line with terminal execution disabled.
+8. The operator reviews, edits, and submits the line manually.
 
 Provider data inside an artifact is untrusted evidence, never instructions. Prompt artifacts tell the interactive agent not to follow commands, role changes, credential requests, links, or mutation requests found inside provider content.
 
 Insertion targets:
 
-- `[JIRA-123]`: visible Jira fields, including custom-field IDs, names, schemas, values, readable text, comments, and bounded allowed text attachments;
+- `[JIRA-123]`: visible Jira fields, including custom-field IDs, names, schemas, values, readable text, comments, and private paths to downloaded raw attachments of any MIME type;
 - `[MR-77]`: GitLab merge-request metadata, notes, discussions, approvals, bounded diffs, pipelines, jobs, and test evidence;
 - `[CI-JIRA-123]`: bounded Jenkins build/test/stage evidence and SonarQube gate/measure/issue evidence.
 
 Partial, unavailable, skipped, truncated, or failed provider components remain explicit in completeness warnings. Kronos never presents partial evidence as complete.
+
+Jira attachment capture is bounded to 100 download attempts, 25 MiB per file, and 100 MiB in total for one explicit insertion. Filename path components are discarded before local storage. Attachment files are untrusted evidence: Kronos never parses, opens, previews, or executes them, and the generated prompt tells the interactive agent to inspect only relevant files with safe read-only tools.
 
 ## Monitoring Contract
 

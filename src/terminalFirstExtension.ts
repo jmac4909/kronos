@@ -8,7 +8,7 @@ import { AttentionTreeProvider } from './views/AttentionTreeProvider';
 import { defaultProviderEnvPath, loadProviderEnv } from './services/providerEnv';
 import { unknownErrorMessage } from './services/errorUtils';
 import { buildFallbackJiraTicketContext, normalizeJiraTicketContext, type JiraTicketContext } from './services/jiraTicketContext';
-import { isJiraRestConfigured, jiraRestClient } from './services/jiraRestClient';
+import { isJiraRestConfigured, jiraRestClient, type JiraAttachmentContentSnapshot } from './services/jiraRestClient';
 import { writeJiraContextArtifacts } from './services/jiraContextStore';
 import {
   configuredGitLabProjectPathFromMergeRequestUrl,
@@ -999,12 +999,14 @@ class TerminalFirstRuntime implements vscode.Disposable {
 
     await this.runProgress(`Kronos: Preparing ${ticketKey} Jira context...`, async progress => {
       let jiraContext: JiraTicketContext | undefined;
+      let attachmentContents: JiraAttachmentContentSnapshot[] = [];
       const warnings: string[] = [];
       if (isJiraRestConfigured()) {
-        progress.report({ message: 'Reading visible fields, comments, and bounded safe-text attachments...' });
+        progress.report({ message: 'Reading visible fields, comments, and bounded raw attachments...' });
         try {
           const snapshot = await jiraRestClient.ticketContext(ticketKey, ticket.jira_url);
           jiraContext = normalizeJiraTicketContext(ticketKey, snapshot, { ...ticket });
+          attachmentContents = snapshot.attachmentContents;
         } catch (error: unknown) {
           warnings.push(`${unknownErrorMessage(error, 'Native Jira REST read failed.')} Cached ticket data was inserted instead.`);
         }
@@ -1014,8 +1016,8 @@ class TerminalFirstRuntime implements vscode.Disposable {
       if (!jiraContext) {
         jiraContext = buildFallbackJiraTicketContext(ticketKey, { ...ticket }, [], warnings);
       }
-      progress.report({ message: 'Writing private content-addressed context...' });
-      const artifact = writeJiraContextArtifacts(jiraContext);
+      progress.report({ message: 'Writing private content-addressed context and attachment files...' });
+      const artifact = writeJiraContextArtifacts(jiraContext, { attachmentContents });
       if (!this.insertionTerminalUnchanged(selection)) {
         void vscode.window.showWarningMessage(`${ticketKey} context was saved, but the terminal attachment changed. Reattach the intended terminal and insert again.`);
         return;
@@ -1035,7 +1037,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
         this.appendContextEvent(selection.workSession, 'jira', ticketKey, artifact.promptPath, artifact.contentSha256);
       }
       this.refreshTerminalFirstViews();
-      const summary = `${jiraContext.completeness.fieldCount} fields (${jiraContext.completeness.customFieldCount} custom), ${jiraContext.comments.length} comments, ${jiraContext.completeness.attachmentBodiesCaptured}/${jiraContext.completeness.attachmentsTotal} attachment bodies`;
+      const summary = `${jiraContext.completeness.fieldCount} fields (${jiraContext.completeness.customFieldCount} custom), ${jiraContext.comments.length} comments, ${jiraContext.completeness.attachmentBodiesCaptured}/${jiraContext.completeness.attachmentsTotal} attachment files downloaded`;
       const message = `Inserted [${ticketKey}] into ${selection.terminal.name} without submitting it (${summary}).`;
       if (jiraContext.completeness.complete) {
         void vscode.window.showInformationMessage(`${message} Review or extend it, then press Enter yourself.`);

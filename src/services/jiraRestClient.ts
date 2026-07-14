@@ -1,7 +1,6 @@
 import * as crypto from 'crypto';
 import * as http from 'http';
 import * as https from 'https';
-import { TextDecoder } from 'util';
 import { unknownErrorCode } from './errorUtils';
 import { parseJsonWithLabel } from './jsonFiles';
 import { arrayFromUnknown, isRecord, optionalFiniteNumberFromUnknown } from './records';
@@ -38,6 +37,9 @@ export interface JiraRestClientOptions {
   commentsPerPage?: number;
   maxResponseBytes?: number;
   maxTotalCommentBytes?: number;
+  maxAttachmentFetches?: number;
+  maxAttachmentBytes?: number;
+  maxTotalAttachmentBytes?: number;
 }
 
 export interface JiraRestConfig {
@@ -86,7 +88,8 @@ export interface JiraAttachmentContentSnapshot {
   declaredBytes?: number;
   responseBytes?: number;
   sourceSha256?: string;
-  text?: string;
+  /** Transient raw bytes. These are written to a private file and never serialized into prompt JSON. */
+  bytes?: Buffer;
 }
 
 interface JiraCommentCollection {
@@ -136,22 +139,9 @@ const JIRA_WORK_LIST_FIELDS = [
   'description',
   'attachment',
 ] as const;
-const MAX_ATTACHMENT_FETCHES = 10;
-const MAX_ATTACHMENT_BYTES = 256 * 1024;
-const MAX_TOTAL_ATTACHMENT_BYTES = 1024 * 1024;
-const ALLOWED_ATTACHMENT_MIME_TYPES = new Set([
-  'application/json',
-  'application/xml',
-  'application/x-yaml',
-  'application/yaml',
-  'text/csv',
-  'text/markdown',
-  'text/plain',
-  'text/tab-separated-values',
-  'text/xml',
-  'text/yaml',
-]);
-const UNSAFE_TEXT_CONTROL_PATTERN = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/;
+const DEFAULT_MAX_ATTACHMENT_FETCHES = 100;
+const DEFAULT_MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
+const DEFAULT_MAX_TOTAL_ATTACHMENT_BYTES = 100 * 1024 * 1024;
 
 export class JiraRestClient {
   private readonly env: NodeJS.ProcessEnv;
@@ -164,6 +154,9 @@ export class JiraRestClient {
   private readonly commentsPerPage: number;
   private readonly maxResponseBytes: number;
   private readonly maxTotalCommentBytes: number;
+  private readonly maxAttachmentFetches: number;
+  private readonly maxAttachmentBytes: number;
+  private readonly maxTotalAttachmentBytes: number;
 
   constructor(options: JiraRestClientOptions = {}) {
     this.env = options.env || process.env;
@@ -190,6 +183,24 @@ export class JiraRestClient {
       DEFAULT_MAX_TOTAL_COMMENT_BYTES,
       1024,
       250 * 1024 * 1024,
+    );
+    this.maxAttachmentFetches = boundedInteger(
+      options.maxAttachmentFetches,
+      DEFAULT_MAX_ATTACHMENT_FETCHES,
+      1,
+      500,
+    );
+    this.maxAttachmentBytes = boundedInteger(
+      options.maxAttachmentBytes,
+      DEFAULT_MAX_ATTACHMENT_BYTES,
+      1024,
+      100 * 1024 * 1024,
+    );
+    this.maxTotalAttachmentBytes = boundedInteger(
+      options.maxTotalAttachmentBytes,
+      DEFAULT_MAX_TOTAL_ATTACHMENT_BYTES,
+      1024,
+      500 * 1024 * 1024,
     );
   }
 
@@ -395,29 +406,25 @@ export class JiraRestClient {
         contents.push({ ...base, reason: 'invalid-id' });
         continue;
       }
-      if (!declaredMimeType || !ALLOWED_ATTACHMENT_MIME_TYPES.has(declaredMimeType)) {
-        contents.push({ ...base, reason: 'unsupported-mime' });
-        continue;
-      }
-      if (declaredBytes !== undefined && declaredBytes > MAX_ATTACHMENT_BYTES) {
+      if (declaredBytes !== undefined && declaredBytes > this.maxAttachmentBytes) {
         contents.push({ ...base, reason: 'per-file-byte-limit' });
         continue;
       }
-      if (fetchCount >= MAX_ATTACHMENT_FETCHES) {
+      if (fetchCount >= this.maxAttachmentFetches) {
         contents.push({ ...base, reason: 'fetch-count-limit' });
         continue;
       }
-      const remainingBytes = MAX_TOTAL_ATTACHMENT_BYTES - budgetBytes;
+      const remainingBytes = this.maxTotalAttachmentBytes - budgetBytes;
       if (remainingBytes <= 0 || (declaredBytes !== undefined && declaredBytes > remainingBytes)) {
         contents.push({ ...base, reason: 'total-byte-limit' });
         continue;
       }
 
       fetchCount += 1;
-      const fetched = await this.requestAttachmentText(
+      const fetched = await this.requestAttachmentBytes(
         config,
         base,
-        Math.min(MAX_ATTACHMENT_BYTES, remainingBytes),
+        Math.min(this.maxAttachmentBytes, remainingBytes),
         options,
       );
       budgetBytes += fetched.budgetBytes;
@@ -429,18 +436,18 @@ export class JiraRestClient {
     const skipped = contents.filter(item => item.status === 'skipped').length;
     const failed = contents.filter(item => item.status === 'failed').length;
     const warnings = skipped > 0 || failed > 0
-      ? [`Jira attachment content capture was partial: ${captured} captured, ${skipped} skipped, and ${failed} failed.`]
+      ? [`Jira attachment download was partial: ${captured} downloaded, ${skipped} skipped, and ${failed} failed.`]
       : [];
     return { contents, fetchCount, responseBytes, warnings };
   }
 
-  private async requestAttachmentText(
+  private async requestAttachmentBytes(
     config: JiraRestConfig,
     base: JiraAttachmentContentSnapshot,
     maxResponseBytes: number,
     options: JiraRestRequestOptions,
   ): Promise<JiraAttachmentFetchResult> {
-    if (!base.id || !base.declaredMimeType) {
+    if (!base.id) {
       return {
         content: { ...base, status: 'skipped', reason: 'invalid-metadata' },
         budgetBytes: 0,
@@ -471,7 +478,7 @@ export class JiraRestClient {
         },
         // The transport did not return a trustworthy byte count. Reserve the
         // entire attempted allowance so repeated failures cannot reset the
-        // cumulative one MiB attachment budget.
+        // cumulative attachment budget.
         budgetBytes: maxResponseBytes,
       };
     }
@@ -493,30 +500,9 @@ export class JiraRestClient {
       result.reason = `http-${response.statusCode || 0}`;
       return completed();
     }
-    if (!responseMime.mimeType || !ALLOWED_ATTACHMENT_MIME_TYPES.has(responseMime.mimeType)) {
-      result.reason = 'unsupported-response-mime';
-      return completed();
-    }
-    if (responseMime.charset && !isSupportedTextCharset(responseMime.charset)) {
-      result.reason = 'unsupported-charset';
-      return completed();
-    }
-
-    let text: string;
-    try {
-      text = new TextDecoder('utf-8', { fatal: true }).decode(body);
-    } catch {
-      result.reason = 'invalid-utf8';
-      return completed();
-    }
-    if (UNSAFE_TEXT_CONTROL_PATTERN.test(text)) {
-      result.reason = 'unsafe-control-characters';
-      return completed();
-    }
-    if (text.charCodeAt(0) === 0xFEFF) { text = text.slice(1); }
     result.status = 'captured';
     result.sourceSha256 = crypto.createHash('sha256').update(body).digest('hex');
-    result.text = text.replace(/\r\n?/g, '\n');
+    result.bytes = Buffer.from(body);
     return completed();
   }
 
@@ -885,10 +871,6 @@ function responseContentType(
   if (mimeType) { result.mimeType = mimeType; }
   if (charset) { result.charset = charset; }
   return result;
-}
-
-function isSupportedTextCharset(value: string): boolean {
-  return value === 'utf-8' || value === 'utf8' || value === 'us-ascii' || value === 'ascii';
 }
 
 function responseBodyBuffer(body: string | Buffer): Buffer {

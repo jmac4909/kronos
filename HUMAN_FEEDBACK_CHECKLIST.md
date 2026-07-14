@@ -78,7 +78,7 @@ Use a real ticket only when its provider data is approved for local context capt
 4. In Sessions, confirm the new session shows the real ticket key and title.
 5. Choose **Insert `[TICKET-KEY]`**.
 6. Confirm exactly one editable reference is inserted, Enter is not pressed, and the terminal remains fully interactive and operator-controlled.
-7. Inspect the referenced Jira artifact. Confirm meaningful custom-field names and values, comments, attachment capture/skip reasons, provenance, pruning, and partial-completeness warnings are understandable.
+7. Inspect the referenced Jira artifact. Confirm meaningful custom-field names and values, comments, attachment download/skip reasons, provenance, pruning, and partial-completeness warnings are understandable. Include a `.msg` or other binary fixture and an uncommon file type; confirm both are stored byte-for-byte as private files, referenced by sanitized paths and hashes, and never embedded, parsed, previewed, or executed by Kronos.
 8. Edit the inserted line and decide yourself whether to press Enter.
 
 To verify the existing-terminal path as well:

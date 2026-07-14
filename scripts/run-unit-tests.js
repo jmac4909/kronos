@@ -548,6 +548,150 @@ test('Jira ticket context asks for newest comments first but renders retained co
   assert.deepEqual(snapshot.comments.map(comment => comment.id), ['1', '2']);
 });
 
+test('Jira downloads arbitrary attachment types as private raw files for Claude to inspect', async () => {
+  const msgBytes = Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1, 0x00, 0xff, 0x10, 0x80]);
+  const unknownBytes = Buffer.from([0x00, 0x01, 0x02, 0x03, 0xfe, 0xff]);
+  const requests = [];
+  const client = new JiraRestClient({
+    env: {
+      JIRA_BASE_URL: 'https://jira.example',
+      JIRA_EMAIL: 'operator@example.test',
+      JIRA_API_TOKEN: 'not-persisted',
+    },
+    maxAttachmentBytes: 1024,
+    maxTotalAttachmentBytes: 4096,
+    transport: async request => {
+      requests.push(request);
+      const url = new URL(request.url);
+      if (url.pathname.endsWith('/comment')) {
+        return {
+          statusCode: 200,
+          body: JSON.stringify({ comments: [], total: 0, isLast: true }),
+          headers: { 'content-type': 'application/json' },
+        };
+      }
+      if (url.pathname.endsWith('/attachment/content/1001')) {
+        return {
+          statusCode: 200,
+          body: msgBytes,
+          headers: { 'content-type': 'application/vnd.ms-outlook' },
+        };
+      }
+      if (url.pathname.endsWith('/attachment/content/1002')) {
+        return {
+          statusCode: 200,
+          body: unknownBytes,
+          headers: {},
+        };
+      }
+      return {
+        statusCode: 200,
+        body: JSON.stringify({
+          fields: {
+            summary: 'Binary attachment fixture',
+            description: 'Claude should choose how to inspect the downloaded files.',
+            attachment: [
+              { id: '1001', filename: 'mail-thread.msg', mimeType: 'application/vnd.ms-outlook', size: msgBytes.length },
+              { id: '1002', filename: '../../payload.fixture', size: unknownBytes.length },
+            ],
+          },
+          names: { summary: 'Summary', description: 'Description', attachment: 'Attachment' },
+          schema: {
+            summary: { type: 'string', system: 'summary' },
+            description: { type: 'string', system: 'description' },
+            attachment: { type: 'array', system: 'attachment' },
+          },
+        }),
+        headers: { 'content-type': 'application/json' },
+      };
+    },
+  });
+
+  const snapshot = await client.ticketContext('JIRA-123');
+  assert.equal(snapshot.attachmentFetchCount, 2);
+  assert.equal(snapshot.attachmentResponseBytes, msgBytes.length + unknownBytes.length);
+  assert.deepEqual(snapshot.attachmentContents.map(item => item.status), ['captured', 'captured']);
+  assert.ok(snapshot.attachmentContents.every(item => Buffer.isBuffer(item.bytes)));
+  const jiraAttachmentSource = fs.readFileSync(path.join(root, 'src', 'services', 'jiraRestClient.ts'), 'utf8');
+  assert.doesNotMatch(jiraAttachmentSource, /ALLOWED_ATTACHMENT_MIME_TYPES|unsupported-mime|TextDecoder/);
+  const attachmentRequests = requests.filter(request => new URL(request.url).pathname.includes('/attachment/content/'));
+  assert.equal(attachmentRequests.length, 2);
+  assert.ok(attachmentRequests.every(request => request.responseType === 'buffer'));
+  assert.ok(attachmentRequests.every(request => new URL(request.url).searchParams.get('redirect') === 'false'));
+
+  const context = jiraContext.normalizeJiraTicketContext('JIRA-123', snapshot);
+  assert.deepEqual(context.attachments.map(item => item.contentStatus), ['captured', 'captured']);
+  assert.ok(context.attachments.every(item => !Object.hasOwn(item, 'textContent')));
+  const artifactRoot = path.join(tempRoot, 'binary-attachment-artifacts');
+  const artifact = jiraContextStore.writeJiraContextArtifacts(context, {
+    kronosDir: artifactRoot,
+    attachmentContents: snapshot.attachmentContents,
+  });
+  assert.equal(artifact.attachmentPaths.length, 2);
+  assert.match(artifact.attachmentPaths[0], /mail-thread\.msg$/);
+  assert.match(artifact.attachmentPaths[1], /payload\.fixture$/);
+  assert.deepEqual(fs.readFileSync(artifact.attachmentPaths[0]), msgBytes);
+  assert.deepEqual(fs.readFileSync(artifact.attachmentPaths[1]), unknownBytes);
+  assert.ok(artifact.attachmentPaths.every(filePath => filePath.startsWith(path.resolve(artifactRoot) + path.sep)));
+  if (process.platform !== 'win32') {
+    assert.ok(artifact.attachmentPaths.every(filePath => (fs.statSync(filePath).mode & 0o777) === 0o600));
+  }
+  const stored = JSON.parse(fs.readFileSync(artifact.jsonPath, 'utf8'));
+  assert.deepEqual(stored.attachments.map(item => item.localPath), artifact.attachmentPaths);
+  assert.ok(stored.attachments.every(item => /^[a-f0-9]{64}$/.test(item.contentSha256)));
+  assert.ok(stored.attachments.every(item => !Object.hasOwn(item, 'bytes')));
+  assert.doesNotMatch(fs.readFileSync(artifact.promptPath, 'utf8'), /textContent/);
+  assert.match(fs.readFileSync(artifact.promptPath, 'utf8'), /Never execute them; inspect them only when relevant/i);
+});
+
+test('Jira raw attachment downloads retain explicit count and byte safety limits', async () => {
+  const attachmentRequests = [];
+  const client = new JiraRestClient({
+    env: {
+      JIRA_BASE_URL: 'https://jira.example',
+      JIRA_EMAIL: 'operator@example.test',
+      JIRA_API_TOKEN: 'token',
+    },
+    maxAttachmentFetches: 1,
+    maxAttachmentBytes: 1024,
+    maxTotalAttachmentBytes: 1024,
+    transport: async request => {
+      const url = new URL(request.url);
+      if (url.pathname.endsWith('/comment')) {
+        return { statusCode: 200, body: JSON.stringify({ comments: [], total: 0, isLast: true }), headers: {} };
+      }
+      if (url.pathname.includes('/attachment/content/')) {
+        attachmentRequests.push(request);
+        return { statusCode: 200, body: Buffer.alloc(512, 7), headers: {} };
+      }
+      return {
+        statusCode: 200,
+        body: JSON.stringify({
+          fields: {
+            summary: 'Bounded attachments',
+            attachment: [
+              { id: '2001', filename: 'first.bin', size: 512 },
+              { id: '2002', filename: 'second.bin', size: 512 },
+              { id: '2003', filename: 'too-large.bin', size: 2048 },
+            ],
+          },
+          names: { summary: 'Summary', attachment: 'Attachment' },
+          schema: { summary: { type: 'string' }, attachment: { type: 'array' } },
+        }),
+        headers: {},
+      };
+    },
+  });
+  const snapshot = await client.ticketContext('JIRA-123');
+  assert.equal(attachmentRequests.length, 1);
+  assert.deepEqual(snapshot.attachmentContents.map(item => [item.status, item.reason]), [
+    ['captured', undefined],
+    ['skipped', 'fetch-count-limit'],
+    ['skipped', 'per-file-byte-limit'],
+  ]);
+  assert.match(snapshot.warnings.join(' '), /partial/i);
+});
+
 test('terminal context insertion is shell-inert and never submits', () => {
   const promptPath = path.join(tempRoot, 'JIRA-123', `prompt-${'a'.repeat(24)}.md`);
   const reference = insertion.buildJiraContextReference('JIRA-123', promptPath);

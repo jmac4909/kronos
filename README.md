@@ -30,7 +30,7 @@ Use **Choose Project Discovery Folders** from the Work toolbar or Setup to selec
 
 From a ticket workspace, explicitly insert the context needed for the next instruction:
 
-- `[JIRA-123]` for Jira fields, description, comments, custom fields, and bounded safe-text attachments;
+- `[JIRA-123]` for Jira fields, description, comments, custom fields, and paths to bounded raw attachment files of any type;
 - `[MR-77]` for GitLab merge-request, review, diff, pipeline, job, and test evidence;
 - `[CI-JIRA-123]` for Jenkins build/test/stage and SonarQube gate/measure/issue evidence.
 
@@ -81,7 +81,7 @@ Common read-only configuration variables are:
 - Jenkins: `JENKINS_URL`, plus optional `JENKINS_USER`/`JENKINS_USERNAME` and `JENKINS_API_TOKEN`/`JENKINS_TOKEN`;
 - SonarQube: `SONAR_HOST_URL`/`SONAR_URL` and `SONAR_TOKEN`.
 
-Context artifacts are bounded, normalized, secret-redacted, wrapped as untrusted provider data, and stored in private per-user files where the platform supports private file permissions. Provider reads are pinned to configured origins when credentials are sent. Kronos does not fetch GitLab job traces, Jenkins console logs, or unsupported Jira attachment bodies.
+Structured context artifacts are bounded, normalized, secret-redacted, wrapped as untrusted provider data, and stored in private per-user files where the platform supports private file permissions. Jira attachments are downloaded byte-for-byte without a MIME allowlist or bundled parser, stored separately as private files, and referenced by a sanitized local path plus SHA-256. Raw attachments are intentionally not transformed or secret-redacted, may contain sensitive or malicious content, and must never be executed. One explicit Jira insertion reads at most 100 files, 25 MiB per file, and 100 MiB total. Provider reads remain pinned to the configured origin when credentials are sent. Kronos does not fetch GitLab job traces or Jenkins console logs.
 
 Use **Kronos: Setup** for guided first-run and private provider-environment guidance, **Kronos: Doctor** to inspect missing or invalid provider/Claude settings without displaying credential values, and **Kronos: Settings** to change:
 
