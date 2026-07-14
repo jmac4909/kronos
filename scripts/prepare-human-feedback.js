@@ -88,6 +88,7 @@ for (const expected of [
   'media/kronos-jira-work-board.js',
   'media/kronos-webview-runtime.js',
   'docs/terminal-first-product-contract.md',
+  'docs/extension-improvement-goals.md',
   'HUMAN_FEEDBACK_CHECKLIST.md',
 ]) {
   if (!tree.includes(expected)) { fail(`VSIX tree is missing ${expected}`); }

@@ -203,5 +203,6 @@ docs/                                    product contract, audit, and preview as
 - [Support and feedback](SUPPORT.md)
 - [Contribution guide](CONTRIBUTING.md)
 - [Human feedback checklist](HUMAN_FEEDBACK_CHECKLIST.md)
+- [Extension improvement goals](docs/extension-improvement-goals.md)
 
 Copyright © 2026 Jeremy Mackey. All rights reserved.

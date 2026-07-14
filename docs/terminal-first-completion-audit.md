@@ -50,10 +50,6 @@ Run `npm run feedback:ready`, install the produced VSIX, and complete `HUMAN_FEE
 - Windows filesystem and terminal behavior on a real Windows extension host;
 - no provider, repository, or terminal mutation during the live journey.
 
-## Focused Next Features
+## Improvement Roadmap
 
-1. **Context basket.** Let the operator collect Jira, MR, diff, Jenkins, and Sonar evidence into one editable preview, then place one non-submitting reference in the selected terminal.
-2. **Provider health timeline.** Show last checked, last changed, next poll, current normalized failure, and suppressed repeat count per provider without generating more Attention noise.
-3. **Redacted handoff bundle.** Export selected audit/context artifacts plus hashes as a local Markdown/JSON bundle for an MR or Jira update, without posting anything automatically.
-4. **Branch profiles.** Allow optional per-project branch mappings for Jenkins jobs and SonarQube keys when one repository has multiple pipeline layouts.
-5. **Local session search.** Search session titles, ticket keys, branches, provider bindings, and saved artifact labels without indexing terminal contents.
+The prioritized cleanup, hardening, edge-case, and next-feature goals are maintained in [extension-improvement-goals.md](extension-improvement-goals.md). That roadmap distinguishes current automated evidence from required Windows, live-provider, and operator-owned terminal signoff.
