@@ -19,6 +19,13 @@ export interface AttentionCommandTarget {
   ticketKey: string | undefined;
   source: MonitorEventSource;
   providerUrl: string | undefined;
+  providerChoices?: AttentionProviderChoice[];
+}
+
+export interface AttentionProviderChoice {
+  label: string;
+  description?: string;
+  url: string;
 }
 
 export interface AttentionTreeProviderOptions {
@@ -31,6 +38,7 @@ interface AttentionEntry {
   session: WorkSessionRecord | undefined;
   ticketKey: string | undefined;
   providerUrl: string | undefined;
+  providerChoices: AttentionProviderChoice[];
 }
 
 /** Shows only unacknowledged durable provider transitions, grouped by session. */
@@ -114,11 +122,13 @@ export class AttentionTreeProvider implements vscode.TreeDataProvider<AttentionT
       .filter(event => sessionsById.has(event.sessionId))
       .map(event => {
         const session = sessionsById.get(event.sessionId);
+        const providerChoices = providerChoicesForEvent(event, session);
         return {
           event,
           session,
           ticketKey: event.subject?.ticketKey || session?.ticketKey,
-          providerUrl: providerUrlForEvent(event, session),
+          providerUrl: providerUrlForEvent(event, session) || providerChoices[0]?.url,
+          providerChoices,
         };
       })
       .sort((left, right) => right.event.at.localeCompare(left.event.at)
@@ -176,6 +186,7 @@ export class AttentionEventTreeItem extends vscode.TreeItem implements Attention
   readonly ticketKey: string | undefined;
   readonly source: MonitorEventSource;
   readonly providerUrl: string | undefined;
+  readonly providerChoices: AttentionProviderChoice[];
 
   constructor(readonly entry: AttentionEntry) {
     super(entry.event.summary, vscode.TreeItemCollapsibleState.None);
@@ -185,6 +196,7 @@ export class AttentionEventTreeItem extends vscode.TreeItem implements Attention
     this.ticketKey = entry.ticketKey;
     this.source = entry.event.source;
     this.providerUrl = entry.providerUrl;
+    this.providerChoices = [...entry.providerChoices];
     const target: AttentionCommandTarget = {
       eventId: this.eventId,
       sessionId: this.sessionId,
@@ -192,6 +204,7 @@ export class AttentionEventTreeItem extends vscode.TreeItem implements Attention
       ticketKey: this.ticketKey,
       source: this.source,
       providerUrl: this.providerUrl,
+      ...(this.providerChoices.length > 1 ? { providerChoices: this.providerChoices } : {}),
     };
 
     this.id = `attention-event:${entry.event.id}`;
@@ -211,6 +224,60 @@ export class AttentionEventTreeItem extends vscode.TreeItem implements Attention
         arguments: [target],
       };
   }
+}
+
+function providerChoicesForEvent(
+  event: MonitorEvent,
+  session: WorkSessionRecord | undefined,
+): AttentionProviderChoice[] {
+  if (!session || (event.source !== 'sonar' && event.source !== 'jenkins')) { return []; }
+  const source = event.source;
+  const candidates = session.providerBindings
+    .filter(binding => binding.provider === source && Boolean(binding.url))
+    .map(binding => {
+      const url = normalizeProviderPublicUrl(binding.url, source);
+      return url ? { binding, url } : undefined;
+    })
+    .filter((candidate): candidate is { binding: WorkSessionProviderBinding; url: string } => Boolean(candidate))
+    .sort((left, right) => {
+      const leftExact = left.binding.subjectId === event.subject?.id ? 1 : 0;
+      const rightExact = right.binding.subjectId === event.subject?.id ? 1 : 0;
+      return rightExact - leftExact || right.binding.attachedAt.localeCompare(left.binding.attachedAt);
+    });
+  const choices: AttentionProviderChoice[] = [];
+  const seen = new Set<string>();
+  for (const { binding, url } of candidates) {
+    if (seen.has(url)) { continue; }
+    seen.add(url);
+    if (source === 'sonar') {
+      const branch = sonarBindingBranch(binding, url);
+      choices.push({
+        label: branch || binding.subjectId,
+        description: binding.projectId ? `SonarQube ${binding.projectId}` : 'SonarQube branch',
+        url,
+      });
+    } else {
+      choices.push({
+        label: binding.subjectId === 'latest' ? 'Latest Jenkins build' : `Jenkins build ${binding.subjectId}`,
+        description: binding.projectId || 'Jenkins',
+        url,
+      });
+    }
+  }
+  return choices;
+}
+
+function sonarBindingBranch(binding: WorkSessionProviderBinding, url: string): string | undefined {
+  try {
+    const urlBranch = new URL(url).searchParams.get('branch')?.trim();
+    if (urlBranch) { return urlBranch; }
+  } catch {
+    return undefined;
+  }
+  const prefix = binding.projectId ? `${binding.projectId}:` : '';
+  return prefix && binding.subjectId.startsWith(prefix)
+    ? binding.subjectId.slice(prefix.length).trim() || undefined
+    : undefined;
 }
 
 export class AttentionMessageTreeItem extends vscode.TreeItem {
@@ -285,6 +352,8 @@ const METADATA_TOOLTIP_FIELDS: ReadonlyArray<readonly [string, string]> = [
   ['failedTestCount', 'Failed tests'],
   ['issueDelta', 'Issue change'],
   ['unresolvedIssueCount', 'Unresolved issues'],
+  ['projectKey', 'SonarQube project'],
+  ['branch', 'Branch'],
 ];
 
 function eventIcon(event: MonitorEvent): vscode.ThemeIcon {

@@ -2030,6 +2030,7 @@ test('extension activation registers the bounded surface and explicit launch com
   const Module = require('node:module');
   const originalLoad = Module._load;
   const registeredViews = [];
+  const registeredTreeProviders = new Map();
   const registeredCommands = [];
   const commandHandlers = new Map();
   const createdTerminals = [];
@@ -2040,7 +2041,10 @@ test('extension activation registers the bounded surface and explicit launch com
   let openDialogResult;
   let lastOpenDialogOptions;
   let multiPickHandler;
+  let singlePickHandler;
   let lastMultiPickItems = [];
+  let lastSinglePickItems = [];
+  const openedExternalUrls = [];
   let warningMessageResult;
   let lastWarningMessage;
   let failNextTerminalCreation = false;
@@ -2076,7 +2080,11 @@ test('extension activation registers the bounded surface and explicit launch com
     window: {
       activeTerminal: undefined,
       terminals: [],
-      registerTreeDataProvider(id) { registeredViews.push(id); return disposable(); },
+      registerTreeDataProvider(id, provider) {
+        registeredViews.push(id);
+        registeredTreeProviders.set(id, provider);
+        return disposable();
+      },
       onDidCloseTerminal(handler) { closeTerminalHandler = handler; return disposable(); },
       createOutputChannel() { return { appendLine() {}, dispose() {} }; },
       showWarningMessage(message) {
@@ -2118,7 +2126,12 @@ test('extension activation registers the bounded surface and explicit launch com
         return Promise.resolve(result);
       },
       showQuickPick(items, options) {
-        if (!options?.canPickMany) { return Promise.resolve(undefined); }
+        if (!options?.canPickMany) {
+          lastSinglePickItems = items;
+          const handler = singlePickHandler;
+          singlePickHandler = undefined;
+          return Promise.resolve(handler ? handler(items) : undefined);
+        }
         lastMultiPickItems = items;
         const handler = multiPickHandler;
         multiPickHandler = undefined;
@@ -2168,7 +2181,12 @@ test('extension activation registers the bounded surface and explicit launch com
       registerCommand(id, handler) { registeredCommands.push(id); commandHandlers.set(id, handler); return disposable(); },
       executeCommand(...args) { executedCommands.push(args); return Promise.resolve(); },
     },
-    env: { openExternal() { return Promise.resolve(true); } },
+    env: {
+      openExternal(uri) {
+        openedExternalUrls.push(uri.toString());
+        return Promise.resolve(true);
+      },
+    },
     Uri: {
       file(value) { return { fsPath: value }; },
       parse(value) { return { toString: () => value }; },
@@ -2192,6 +2210,11 @@ test('extension activation registers the bounded surface and explicit launch com
         'JIRA-456': fixtureTicket({ summary: 'Attachment race fixture', launch_project: 'fixture' }),
         'JIRA-789': fixtureTicket({ summary: 'Closed-before-attach fixture', launch_project: 'fixture' }),
         'JIRA-999': fixtureTicket({ summary: 'Launch failure fixture', launch_project: 'fixture' }),
+        'JIRA-321': fixtureTicket({
+          summary: 'Attention branch picker fixture',
+          projects: [],
+          launch_project: undefined,
+        }),
       },
     });
     fs.mkdirSync(path.join(tempRoot, '.git'), { recursive: true });
@@ -2201,6 +2224,46 @@ test('extension activation registers the bounded surface and explicit launch com
     const expectedCommands = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
       .contributes.commands.map(command => command.command);
     assert.deepEqual(registeredCommands, expectedCommands);
+
+    const attentionSession = workSessions.createOrGetWorkSessionByTicket({
+      ticketKey: 'JIRA-321',
+      title: 'Attention branch picker fixture',
+      projectName: 'fixture',
+      projectPath: tempRoot,
+    });
+    workSessions.addWorkSessionProviderBinding(attentionSession.id, {
+      provider: 'sonar',
+      resource: 'quality-gate',
+      subjectId: 'fixture:feature/one',
+      projectId: 'fixture',
+      url: 'https://sonar.example/dashboard?id=fixture&branch=feature%2Fone',
+    });
+    workSessions.addWorkSessionProviderBinding(attentionSession.id, {
+      provider: 'sonar',
+      resource: 'quality-gate',
+      subjectId: 'fixture:feature/two',
+      projectId: 'fixture',
+      url: 'https://sonar.example/dashboard?id=fixture&branch=feature%2Ftwo',
+    });
+    monitorEventStore.appendMonitorEvent({
+      id: 'attention-branch-picker-event',
+      sessionId: attentionSession.id,
+      type: 'provider.transition',
+      source: 'sonar',
+      summary: 'JIRA-321 Sonar branch fixture.',
+      subject: { kind: 'quality-gate', id: 'fixture:feature/one', ticketKey: 'JIRA-321' },
+      after: { state: 'ERROR', fingerprint: 'attention-branch-picker-fingerprint' },
+      metadata: { transitionKind: 'sonar_gate_failed', projectKey: 'fixture', branch: 'feature/one' },
+    });
+    const attentionProvider = registeredTreeProviders.get('kronosAttention');
+    const attentionGroup = attentionProvider.getChildren().find(item => item.ticketKey === 'JIRA-321');
+    const attentionItem = attentionProvider.getChildren(attentionGroup)[0];
+    assert.deepEqual(attentionItem.providerChoices.map(choice => choice.label), ['feature/one', 'feature/two']);
+    singlePickHandler = items => items.find(item => item.label === 'feature/two');
+    await commandHandlers.get('kronos.openProvider')(attentionItem);
+    assert.deepEqual(lastSinglePickItems.map(item => item.label), ['feature/one', 'feature/two']);
+    assert.equal(openedExternalUrls.at(-1), 'https://sonar.example/dashboard?id=fixture&branch=feature%2Ftwo');
+    workSessions.removeWorkSession(attentionSession.id);
 
     await commandHandlers.get('kronos.setup')();
     const setupPanel = createdWebviewPanels.find(panel => panel.viewType === 'kronosSetup');

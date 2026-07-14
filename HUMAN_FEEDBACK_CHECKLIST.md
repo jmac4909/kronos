@@ -123,11 +123,12 @@ If GitLab and CI providers are safely configured:
 
 1. Let Kronos discover an MR with no prior local baseline. Confirm its first successful observation appears once even when GitLab reports it healthy and mergeable; an MR already needing review should appear as a warning.
 2. Confirm provider failures, recoveries, partial reads, and monitoring blockers are grouped by real ticket when linked, or by standalone session title when not linked, rather than scattered by provider.
-3. Open an attention item's provider page and confirm it points to the expected configured provider.
+3. Open an attention item's provider page and confirm it points to the expected configured provider. For a SonarQube item, confirm its dashboard link keeps the expected project and branch routing. If the session retains multiple SonarQube branches or Jenkins builds, confirm a native picker appears and opens the selected target.
 4. For a ticket-linked item, open the related ticket workspace. Confirm a standalone item does not fabricate that action or a ticket key.
 5. Insert fresh MR or CI context from the item when applicable; confirm the reference goes only to the explicitly attached terminal and is not submitted.
 6. Acknowledge the item and confirm acknowledgement changes only local Attention/audit state.
 7. Confirm ordinary unchanged polls do not create repeated attention noise.
+8. With Jenkins configured and no explicit SonarQube project key, use a safe fixture job whose `/config.xml` contains a literal `sonar.projectKey`. Confirm polling discovers SonarQube without retaining raw XML; confirm an expression value such as `${SONAR_PROJECT_KEY}` is ignored.
 
 ## Reload and Recovery
 

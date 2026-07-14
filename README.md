@@ -56,7 +56,7 @@ After VS Code reloads, persisted history remains but the live terminal starts de
 
 Attention is the session- and ticket-aware inbox for meaningful provider changes and monitoring problems: the first successful observation of a merge request, later merge-request review changes, pipeline failures or recoveries, Jenkins test/stage changes, SonarQube gate or issue changes, partial provider reads, and monitoring blockers. The initial MR item is informational when healthy and a warning when it already needs review, so an MR first found in a mergeable state is still visible once.
 
-An attention item can open the originating provider page, open its ticket workspace when ticket-linked, insert applicable fresh MR or CI context into the managed terminal, or be acknowledged. Acknowledgement changes only the local audit state.
+An attention item can open the originating provider page, open its ticket workspace when ticket-linked, insert applicable fresh MR or CI context into the managed terminal, or be acknowledged. When more than one retained SonarQube branch or Jenkins build is available, opening the provider first presents a native branch/build picker. SonarQube dashboard links retain only the non-secret `id` and `branch` routing parameters. Acknowledgement changes only the local audit state.
 
 ## Typical Journey
 
@@ -65,7 +65,7 @@ An attention item can open the originating provider page, open its ticket worksp
 3. For an explicit start, Kronos validates the configured executable and approved interactive flags, terminal name, and working directory; it then creates and focuses one VS Code terminal and executes that command once.
 4. Choose **Insert `[JIRA-123]`**. Kronos writes a private context artifact and opens the context composer.
 5. Review the fetched evidence, add an optional operator focus, choose **Place in Terminal** (or Ctrl/Cmd+Enter), then press Enter in the terminal yourself and continue directing the interactive session normally.
-6. Once a project and ticket session are configured, Kronos immediately begins read-only provider polling and continues on the configured interval. GitLab finds a unique open MR by current branch first and Jira key second; it refuses ambiguous matches. The MR/CI buttons are evidence insertion actions, not connection steps.
+6. Once a project and ticket session are configured, Kronos immediately begins read-only provider polling and continues on the configured interval. GitLab finds a unique open MR by current branch first and Jira key second; it refuses ambiguous matches. When a Jenkins job is configured but SonarQube is not, Kronos makes a bounded best-effort read of the job's `/config.xml` and can use a literal `sonar.projectKey` plus optional literal `sonar.branch.name` to discover the SonarQube target in the same polling cycle. Raw XML is not retained, and expression-valued properties are ignored. The MR/CI buttons are evidence insertion actions, not connection steps.
 7. Respond to meaningful changes from **Attention** by opening the provider, inserting fresh context, or acknowledging the event.
 8. Use **Sessions > Open Work Session Audit** to inspect context provenance, completeness, transitions, and acknowledgements. Terminal contents are never part of the audit.
 9. Choose **Stop Managing Work Session** when finished. The terminal remains open and under operator control.

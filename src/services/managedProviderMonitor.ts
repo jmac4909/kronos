@@ -884,6 +884,8 @@ function initialCiNotices(
       transitionKey: `initial-unhealthy-gate-${sonar.projectKey}-${sonar.branch}`,
       metadata: {
         transitionKind: 'initial_unhealthy',
+        projectKey: sonar.projectKey,
+        branch: sonar.branch,
         unresolvedIssueCount: sonar.unresolvedIssueCount,
       },
     });
@@ -972,6 +974,8 @@ function appendCiTransitionOnce(
   } else {
     metadata['issueDelta'] = transition.issueDelta;
     metadata['unresolvedIssueCount'] = transition.unresolvedIssueCount;
+    metadata['projectKey'] = transition.projectKey;
+    metadata['branch'] = transition.branch;
   }
   const event = appendTransitionOnce({
     session,

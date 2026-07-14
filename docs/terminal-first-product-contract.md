@@ -117,7 +117,7 @@ Eligible items include:
 - partial provider reads and monitoring blockers;
 - unsafe or unavailable local monitoring state.
 
-A ticket-linked item may open its ticket workspace. Applicable items may open a validated provider URL, insert fresh MR/CI context into the explicitly attached terminal, or be acknowledged locally. Acknowledgement never changes provider state.
+A ticket-linked item may open its ticket workspace. Applicable items may open a validated provider URL, insert fresh MR/CI context into the explicitly attached terminal, or be acknowledged locally. If multiple retained SonarQube branch targets or Jenkins builds are available, opening the provider uses a native picker; otherwise it opens directly. SonarQube dashboard URLs may retain only the non-secret `id` and `branch` routing parameters. Acknowledgement never changes provider state.
 
 The first successful merge-request observation creates one durable transition in Attention: informational when healthy and warning-level when it already needs review. Its comparison baseline is recorded at the same time. Unchanged subsequent polling results do not create new Attention items.
 
@@ -159,6 +159,7 @@ Monitoring is read-only and belongs to an active provider-bound work session. A 
 - Incomplete provider components do not erase the last complete component or create false recovery events.
 - Losing lease ownership stops persistence and prevents the next provider request from starting.
 - Provider errors affect readiness and Attention; they do not trigger remediation.
+- A configured Jenkins job permits a bounded, best-effort read of that job's `/config.xml`. When SonarQube has no explicit project binding, literal `sonar.projectKey` and optional literal `sonar.branch.name` values may establish the read-only SonarQube target for the same poll. Raw XML is never persisted, expression-valued properties are ignored, and the request remains pinned to the configured Jenkins origin.
 
 Monitoring can observe GitLab, Jenkins, and SonarQube. Jira remains explicitly refreshed from Work rather than continuously monitored as terminal content.
 

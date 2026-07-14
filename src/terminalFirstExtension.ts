@@ -2150,7 +2150,16 @@ class TerminalFirstRuntime implements vscode.Disposable {
   }
 
   private async openProvider(argument: unknown): Promise<void> {
-    const providerUrl = stringProperty(argument, 'providerUrl') || stringProperty(argument, 'url');
+    const providerChoices = providerOpenChoices(argument);
+    let providerUrl = stringProperty(argument, 'providerUrl') || stringProperty(argument, 'url') || providerChoices[0]?.url;
+    if (providerChoices.length > 1) {
+      const selected = await vscode.window.showQuickPick(providerChoices, {
+        title: 'Choose provider branch or build',
+        placeHolder: 'Open one retained provider target',
+      });
+      if (!selected) { return; }
+      providerUrl = selected.url;
+    }
     if (!providerUrl) {
       void vscode.window.showWarningMessage('This Attention item has no validated provider URL.');
       return;
@@ -2740,6 +2749,20 @@ function stringProperty(value: unknown, key: string): string | undefined {
   if (!isRecord(value)) { return undefined; }
   const candidate = value[key];
   return typeof candidate === 'string' && candidate.trim() ? candidate.trim() : undefined;
+}
+
+function providerOpenChoices(value: unknown): Array<{ label: string; description?: string; url: string }> {
+  if (!isRecord(value) || !Array.isArray(value['providerChoices'])) { return []; }
+  const choices: Array<{ label: string; description?: string; url: string }> = [];
+  for (const item of value['providerChoices'].slice(0, 100)) {
+    if (!isRecord(item)) { continue; }
+    const label = safeProjectName(item['label']);
+    const description = safeProjectName(item['description']);
+    const url = typeof item['url'] === 'string' && item['url'].length <= 8_192 ? item['url'].trim() : '';
+    if (!label || !url) { continue; }
+    choices.push({ label, ...(description ? { description } : {}), url });
+  }
+  return choices;
 }
 
 function safeProjectName(value: unknown): string {
