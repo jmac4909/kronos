@@ -445,12 +445,26 @@ test('bounded operation failures use one redacted actionable vocabulary', () => 
   for (const relativePath of [
     'src/terminalFirstExtension.ts',
     'src/services/managedProviderMonitor.ts',
+    'src/services/vscodeGitReadService.ts',
+    'src/views/AttentionTreeProvider.ts',
+    'src/views/ManagedSessionTreeProvider.ts',
+    'src/views/ProjectTreeProvider.ts',
   ]) {
     const source = fs.readFileSync(path.join(root, relativePath), 'utf8');
     assert.doesNotMatch(
       source,
       /unknownErrorMessage\(/,
       `${relativePath} must route operator-visible and polling-log failures through boundedOperationFailure`,
+    );
+    assert.doesNotMatch(
+      source,
+      /error instanceof Error\s*\?\s*error\.message|String\(error/,
+      `${relativePath} must not render raw exception text at an operator-visible or polling-log boundary`,
+    );
+    assert.match(
+      source,
+      /boundedOperationFailure\(/,
+      `${relativePath} must retain the shared bounded failure vocabulary`,
     );
   }
 });
@@ -2946,6 +2960,7 @@ test('project Git evidence reads only the bounded VS Code Git model', async () =
   }));
   let openRepositoryCalls = 0;
   let repositoryVisible = true;
+  let diffFailure;
   const repository = {
     rootUri: { fsPath: projectPath },
     state: {
@@ -2955,7 +2970,10 @@ test('project Git evidence reads only the bounded VS Code Git model', async () =
       workingTreeChanges: changes.slice(2),
       untrackedChanges: [changes[1]],
     },
-    async diffWithHEAD() { return `diff --git a/file b/file\n${'x'.repeat((512 * 1024) + 50)}`; },
+    async diffWithHEAD() {
+      if (diffFailure) { throw diffFailure; }
+      return `diff --git a/file b/file\n${'x'.repeat((512 * 1024) + 50)}`;
+    },
   };
   const vscode = {
     extensions: {
@@ -3007,6 +3025,14 @@ test('project Git evidence reads only the bounded VS Code Git model', async () =
     const rendered = gitEvidence.renderProjectGitEvidence('Fixture', evidence);
     assert.match(rendered, /VS Code built-in Git model \(read-only\)/);
     assert.match(rendered, /Branch: feature\/git-evidence/);
+    const credential = ['github_pat_', 'projectgitfailurefixture'].join('');
+    diffFailure = new Error(`Git diff failed with token=${credential}`);
+    const failedDiffEvidence = await gitEvidence.readProjectGitEvidence(projectPath);
+    assert.equal(failedDiffEvidence.available, true, 'status remains usable when only the diff read fails');
+    assert.equal(failedDiffEvidence.warning.includes(credential), false);
+    assert.match(failedDiffEvidence.warning, /REDACTED/);
+    assert.match(failedDiffEvidence.warning, /\[unavailable\]/);
+    diffFailure = undefined;
     repositoryVisible = false;
     const loadedEvidence = await gitEvidence.readProjectGitEvidence(projectPath, {
       includeDiff: false,

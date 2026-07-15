@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { boundedOperationFailure } from '../services/errorUtils';
 import { OperatorTerminalRegistry } from '../services/operatorTerminalRegistry';
 import { WorkSessionRecord, listWorkSessions } from '../services/workSessionStore';
 import { readProjectGitBranch } from '../services/projectCatalog';
@@ -48,7 +49,7 @@ export class ManagedSessionTreeProvider implements vscode.TreeDataProvider<Sessi
   private safeLoadWorkSessions(): WorkSessionRecord[] {
     try { return this.loadWorkSessions(); }
     catch (error: unknown) {
-      console.warn(`Kronos managed-session refresh failed: ${errorMessage(error)}`);
+      console.warn(`Kronos managed-session refresh failed: ${boundedOperationFailure(error, 'Managed session state could not be read.').display}`);
       return [];
     }
   }
@@ -184,5 +185,3 @@ function sessionIcon(session: WorkSessionRecord, attached: boolean): vscode.Them
     ? new vscode.ThemeIcon('terminal', new vscode.ThemeColor('testing.iconPassed'))
     : new vscode.ThemeIcon('debug-disconnect', new vscode.ThemeColor('charts.yellow'));
 }
-
-function errorMessage(error: unknown): string { return error instanceof Error ? error.message : String(error || 'Unknown error.'); }

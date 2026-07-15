@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { boundedOperationFailure } from '../services/errorUtils';
 import {
   MonitorEvent,
   MonitorEventSource,
@@ -107,7 +108,7 @@ export class AttentionTreeProvider implements vscode.TreeDataProvider<AttentionT
     try {
       events = this.loadMonitorEvents();
     } catch (error: unknown) {
-      console.warn(`Kronos attention refresh failed: ${errorMessage(error)}`);
+      console.warn(`Kronos attention refresh failed: ${boundedOperationFailure(error, 'Attention events could not be read.').display}`);
       return [];
     }
 
@@ -133,7 +134,7 @@ export class AttentionTreeProvider implements vscode.TreeDataProvider<AttentionT
     try {
       return this.loadWorkSessions();
     } catch (error: unknown) {
-      console.warn(`Kronos attention session correlation failed: ${errorMessage(error)}`);
+      console.warn(`Kronos attention session correlation failed: ${boundedOperationFailure(error, 'Attention session state could not be read.').display}`);
       return [];
     }
   }
@@ -399,8 +400,4 @@ function providerLabel(source: MonitorEventSource): string {
 function displayTimestamp(value: string): string {
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString();
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error || 'Unknown error.');
 }

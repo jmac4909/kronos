@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import type { KronosState, ProjectConfig } from '../state/types';
+import { boundedOperationFailure } from '../services/errorUtils';
 import { listLocalProjects } from '../services/projectCatalog';
 import { providerReadiness } from '../services/providerReadiness';
 import {
@@ -72,7 +73,7 @@ export class ProjectTreeProvider implements vscode.TreeDataProvider<ProjectTreeE
   private safeLoadState(): KronosState | null {
     try { return this.loadState(); }
     catch (error: unknown) {
-      console.warn(`Kronos project refresh failed: ${errorMessage(error)}`);
+      console.warn(`Kronos project refresh failed: ${boundedOperationFailure(error, 'Project state could not be read.').display}`);
       return null;
     }
   }
@@ -80,7 +81,7 @@ export class ProjectTreeProvider implements vscode.TreeDataProvider<ProjectTreeE
   private safeLoadWorkSessions(): WorkSessionRecord[] {
     try { return this.loadWorkSessions(); }
     catch (error: unknown) {
-      console.warn(`Kronos project session refresh failed: ${errorMessage(error)}`);
+      console.warn(`Kronos project session refresh failed: ${boundedOperationFailure(error, 'Project session state could not be read.').display}`);
       return [];
     }
   }
@@ -218,5 +219,3 @@ function providerStatus(name: string, targetConfigured: boolean, credentialsRead
     ? `${name}: automatic polling active for ${activeSessions} ticket session${activeSessions === 1 ? '' : 's'}`
     : `${name}: ready; automatic polling starts with a ticket session`;
 }
-
-function errorMessage(error: unknown): string { return error instanceof Error ? error.message : String(error || 'Unknown error.'); }

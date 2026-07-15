@@ -1,5 +1,6 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
+import { boundedOperationFailure } from './errorUtils';
 import { readProjectGitBranch } from './projectCatalog';
 
 export interface ProjectGitChange {
@@ -97,9 +98,10 @@ export async function readProjectGitEvidence(
     if (options.includeDiff !== false) {
       try { diff = await repository.diffWithHEAD(); }
       catch (error: unknown) {
-        warning = error instanceof Error
-          ? `Git status is available, but the diff could not be read: ${singleLine(error.message, 500)}`
-          : 'Git status is available, but the diff could not be read.';
+        warning = boundedOperationFailure(
+          error,
+          'Git status is available, but the diff could not be read.',
+        ).display;
       }
     }
     let diffTruncated = false;
@@ -124,7 +126,10 @@ export async function readProjectGitEvidence(
       } : {}),
     };
   } catch (error: unknown) {
-    return { ...base, warning: error instanceof Error ? error.message : 'VS Code Git status could not be read.' };
+    return {
+      ...base,
+      warning: boundedOperationFailure(error, 'VS Code Git status could not be read.').display,
+    };
   }
 }
 
