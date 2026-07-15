@@ -3,6 +3,10 @@ import { OperatorTerminalRegistry } from '../services/operatorTerminalRegistry';
 import { WorkSessionRecord, listWorkSessions } from '../services/workSessionStore';
 import { readProjectGitBranch } from '../services/projectCatalog';
 import { workSessionLifecycle } from '../services/workSessionLifecycle';
+import {
+  providerMonitoringHealthSummary,
+  sessionProviderMonitoringHealth,
+} from '../services/providerMonitoringHealth';
 
 export interface ManagedSessionCommandTarget {
   workSessionId: string;
@@ -21,6 +25,7 @@ export class ManagedSessionTreeProvider implements vscode.TreeDataProvider<Sessi
   constructor(
     private readonly operatorTerminals: OperatorTerminalRegistry<vscode.Terminal>,
     private readonly loadWorkSessions: WorkSessionLoader = () => listWorkSessions(),
+    private readonly pollIntervalMs: () => number = () => 300_000,
   ) {}
 
   getTreeItem(element: SessionTreeElement): vscode.TreeItem { return element; }
@@ -32,6 +37,7 @@ export class ManagedSessionTreeProvider implements vscode.TreeDataProvider<Sessi
       ? sessions.map(session => new ManagedSessionTreeItem(
         session,
         this.operatorTerminals.listBindings(session.id).map(binding => binding.bindingId),
+        this.pollIntervalMs(),
       ))
       : [new ManagedSessionMessageTreeItem()];
   }
@@ -53,7 +59,7 @@ export class ManagedSessionTreeItem extends vscode.TreeItem implements ManagedSe
   readonly ticketKey?: string;
   readonly liveTerminalBindingIds: readonly string[];
 
-  constructor(readonly session: WorkSessionRecord, liveTerminalBindingIds: readonly string[]) {
+  constructor(readonly session: WorkSessionRecord, liveTerminalBindingIds: readonly string[], pollIntervalMs: number) {
     super(sessionLabel(session), vscode.TreeItemCollapsibleState.None);
     this.workSessionId = session.id;
     if (session.kind === 'ticket') { this.ticketKey = session.ticketKey; }
@@ -75,8 +81,8 @@ export class ManagedSessionTreeItem extends vscode.TreeItem implements ManagedSe
       : session.status === 'closed' ? 'work_session_closed'
         : !session.monitoring.enabled ? attached ? 'work_session_attached_paused' : 'work_session_detached_paused'
           : attached ? 'work_session_attached' : 'work_session_detached';
-    this.description = sessionDescription(session, liveCount);
-    this.tooltip = sessionTooltip(session, liveCount);
+    this.description = sessionDescription(session, liveCount, pollIntervalMs);
+    this.tooltip = sessionTooltip(session, liveCount, pollIntervalMs);
     this.iconPath = sessionIcon(session, attached);
     this.command = { command: 'kronos.focusWorkSessionTerminal', title: 'Open Session Terminal', arguments: [commandTarget] };
   }
@@ -100,7 +106,7 @@ function sessionSortOrder(left: WorkSessionRecord, right: WorkSessionRecord): nu
   return right.updatedAt.localeCompare(left.updatedAt) || sessionLabel(left).localeCompare(sessionLabel(right)) || left.id.localeCompare(right.id);
 }
 
-function sessionDescription(session: WorkSessionRecord, liveCount: number): string {
+function sessionDescription(session: WorkSessionRecord, liveCount: number, pollIntervalMs: number): string {
   const lifecycle = workSessionLifecycle(session, liveCount);
   const branch = session.projectPath ? readProjectGitBranch(session.projectPath)?.branch : undefined;
   const project = branch ? `${session.projectName || 'project'} @ ${branch} • ` : '';
@@ -116,13 +122,14 @@ function sessionDescription(session: WorkSessionRecord, liveCount: number): stri
   if (session.kind === 'standalone') {
     return `${project}${contexts}${terminal}`;
   }
+  const health = sessionProviderMonitoringHealth(session, pollIntervalMs);
   const monitoring = lifecycle.monitoring === 'running'
-    ? `auto-poll ${session.monitoring.lastState || 'waiting'}`
+    ? `auto-${providerMonitoringHealthSummary(health)}`
     : lifecycle.monitoring === 'paused' ? 'auto-poll paused' : 'auto-poll unavailable';
   return `${project}${contexts}${terminal} • ${monitoring}`;
 }
 
-function sessionTooltip(session: WorkSessionRecord, liveCount: number): string {
+function sessionTooltip(session: WorkSessionRecord, liveCount: number, pollIntervalMs: number): string {
   const lifecycle = workSessionLifecycle(session, liveCount);
   const terminalCounts = { attached: 0, detached: 0, closed: 0 };
   for (const terminal of session.terminals) { terminalCounts[terminal.status] += 1; }
@@ -130,6 +137,7 @@ function sessionTooltip(session: WorkSessionRecord, liveCount: number): string {
     ? session.providerBindings.map(binding => `${binding.provider} ${binding.resource} ${binding.subjectId}`).join(', ')
     : 'none yet; configured providers are discovered automatically';
   const completeArtifacts = session.artifacts.filter(artifact => artifact.complete).length;
+  const health = sessionProviderMonitoringHealth(session, pollIntervalMs);
   const lines = [
     `Work session: ${session.id}`,
     `Ticket contexts: ${session.ticketKeys.join(', ') || 'none'}`,
@@ -149,7 +157,11 @@ function sessionTooltip(session: WorkSessionRecord, liveCount: number): string {
     `Monitoring failures: ${session.monitoring.lastFailureCount ?? 0}`,
     `Monitoring skipped: ${session.monitoring.lastSkippedCount ?? 0}`,
     `Last monitoring attempt: ${session.monitoring.lastAttemptAt || 'never'}`,
-    `Last successful poll: ${session.monitoring.lastPolledAt || 'never'}`,
+    `Last successful poll: ${health.lastSuccessfulAt || 'never'}`,
+    `Last meaningful provider change: ${health.lastMeaningfulChangeAt || 'never'}`,
+    `Next scheduled poll: ${health.nextScheduledAt || 'not scheduled'}`,
+    `Current normalized error: ${health.currentError || 'none'}`,
+    `Suppressed unchanged polls since last change: ${health.suppressedUnchangedCount}`,
     `Created: ${session.createdAt}`,
     `Updated: ${session.updatedAt}`,
   ];

@@ -113,6 +113,17 @@
       "humanGates": ["real-vscode", "operator-terminal"]
     },
     {
+      "id": "provider-health-visibility",
+      "goals": ["G20"],
+      "automated": [
+        { "file": "scripts/run-provider-health-visibility-tests.js", "test": "session provider health derives the next poll and legacy successful-poll fallback" },
+        { "file": "scripts/run-provider-health-visibility-tests.js", "test": "project provider health aggregates latest evidence and earliest scheduled poll" },
+        { "file": "scripts/run-provider-health-visibility-tests.js", "test": "monitoring results persist success, meaningful change, and quiet suppression separately" },
+        { "file": "scripts/run-provider-health-visibility-tests.js", "test": "current normalized provider error clears only after a non-failing result" }
+      ],
+      "humanGates": ["real-vscode", "live-providers"]
+    },
+    {
       "id": "security-and-release",
       "goals": ["G16", "G18"],
       "automated": [

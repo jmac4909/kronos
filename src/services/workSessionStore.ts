@@ -78,10 +78,14 @@ interface WorkSessionRecordBase {
     enabled: boolean;
     lastPolledAt?: string;
     lastAttemptAt?: string;
+    lastSuccessfulAt?: string;
+    lastMeaningfulChangeAt?: string;
     lastState?: WorkSessionMonitoringState;
     lastSummary?: string;
     lastFailureCount?: number;
     lastSkippedCount?: number;
+    suppressedUnchangedCount?: number;
+    currentError?: 'provider_read_failed' | 'provider_evidence_partial' | 'provider_target_unavailable';
   };
   projectName?: string;
   projectPath?: string;
@@ -173,6 +177,7 @@ export interface ListWorkSessionOptions extends WorkSessionStoreOptions {
 
 export interface RecordWorkSessionMonitoringResultInput {
   polled: number;
+  transitions?: number;
   failures: number;
   skipped: number;
   attemptedAt?: string;
@@ -574,11 +579,22 @@ export function recordWorkSessionMonitoringResult(
     const polled = normalizeNonNegativeInteger(input.polled, 'monitoring polled count');
     const failures = normalizeNonNegativeInteger(input.failures, 'monitoring failure count');
     const skipped = normalizeNonNegativeInteger(input.skipped, 'monitoring skipped count');
+    const transitions = normalizeNonNegativeInteger(input.transitions || 0, 'monitoring transition count');
     const attemptedAt = input.attemptedAt
       ? normalizeTimestamp(input.attemptedAt, 'monitoring lastAttemptAt')
       : at;
     record.monitoring.lastAttemptAt = attemptedAt;
     if (polled > 0) { record.monitoring.lastPolledAt = attemptedAt; }
+    if (polled > 0 && failures === 0) { record.monitoring.lastSuccessfulAt = attemptedAt; }
+    if (transitions > 0) {
+      record.monitoring.lastMeaningfulChangeAt = attemptedAt;
+      record.monitoring.suppressedUnchangedCount = 0;
+    } else if (polled > 0) {
+      record.monitoring.suppressedUnchangedCount = Math.min(
+        Number.MAX_SAFE_INTEGER,
+        (record.monitoring.suppressedUnchangedCount || 0) + 1,
+      );
+    }
     record.monitoring.lastFailureCount = failures;
     record.monitoring.lastSkippedCount = skipped;
     record.monitoring.lastState = failures > 0
@@ -586,6 +602,10 @@ export function recordWorkSessionMonitoringResult(
       : skipped > 0
         ? (polled > 0 ? 'partial' : 'blocked')
         : polled > 0 ? 'healthy' : 'idle';
+    if (failures > 0) { record.monitoring.currentError = 'provider_read_failed'; }
+    else if (skipped > 0) {
+      record.monitoring.currentError = polled > 0 ? 'provider_evidence_partial' : 'provider_target_unavailable';
+    } else { delete record.monitoring.currentError; }
     const summary = optionalSingleLine(input.summary, 'monitoring result summary', 500);
     record.monitoring.lastSummary = summary || `Polled ${polled}; ${failures} failed; ${skipped} skipped.`;
   });
@@ -816,6 +836,10 @@ function normalizeMonitoring(value: unknown): WorkSessionRecord['monitoring'] {
   if (lastPolledAt) { monitoring.lastPolledAt = lastPolledAt; }
   const lastAttemptAt = optionalTimestamp(value['lastAttemptAt'], 'monitoring lastAttemptAt');
   if (lastAttemptAt) { monitoring.lastAttemptAt = lastAttemptAt; }
+  const lastSuccessfulAt = optionalTimestamp(value['lastSuccessfulAt'], 'monitoring lastSuccessfulAt');
+  if (lastSuccessfulAt) { monitoring.lastSuccessfulAt = lastSuccessfulAt; }
+  const lastMeaningfulChangeAt = optionalTimestamp(value['lastMeaningfulChangeAt'], 'monitoring lastMeaningfulChangeAt');
+  if (lastMeaningfulChangeAt) { monitoring.lastMeaningfulChangeAt = lastMeaningfulChangeAt; }
   const lastState = normalizeOptionalMonitoringState(value['lastState']);
   if (lastState) { monitoring.lastState = lastState; }
   const lastSummary = optionalSingleLine(value['lastSummary'], 'monitoring result summary', 500);
@@ -825,6 +849,18 @@ function normalizeMonitoring(value: unknown): WorkSessionRecord['monitoring'] {
   }
   if (value['lastSkippedCount'] !== undefined) {
     monitoring.lastSkippedCount = normalizeNonNegativeInteger(value['lastSkippedCount'], 'monitoring skipped count');
+  }
+  if (value['suppressedUnchangedCount'] !== undefined) {
+    monitoring.suppressedUnchangedCount = normalizeNonNegativeInteger(
+      value['suppressedUnchangedCount'],
+      'monitoring suppressed unchanged count',
+    );
+  }
+  const currentError = value['currentError'];
+  if (currentError === 'provider_read_failed'
+    || currentError === 'provider_evidence_partial'
+    || currentError === 'provider_target_unavailable') {
+    monitoring.currentError = currentError;
   }
   return monitoring;
 }

@@ -7,6 +7,11 @@ import {
   type ProjectGitEvidence,
 } from '../services/vscodeGitReadService';
 import { listWorkSessions, type WorkSessionRecord } from '../services/workSessionStore';
+import {
+  projectProviderMonitoringHealth,
+  providerMonitoringHealthSummary,
+  type ProviderMonitoringHealth,
+} from '../services/providerMonitoringHealth';
 
 export interface RegisteredProjectCommandTarget {
   projectName: string;
@@ -25,6 +30,7 @@ export class ProjectTreeProvider implements vscode.TreeDataProvider<ProjectTreeE
   constructor(
     private readonly loadState: StateLoader = () => null,
     private readonly loadWorkSessions: WorkSessionLoader = () => listWorkSessions(),
+    private readonly pollIntervalMs: () => number = () => 300_000,
   ) {}
 
   getTreeItem(element: ProjectTreeElement): vscode.TreeItem { return element; }
@@ -43,17 +49,18 @@ export class ProjectTreeProvider implements vscode.TreeDataProvider<ProjectTreeE
         openRepositoryIfNeeded: true,
       });
       const config = state?.projects[project.name]?.config || {};
-      const linkedSessionCount = sessions.filter(session =>
+      const linkedSessions = sessions.filter(session =>
         session.projectName === project.name
           && session.ticketKeys.length > 0
           && session.status === 'active'
           && session.monitoring.enabled
-      ).length;
+      );
       return new RegisteredProjectTreeItem(
         { projectName: project.name, projectPath: project.path },
         evidence,
         config,
-        linkedSessionCount,
+        linkedSessions.length,
+        projectProviderMonitoringHealth(linkedSessions, this.pollIntervalMs()),
       );
     }));
   }
@@ -84,12 +91,13 @@ class RegisteredProjectTreeItem extends vscode.TreeItem {
     evidence: ProjectGitEvidence,
     config: ProjectConfig,
     linkedSessionCount: number,
+    monitoringHealth: ProviderMonitoringHealth,
   ) {
     super(target.projectName, vscode.TreeItemCollapsibleState.Collapsed);
     this.id = `registered-project:${target.projectName}`;
     this.contextValue = 'registered_project';
     this.iconPath = projectIcon(evidence);
-    this.description = `${evidence.branch || 'branch unavailable'} • ${projectStatusLabel(evidence)}`;
+    this.description = `${evidence.branch || 'branch unavailable'} • ${projectStatusLabel(evidence)} • ${providerMonitoringHealthSummary(monitoringHealth)}`;
     const readiness = providerReadiness();
     const providers = [
       providerStatus('GitLab', Boolean(config.gitlab_project_id || config.gitlab_project_path), readiness.gitlab.configured, linkedSessionCount),
@@ -103,6 +111,12 @@ class RegisteredProjectTreeItem extends vscode.TreeItem {
       `Git status: ${projectStatusTooltip(evidence)}`,
       'Git source: VS Code built-in Git model plus bounded local HEAD fallback',
       `Active monitored ticket sessions: ${linkedSessionCount}`,
+      `Last monitoring attempt: ${monitoringHealth.lastAttemptAt || 'never'}`,
+      `Last successful poll: ${monitoringHealth.lastSuccessfulAt || 'never'}`,
+      `Last meaningful provider change: ${monitoringHealth.lastMeaningfulChangeAt || 'never'}`,
+      `Next scheduled poll: ${monitoringHealth.nextScheduledAt || 'not scheduled'}`,
+      `Current normalized error: ${monitoringHealth.currentError || 'none'}`,
+      `Suppressed unchanged polls since last change: ${monitoringHealth.suppressedUnchangedCount}`,
       ...providers,
       ...(evidence.warning ? [`Git read note: ${evidence.warning}`] : []),
       'Select to open the full read-only status and diff; expand for project actions.',

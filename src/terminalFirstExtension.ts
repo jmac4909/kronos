@@ -250,10 +250,12 @@ class TerminalFirstRuntime implements vscode.Disposable {
   private readonly sessionTree = new ManagedSessionTreeProvider(
     this.operatorTerminals,
     () => listWorkSessions(),
+    () => this.configurationIntervalMs('managedProviderPollIntervalSec', 300),
   );
   private readonly projectTree = new ProjectTreeProvider(
     () => this.state.state,
     () => listWorkSessions(),
+    () => this.configurationIntervalMs('managedProviderPollIntervalSec', 300),
   );
   private readonly attentionTree = new AttentionTreeProvider();
   private readonly workRefresh = new WorkRefreshCoordinator<TerminalFirstRefreshResult>(signal => vscode.window.withProgress(

@@ -3485,9 +3485,11 @@ test('extension activation registers the bounded surface and explicit launch com
     const projectItems = await registeredTreeProviders.get('kronosProjects').getChildren();
     assert.equal(projectItems.length, 1);
     assert.equal(projectItems[0].label, 'fixture');
-    assert.equal(projectItems[0].description, 'feature/runtime-project • 1 change');
+    assert.equal(projectItems[0].description, 'feature/runtime-project • 1 change • poll paused');
     assert.equal(projectItems[0].contextValue, 'registered_project');
     assert.match(projectItems[0].tooltip, /Git status: 1 total, 0 staged, 1 modified/);
+    assert.match(projectItems[0].tooltip, /Last meaningful provider change: never/);
+    assert.match(projectItems[0].tooltip, /Suppressed unchanged polls since last change: 0/);
     const projectActions = await registeredTreeProviders.get('kronosProjects').getChildren(projectItems[0]);
     assert.deepEqual(projectActions.map(item => item.label), [
       'View Git status and diff',

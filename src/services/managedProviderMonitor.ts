@@ -208,6 +208,7 @@ export class ManagedProviderMonitor {
         try {
           recordWorkSessionMonitoringResult(session.id, {
             polled: sessionResult.polled,
+            transitions: sessionResult.transitions,
             failures: sessionResult.failures,
             skipped: sessionResult.skipped,
             attemptedAt: new Date().toISOString(),
