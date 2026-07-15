@@ -7,6 +7,7 @@ import { arrayFromUnknown, isRecord, optionalFiniteNumberFromUnknown } from './r
 
 export interface JiraRestRequestOptions {
   timeoutMs?: number;
+  signal?: AbortSignal;
 }
 
 export interface JiraHttpRequest {
@@ -16,6 +17,7 @@ export interface JiraHttpRequest {
   timeoutMs: number;
   maxResponseBytes: number;
   responseType?: 'text' | 'buffer';
+  signal?: AbortSignal;
 }
 
 export interface JiraHttpResponse {
@@ -209,6 +211,7 @@ export class JiraRestClient {
    * This method only issues credential-pinned GET requests and never mutates Jira.
    */
   async searchWorkList(options: JiraRestRequestOptions = {}): Promise<JiraWorkListSnapshot> {
+    throwIfJiraRequestCancelled(options.signal);
     const config = resolveJiraRestConfig(this.env);
     const query = resolveJiraWorkListJql(this.env);
     const issues: unknown[] = [];
@@ -252,6 +255,7 @@ export class JiraRestClient {
           Math.min(this.maxResponseBytes, remainingBytes),
         );
       } catch (error: unknown) {
+        if (isJiraRequestCancelled(error, options.signal)) { throw error; }
         if (pageCount === 0) { throw error; }
         const reason = error instanceof JiraResponseLimitError
           ? ` because responses reached the ${this.maxTotalWorkListBytes}-byte cumulative safety limit`
@@ -465,11 +469,15 @@ export class JiraRestClient {
       timeoutMs: boundedInteger(options.timeoutMs, DEFAULT_TIMEOUT_MS, 250, 120000),
       maxResponseBytes,
       responseType: 'buffer',
+      ...(options.signal ? { signal: options.signal } : {}),
     };
     let response: JiraHttpResponse;
     try {
       response = await this.transport(request);
     } catch (error: unknown) {
+      if (isJiraRequestCancelled(error, options.signal)) {
+        throw new JiraRestCancelledError();
+      }
       return {
         content: {
           ...base,
@@ -530,7 +538,8 @@ export class JiraRestClient {
           { startAt, maxResults: this.commentsPerPage, orderBy: '-created' },
           options,
         );
-      } catch {
+      } catch (error: unknown) {
+        if (isJiraRequestCancelled(error, options.signal)) { throw error; }
         warnings.push(`Jira comment page ${pageNumber} could not be fetched; ${comments.length} previously fetched comment${comments.length === 1 ? '' : 's'} were retained.`);
         break;
       }
@@ -600,11 +609,15 @@ export class JiraRestClient {
       timeoutMs: boundedInteger(options.timeoutMs, DEFAULT_TIMEOUT_MS, 250, 120000),
       maxResponseBytes: responseLimitBytes,
       responseType: 'text',
+      ...(options.signal ? { signal: options.signal } : {}),
     };
     let response: JiraHttpResponse;
     try {
       response = await this.transport(request);
     } catch (error: unknown) {
+      if (isJiraRequestCancelled(error, options.signal)) {
+        throw new JiraRestCancelledError();
+      }
       if (error instanceof JiraRestError) { throw error; }
       const code = unknownErrorCode(error);
       throw new JiraRestError(
@@ -706,6 +719,15 @@ export class JiraRestError extends Error {
     super(message);
     Object.setPrototypeOf(this, JiraRestError.prototype);
     this.name = 'JiraRestError';
+  }
+}
+
+/** A local operator superseded this read; it is not a provider failure. */
+export class JiraRestCancelledError extends JiraRestError {
+  constructor() {
+    super('Jira REST request was superseded by a newer operator refresh.');
+    Object.setPrototypeOf(this, JiraRestCancelledError.prototype);
+    this.name = 'JiraRestCancelledError';
   }
 }
 
@@ -895,6 +917,7 @@ function defaultJiraTransport(request: JiraHttpRequest): Promise<JiraHttpRespons
       method: request.method,
       timeout: request.timeoutMs,
       headers: request.headers,
+      ...(request.signal ? { signal: request.signal } : {}),
     }, res => {
       const declaredLength = firstHeaderLikeString(res.headers['content-length']);
       if (declaredLength && /^\d+$/.test(declaredLength) && Number(declaredLength) > request.maxResponseBytes) {
@@ -933,8 +956,20 @@ function defaultJiraTransport(request: JiraHttpRequest): Promise<JiraHttpRespons
       reject(new JiraRestError(`Timed out after ${request.timeoutMs}ms reaching Jira REST API.`));
     });
     req.on('error', () => {
-      reject(new JiraRestError('Jira REST network request failed.'));
+      reject(request.signal?.aborted
+        ? new JiraRestCancelledError()
+        : new JiraRestError('Jira REST network request failed.'));
     });
     req.end();
   });
+}
+
+function throwIfJiraRequestCancelled(signal: AbortSignal | undefined): void {
+  if (signal?.aborted) { throw new JiraRestCancelledError(); }
+}
+
+function isJiraRequestCancelled(error: unknown, signal: AbortSignal | undefined): boolean {
+  return Boolean(signal?.aborted)
+    || error instanceof JiraRestCancelledError
+    || (error instanceof Error && error.name === 'AbortError');
 }

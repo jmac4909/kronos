@@ -25,7 +25,7 @@ export function buildProjectIntegrationPanelHtml(input: ProjectIntegrationPanelI
     <span class="status-dot" aria-hidden="true"></span>
     <div><strong>${escapeHtml(provider.name)}</strong><span>${escapeHtml(provider.detail)}</span></div>
   </div>`).join('');
-  const projectCards = input.projects.slice(0, 100).map(project => `<section class="integration-card" data-project-card data-project-name="${escapeAttr(project.name)}">
+  const projectCards = input.projects.slice(0, 200).map(project => `<section class="integration-card" data-project-card data-project-name="${escapeAttr(project.name)}">
     <header>
       <div><h2>${escapeHtml(project.name)}</h2><div class="project-path">${escapeHtml(project.path)}</div></div>
       <span class="kronos-pill info">${escapeHtml(project.branch || 'branch unavailable')}</span>
@@ -89,8 +89,9 @@ ${script}
 
 function formField(label: string, field: string, value: string, placeholder: string, help: string): string {
   return `<div class="form-field">
-    <label>${escapeHtml(label)}</label>
-    <input class="kronos-input" type="text" data-field="${escapeAttr(field)}" value="${escapeAttr(value)}" placeholder="${escapeAttr(placeholder)}" autocomplete="off" spellcheck="false">
+    <label>${escapeHtml(label)}
+      <input class="kronos-input" type="text" data-field="${escapeAttr(field)}" value="${escapeAttr(value)}" placeholder="${escapeAttr(placeholder)}" autocomplete="off" spellcheck="false">
+    </label>
     <div class="field-help">${escapeHtml(help)}</div>
   </div>`;
 }

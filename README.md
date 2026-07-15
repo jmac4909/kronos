@@ -12,7 +12,7 @@
   <img alt="TypeScript strict" src="https://img.shields.io/badge/TypeScript-strict-3178C6">
   <img alt="VS Code 1.85 or newer" src="https://img.shields.io/badge/VS%20Code-%5E1.85-23A8F2">
   <img alt="Zero third-party runtime dependencies" src="https://img.shields.io/badge/runtime%20dependencies-0-22C55E">
-  <img alt="93 automated local tests" src="https://img.shields.io/badge/test%20suite-93%20local-22C55E">
+  <img alt="98 automated local tests" src="https://img.shields.io/badge/test%20suite-98%20local-22C55E">
   <img alt="Preview status" src="https://img.shields.io/badge/status-preview-F59E0B">
 </p>
 
@@ -101,7 +101,7 @@ The installed extension uses the VS Code API and Node built-ins only. It has **z
 | Manifest-covered settings | 10 |
 | Reachable runtime modules checked for cycles/dead exports | 67 |
 | Third-party runtime dependencies | 0 |
-| Automated Node/DOM/board tests | 93 |
+| Automated Node/DOM/board tests | 98 |
 
 Automated gates also cover the runtime graph, security boundary, context governance, activation surface, provider transitions, private state, credential redaction, and packaged extension contents.
 
@@ -168,7 +168,7 @@ npm run package
 npm run feedback:ready
 ```
 
-`npm test` begins with a public-surface gate that rejects tracked local-state directories, machine-specific home paths, employer identifiers, private-key material, and high-confidence token shapes. The remaining checks enforce the manifest allowlist, reachable runtime graph, explicit-launch boundary, context governance, strict TypeScript compilation, unit behavior, and dependency-free webviews. The checked [verification matrix](docs/verification-matrix.json) maps roadmap goals to named tests and keeps real VS Code, operator-terminal, Windows, multi-window, and live-provider gates explicit. README engineering metrics are derived from the manifest, source tree, dependencies, and test declarations on every run.
+`npm test` begins with a public-surface gate that rejects tracked local-state directories, machine-specific home paths, employer identifiers, private-key material, and high-confidence token shapes. The remaining checks enforce the manifest allowlist, reachable runtime graph, explicit-launch boundary, context governance, strict TypeScript compilation, unit behavior, provider fixtures, large synthetic scale/accessibility behavior, and dependency-free webviews. The checked [verification matrix](docs/verification-matrix.json) maps roadmap goals to named tests and keeps real VS Code, operator-terminal, Windows, multi-window, and live-provider gates explicit. README engineering metrics are derived from the manifest, source tree, dependencies, and test declarations on every run.
 
 For the interactive pass, use [HUMAN_FEEDBACK_CHECKLIST.md](HUMAN_FEEDBACK_CHECKLIST.md). Real-provider, terminal-focus, and Windows feedback remain explicit human gates; see the [completion audit](docs/terminal-first-completion-audit.md).
 
@@ -208,5 +208,6 @@ docs/                                    product contract, audit, and preview as
 - [Checked verification matrix](docs/verification-matrix.json)
 - [State ownership and data flow](docs/state-ownership.md)
 - [Provider read contract matrix](docs/provider-contract-matrix.md)
+- [Scale and accessibility budget](docs/scale-accessibility-budget.md)
 
 Copyright © 2026 Jeremy Mackey. All rights reserved.

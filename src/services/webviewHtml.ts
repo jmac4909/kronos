@@ -466,6 +466,26 @@ export function kronosWebviewBaseCss(): string {
   }
   a:hover { text-decoration: underline; }
   li { margin: 4px 0; }
+  @media (forced-colors: active) {
+    .kronos-panel,
+    .kronos-card,
+    .kronos-stat,
+    .summary-card,
+    .kronos-pill,
+    .pill,
+    .kronos-button,
+    button.kronos-button,
+    .kronos-input,
+    .message,
+    pre {
+      border-color: CanvasText;
+      forced-color-adjust: auto;
+    }
+    .kronos-button.primary,
+    button.kronos-button.primary {
+      border-width: 2px;
+    }
+  }
   @media (max-width: 760px) {
     body { padding: 14px; }
     .kronos-header {

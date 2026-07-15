@@ -9,6 +9,7 @@ const readmePath = path.join(root, 'README.md');
 const packagePath = path.join(root, 'package.json');
 const ownershipPath = path.join(root, 'docs', 'state-ownership.md');
 const providerContractPath = path.join(root, 'docs', 'provider-contract-matrix.md');
+const scaleAccessibilityPath = path.join(root, 'docs', 'scale-accessibility-budget.md');
 
 const matrix = readJson(matrixPath, 'verification matrix');
 const manifest = readJson(packagePath, 'package manifest');
@@ -16,10 +17,11 @@ const checklist = readText(checklistPath, 'human feedback checklist');
 const readme = readText(readmePath, 'README');
 const ownership = readText(ownershipPath, 'state ownership document');
 const providerContract = readText(providerContractPath, 'provider contract matrix');
+const scaleAccessibility = readText(scaleAccessibilityPath, 'scale and accessibility budget');
 
 checkVerificationMatrix(matrix, checklist);
 checkReadmeMetrics(manifest, readme);
-checkArchitectureEvidence(ownership, providerContract);
+checkArchitectureEvidence(ownership, providerContract, scaleAccessibility);
 
 if (failures.length > 0) {
   console.error(`Kronos quality evidence failed (${failures.length} problem${failures.length === 1 ? '' : 's'}):`);
@@ -91,6 +93,7 @@ function checkReadmeMetrics(packageJson, readmeSource) {
     'scripts/run-webview-dom-tests.js',
     'scripts/run-jira-work-board-tests.js',
     'scripts/run-provider-contract-tests.js',
+    'scripts/run-scale-accessibility-tests.js',
   ];
   const actual = new Map([
     ['Enterprise provider integrations', 4],
@@ -110,7 +113,7 @@ function checkReadmeMetrics(packageJson, readmeSource) {
   }
 }
 
-function checkArchitectureEvidence(ownershipSource, providerContractSource) {
+function checkArchitectureEvidence(ownershipSource, providerContractSource, scaleAccessibilitySource) {
   for (const marker of [
     '| Work catalog |',
     '| Live terminal object attachment |',
@@ -126,6 +129,17 @@ function checkArchitectureEvidence(ownershipSource, providerContractSource) {
   }
   for (const concept of ['Requests and enterprise variants', 'Collection and response bounds', 'Normalization and retained evidence', 'Completeness and optional evidence', 'Error behavior']) {
     if (!providerContractSource.includes(concept)) { fail(`docs/provider-contract-matrix.md is missing ${concept}.`); }
+  }
+  for (const marker of [
+    '| Jira Work |',
+    '| Registered projects |',
+    '| Work sessions |',
+    '| Attention ledger |',
+    '| Provider polling |',
+    '## Responsiveness budgets',
+    '## Accessibility contract',
+  ]) {
+    if (!scaleAccessibilitySource.includes(marker)) { fail(`docs/scale-accessibility-budget.md is missing ${marker}.`); }
   }
 }
 

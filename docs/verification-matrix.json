@@ -86,6 +86,18 @@
       "humanGates": ["live-providers"]
     },
     {
+      "id": "scale-and-accessibility",
+      "goals": ["G17"],
+      "automated": [
+        { "file": "scripts/run-scale-accessibility-tests.js", "test": "500-ticket board stays inside the checked render and output budget" },
+        { "file": "scripts/run-scale-accessibility-tests.js", "test": "500-ticket filtering and facet collection stay inside the checked CPU budget" },
+        { "file": "scripts/run-scale-accessibility-tests.js", "test": "2000 supplied audit events render only the newest 500 inside the checked budget" },
+        { "file": "scripts/run-scale-accessibility-tests.js", "test": "shared webview accessibility CSS and form labels cover focus, forced colors, and narrow panels" },
+        { "file": "scripts/run-scale-accessibility-tests.js", "test": "an aborted Jira read rejects before transport and is not reported as a provider failure" }
+      ],
+      "humanGates": ["real-vscode", "operator-terminal"]
+    },
+    {
       "id": "security-and-release",
       "goals": ["G16", "G18"],
       "automated": [

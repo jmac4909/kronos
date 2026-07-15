@@ -135,6 +135,15 @@ If GitLab and CI providers are safely configured:
 9. Cause a provider stream to change state more than once (for example failure, recovery, then partial). Confirm only its newest state remains in Attention, the older transitions remain in the audit, and acknowledging the newest state does not bring an older row back.
 10. Clear an Attention item for an MR that remains open, then poll again. Confirm the MR returns once on that next poll, does not duplicate on later polls while uncleared, and stops returning after GitLab reports it merged or closed.
 
+## Scale and Accessibility
+
+1. With a large safe/synthetic Work catalog, open the Jira board, use every filter, and reset it. Confirm long summaries wrap, the board remains responsive, counts update, and no ticket or project control becomes unreachable.
+2. Use only the keyboard to traverse Setup, Doctor, Project Integration, the Jira board, ticket workspaces, and the context composer. Confirm focus is always visible; Jira cards open with Enter and Space; no action requires a pointer.
+3. With a screen reader, confirm control labels, Jira card names, filter-result status updates, and Jira refresh errors are understandable without relying on color or visual position.
+4. Test a VS Code high-contrast theme, 200% zoom, and a narrow editor panel. Confirm cards and status borders remain distinguishable, forms collapse to one column, content wraps or scrolls without covering actions, and the context composer remains editable.
+5. Start one deliberately slow Jira refresh, then explicitly refresh again. Confirm the newer result wins, the older request does not create a stale failure banner, and no provider or terminal mutation occurs.
+6. Record VS Code version, OS, zoom/theme, screen reader if used, approximate ticket count, and any focus/order/paint issue. Automated markup and construction timing do not close this real-UI gate.
+
 ## Reload and Recovery
 
 1. With standalone and ticket-linked sessions present, reload VS Code.

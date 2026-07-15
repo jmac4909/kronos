@@ -4213,6 +4213,51 @@ test('extension activation registers the bounded surface and explicit launch com
       assert.equal(partialWorkItems.filter(item => item.ticketKey).length, 5);
       assert.match(jiraBoardPanel.webview.html, /data-work-data-state="partial"/);
 
+      let resolveSupersededRefresh;
+      let resolveNewestRefresh;
+      const refreshSignals = [];
+      jiraRestModule.jiraRestClient.searchWorkList = options => new Promise(resolve => {
+        refreshSignals.push(options.signal);
+        if (refreshSignals.length === 1) { resolveSupersededRefresh = resolve; }
+        else { resolveNewestRefresh = resolve; }
+      });
+      const supersededRefresh = commandHandlers.get('kronos.refreshTickets')();
+      await new Promise(resolve => setImmediate(resolve));
+      const newestRefresh = commandHandlers.get('kronos.refreshTickets')();
+      await new Promise(resolve => setImmediate(resolve));
+      assert.equal(refreshSignals.length, 2);
+      assert.equal(refreshSignals[0].aborted, true, 'a newer explicit refresh cancels the previous read');
+      assert.equal(refreshSignals[1].aborted, false);
+      resolveNewestRefresh({
+        issues: [
+          jiraIssue('JIRA-123', 'Newest fixture 123'),
+          jiraIssue('JIRA-321', 'Newest fixture 321'),
+          jiraIssue('JIRA-456', 'Newest fixture 456'),
+          jiraIssue('JIRA-789', 'Newest fixture 789'),
+          jiraIssue('JIRA-999', 'Newest fixture 999'),
+        ],
+        fetchedAt: '2026-07-14T13:10:00.000Z',
+        jql: 'project = JIRA ORDER BY updated DESC',
+        jqlSource: 'configured',
+        complete: true,
+        pageCount: 1,
+        responseBytes: 1024,
+        warnings: [],
+      });
+      await newestRefresh;
+      resolveSupersededRefresh({
+        issues: [jiraIssue('JIRA-123', 'Stale fixture must not win')],
+        fetchedAt: '2026-07-14T13:06:00.000Z',
+        jql: 'project = JIRA ORDER BY updated DESC',
+        jqlSource: 'configured',
+        complete: true,
+        pageCount: 1,
+        responseBytes: 256,
+        warnings: [],
+      });
+      await supersededRefresh;
+      assert.equal(stateStore.readStateFileWithIssues().state.refreshedAt, '2026-07-14T13:10:00.000Z');
+
       jiraRestModule.jiraRestClient.searchWorkList = async () => {
         throw new Error('Synthetic Jira timeout.');
       };
@@ -4230,7 +4275,7 @@ test('extension activation registers the bounded surface and explicit launch com
       else { process.env.JIRA_API_TOKEN = previousJiraEnv.token; }
     }
     const refreshedState = stateStore.readStateFileWithIssues().state;
-    assert.equal(refreshedState.refreshedAt, '2026-07-14T13:05:00.000Z');
+    assert.equal(refreshedState.refreshedAt, '2026-07-14T13:10:00.000Z');
     assert.equal(Object.keys(refreshedState.tickets).length, 5);
   } finally {
     jiraRestModule.jiraRestClient.searchWorkList = originalProviderMethods.jiraSearchWorkList;

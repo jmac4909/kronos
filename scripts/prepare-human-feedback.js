@@ -90,6 +90,7 @@ for (const expected of [
   'docs/terminal-first-product-contract.md',
   'docs/extension-improvement-goals.md',
   'docs/provider-contract-matrix.md',
+  'docs/scale-accessibility-budget.md',
   'docs/state-ownership.md',
   'docs/verification-matrix.json',
   'HUMAN_FEEDBACK_CHECKLIST.md',

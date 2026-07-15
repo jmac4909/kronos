@@ -270,7 +270,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
   private readonly monitor: ManagedProviderMonitor;
   private refreshTimer: NodeJS.Timeout | undefined;
   private providerTimer: NodeJS.Timeout | undefined;
-  private ticketRefreshRunning = false;
+  private ticketRefreshController: AbortController | undefined;
   private providerEnvironmentLoad: ProviderEnvLoadResult | undefined;
 
   constructor(private readonly context: vscode.ExtensionContext) {
@@ -322,6 +322,8 @@ class TerminalFirstRuntime implements vscode.Disposable {
   dispose(): void {
     if (this.refreshTimer) { clearInterval(this.refreshTimer); }
     if (this.providerTimer) { clearInterval(this.providerTimer); }
+    this.ticketRefreshController?.abort();
+    this.ticketRefreshController = undefined;
     for (const panel of this.ticketPanels.values()) { panel.panel.dispose(); }
     this.ticketPanels.clear();
     this.claudeLaunchCooldownUntil.clear();
@@ -849,15 +851,16 @@ class TerminalFirstRuntime implements vscode.Disposable {
   }
 
   private async refreshTickets(showResult: boolean): Promise<void> {
-    if (this.ticketRefreshRunning) {
-      if (showResult) { void vscode.window.showInformationMessage('A Jira ticket refresh is already running.'); }
-      return;
+    if (this.ticketRefreshController) {
+      if (!showResult) { return; }
+      this.ticketRefreshController.abort();
     }
-    this.ticketRefreshRunning = true;
+    const controller = new AbortController();
+    this.ticketRefreshController = controller;
     try {
       const result = await vscode.window.withProgress(
         { location: vscode.ProgressLocation.Notification, title: 'Kronos: Reading Jira work metadata...' },
-        async () => this.state.refreshTickets(),
+        async () => this.state.refreshTickets({ signal: controller.signal }),
       );
       if (result.warnings.length > 0) {
         this.log('Jira Work refresh completed with bounded-read warnings.', result.warnings.join(' '));
@@ -872,11 +875,14 @@ class TerminalFirstRuntime implements vscode.Disposable {
       }
       void this.pollProviders(false);
     } catch (error: unknown) {
+      if (controller.signal.aborted) { return; }
       const detail = boundedOperationFailure(error, 'Jira ticket refresh failed.').display;
       this.log('Jira ticket refresh failed.', detail);
       if (showResult) { void vscode.window.showWarningMessage(detail); }
     } finally {
-      this.ticketRefreshRunning = false;
+      if (this.ticketRefreshController === controller) {
+        this.ticketRefreshController = undefined;
+      }
     }
   }
 

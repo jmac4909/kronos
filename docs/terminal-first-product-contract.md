@@ -190,6 +190,8 @@ By default, private terminal-first state lives under `~/.kronos`, or the explici
 
 The canonical owner, ingress, compatibility, and consumer for every record are listed in [State Ownership and Data Flow](state-ownership.md). Provider request, bound, normalization, completeness, and error behavior are listed in the [Provider Read Contract Matrix](provider-contract-matrix.md).
 
+Collection ceilings, local render/read timing gates, superseding Jira refresh behavior, and the automated versus human accessibility boundary are listed in [Scale, Responsiveness, and Accessibility Budget](scale-accessibility-budget.md).
+
 The one-time migration from the legacy default directory rejects symbolic-link ancestors and unsupported entries, caps traversal at 20,000 entries and 2 GiB, and recursively applies private file and directory modes before the migrated state is accepted.
 
 - work-session records contain an operator-facing title, optional real ticket identity, terminal metadata, provider bindings, context references, and monitoring readiness; each record is capped at 4 MiB and uses the shared cross-platform private atomic file primitive;

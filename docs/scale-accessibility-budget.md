@@ -1,0 +1,44 @@
+# Scale, Responsiveness, and Accessibility Budget
+
+This is the checked G17 budget for the terminal-first preview. Limits are safety ceilings, not targets. Kronos summarizes or truncates before a collection can grow without bound, and provider reads remain explicit, read-only, origin-pinned, and subject to their transport timeout.
+
+## Collection and read budgets
+
+| Surface | Shipped bound | Presentation rule |
+| --- | --- | --- |
+| Jira Work | 500 issues by default, 10 pages, 50 rows per page, 10 MiB total response, 15 seconds per request | Work tree and board render the bounded catalog; completed work is hidden by default, not discarded. |
+| Jira comments | 100 pages of 100 newest-first comments, 20 MiB total response | Retained comments are restored to chronological order and partial reads are labeled. |
+| Jira attachments | 100 fetches, 25 MiB each, 100 MiB total | Raw bytes are private artifacts; the UI renders metadata and a reference instead of the payload. |
+| Registered projects | 200 canonical registrations | Project views show registered projects first; setup renders all 200 and discovery remains separate. |
+| Project discovery | 50 roots, depth 5, 500 results, 2,000 entries per directory, 5,000 visited directories | Results stop at the configured bound and report truncation. |
+| Work sessions | 200 rows by default, 1,000 hard maximum; each record has 64 terminals, 64 provider bindings, 200 artifacts, and 32 warnings | Views load newest records first; terminal contents are never read. |
+| Attention ledger | 2,000 newest ledger rows, 50 MiB read ceiling, 16 KiB per event | Only the newest unacknowledged state per logical provider stream renders. |
+| Session audit | Caller reads 1,000 newest events; Markdown renders 500 | A truncation line states how many supplied events were omitted. |
+| Local Git | 500 changed paths and 512 KiB diff text | Summary renders before the immutable full bounded artifact reference. |
+| Context composer | 20 evidence summaries, 20 warnings, 2,000 operator-focus characters | Full evidence stays in private artifacts; insertion is one inert non-submitting reference. |
+| GitLab | 20 pages by default, 5 MiB per response, 30 MiB aggregate | Missing optional discussions, approvals, jobs, or tests produce partial evidence rather than a false success. |
+| Jenkins | 5 MiB per response, 500 failed test cases, 200 stages, 1,000 artifacts, 500 changes | Optional JUnit/Pipeline endpoints may be unavailable; summaries remain bounded. |
+| SonarQube | 20 issue pages, 100 issues per page, 2,000 issues, 50 MiB aggregate | The view renders gate/measures and a small issue summary, with the validated dashboard link for detail. |
+| Provider polling | One in-process poll promise and one cross-window lease; minimum configured interval 15 seconds | Overlapping polls coalesce. A contending window does not duplicate provider reads. |
+
+## Responsiveness budgets
+
+The deterministic local scale gate uses deliberately generous CI ceilings so it catches accidental quadratic or unbounded work without becoming a timing lottery:
+
+- Build a 500-ticket board with long summaries and labels in under 2,000 ms and under 8 MiB of HTML.
+- Filter and derive facets for 500 tickets in under 1,000 ms.
+- Render a 2,000-event supplied audit ledger into its 500-event Markdown summary in under 1,000 ms and under 2 MiB.
+- A newer explicit Jira refresh aborts the prior transport signal and owns the only state write. Scheduled refreshes and overlapping provider polls coalesce.
+
+These are extension-host construction budgets, not claims about network latency or VS Code paint time. Real VS Code zoom, screen-reader, Windows, and live-provider behavior remains a human gate in `HUMAN_FEEDBACK_CHECKLIST.md`.
+
+## Accessibility contract
+
+- Every interactive form control has visible text or an associated label.
+- Jira cards support Enter and Space, expose a descriptive accessible name, and retain visible `:focus-visible` treatment.
+- Dynamic Work state and filter counts use polite status regions; failures use an assertive alert.
+- Shared CSS uses VS Code theme variables, an explicit forced-colors rule, wrapping/overflow containment, and a single-column narrow-panel breakpoint.
+- Color is supplementary: status text, icons, headings, and borders carry the same meaning.
+- Large provider evidence is represented by summaries and operator-opened artifacts; it is not injected into the DOM wholesale.
+
+The automated gate checks markup and CSS invariants. Keyboard traversal, focus order, screen-reader speech, high-contrast appearance, 200% zoom, and narrow-panel usability still require the recorded real-VS-Code pass.

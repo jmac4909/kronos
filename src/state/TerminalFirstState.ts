@@ -34,6 +34,10 @@ export interface TerminalFirstRefreshResult {
   warnings: string[];
 }
 
+export interface TerminalFirstRefreshOptions {
+  signal?: AbortSignal;
+}
+
 /**
  * The terminal-first product consumes only the bounded Jira Work catalog and
  * explicit project/provider bindings needed by the terminal-first product.
@@ -42,6 +46,7 @@ export class TerminalFirstState implements vscode.Disposable {
   private snapshot: KronosStateSnapshot | null = null;
   private issues: TerminalFirstStateIssue[] = [];
   private refreshSnapshot: JiraWorkRefreshStatus = idleJiraWorkRefreshStatus();
+  private refreshGeneration = 0;
   private watcher: fs.FSWatcher | undefined;
   private watchTimer: NodeJS.Timeout | undefined;
   private readonly changeEmitter = new vscode.EventEmitter<void>();
@@ -88,7 +93,8 @@ export class TerminalFirstState implements vscode.Disposable {
     this.changeEmitter.fire();
   }
 
-  async refreshTickets(): Promise<TerminalFirstRefreshResult> {
+  async refreshTickets(options: TerminalFirstRefreshOptions = {}): Promise<TerminalFirstRefreshResult> {
+    const generation = ++this.refreshGeneration;
     const startedAt = new Date().toISOString();
     this.refreshSnapshot = {
       phase: 'loading',
@@ -98,7 +104,10 @@ export class TerminalFirstState implements vscode.Disposable {
     };
     this.changeEmitter.fire();
     try {
-      const snapshot = await jiraRestClient.searchWorkList();
+      const snapshot = await jiraRestClient.searchWorkList(options);
+      if (generation !== this.refreshGeneration || options.signal?.aborted) {
+        throw new Error('Jira refresh was superseded by a newer operator request.');
+      }
       const current = this.snapshot || emptyWorkCatalog();
       const next = catalogFromJiraWorkList(snapshot, current, resolveJiraRestConfig().baseUrl);
       writeStateFile(next.state);
@@ -122,15 +131,17 @@ export class TerminalFirstState implements vscode.Disposable {
         warnings: [...snapshot.warnings],
       };
     } catch (error: unknown) {
-      this.refreshSnapshot = {
-        phase: 'error',
-        startedAt,
-        completedAt: new Date().toISOString(),
-        detail: boundedOperationFailure(error, 'Jira ticket refresh failed.').display,
-        retainedFromPrevious: 0,
-        warningCount: 0,
-      };
-      this.changeEmitter.fire();
+      if (generation === this.refreshGeneration && !options.signal?.aborted) {
+        this.refreshSnapshot = {
+          phase: 'error',
+          startedAt,
+          completedAt: new Date().toISOString(),
+          detail: boundedOperationFailure(error, 'Jira ticket refresh failed.').display,
+          retainedFromPrevious: 0,
+          warningCount: 0,
+        };
+        this.changeEmitter.fire();
+      }
       throw error;
     }
   }
