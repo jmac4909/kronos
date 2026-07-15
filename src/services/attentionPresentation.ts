@@ -30,6 +30,15 @@ export interface AttentionProjectGroupIdentity {
   projectName: string | undefined;
 }
 
+export interface AttentionProjectEntry {
+  session?: Pick<WorkSessionRecord, 'projectName'> | undefined;
+}
+
+export interface AttentionProjectGroup<Entry> {
+  identity: AttentionProjectGroupIdentity;
+  entries: readonly Entry[];
+}
+
 export type AttentionActionContext =
   | 'attention_provider'
   | 'attention_repair'
@@ -59,6 +68,23 @@ export function attentionProjectGroupIdentity(projectName: unknown): AttentionPr
     label: normalized,
     projectName: normalized,
   };
+}
+
+/** Groups current Attention rows only by their explicit local-project session identity. */
+export function groupAttentionEntriesByProject<Entry extends AttentionProjectEntry>(
+  entries: readonly Entry[],
+): AttentionProjectGroup<Entry>[] {
+  const grouped = new Map<string, { identity: AttentionProjectGroupIdentity; entries: Entry[] }>();
+  for (const entry of entries) {
+    const identity = attentionProjectGroupIdentity(entry.session?.projectName);
+    const existing = grouped.get(identity.key);
+    if (existing) {
+      existing.entries.push(entry);
+    } else {
+      grouped.set(identity.key, { identity, entries: [entry] });
+    }
+  }
+  return [...grouped.values()];
 }
 
 /** Keeps ticket actions tied to a Jira context that is actually stored on the session. */
