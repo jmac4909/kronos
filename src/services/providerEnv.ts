@@ -1,5 +1,5 @@
 import * as path from 'path';
-import { unknownErrorMessage } from './errorUtils';
+import { boundedOperationFailure } from './errorUtils';
 import { ensurePrivateDirectoryPath, writePrivateTextFileAtomically } from './privateFilePrimitives';
 import { KRONOS_DIR, readBoundedPrivateUtf8File } from './stateStore';
 
@@ -144,7 +144,7 @@ export function loadProviderEnv(options: ProviderEnvLoadOptions = {}): ProviderE
       loaded: 0,
       skippedExisting: 0,
       invalid: 0,
-      error: unknownErrorMessage(error, 'Could not load the Kronos provider environment file.'),
+      error: boundedOperationFailure(error, 'Could not load the Kronos provider environment file.').display,
     };
   }
 }

@@ -2,7 +2,7 @@ import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import { safeFileStem } from './fileNames';
-import { unknownErrorMessage } from './errorUtils';
+import { boundedOperationFailure } from './errorUtils';
 import { isRecord } from './records';
 import { redactSensitiveTokens } from './sensitiveText';
 import { normalizeProviderPublicUrl } from './providerUrls';
@@ -383,7 +383,7 @@ export function listWorkSessionStoreIssues(options: WorkSessionStoreOptions = {}
     try {
       readWorkSession(entry.name, options);
     } catch (error: unknown) {
-      issues.push({ filePath, detail: unknownErrorMessage(error, 'Invalid work session record.') });
+      issues.push({ filePath, detail: boundedOperationFailure(error, 'Invalid work session record.').display });
     }
   }
   return issues;

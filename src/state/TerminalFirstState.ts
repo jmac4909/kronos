@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as vscode from 'vscode';
 import type { KronosState as KronosStateSnapshot } from './types';
 import { STATE_FILE, emptyWorkCatalog, readStateFileWithIssues, writeStateFile } from '../services/stateStore';
-import { boundedOperationFailure, unknownErrorMessage } from '../services/errorUtils';
+import { boundedOperationFailure } from '../services/errorUtils';
 import { jiraRestClient, resolveJiraRestConfig } from '../services/jiraRestClient';
 import { catalogFromJiraWorkList } from '../services/jiraWorkCatalog';
 import {
@@ -83,7 +83,7 @@ export class TerminalFirstState implements vscode.Disposable {
       this.snapshot = null;
       this.issues = [{
         filePath: STATE_FILE,
-        detail: unknownErrorMessage(error, 'Could not load Kronos ticket state.'),
+        detail: boundedOperationFailure(error, 'Could not load Kronos ticket state.').display,
       }];
     }
   }
@@ -228,7 +228,7 @@ export class TerminalFirstState implements vscode.Disposable {
         }, 150);
       });
     } catch (error: unknown) {
-      console.warn(unknownErrorMessage(error, `Could not watch ${STATE_FILE}.`));
+      console.warn(boundedOperationFailure(error, 'Could not watch the local Work catalog.').display);
     }
   }
 

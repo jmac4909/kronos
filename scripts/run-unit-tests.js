@@ -445,7 +445,11 @@ test('bounded operation failures use one redacted actionable vocabulary', () => 
   for (const relativePath of [
     'src/terminalFirstExtension.ts',
     'src/services/managedProviderMonitor.ts',
+    'src/services/providerEnv.ts',
+    'src/services/stateStore.ts',
     'src/services/vscodeGitReadService.ts',
+    'src/services/workSessionStore.ts',
+    'src/state/TerminalFirstState.ts',
     'src/views/AttentionTreeProvider.ts',
     'src/views/ManagedSessionTreeProvider.ts',
     'src/views/ProjectTreeProvider.ts',
@@ -1542,6 +1546,17 @@ test('provider environment reads are bounded and retain the exact allowlist', ()
   const missing = providerEnv.loadProviderEnv({ filePath: path.join(fixtureRoot, 'missing.env'), env: {} });
   assert.equal(missing.present, false);
   assert.equal(missing.error, undefined);
+
+  const credential = ['github_pat_', 'providerenvfailurefixture'].join('');
+  const failed = providerEnv.loadProviderEnv({
+    filePath: path.join(fixtureRoot, 'failure.env'),
+    env: {},
+    exists: () => true,
+    readFile: () => { throw new Error(`Could not read token=${credential}`); },
+  });
+  assert.equal(failed.error.includes(credential), false);
+  assert.match(failed.error, /REDACTED/);
+  assert.match(failed.error, /\[unavailable\]/);
 
   const oversizedPath = path.join(fixtureRoot, 'oversized.env');
   fs.writeFileSync(oversizedPath, '');

@@ -10,7 +10,7 @@ import type {
   ProjectConfig,
   Ticket,
 } from '../state/types';
-import { unknownErrorMessage } from './errorUtils';
+import { boundedOperationFailure } from './errorUtils';
 import {
   ensurePrivateDirectoryPath,
   readPrivateTextFileIfPresent,
@@ -65,7 +65,7 @@ export function readStateFileWithIssues(): StateFileReadResult {
     }
     return {
       state: emptyWorkCatalog(),
-      issues: [{ filePath, detail: unknownErrorMessage(error, 'Could not read the local Work catalog.') }],
+      issues: [{ filePath, detail: boundedOperationFailure(error, 'Could not read the local Work catalog.').display }],
     };
   }
 }
