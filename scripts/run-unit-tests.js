@@ -587,6 +587,7 @@ test('one monitor coalesces overlapping polls instead of reporting a false cross
     transitions: 0,
     failures: 0,
     skipped: 0,
+    unconfigured: 0,
     leaseUnavailable: false,
   });
 });

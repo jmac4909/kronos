@@ -239,6 +239,7 @@ test('disposing the monitor releases its lease and prevents late provider state 
       transitions: 0,
       failures: 0,
       skipped: 0,
+      unconfigured: 0,
       leaseUnavailable: false,
     });
   } finally {

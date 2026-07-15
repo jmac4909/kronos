@@ -103,7 +103,7 @@ const FAILURE_GUIDANCE: Record<OperationFailureKind, { nextAction: string; retry
     retryable: false,
   },
   malformed_response: {
-    nextAction: 'Run Doctor and verify the provider/version endpoint; the response body was not displayed or trusted.',
+    nextAction: 'Run Doctor and verify the provider/version endpoint, then retry the read; the response body was not displayed or trusted.',
     retryable: true,
   },
   pagination: {

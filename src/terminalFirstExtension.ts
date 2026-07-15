@@ -13,6 +13,14 @@ import {
   type ProviderEnvLoadResult,
 } from './services/providerEnv';
 import { boundedOperationFailure } from './services/errorUtils';
+import {
+  failedOperationStageOutcome,
+  finalizeInsertedContext,
+  isOperationStageOutcomeError,
+  OperationStageOutcomeError,
+  type OperationStageInput,
+  type OperationStageOutcome,
+} from './services/operationStageOutcome';
 import { buildFallbackJiraTicketContext, normalizeJiraTicketContext, type JiraTicketContext } from './services/jiraTicketContext';
 import { isJiraRestConfigured, jiraRestClient, type JiraAttachmentContentSnapshot } from './services/jiraRestClient';
 import { writeJiraContextArtifacts } from './services/jiraContextStore';
@@ -77,6 +85,7 @@ import {
 import { buildWorkSessionAuditMarkdown } from './services/workSessionAuditView';
 import {
   ManagedProviderMonitor,
+  managedProviderPollNotice,
   type ManagedProviderNotice,
   type ManagedProviderPollResult,
 } from './services/managedProviderMonitor';
@@ -220,7 +229,7 @@ interface ContextComposerPanelRecord {
   placement: TerminalContextPlacement<vscode.Terminal>;
   reference: string;
   promptPath: string;
-  onInserted: () => void | Promise<void>;
+  onInserted: () => void | OperationStageOutcome | Promise<void | OperationStageOutcome>;
 }
 
 interface ContextComposerRequest {
@@ -235,7 +244,7 @@ interface ContextComposerRequest {
   evidence: ContextComposerEvidenceItem[];
   warnings: string[];
   selection: TerminalSelection;
-  onInserted: () => void | Promise<void>;
+  onInserted: () => void | OperationStageOutcome | Promise<void | OperationStageOutcome>;
   basketItem?: AddContextBasketItemInput;
 }
 
@@ -1547,13 +1556,16 @@ class TerminalFirstRuntime implements vscode.Disposable {
         return;
       }
       try {
-        await record.onInserted();
+        const outcome = await record.onInserted();
+        if (outcome?.failed) { throw new OperationStageOutcomeError(outcome); }
         panel.dispose();
       } catch (error: unknown) {
-        const detail = boundedOperationFailure(error, 'Context insertion failed.').display;
-        this.log('Context was inserted but its local audit update failed.', detail);
+        const detail = isOperationStageOutcomeError(error)
+          ? error.outcome.display
+          : boundedOperationFailure(error, 'Post-insertion local evidence update failed.').display;
+        this.log('Context was inserted, but one or more later local evidence steps failed.', detail);
         void vscode.window.showErrorMessage(
-          `The context was inserted without submission, but Kronos could not finish its local audit update: ${detail}`,
+          `The context was inserted without submission. Review the exact retained and failed steps: ${detail}`,
         );
         panel.dispose();
       }
@@ -1735,7 +1747,26 @@ class TerminalFirstRuntime implements vscode.Disposable {
         sessionId: selected.binding.sessionId,
         bindingId: selected.binding.bindingId,
       });
-      const bundle = writeContextBasketBundle(items, focus);
+      let bundle: ReturnType<typeof writeContextBasketBundle>;
+      try {
+        bundle = writeContextBasketBundle(items, focus);
+      } catch (error: unknown) {
+        const selectedComplete = items.every(item => item.complete);
+        throw new OperationStageOutcomeError(failedOperationStageOutcome(
+          'Context Basket preparation',
+          [
+            {
+              stage: 'provider-read',
+              state: selectedComplete ? 'succeeded' : 'partial',
+              detail: 'Selected source artifacts remain retained and unchanged.',
+            },
+            { stage: 'snapshot', state: selectedComplete ? 'succeeded' : 'partial' },
+          ],
+          'artifact-write',
+          error,
+          'Private Context Basket bundle write failed.',
+        ));
+      }
       const reference = buildContextBasketReference(bundle);
       const result = placeEditableTerminalContextReference(
         placement,
@@ -1748,17 +1779,32 @@ class TerminalFirstRuntime implements vscode.Disposable {
         return;
       }
       if (result.kind !== 'placed') { return; }
-      try {
-        recordWorkSessionContextArtifact(session.id, {
-          id: `basket-${bundle.contentSha256.slice(0, 24)}`,
-          kind: 'context-basket',
-          label: `[${bundle.id}] ${bundle.itemCount} selected context${bundle.itemCount === 1 ? '' : 's'}`,
-          promptPath: bundle.promptPath,
-          complete: bundle.complete,
-          warnings: bundle.warnings,
-          contentSha256: bundle.contentSha256,
-        });
-        appendMonitorEvent({
+      const outcome = finalizeInsertedContext({
+        operation: `${bundle.id} Context Basket placement`,
+        providerRead: {
+          state: bundle.complete ? 'succeeded' : 'partial',
+          detail: bundle.complete
+            ? 'Every selected source artifact was current and complete.'
+            : 'One or more selected source artifacts retained partial or stale evidence warnings.',
+        },
+        artifactWrite: {
+          state: 'succeeded',
+          detail: 'A private immutable reference bundle was written.',
+        },
+        snapshot: contextSnapshotStep(bundle.complete),
+        sessionUpdate: () => {
+          recordWorkSessionContextArtifact(session.id, {
+            id: `basket-${bundle.contentSha256.slice(0, 24)}`,
+            kind: 'context-basket',
+            label: `[${bundle.id}] ${bundle.itemCount} selected context${bundle.itemCount === 1 ? '' : 's'}`,
+            promptPath: bundle.promptPath,
+            complete: bundle.complete,
+            warnings: bundle.warnings,
+            contentSha256: bundle.contentSha256,
+          });
+          return session;
+        },
+        auditAppend: () => appendMonitorEvent({
           sessionId: session.id,
           type: 'context.inserted',
           source: 'kronos',
@@ -1766,18 +1812,20 @@ class TerminalFirstRuntime implements vscode.Disposable {
           subject: { kind: 'context-basket', id: bundle.id, ...workSessionTicketMetadata(session) },
           artifactPath: bundle.promptPath,
           metadata: { submitted: false, artifactSha256: bundle.contentSha256, itemCount: bundle.itemCount },
-        });
-        this.refreshTerminalFirstViews();
-        void vscode.window.showInformationMessage(
-          `Placed ${bundle.id} in ${selected.terminal.name} without submitting it. Review the line, then press Enter yourself.`,
-        );
-      } catch (error: unknown) {
-        const detail = boundedOperationFailure(error, 'Context Basket audit update failed.').display;
-        this.log('Context Basket was placed but its local audit update failed.', detail);
+        }),
+      });
+      this.refreshTerminalFirstViews();
+      if (outcome.failed) {
+        this.log('Context Basket was placed, but one or more later local evidence steps failed.', outcome.display);
         void vscode.window.showErrorMessage(
-          `The Context Basket was placed without submission, but Kronos could not finish its local audit update: ${detail}`,
+          `The Context Basket was placed without submission. Review the exact retained and failed steps: ${outcome.display}`,
         );
+        return;
       }
+      const completionDetail = outcome.partial ? ` ${outcome.display}` : '';
+      void vscode.window.showInformationMessage(
+        `Placed ${bundle.id} in ${selected.terminal.name} without submitting it. Review the line, then press Enter yourself.${completionDetail}`,
+      );
     } catch (error: unknown) {
       this.showContextBasketError(error, 'Kronos could not place the Context Basket.');
     } finally {
@@ -1786,7 +1834,9 @@ class TerminalFirstRuntime implements vscode.Disposable {
   }
 
   private showContextBasketError(error: unknown, fallback: string): void {
-    const detail = boundedOperationFailure(error, fallback).display;
+    const detail = isOperationStageOutcomeError(error)
+      ? error.outcome.display
+      : boundedOperationFailure(error, fallback).display;
     this.log(fallback, detail);
     void vscode.window.showErrorMessage(detail);
   }
@@ -1968,7 +2018,21 @@ class TerminalFirstRuntime implements vscode.Disposable {
         jiraContext = buildFallbackJiraTicketContext(ticketKey, { ...ticket }, [], warnings);
       }
       progress.report({ message: 'Writing private content-addressed context and attachment files...' });
-      const artifact = writeJiraContextArtifacts(jiraContext, { attachmentContents });
+      let artifact: ReturnType<typeof writeJiraContextArtifacts>;
+      try {
+        artifact = writeJiraContextArtifacts(jiraContext, { attachmentContents });
+      } catch (error: unknown) {
+        throw new OperationStageOutcomeError(failedOperationStageOutcome(
+          `${ticketKey} Jira context preparation`,
+          [
+            { stage: 'provider-read', ...contextProviderReadStep(jiraContext.completeness.complete, 'Available Jira evidence was retained.') },
+            { stage: 'snapshot', ...contextSnapshotStep(jiraContext.completeness.complete) },
+          ],
+          'artifact-write',
+          error,
+          'Private Jira context artifact write failed.',
+        ));
+      }
       const summary = `${jiraContext.completeness.fieldCount} fields (${jiraContext.completeness.customFieldCount} custom), ${jiraContext.comments.length} comments, ${jiraContext.completeness.attachmentBodiesCaptured}/${jiraContext.completeness.attachmentsTotal} attachment files downloaded`;
       this.openContextComposer({
         key: `jira:${ticketKey}`,
@@ -1995,26 +2059,42 @@ class TerminalFirstRuntime implements vscode.Disposable {
           contentSha256: artifact.contentSha256,
         },
         onInserted: () => {
-          if (selection.workSession) {
-            recordWorkSessionContextArtifact(selection.workSession.id, {
-              id: `jira-${ticketKey}`,
-              kind: 'jira-ticket',
-              label: `[${ticketKey}] Jira context`,
-              promptPath: artifact.promptPath,
-              fetchedAt: jiraContext.fetchedAt,
-              complete: jiraContext.completeness.complete,
-              warnings: jiraContext.completeness.warnings,
-              contentSha256: artifact.contentSha256,
-            });
-            this.appendContextEvent(selection.workSession, 'jira', ticketKey, artifact.promptPath, artifact.contentSha256);
-          }
+          const managedSession = selection.workSession;
+          const outcome = finalizeInsertedContext({
+            operation: `${ticketKey} Jira context placement`,
+            providerRead: contextProviderReadStep(
+              jiraContext.completeness.complete,
+              jiraContext.completeness.complete
+                ? 'Ticket, comments, and bounded attachment reads completed.'
+                : 'Cached or partial ticket, comment, or attachment evidence was retained with warnings.',
+            ),
+            snapshot: contextSnapshotStep(jiraContext.completeness.complete),
+            sessionUpdate: managedSession ? () => {
+              recordWorkSessionContextArtifact(managedSession.id, {
+                id: `jira-${ticketKey}`,
+                kind: 'jira-ticket',
+                label: `[${ticketKey}] Jira context`,
+                promptPath: artifact.promptPath,
+                fetchedAt: jiraContext.fetchedAt,
+                complete: jiraContext.completeness.complete,
+                warnings: jiraContext.completeness.warnings,
+                contentSha256: artifact.contentSha256,
+              });
+              return managedSession;
+            } : undefined,
+            auditAppend: managedSession ? updatedSession => {
+              this.appendContextEvent(updatedSession || managedSession, 'jira', ticketKey, artifact.promptPath, artifact.contentSha256);
+            } : undefined,
+          });
           this.refreshTerminalFirstViews();
+          if (outcome.failed) { return outcome; }
           const message = `Inserted edited [${ticketKey}] context into ${selection.terminal.name} without submitting it (${summary}).`;
           if (jiraContext.completeness.complete) {
             void vscode.window.showInformationMessage(`${message} Review the terminal line, then press Enter yourself.`);
           } else {
-            void vscode.window.showWarningMessage(`${message} Cached or partial context was used; review the saved warnings.`);
+            void vscode.window.showWarningMessage(`${message} Cached or partial context was used; review the saved warnings. ${outcome.display}`);
           }
+          return outcome;
         },
       });
     });
@@ -2040,9 +2120,45 @@ class TerminalFirstRuntime implements vscode.Disposable {
 
     await this.runProgress(`Kronos: Preparing MR-${iid} context...`, async progress => {
       progress.report({ message: 'Reading MR, discussions, diffs, pipeline, jobs, and tests...' });
-      const snapshot = await gitlabRestClient.mergeRequestContext({ projectIdOrPath, iid });
-      const context = normalizeGitLabMergeRequestContext(ticketKey, iid, snapshot);
-      const artifact = writeGitLabContextArtifacts(context);
+      let snapshot: Awaited<ReturnType<typeof gitlabRestClient.mergeRequestContext>>;
+      try {
+        snapshot = await gitlabRestClient.mergeRequestContext({ projectIdOrPath, iid });
+      } catch (error: unknown) {
+        throw new OperationStageOutcomeError(failedOperationStageOutcome(
+          `MR-${iid} GitLab context preparation`,
+          [],
+          'provider-read',
+          error,
+          'GitLab merge-request context read failed.',
+        ));
+      }
+      let context: GitLabMergeRequestContext;
+      try {
+        context = normalizeGitLabMergeRequestContext(ticketKey, iid, snapshot);
+      } catch (error: unknown) {
+        throw new OperationStageOutcomeError(failedOperationStageOutcome(
+          `MR-${iid} GitLab context preparation`,
+          [{ stage: 'provider-read', state: 'succeeded' }],
+          'snapshot',
+          error,
+          'GitLab context normalization failed.',
+        ));
+      }
+      let artifact: ReturnType<typeof writeGitLabContextArtifacts>;
+      try {
+        artifact = writeGitLabContextArtifacts(context);
+      } catch (error: unknown) {
+        throw new OperationStageOutcomeError(failedOperationStageOutcome(
+          `MR-${iid} GitLab context preparation`,
+          [
+            { stage: 'provider-read', ...contextProviderReadStep(context.completeness.complete, 'Available GitLab evidence was retained.') },
+            { stage: 'snapshot', ...contextSnapshotStep(context.completeness.complete) },
+          ],
+          'artifact-write',
+          error,
+          'Private GitLab context artifact write failed.',
+        ));
+      }
       const failedTests = context.testReport?.failedCount ?? context.testReportSummary?.failedCount ?? 0;
       const summary = `${context.notes.length} notes, ${context.discussions.length} discussions, ${context.jobs.length} jobs, ${failedTests} failed tests`;
       this.openContextComposer({
@@ -2070,45 +2186,61 @@ class TerminalFirstRuntime implements vscode.Disposable {
           contentSha256: artifact.contentSha256,
         },
         onInserted: () => {
-          if (selection.workSession) {
-            const mergeRequestBinding: Parameters<typeof addWorkSessionProviderBinding>[1] = {
-              provider: 'gitlab',
-              resource: 'merge-request',
-              subjectId: String(iid),
-              projectId: projectIdOrPath,
-            };
-            const mergeRequestUrl = target.url || context.mergeRequest.webUrl;
-            if (mergeRequestUrl) { mergeRequestBinding.url = mergeRequestUrl; }
-            let session = addWorkSessionProviderBinding(selection.workSession.id, mergeRequestBinding);
-            if (context.pipeline) {
-              const pipelineBinding: Parameters<typeof addWorkSessionProviderBinding>[1] = {
+          const managedSession = selection.workSession;
+          const outcome = finalizeInsertedContext({
+            operation: `MR-${iid} GitLab context placement`,
+            providerRead: contextProviderReadStep(
+              context.completeness.complete,
+              context.completeness.complete
+                ? 'Merge request, discussion, diff, pipeline, job, and test reads completed.'
+                : 'Partial GitLab evidence was retained with its component warnings.',
+            ),
+            snapshot: contextSnapshotStep(context.completeness.complete),
+            sessionUpdate: managedSession ? () => {
+              const mergeRequestBinding: Parameters<typeof addWorkSessionProviderBinding>[1] = {
                 provider: 'gitlab',
-                resource: 'pipeline',
-                subjectId: String(context.pipeline.id),
+                resource: 'merge-request',
+                subjectId: String(iid),
+                projectId: projectIdOrPath,
               };
-              if (context.pipeline.projectId) { pipelineBinding.projectId = String(context.pipeline.projectId); }
-              if (context.pipeline.webUrl) { pipelineBinding.url = context.pipeline.webUrl; }
-              session = addWorkSessionProviderBinding(session.id, pipelineBinding);
-            }
-            recordWorkSessionContextArtifact(session.id, {
-              id: `gitlab-mr-${iid}`,
-              kind: 'gitlab-merge-request',
-              label: `[MR-${iid}] GitLab MR and pipeline context`,
-              promptPath: artifact.promptPath,
-              fetchedAt: context.fetchedAt,
-              complete: context.completeness.complete,
-              warnings: context.completeness.warnings,
-              contentSha256: artifact.contentSha256,
-            });
-            this.appendContextEvent(session, 'gitlab', String(iid), artifact.promptPath, artifact.contentSha256);
-          }
+              const mergeRequestUrl = target.url || context.mergeRequest.webUrl;
+              if (mergeRequestUrl) { mergeRequestBinding.url = mergeRequestUrl; }
+              let session = addWorkSessionProviderBinding(managedSession.id, mergeRequestBinding);
+              if (context.pipeline) {
+                const pipelineBinding: Parameters<typeof addWorkSessionProviderBinding>[1] = {
+                  provider: 'gitlab',
+                  resource: 'pipeline',
+                  subjectId: String(context.pipeline.id),
+                };
+                if (context.pipeline.projectId) { pipelineBinding.projectId = String(context.pipeline.projectId); }
+                if (context.pipeline.webUrl) { pipelineBinding.url = context.pipeline.webUrl; }
+                session = addWorkSessionProviderBinding(session.id, pipelineBinding);
+              }
+              recordWorkSessionContextArtifact(session.id, {
+                id: `gitlab-mr-${iid}`,
+                kind: 'gitlab-merge-request',
+                label: `[MR-${iid}] GitLab MR and pipeline context`,
+                promptPath: artifact.promptPath,
+                fetchedAt: context.fetchedAt,
+                complete: context.completeness.complete,
+                warnings: context.completeness.warnings,
+                contentSha256: artifact.contentSha256,
+              });
+              return session;
+            } : undefined,
+            auditAppend: managedSession ? updatedSession => {
+              this.appendContextEvent(updatedSession || managedSession, 'gitlab', String(iid), artifact.promptPath, artifact.contentSha256);
+            } : undefined,
+          });
           this.refreshTerminalFirstViews();
+          if (outcome.failed) { return outcome; }
           const message = `Inserted edited [MR-${iid}] context into ${selection.terminal.name} without submitting it (${summary}).`;
           if (context.completeness.complete) {
             void vscode.window.showInformationMessage(`${message} Review the terminal line, then press Enter yourself.`);
           } else {
-            void vscode.window.showWarningMessage(`${message} The saved MR context is partial; review its warnings.`);
+            void vscode.window.showWarningMessage(`${message} The saved MR context is partial; review its warnings. ${outcome.display}`);
           }
+          return outcome;
         },
       });
     });
@@ -2169,12 +2301,51 @@ class TerminalFirstRuntime implements vscode.Disposable {
         try { sonar = await sonarRestClient.branchContext(sonarTarget.projectKey, sonarTarget.branch); }
         catch (error: unknown) { warnings.push(boundedOperationFailure(error, 'SonarQube context was unavailable.').display); }
       }
-      if (!jenkins && !sonar) { throw new Error('Neither Jenkins nor SonarQube context could be read. Run Kronos: Doctor.'); }
+      if (!jenkins && !sonar) {
+        throw new OperationStageOutcomeError(failedOperationStageOutcome(
+          `${ticketKey} CI context preparation`,
+          [],
+          'provider-read',
+          new Error(warnings.join(' ') || 'Neither Jenkins nor SonarQube context could be read.'),
+          'Neither Jenkins nor SonarQube context could be read.',
+        ));
+      }
       const input: { jenkins?: JenkinsBuildContext; sonar?: SonarBranchContext; warnings: string[] } = { warnings };
       if (jenkins) { input.jenkins = jenkins; }
       if (sonar) { input.sonar = sonar; }
-      const context = buildCiContext(ticketKey, input);
-      const artifact = writeCiContextArtifacts(context);
+      let context: ReturnType<typeof buildCiContext>;
+      try {
+        context = buildCiContext(ticketKey, input);
+      } catch (error: unknown) {
+        throw new OperationStageOutcomeError(failedOperationStageOutcome(
+          `${ticketKey} CI context preparation`,
+          [{
+            stage: 'provider-read',
+            state: warnings.length > 0 ? 'partial' : 'succeeded',
+            detail: warnings.length > 0
+              ? 'At least one configured CI provider failed while another valid result was retained.'
+              : 'Configured CI provider reads completed.',
+          }],
+          'snapshot',
+          error,
+          'CI context normalization failed.',
+        ));
+      }
+      let artifact: ReturnType<typeof writeCiContextArtifacts>;
+      try {
+        artifact = writeCiContextArtifacts(context);
+      } catch (error: unknown) {
+        throw new OperationStageOutcomeError(failedOperationStageOutcome(
+          `${ticketKey} CI context preparation`,
+          [
+            { stage: 'provider-read', ...contextProviderReadStep(context.completeness.complete, 'Available CI provider evidence was retained.') },
+            { stage: 'snapshot', ...contextSnapshotStep(context.completeness.complete) },
+          ],
+          'artifact-write',
+          error,
+          'Private CI context artifact write failed.',
+        ));
+      }
       const providerSummary = [
         jenkins ? `Jenkins #${jenkins.build.number} ${jenkins.build.status}` : '',
         sonar ? `SonarQube ${sonar.qualityGate.status}` : '',
@@ -2204,46 +2375,62 @@ class TerminalFirstRuntime implements vscode.Disposable {
           contentSha256: artifact.contentSha256,
         },
         onInserted: () => {
-          if (selection.workSession) {
-            let session = selection.workSession;
-            if (jenkins) {
-              const binding: Parameters<typeof addWorkSessionProviderBinding>[1] = {
-                provider: 'jenkins',
-                resource: 'build',
-                subjectId: String(jenkins.build.number),
-              };
-              const buildUrl = jenkins.build.url || jenkinsUrl;
-              if (buildUrl) { binding.url = buildUrl; }
-              session = addWorkSessionProviderBinding(session.id, binding);
-            }
-            if (sonar && sonarTarget) {
-              session = addWorkSessionProviderBinding(session.id, {
-                provider: 'sonar',
-                resource: 'quality-gate',
-                subjectId: `${sonarTarget.projectKey}:${sonarTarget.branch}`,
-                projectId: sonarTarget.projectKey,
-                url: sonar.dashboardUrl,
+          const managedSession = selection.workSession;
+          const outcome = finalizeInsertedContext({
+            operation: `${ticketKey} CI context placement`,
+            providerRead: contextProviderReadStep(
+              context.completeness.complete,
+              context.completeness.complete
+                ? 'Configured Jenkins and SonarQube evidence reads completed.'
+                : 'Available provider evidence was retained while failed or optional components remain explicit.',
+            ),
+            snapshot: contextSnapshotStep(context.completeness.complete),
+            sessionUpdate: managedSession ? () => {
+              let session = managedSession;
+              if (jenkins) {
+                const binding: Parameters<typeof addWorkSessionProviderBinding>[1] = {
+                  provider: 'jenkins',
+                  resource: 'build',
+                  subjectId: String(jenkins.build.number),
+                };
+                const buildUrl = jenkins.build.url || jenkinsUrl;
+                if (buildUrl) { binding.url = buildUrl; }
+                session = addWorkSessionProviderBinding(session.id, binding);
+              }
+              if (sonar && sonarTarget) {
+                session = addWorkSessionProviderBinding(session.id, {
+                  provider: 'sonar',
+                  resource: 'quality-gate',
+                  subjectId: `${sonarTarget.projectKey}:${sonarTarget.branch}`,
+                  projectId: sonarTarget.projectKey,
+                  url: sonar.dashboardUrl,
+                });
+              }
+              recordWorkSessionContextArtifact(session.id, {
+                id: `ci-${ticketKey}`,
+                kind: 'ci-evidence',
+                label: `[CI-${ticketKey}] Jenkins and SonarQube context`,
+                promptPath: artifact.promptPath,
+                fetchedAt: context.fetchedAt,
+                complete: context.completeness.complete,
+                warnings: context.completeness.warnings,
+                contentSha256: artifact.contentSha256,
               });
-            }
-            recordWorkSessionContextArtifact(session.id, {
-              id: `ci-${ticketKey}`,
-              kind: 'ci-evidence',
-              label: `[CI-${ticketKey}] Jenkins and SonarQube context`,
-              promptPath: artifact.promptPath,
-              fetchedAt: context.fetchedAt,
-              complete: context.completeness.complete,
-              warnings: context.completeness.warnings,
-              contentSha256: artifact.contentSha256,
-            });
-            this.appendContextEvent(session, 'kronos', ticketKey, artifact.promptPath, artifact.contentSha256);
-          }
+              return session;
+            } : undefined,
+            auditAppend: managedSession ? updatedSession => {
+              this.appendContextEvent(updatedSession || managedSession, 'kronos', ticketKey, artifact.promptPath, artifact.contentSha256);
+            } : undefined,
+          });
           this.refreshTerminalFirstViews();
+          if (outcome.failed) { return outcome; }
           const message = `Inserted edited [CI-${ticketKey}] context into ${selection.terminal.name} without submitting it.`;
           if (context.completeness.complete) {
             void vscode.window.showInformationMessage(`${message} Review the terminal line, then press Enter yourself.`);
           } else {
-            void vscode.window.showWarningMessage(`${message} One or more provider components were partial; review the saved warnings.`);
+            void vscode.window.showWarningMessage(`${message} One or more provider components were partial; review the saved warnings. ${outcome.display}`);
           }
+          return outcome;
         },
       });
     });
@@ -2333,13 +2520,9 @@ class TerminalFirstRuntime implements vscode.Disposable {
       return;
     }
     if (!showResult) { return; }
-    if (result.leaseUnavailable && result.polled === 0) {
-      void vscode.window.showInformationMessage('Another Kronos window owns the provider-monitoring lease; no duplicate read was started.');
-      return;
-    }
-    const message = `Read ${result.polled} provider context${result.polled === 1 ? '' : 's'}; recorded ${result.transitions} new attention item${result.transitions === 1 ? '' : 's'}; ${result.failures} failed; ${result.skipped} skipped.`;
-    if (result.failures > 0 || result.leaseUnavailable) { void vscode.window.showWarningMessage(message); }
-    else { void vscode.window.showInformationMessage(message); }
+    const notice = managedProviderPollNotice(result);
+    if (notice.warning) { void vscode.window.showWarningMessage(notice.message); }
+    else { void vscode.window.showInformationMessage(notice.message); }
   }
 
   private showProviderNotice(notice: ManagedProviderNotice): void {
@@ -2541,13 +2724,38 @@ class TerminalFirstRuntime implements vscode.Disposable {
     if (!selection) { return; }
     await this.runProgress(`Kronos: Preparing ${project.projectName} Git context...`, async progress => {
       progress.report({ message: 'Reading read-only status and diff from VS Code Git...' });
-      const evidence = await readProjectGitEvidence(project.projectPath, { openRepositoryIfNeeded: true });
+      let evidence: Awaited<ReturnType<typeof readProjectGitEvidence>>;
+      try {
+        evidence = await readProjectGitEvidence(project.projectPath, { openRepositoryIfNeeded: true });
+      } catch (error: unknown) {
+        throw new OperationStageOutcomeError(failedOperationStageOutcome(
+          `${project.projectName} local Git context preparation`,
+          [{ stage: 'provider-read', state: 'skipped', detail: 'Local Git does not require a provider read.' }],
+          'snapshot',
+          error,
+          'Read-only VS Code Git snapshot failed.',
+        ));
+      }
       if (!evidence.available) {
         void vscode.window.showWarningMessage(evidence.warning || 'VS Code Git status is unavailable for this project.');
         return;
       }
       const rendered = renderProjectGitEvidence(project.projectName, evidence);
-      const artifact = writeProjectGitContextArtifact(project.projectName, rendered);
+      let artifact: ReturnType<typeof writeProjectGitContextArtifact>;
+      try {
+        artifact = writeProjectGitContextArtifact(project.projectName, rendered);
+      } catch (error: unknown) {
+        throw new OperationStageOutcomeError(failedOperationStageOutcome(
+          `${project.projectName} local Git context preparation`,
+          [
+            { stage: 'provider-read', state: 'skipped', detail: 'Local Git does not require a provider read.' },
+            { stage: 'snapshot', state: evidence.diffTruncated ? 'partial' : 'succeeded' },
+          ],
+          'artifact-write',
+          error,
+          'Private local Git context artifact write failed.',
+        ));
+      }
       const warnings = [
         ...(evidence.warning ? [evidence.warning] : []),
         ...(evidence.diffTruncated ? ['The working-tree diff was truncated at the bounded local context limit.'] : []),
@@ -2582,23 +2790,37 @@ class TerminalFirstRuntime implements vscode.Disposable {
           contentSha256: artifact.contentSha256,
         },
         onInserted: () => {
-          if (selection.workSession) {
-            const complete = evidence.available && !evidence.diffTruncated;
-            recordWorkSessionContextArtifact(selection.workSession.id, {
-              id: `git-${artifact.contentSha256.slice(0, 24)}`,
-              kind: 'git-working-tree',
-              label: `[${artifact.contextId}] local Git working tree`,
-              promptPath: artifact.promptPath,
-              complete,
-              warnings,
-              contentSha256: artifact.contentSha256,
-            });
-            this.appendContextEvent(selection.workSession, 'kronos', project.projectName, artifact.promptPath, artifact.contentSha256);
-          }
+          const managedSession = selection.workSession;
+          const complete = evidence.available && !evidence.diffTruncated;
+          const outcome = finalizeInsertedContext({
+            operation: `${project.projectName} local Git context placement`,
+            providerRead: {
+              state: 'skipped',
+              detail: 'This source is the read-only VS Code Git model, not a provider read.',
+            },
+            snapshot: contextSnapshotStep(complete),
+            sessionUpdate: managedSession ? () => {
+              recordWorkSessionContextArtifact(managedSession.id, {
+                id: `git-${artifact.contentSha256.slice(0, 24)}`,
+                kind: 'git-working-tree',
+                label: `[${artifact.contextId}] local Git working tree`,
+                promptPath: artifact.promptPath,
+                complete,
+                warnings,
+                contentSha256: artifact.contentSha256,
+              });
+              return managedSession;
+            } : undefined,
+            auditAppend: managedSession ? updatedSession => {
+              this.appendContextEvent(updatedSession || managedSession, 'kronos', project.projectName, artifact.promptPath, artifact.contentSha256);
+            } : undefined,
+          });
           this.refreshTerminalFirstViews();
+          if (outcome.failed) { return outcome; }
           void vscode.window.showInformationMessage(
             `Inserted [${artifact.contextId}] into ${selection.terminal.name} without submitting it. Review the line, then press Enter yourself.`,
           );
+          return outcome;
         },
       });
     });
@@ -3338,7 +3560,9 @@ class TerminalFirstRuntime implements vscode.Disposable {
     try {
       await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title }, task);
     } catch (error: unknown) {
-      const detail = boundedOperationFailure(error, `${title} failed.`).display;
+      const detail = isOperationStageOutcomeError(error)
+        ? error.outcome.display
+        : boundedOperationFailure(error, `${title} failed.`).display;
       this.log(title, detail);
       void vscode.window.showErrorMessage(detail);
     }
@@ -3454,6 +3678,19 @@ function buildClaudeTerminalTitle(baseName: string, ticketKey?: string, branch?:
     : context;
   const maximumBaseLength = Math.max(1, 80 - separator.length - boundedContext.length);
   return `${baseName.slice(0, maximumBaseLength)}${separator}${boundedContext}`;
+}
+
+function contextProviderReadStep(complete: boolean, detail: string): OperationStageInput {
+  return { state: complete ? 'succeeded' : 'partial', detail };
+}
+
+function contextSnapshotStep(complete: boolean): OperationStageInput {
+  return {
+    state: complete ? 'succeeded' : 'partial',
+    detail: complete
+      ? 'The normalized bounded evidence snapshot is complete.'
+      : 'The normalized snapshot retains the last valid or available evidence plus explicit warnings.',
+  };
 }
 
 function jiraComposerEvidence(context: JiraTicketContext): ContextComposerEvidenceItem[] {

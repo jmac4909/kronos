@@ -101,6 +101,16 @@
       "goals": ["G07", "G12"],
       "automated": [
         { "file": "scripts/run-unit-tests.js", "test": "bounded operation failures use one redacted actionable vocabulary" },
+        { "file": "scripts/run-failure-contract-tests.js", "test": "context completion reports every provider, artifact, snapshot, insertion, session, and audit stage" },
+        { "file": "scripts/run-failure-contract-tests.js", "test": "session failure still attempts audit and reports retained insertion without exposing credentials" },
+        { "file": "scripts/run-failure-contract-tests.js", "test": "audit failure does not hide a successful local session update or inserted reference" },
+        { "file": "scripts/run-failure-contract-tests.js", "test": "failure vocabulary distinguishes configuration, credentials, permission, transport, and bounded payload faults" },
+        { "file": "scripts/run-failure-contract-tests.js", "test": "Jira retains successful ticket and recent comment evidence when later comments and attachments are partial" },
+        { "file": "scripts/run-failure-contract-tests.js", "test": "Jenkins keeps the valid build while unavailable JUnit and stage APIs stay explicit" },
+        { "file": "scripts/run-failure-contract-tests.js", "test": "mixed CI provider failure retains the other provider result with an explicit warning" },
+        { "file": "scripts/run-failure-contract-tests.js", "test": "poll notice distinguishes another-window lease ownership from missing provider configuration" },
+        { "file": "scripts/run-failure-contract-tests.js", "test": "failed monitoring remains visible while last-known-good timestamps stay retained" },
+        { "file": "scripts/run-failure-contract-tests.js", "test": "operator surfaces use staged outcomes and the shared bounded failure vocabulary" },
         { "file": "scripts/run-provider-readiness-tests.js", "test": "one readiness snapshot feeds Setup and Doctor and gives every non-ready row an action" },
         { "file": "scripts/run-webview-dom-tests.js", "test": "Setup and Doctor actions post only their allowlisted operation command field" }
       ],
@@ -745,6 +755,79 @@
     {
       "requirements": ["G06-evidence-03:0f8109d0"],
       "humanGates": ["windows-native", "multi-window"]
+    },
+    {
+      "requirements": ["G07-goal:117ce800"],
+      "automated": [
+        { "file": "scripts/run-failure-contract-tests.js", "test": "context completion reports every provider, artifact, snapshot, insertion, session, and audit stage" },
+        { "file": "scripts/run-failure-contract-tests.js", "test": "operator surfaces use staged outcomes and the shared bounded failure vocabulary" }
+      ],
+      "humanGates": ["live-providers"]
+    },
+    {
+      "requirements": ["G07-case-01:05785670"],
+      "automated": [
+        { "file": "scripts/run-failure-contract-tests.js", "test": "failure vocabulary distinguishes configuration, credentials, permission, transport, and bounded payload faults" },
+        { "file": "scripts/run-provider-readiness-tests.js", "test": "provider readiness is shared, secret-free, and distinguishes missing from invalid configuration" }
+      ]
+    },
+    {
+      "requirements": ["G07-case-02:e93af109"],
+      "automated": [
+        { "file": "scripts/run-failure-contract-tests.js", "test": "failure vocabulary distinguishes configuration, credentials, permission, transport, and bounded payload faults" }
+      ]
+    },
+    {
+      "requirements": ["G07-case-03:0402223e"],
+      "automated": [
+        { "file": "scripts/run-failure-contract-tests.js", "test": "Jira retains successful ticket and recent comment evidence when later comments and attachments are partial" }
+      ]
+    },
+    {
+      "requirements": ["G07-case-04:349cb3af"],
+      "automated": [
+        { "file": "scripts/run-failure-contract-tests.js", "test": "Jenkins keeps the valid build while unavailable JUnit and stage APIs stay explicit" }
+      ]
+    },
+    {
+      "requirements": ["G07-case-05:e24784da"],
+      "automated": [
+        { "file": "scripts/run-failure-contract-tests.js", "test": "mixed CI provider failure retains the other provider result with an explicit warning" }
+      ]
+    },
+    {
+      "requirements": ["G07-case-06:177cef4a"],
+      "automated": [
+        { "file": "scripts/run-failure-contract-tests.js", "test": "session failure still attempts audit and reports retained insertion without exposing credentials" },
+        { "file": "scripts/run-failure-contract-tests.js", "test": "audit failure does not hide a successful local session update or inserted reference" }
+      ]
+    },
+    {
+      "requirements": ["G07-case-07:4a4ab8d6"],
+      "automated": [
+        { "file": "scripts/run-failure-contract-tests.js", "test": "poll notice distinguishes another-window lease ownership from missing provider configuration" }
+      ]
+    },
+    {
+      "requirements": ["G07-evidence-01:c8b0a1e8"],
+      "automated": [
+        { "file": "scripts/run-unit-tests.js", "test": "bounded operation failures use one redacted actionable vocabulary" },
+        { "file": "scripts/run-failure-contract-tests.js", "test": "operator surfaces use staged outcomes and the shared bounded failure vocabulary" }
+      ]
+    },
+    {
+      "requirements": ["G07-evidence-02:60a9b93b"],
+      "automated": [
+        { "file": "scripts/run-failure-contract-tests.js", "test": "failure vocabulary distinguishes configuration, credentials, permission, transport, and bounded payload faults" },
+        { "file": "scripts/run-failure-contract-tests.js", "test": "session failure still attempts audit and reports retained insertion without exposing credentials" }
+      ]
+    },
+    {
+      "requirements": ["G07-evidence-03:6f55d40f"],
+      "automated": [
+        { "file": "scripts/run-failure-contract-tests.js", "test": "failed monitoring remains visible while last-known-good timestamps stay retained" },
+        { "file": "scripts/run-failure-contract-tests.js", "test": "Jira retains successful ticket and recent comment evidence when later comments and attachments are partial" }
+      ]
     },
     {
       "requirements": ["G16-goal:b55b5b6c"],

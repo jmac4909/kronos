@@ -101,8 +101,29 @@ export interface ManagedProviderPollResult {
   transitions: number;
   failures: number;
   skipped: number;
+  unconfigured: number;
   leaseUnavailable: boolean;
   leaseReason?: string;
+}
+
+export interface ManagedProviderPollNotice {
+  kind: 'lease-unavailable' | 'missing-configuration' | 'failed' | 'complete';
+  message: string;
+  warning: boolean;
+}
+
+export function managedProviderPollNotice(result: ManagedProviderPollResult): ManagedProviderPollNotice {
+  if (result.leaseUnavailable && result.polled === 0) {
+    return {
+      kind: 'lease-unavailable',
+      message: 'Another Kronos window owns the provider-monitoring lease; no duplicate read was started. Wait for that poll or close the duplicate window, then use Poll Now.',
+      warning: false,
+    };
+  }
+  const message = `Read ${result.polled} provider context${result.polled === 1 ? '' : 's'}; recorded ${result.transitions} new attention item${result.transitions === 1 ? '' : 's'}; ${result.failures} failed; ${result.skipped} skipped; ${result.unconfigured} work session${result.unconfigured === 1 ? '' : 's'} missing provider configuration.`;
+  if (result.unconfigured > 0) { return { kind: 'missing-configuration', message, warning: true }; }
+  if (result.failures > 0 || result.leaseUnavailable) { return { kind: 'failed', message, warning: true }; }
+  return { kind: 'complete', message, warning: false };
 }
 
 export interface ManagedProviderNotice {
@@ -215,8 +236,9 @@ export class ManagedProviderMonitor {
           || session.providerBindings.some(binding =>
             binding.provider === 'gitlab' || binding.provider === 'jenkins' || binding.provider === 'sonar'
           );
+        if (!hasProviderTarget) { sessionResult.unconfigured += 1; }
         const summary = hasProviderTarget
-          ? `Polled ${sessionResult.polled} provider context${sessionResult.polled === 1 ? '' : 's'}; ${sessionResult.failures} failed; ${sessionResult.skipped} skipped.`
+          ? `Polled ${sessionResult.polled} provider context${sessionResult.polled === 1 ? '' : 's'}; ${sessionResult.failures} failed; ${sessionResult.skipped} skipped; ${sessionResult.unconfigured} missing configuration.`
           : 'No GitLab, Jenkins, or SonarQube provider is bound to this work session.';
         try {
           recordWorkSessionMonitoringResult(session.id, {
@@ -298,7 +320,7 @@ export class ManagedProviderMonitor {
         ? 'No GitLab project ID or path is configured for the current merge request.'
         : 'The current merge request has no valid IID.';
       this.log(`Skipped GitLab monitoring for ${session.ticketKey}.`, detail);
-      return { ...emptyResult(), skipped: 1 };
+      return { ...emptyResult(), skipped: 1, unconfigured: 1 };
     }
     const { iid, projectIdOrPath, providerUrl } = target;
     try {
@@ -787,7 +809,7 @@ function newestProviderBinding(
 }
 
 function emptyResult(): ManagedProviderPollResult {
-  return { polled: 0, transitions: 0, failures: 0, skipped: 0, leaseUnavailable: false };
+  return { polled: 0, transitions: 0, failures: 0, skipped: 0, unconfigured: 0, leaseUnavailable: false };
 }
 
 function monitorableWorkSession(session: WorkSessionRecord): MonitoredWorkSessionRecord | undefined {
@@ -801,6 +823,7 @@ function combine(left: ManagedProviderPollResult, right: ManagedProviderPollResu
     transitions: left.transitions + right.transitions,
     failures: left.failures + right.failures,
     skipped: left.skipped + right.skipped,
+    unconfigured: left.unconfigured + right.unconfigured,
     leaseUnavailable: left.leaseUnavailable || right.leaseUnavailable,
   };
   const reason = left.leaseReason || right.leaseReason;
