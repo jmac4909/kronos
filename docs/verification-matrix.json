@@ -1,0 +1,106 @@
+{
+  "schemaVersion": 1,
+  "featureGroups": [
+    {
+      "id": "identity-and-work",
+      "goals": ["G01", "G08"],
+      "automated": [
+        { "file": "scripts/run-unit-tests.js", "test": "Jira project keys never auto-link a repository; only an explicit ticket link does" },
+        { "file": "scripts/run-unit-tests.js", "test": "Work data status distinguishes empty, loading, partial, stale, error, and current results" },
+        { "file": "scripts/run-jira-work-board-tests.js", "test": "board runtime filters cards and reveals a specifically selected completed status" }
+      ],
+      "humanGates": ["operator-terminal"]
+    },
+    {
+      "id": "terminal-and-sessions",
+      "goals": ["G02", "G10"],
+      "automated": [
+        { "file": "scripts/run-unit-tests.js", "test": "Claude terminal launch is explicit, focused, validated, and operator-triggered" },
+        { "file": "scripts/run-unit-tests.js", "test": "work-session lifecycle never requires a terminal process owner" },
+        { "file": "scripts/run-unit-tests.js", "test": "extension activation registers the bounded surface and explicit launch commands create the right session kinds" }
+      ],
+      "humanGates": ["operator-terminal", "real-vscode"]
+    },
+    {
+      "id": "context-placement",
+      "goals": ["G03"],
+      "automated": [
+        { "file": "scripts/run-unit-tests.js", "test": "context placement verifies one exact attachment and remains exactly once after audit work" },
+        { "file": "scripts/run-webview-dom-tests.js", "test": "context composer posts edited focus only after Insert or Ctrl+Enter" },
+        { "file": "scripts/run-unit-tests.js", "test": "Jira downloads arbitrary attachment types as private raw files for Claude to inspect" }
+      ],
+      "humanGates": ["operator-terminal"]
+    },
+    {
+      "id": "monitoring-and-attention",
+      "goals": ["G04", "G05", "G11"],
+      "automated": [
+        { "file": "scripts/run-unit-tests.js", "test": "Attention stream identity is stable by project, provider, resource, logical subject, and facet" },
+        { "file": "scripts/run-unit-tests.js", "test": "managed provider polling automatically discovers and locally binds a project MR" },
+        { "file": "scripts/run-unit-tests.js", "test": "GitLab MR review monitoring retains complete facets across partial reads and dedupes read health" }
+      ],
+      "humanGates": ["live-providers"]
+    },
+    {
+      "id": "persistence-and-migration",
+      "goals": ["G06", "G15"],
+      "automated": [
+        { "file": "scripts/run-unit-tests.js", "test": "managed monitoring lease omits unsupported open flags on Windows and fails closed on POSIX" },
+        { "file": "scripts/run-unit-tests.js", "test": "managed monitoring lease acquires, blocks duplicate owners, renews, and releases" },
+        { "file": "scripts/run-unit-tests.js", "test": "legacy ~/.claude/kronos state migrates once without helper scripts" }
+      ],
+      "humanGates": ["windows-native", "multi-window"]
+    },
+    {
+      "id": "projects-and-git",
+      "goals": ["G09"],
+      "automated": [
+        { "file": "scripts/run-unit-tests.js", "test": "project discovery honors configured roots, depth, limits, and workspace folders" },
+        { "file": "scripts/run-unit-tests.js", "test": "project Git evidence reads only the bounded VS Code Git model" },
+        { "file": "scripts/run-jira-work-board-tests.js", "test": "board lists registered local project paths and current Git branches" }
+      ],
+      "humanGates": ["real-vscode"]
+    },
+    {
+      "id": "setup-and-failures",
+      "goals": ["G07", "G12"],
+      "automated": [
+        { "file": "scripts/run-unit-tests.js", "test": "bounded operation failures use one redacted actionable vocabulary" },
+        { "file": "scripts/run-unit-tests.js", "test": "one readiness snapshot feeds Setup and Doctor and gives every non-ready row an action" },
+        { "file": "scripts/run-webview-dom-tests.js", "test": "Setup and Doctor actions post only their allowlisted operation command field" }
+      ],
+      "humanGates": ["live-providers"]
+    },
+    {
+      "id": "provider-variants",
+      "goals": ["G13"],
+      "automated": [
+        { "file": "scripts/run-unit-tests.js", "test": "Jira Work search uses GET token pagination and bounded fields" },
+        { "file": "scripts/run-unit-tests.js", "test": "Jenkins resolves multibranch parents and scopes the TLS exception to Jenkins requests" },
+        { "file": "scripts/run-unit-tests.js", "test": "GitLab discovery falls back to ticket key and refuses ambiguous matches" },
+        { "file": "scripts/run-provider-contract-tests.js", "test": "sanitized Jira fixture retains rich fields and prior rows after a partial page read" },
+        { "file": "scripts/run-provider-contract-tests.js", "test": "sanitized GitLab fixture normalizes enterprise MR review, pipeline, job, and test evidence" },
+        { "file": "scripts/run-provider-contract-tests.js", "test": "sanitized Jenkins fixture resolves a multibranch build and treats missing stages as optional" },
+        { "file": "scripts/run-provider-contract-tests.js", "test": "sanitized SonarQube fixture retains branch-qualified gate, measures, and issues" }
+      ],
+      "humanGates": ["live-providers"]
+    },
+    {
+      "id": "security-and-release",
+      "goals": ["G16", "G18"],
+      "automated": [
+        { "file": "scripts/run-unit-tests.js", "test": "runtime dependency surface is Node and VS Code only" },
+        { "file": "scripts/run-jira-work-board-tests.js", "test": "board runtime posts only normalized command and Jira ticket key" },
+        { "file": "scripts/run-webview-dom-tests.js", "test": "ticket workspace action panel posts one normalized, ticket-scoped message" }
+      ],
+      "humanGates": ["operator-terminal", "windows-native", "multi-window", "live-providers"]
+    }
+  ],
+  "humanGates": [
+    { "id": "operator-terminal", "status": "required", "checklistMarker": "## Start Claude for a Ticket" },
+    { "id": "real-vscode", "status": "required", "checklistMarker": "## Sessions View" },
+    { "id": "windows-native", "status": "required", "checklistMarker": "### Windows and multi-window ownership" },
+    { "id": "multi-window", "status": "required", "checklistMarker": "### Windows and multi-window ownership" },
+    { "id": "live-providers", "status": "required", "checklistMarker": "### Live-provider compatibility record" }
+  ]
+}

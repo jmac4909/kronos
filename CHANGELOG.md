@@ -17,6 +17,9 @@ All notable changes to the Kronos preview are documented here.
 
 - Added one Jira refresh lifecycle shared by the Work tree and board, with distinct current, empty, loading, partial, stale, error, and no-match states; in-flight, partial, and failed refreshes retain the last usable tickets and expose bounded Refresh/Doctor repair actions.
 - Made every linked Jira card and ticket workspace label its repository control as **Change / Unlink Project**, sort the current project first beside its unlink choice, and expose keyboard-focusable card navigation.
+- Added a machine-checked requirement-to-test matrix and derived README metric gate; automated output now lists covered feature groups and keeps real VS Code, operator-terminal, Windows, multi-window, and live-provider signoff explicitly open.
+- Documented one owner and canonical data flow for every local/in-memory record, plus a checked Jira/GitLab/Jenkins/SonarQube request-bound-normalization-completeness-error matrix.
+- Added four sanitized file-based enterprise provider fixtures that exercise Jira partial rich work, GitLab MR/review/pipeline/test context, Jenkins multibranch optional evidence, and SonarQube branch gate/measure/issue normalization without new runtime dependencies.
 - Attention items without a validated provider URL now route directly to the registered project integration repair UI, or Doctor when no project is available, instead of presenting a dead dashboard action.
 - Hardened one-time legacy-state migration by rejecting symbolic-link ancestors, recognizing broken target links, and recursively applying private directory/file modes after same-filesystem renames.
 - Added shared bounded immutable-artifact and two-file pair primitives with content verification, incomplete-pair refusal, and no-replace publication; local Git, Jira, GitLab, and CI context evidence—including arbitrary binary Jira attachments—now use them for consistent Windows/POSIX path safety.

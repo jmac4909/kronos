@@ -22,6 +22,8 @@ The repository is ready for the operator-owned human feedback pass in `HUMAN_FEE
 | Setup and Doctor | Unit, DOM, and activation tests cover one shared readiness snapshot, blocked-first ordering, allowlisted per-row actions, private comment-only provider template creation, missing versus invalid configuration, immediate Poll Now verification, credential-presence labels, and no credential values in UI. | Pass |
 | Security and dependencies | Public-surface, security, and context-governance gates pass. Runtime dependencies are empty; only TypeScript and Node/VS Code type packages are development dependencies. `npm audit` reports zero known vulnerabilities. | Pass |
 | Packaging | `npm run feedback:ready` compiles, tests, packages, checks the VSIX contents, rejects legacy/development/local-state files, and creates a safe synthetic feedback state. | Final gate |
+| Quality evidence | `docs/verification-matrix.json` maps roadmap goals to named test declarations and explicit human gates. `scripts/check-quality-evidence.js` rejects missing tests, checklist markers, command/setting/module/test metric drift, or a human gate silently marked complete. | Pass |
+| State and provider contracts | `docs/state-ownership.md` gives every persisted/in-memory record one writer, ingress, bound, compatibility rule, and consumer. `docs/provider-contract-matrix.md` records request, bound, normalization, completeness, and error behavior for all four providers; the quality gate checks both documents' required rows. | Pass |
 
 ## Changes Found During This Audit
 

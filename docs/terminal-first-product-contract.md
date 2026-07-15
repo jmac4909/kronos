@@ -186,7 +186,9 @@ Saving project integration data, explicitly linking a ticket project, attaching 
 
 ## Audit and Local State
 
-By default, private terminal-first state lives under `~/.kronos`, or the explicitly configured `KRONOS_DIR`:
+By default, private terminal-first state lives under `~/.kronos`, or the explicitly configured `KRONOS_DIR`.
+
+The canonical owner, ingress, compatibility, and consumer for every record are listed in [State Ownership and Data Flow](state-ownership.md). Provider request, bound, normalization, completeness, and error behavior are listed in the [Provider Read Contract Matrix](provider-contract-matrix.md).
 
 The one-time migration from the legacy default directory rejects symbolic-link ancestors and unsupported entries, caps traversal at 20,000 entries and 2 GiB, and recursively applies private file and directory modes before the migrated state is accepted.
 

@@ -4,6 +4,7 @@
 src/**
 scripts/**
 test/**
+test-fixtures/**
 node_modules/**
 vscode-user-*/**
 .vscode-test/**

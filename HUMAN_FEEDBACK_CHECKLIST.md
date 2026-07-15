@@ -144,6 +144,16 @@ If GitLab and CI providers are safely configured:
 5. Select the Session, confirm the sole unclaimed terminal reconnects or a terminal chooser appears, then confirm ticket context insertion works again.
 6. Temporarily make one provider unavailable or use a safe invalid test configuration. Confirm the other providers remain usable, the result is marked partial/blocked, and no stale success is reported as current.
 
+### Windows and multi-window ownership
+
+1. On a real Windows host, repeat one Jira refresh and one provider poll. Confirm monitoring does not fail because `O_NOFOLLOW` is unavailable and private state remains readable after reload.
+2. Open two VS Code windows against the same explicit `KRONOS_DIR`. Start provider polling in both within one poll interval. Confirm only one window owns the lease, the other reports lease contention without issuing duplicate provider reads, and the next poll succeeds after the owner closes or releases it.
+3. Record the Windows version, VS Code version, filesystem type, whether the data directory is local or network-backed, and the observed lease owner/recovery result. Until this is recorded, Windows and multi-window verification remain open gates.
+
+### Live-provider compatibility record
+
+For each approved live Jira, GitLab, Jenkins, and SonarQube system exercised, record the product/server version, authentication type, effective read permissions, configured project/job/branch shape, endpoints that were unavailable, and whether the result was complete or partial. Do not record credentials, response bodies, employer identifiers, or private ticket content. Any provider not exercised remains an explicit open gate.
+
 ## Feedback Questions
 
 - Was it always clear that you, not Kronos, owned the terminal and submission decision?

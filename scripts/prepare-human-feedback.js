@@ -89,6 +89,9 @@ for (const expected of [
   'media/kronos-webview-runtime.js',
   'docs/terminal-first-product-contract.md',
   'docs/extension-improvement-goals.md',
+  'docs/provider-contract-matrix.md',
+  'docs/state-ownership.md',
+  'docs/verification-matrix.json',
   'HUMAN_FEEDBACK_CHECKLIST.md',
 ]) {
   if (!tree.includes(expected)) { fail(`VSIX tree is missing ${expected}`); }
@@ -97,6 +100,7 @@ for (const forbidden of [
   'src/',
   'scripts/',
   'test/',
+  'test-fixtures/',
   'node_modules/',
   '.kronos/',
   'sessionDispatcher',
