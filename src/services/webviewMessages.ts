@@ -29,6 +29,8 @@ export type ProjectIntegrationMessage =
       jenkinsUrl: string;
       sonarProjectKey: string;
       defaultBranch: string;
+      branchProfiles: string;
+      activeBranchProfile: string;
     }>;
   };
 
@@ -102,10 +104,21 @@ export function normalizeProjectIntegrationMessage(raw: unknown): ProjectIntegra
     const jenkinsUrl = boundedMessageString(project['jenkinsUrl'], 4_000, true);
     const sonarProjectKey = boundedMessageString(project['sonarProjectKey'], 400, true);
     const defaultBranch = boundedMessageString(project['defaultBranch'], 500, true);
-    if (name === null || gitlabProject === null || jenkinsUrl === null || sonarProjectKey === null || defaultBranch === null) {
+    const branchProfiles = boundedMultilineMessageString(project['branchProfiles'], 20_000);
+    const activeBranchProfile = boundedMessageString(project['activeBranchProfile'], 500, true);
+    if (name === null || gitlabProject === null || jenkinsUrl === null || sonarProjectKey === null
+      || defaultBranch === null || branchProfiles === null || activeBranchProfile === null) {
       return null;
     }
-    projects.push({ name, gitlabProject, jenkinsUrl, sonarProjectKey, defaultBranch });
+    projects.push({
+      name,
+      gitlabProject,
+      jenkinsUrl,
+      sonarProjectKey,
+      defaultBranch,
+      branchProfiles,
+      activeBranchProfile,
+    });
   }
   return { command: 'save', projects };
 }
@@ -115,4 +128,9 @@ function boundedMessageString(value: unknown, maxLength: number, allowEmpty = fa
   const normalized = value.replace(/[\u0000-\u001f\u007f\u2028\u2029]/g, ' ').replace(/\s+/g, ' ').trim();
   if (normalized) { return normalized; }
   return allowEmpty ? '' : null;
+}
+
+function boundedMultilineMessageString(value: unknown, maxLength: number): string | null {
+  if (typeof value !== 'string' || value.length > maxLength) { return null; }
+  return value.replace(/\r\n?/g, '\n').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f\u2028\u2029]/g, '').trim();
 }

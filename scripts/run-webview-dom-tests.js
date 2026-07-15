@@ -151,6 +151,8 @@ test('project integration form collects only bounded project setup fields', () =
     jenkinsUrl: 'https://jenkins.example/job/app/',
     sonarProjectKey: 'app:key',
     defaultBranch: 'main',
+    branchProfiles: 'main | https://jenkins.example/job/app/main | app:key | main',
+    activeBranchProfile: 'main',
   };
   const card = {
     getAttribute(name) { return name === 'data-project-name' ? 'Application' : null; },

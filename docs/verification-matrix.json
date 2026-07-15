@@ -147,6 +147,19 @@
       "humanGates": ["real-vscode"]
     },
     {
+      "id": "handoff-and-branch-profiles",
+      "goals": ["G22"],
+      "automated": [
+        { "file": "scripts/run-handoff-branch-profile-tests.js", "test": "handoff candidates cap context and audit metadata without accepting terminal content" },
+        { "file": "scripts/run-handoff-branch-profile-tests.js", "test": "local handoff writes a private immutable Markdown and JSON reference pair without copying source payloads" },
+        { "file": "scripts/run-handoff-branch-profile-tests.js", "test": "local handoff refuses external artifact paths and oversized selections" },
+        { "file": "scripts/run-handoff-branch-profile-tests.js", "test": "project integration parses, formats, and stores explicit Jenkins and SonarQube branch profiles" },
+        { "file": "scripts/run-handoff-branch-profile-tests.js", "test": "branch profile validation refuses duplicates, unsafe branches, credentials, and unknown active profiles" },
+        { "file": "scripts/run-handoff-branch-profile-tests.js", "test": "CI target selection uses an exact MR profile then explicit fallback without creating a ticket project link" }
+      ],
+      "humanGates": ["real-vscode", "live-providers"]
+    },
+    {
       "id": "security-and-release",
       "goals": ["G16", "G18"],
       "automated": [

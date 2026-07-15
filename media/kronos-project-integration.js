@@ -22,7 +22,9 @@
           gitlabProject: value('gitlabProject'),
           jenkinsUrl: value('jenkinsUrl'),
           sonarProjectKey: value('sonarProjectKey'),
-          defaultBranch: value('defaultBranch')
+          defaultBranch: value('defaultBranch'),
+          branchProfiles: value('branchProfiles'),
+          activeBranchProfile: value('activeBranchProfile')
         };
       });
     }

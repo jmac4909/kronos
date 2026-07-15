@@ -1,6 +1,14 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import type { BuildStatus, KronosState, MergeRequest, Project, ProjectConfig, Ticket } from '../state/types';
+import type {
+  BuildStatus,
+  KronosState,
+  MergeRequest,
+  Project,
+  ProjectBranchProfile,
+  ProjectConfig,
+  Ticket,
+} from '../state/types';
 import { normalizeJenkinsJobUrl } from './jenkinsRestClient';
 import { readBoundedPrivateUtf8File } from './stateStore';
 
@@ -21,6 +29,8 @@ export interface LocalProjectIntegrationInput {
   jenkinsUrl?: string;
   sonarProjectKey?: string;
   defaultBranch?: string;
+  branchProfiles?: string;
+  activeBranchProfile?: string;
 }
 
 export interface TicketProviderStateInput {
@@ -206,6 +216,8 @@ export function setLocalProjectIntegrations(
     delete config.sonar_project_key;
     delete config.default_branch;
     delete config.base_branch;
+    delete config.branch_profiles;
+    delete config.active_branch_profile;
 
     const gitLabProject = safeSingleLine(value.gitlabProject, 512);
     if (gitLabProject) {
@@ -230,12 +242,83 @@ export function setLocalProjectIntegrations(
     }
     const defaultBranch = safeSingleLine(value.defaultBranch, 500);
     if (defaultBranch) { config.default_branch = defaultBranch; }
+    const branchProfiles = parseProjectBranchProfiles(value.branchProfiles || '');
+    if (branchProfiles.length > 0) { config.branch_profiles = branchProfiles; }
+    const activeBranchProfile = safeSingleLine(value.activeBranchProfile, 500);
+    if (activeBranchProfile) {
+      const branch = normalizeProfileBranch(activeBranchProfile, `${name} active provider profile`);
+      if (!branchProfiles.some(profile => profile.branch === branch)) {
+        throw new Error(`${name} active provider profile must match one configured branch profile.`);
+      }
+      config.active_branch_profile = branch;
+    }
   }
   return {
     ...state,
     projects,
     tickets: Object.fromEntries(Object.entries(state.tickets).map(([key, ticket]) => [key, { ...ticket }])),
   };
+}
+
+export function parseProjectBranchProfiles(value: string): ProjectBranchProfile[] {
+  if (typeof value !== 'string' || value.length > 20_000) {
+    throw new Error('Project branch profiles exceed the 20,000-character limit.');
+  }
+  const profiles: ProjectBranchProfile[] = [];
+  const seen = new Set<string>();
+  for (const [index, rawLine] of value.replace(/\r\n?/g, '\n').split('\n').entries()) {
+    const line = rawLine.trim();
+    if (!line) { continue; }
+    if (profiles.length >= 20) { throw new Error('Project branch profiles exceed the 20-profile limit.'); }
+    const parts = line.split('|').map(part => part.trim());
+    if (parts.length < 2 || parts.length > 4) {
+      throw new Error(`Branch profile line ${index + 1} must use: branch | Jenkins URL | SonarQube key | SonarQube branch.`);
+    }
+    const branch = normalizeProfileBranch(parts[0] || '', `branch profile line ${index + 1}`);
+    if (seen.has(branch)) { throw new Error(`Branch profile ${branch} is duplicated.`); }
+    seen.add(branch);
+    const jenkinsUrl = normalizeOptionalHttpUrl(parts[1], `${branch} Jenkins job URL`);
+    const sonarProjectKey = safeSingleLine(parts[2], 400);
+    if (sonarProjectKey && !/^[A-Za-z0-9_.:-]+$/.test(sonarProjectKey)) {
+      throw new Error(`${branch} SonarQube project key contains unsupported characters.`);
+    }
+    const sonarBranch = parts[3]
+      ? normalizeProfileBranch(parts[3], `${branch} SonarQube branch`)
+      : sonarProjectKey ? branch : undefined;
+    if (!jenkinsUrl && !sonarProjectKey) {
+      throw new Error(`Branch profile ${branch} must configure a Jenkins URL, a SonarQube key, or both.`);
+    }
+    const profile: ProjectBranchProfile = { branch };
+    if (jenkinsUrl) { profile.jenkins_url = jenkinsUrl; }
+    if (sonarProjectKey) { profile.sonar_project_key = sonarProjectKey; }
+    if (sonarBranch) { profile.sonar_branch = sonarBranch; }
+    profiles.push(profile);
+  }
+  return profiles;
+}
+
+export function formatProjectBranchProfiles(profiles: readonly ProjectBranchProfile[] | undefined): string {
+  return (profiles || []).slice(0, 20).map(profile => [
+    profile.branch,
+    profile.jenkins_url || '',
+    profile.sonar_project_key || '',
+    profile.sonar_branch || '',
+  ].join(' | ')).join('\n');
+}
+
+export function selectProjectBranchProfile(
+  config: ProjectConfig | null | undefined,
+  requestedBranches: readonly (string | null | undefined)[] = [],
+): ProjectBranchProfile | undefined {
+  const profiles = config?.branch_profiles || [];
+  for (const requested of requestedBranches) {
+    const branch = typeof requested === 'string' ? requested.trim() : '';
+    const profile = branch ? profiles.find(candidate => candidate.branch === branch) : undefined;
+    if (profile) { return { ...profile }; }
+  }
+  const active = config?.active_branch_profile;
+  const profile = active ? profiles.find(candidate => candidate.branch === active) : undefined;
+  return profile ? { ...profile } : undefined;
 }
 
 /** Only the operator's explicit ticket-to-project link supplies provider configuration. */
@@ -352,6 +435,20 @@ function normalizeTicketKey(value: string): string {
   const key = safeSingleLine(value, 160).toUpperCase();
   if (!/^[A-Z][A-Z0-9_]*-[0-9]{1,12}$/.test(key)) { throw new Error('Invalid Jira ticket key.'); }
   return key;
+}
+
+function normalizeProfileBranch(value: string, label: string): string {
+  const branch = requiredSingleLine(value, label, 500);
+  if (!/^[A-Za-z0-9][A-Za-z0-9._/@+-]{0,499}$/.test(branch)
+    || branch.includes('..')
+    || branch.includes('@{')
+    || branch.includes('//')
+    || branch.endsWith('/')
+    || branch.endsWith('.')
+    || branch.endsWith('.lock')) {
+    throw new Error(`${label} contains unsupported Git branch characters.`);
+  }
+  return branch;
 }
 
 function requiredSingleLine(value: string, label: string, maxLength: number): string {

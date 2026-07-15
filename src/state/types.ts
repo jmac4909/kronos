@@ -11,6 +11,14 @@ export interface Project {
   config: ProjectConfig;
 }
 
+export interface ProjectBranchProfile {
+  /** Exact local/MR branch name that selects this provider routing profile. */
+  branch: string;
+  jenkins_url?: string;
+  sonar_project_key?: string;
+  sonar_branch?: string;
+}
+
 export interface ProjectConfig {
   repo_name?: string;
   jira_ticket_filter?: string;
@@ -22,6 +30,10 @@ export interface ProjectConfig {
   sonar_branch?: string;
   base_branch?: string;
   default_branch?: string;
+  /** Explicit provider routing variants; these never switch the Git branch. */
+  branch_profiles?: ProjectBranchProfile[];
+  /** Optional profile selected when no exact MR branch profile matches. */
+  active_branch_profile?: string;
   extra_dirs?: string[];
 }
 

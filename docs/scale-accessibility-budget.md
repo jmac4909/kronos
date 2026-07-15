@@ -16,6 +16,10 @@ This is the checked G17 budget for the terminal-first preview. Limits are safety
 | Session audit | Caller reads 1,000 newest events; Markdown renders 500 | A truncation line states how many supplied events were omitted. |
 | Local Git | 500 changed paths and 512 KiB diff text | Summary renders before the immutable full bounded artifact reference. |
 | Context composer | 20 evidence summaries, 20 warnings, 2,000 operator-focus characters | Full evidence stays in private artifacts; insertion is one inert non-submitting reference. |
+| Context Basket | 20 selected references, 256 KiB mutable state, 20 source warnings, 4,000 operator-focus characters | Renders provenance/freshness/size/hash summaries; immutable source payloads are referenced, not copied. |
+| Local evidence search | 2,000 ephemeral entries: 200 projects, 200 sessions, 300 ticket contexts, 400 provider bindings, 400 artifacts, 500 events | Rebuilt for each Quick Pick; no terminal object or content is an index input. |
+| Local handoff | 100 selected references from at most 100 context and 500 audit candidates; 2 MiB per Markdown/JSON file | Exports redacted references, summaries, and hashes only; source payloads remain in their private artifacts. |
+| Project branch profiles | 20 profiles per registered project and 20,000 input characters | Exact MR branch match wins, then one explicit active fallback; profiles route reads but never switch Git. |
 | GitLab | 20 pages by default, 5 MiB per response, 30 MiB aggregate | Missing optional discussions, approvals, jobs, or tests produce partial evidence rather than a false success. |
 | Jenkins | 5 MiB per response, 500 failed test cases, 200 stages, 1,000 artifacts, 500 changes | Optional JUnit/Pipeline endpoints may be unavailable; summaries remain bounded. |
 | SonarQube | 20 issue pages, 100 issues per page, 2,000 issues, 50 MiB aggregate | The view renders gate/measures and a small issue summary, with the validated dashboard link for detail. |

@@ -10,6 +10,7 @@ const packagePath = path.join(root, 'package.json');
 const ownershipPath = path.join(root, 'docs', 'state-ownership.md');
 const providerContractPath = path.join(root, 'docs', 'provider-contract-matrix.md');
 const scaleAccessibilityPath = path.join(root, 'docs', 'scale-accessibility-budget.md');
+const roadmapPath = path.join(root, 'docs', 'extension-improvement-goals.md');
 
 const matrix = readJson(matrixPath, 'verification matrix');
 const manifest = readJson(packagePath, 'package manifest');
@@ -18,8 +19,9 @@ const readme = readText(readmePath, 'README');
 const ownership = readText(ownershipPath, 'state ownership document');
 const providerContract = readText(providerContractPath, 'provider contract matrix');
 const scaleAccessibility = readText(scaleAccessibilityPath, 'scale and accessibility budget');
+const roadmap = readText(roadmapPath, 'extension improvement roadmap');
 
-checkVerificationMatrix(matrix, checklist);
+checkVerificationMatrix(matrix, checklist, roadmap);
 checkReadmeMetrics(manifest, readme);
 checkArchitectureEvidence(ownership, providerContract, scaleAccessibility);
 
@@ -35,7 +37,7 @@ if (failures.length > 0) {
   console.log(`Human gates still required: ${matrix.humanGates.map(gate => gate.id).join(', ')}.`);
 }
 
-function checkVerificationMatrix(value, checklistSource) {
+function checkVerificationMatrix(value, checklistSource, roadmapSource) {
   if (!value || value.schemaVersion !== 1 || !Array.isArray(value.featureGroups) || !Array.isArray(value.humanGates)) {
     fail('docs/verification-matrix.json must use schemaVersion 1 with featureGroups and humanGates arrays.');
     return;
@@ -54,11 +56,13 @@ function checkVerificationMatrix(value, checklistSource) {
 
   const groupIds = uniqueIds(value.featureGroups, 'feature group');
   if (groupIds.size < 8) { fail('verification matrix must retain at least eight bounded feature groups.'); }
+  const mappedGoals = new Set();
   for (const group of value.featureGroups) {
     if (!Array.isArray(group.goals) || group.goals.length === 0
       || group.goals.some(goal => typeof goal !== 'string' || !/^G(?:0[1-9]|1[0-9]|2[0-2])$/.test(goal))) {
       fail(`feature group ${group.id || '<missing>'} has an invalid roadmap goal list.`);
     }
+    for (const goal of group.goals || []) { mappedGoals.add(goal); }
     if (!Array.isArray(group.automated) || group.automated.length === 0) {
       fail(`feature group ${group.id || '<missing>'} must reference automated evidence.`);
     } else {
@@ -71,6 +75,13 @@ function checkVerificationMatrix(value, checklistSource) {
         if (!humanGateIds.has(gateId)) { fail(`feature group ${group.id || '<missing>'} references unknown human gate ${gateId}.`); }
       }
     }
+  }
+  const roadmapGoals = [...roadmapSource.matchAll(/^### (G(?:0[1-9]|1[0-9]|2[0-2]))\b/gm)].map(match => match[1]);
+  if (roadmapGoals.length !== 22 || new Set(roadmapGoals).size !== 22) {
+    fail('extension improvement roadmap must retain exactly one G01 through G22 heading.');
+  }
+  for (const goal of roadmapGoals) {
+    if (!mappedGoals.has(goal)) { fail(`verification matrix has no evidence group for roadmap goal ${goal}.`); }
   }
 }
 
@@ -99,6 +110,7 @@ function checkReadmeMetrics(packageJson, readmeSource) {
     'scripts/run-provider-health-visibility-tests.js',
     'scripts/run-context-basket-tests.js',
     'scripts/run-local-evidence-search-tests.js',
+    'scripts/run-handoff-branch-profile-tests.js',
   ];
   const actual = new Map([
     ['Enterprise provider integrations', 4],

@@ -77,6 +77,10 @@ Use a real ticket only when its provider data is approved for local context capt
 12. Open the separate **Projects** view. Confirm every registered project shows its current branch and clean/dirty status, including staged or conflicted detail when present. Use its refresh action after switching branches, then open status/diff and verify the repository is unchanged.
 13. Insert the project's `[GIT-project]` context into its explicitly attached session. Confirm the composer previews changed paths, potential credential material is redacted from the private artifact, and the terminal line is not submitted.
 14. Use **Open merge request page**. Confirm an existing MR opens when known; otherwise a prefilled GitLab new-MR browser page opens and no MR is created until you act in GitLab.
+15. In **Project Integration Setup**, add two explicit branch-profile lines using `branch | Jenkins URL | SonarQube key | SonarQube branch`, choose one optional active fallback, save, and reopen the form. Confirm both profiles and the active choice round-trip exactly.
+16. Link a ticket whose known MR source branch exactly matches the second profile, poll once, and confirm Jenkins uses that profile's job/branch while SonarQube uses its project key/provider branch. Use a ticket without a matching MR profile and confirm only the explicit active fallback is used.
+17. Enter a duplicate branch, unsafe branch, credential-bearing URL, or active name not present in the profile list. Confirm save is refused with a bounded repair message and the prior valid setup remains unchanged.
+18. Confirm saving or selecting a profile never switches the repository branch, changes a worktree, invents a ticket-project link, or sends a provider write.
 
 ## Start Claude for a Ticket
 
@@ -131,6 +135,14 @@ If GitLab and CI providers are safely configured:
 2. Select one result of each kind. Confirm Session focuses/reconnects its terminal, Jira opens its workspace or retained session audit, Project opens bounded read-only Git evidence, Provider opens only a validated URL or audit, Artifact opens its private file, and Event opens its session audit.
 3. Include a terminal with distinctive visible text that appears nowhere in Kronos metadata. Confirm searching that text returns no result and Kronos does not read or index terminal input, output, or scrollback.
 4. Change a session title or create a new local event, reopen search, and confirm the rebuilt Quick Pick reflects current state without a separate indexing task or persistent search file.
+
+## Private Local Handoff
+
+1. From Sessions or Projects choose **Create Private Local Handoff**, select one work session, then select a mix of saved context and audit references. Confirm context references are preselected, audit events remain explicit choices, and the picker refuses more than 100 selections.
+2. Enter a title and optional next-step note. Include a safe credential-shaped fixture and confirm the saved bundle redacts it.
+3. Confirm Kronos opens one private `handoff.md` beside `handoff.json`, and both contain session/project/Jira provenance, selected context paths/completeness/warnings/hashes, selected audit identities/summaries/hashes, and the operator note.
+4. Confirm the pair does not contain source artifact payloads, attachment bytes, terminal names/content/scrollback, credentials, or provider response bodies.
+5. Confirm creating the handoff performs no Jira/GitLab/Jenkins/SonarQube request or write, does not change Git, and records only the private bundle reference/hash/count in the local audit.
 
 ## Launch Validation and Operations
 

@@ -1,6 +1,14 @@
 import * as os from 'os';
 import * as path from 'path';
-import type { BuildStatus, KronosState, MergeRequest, Project, ProjectConfig, Ticket } from '../state/types';
+import type {
+  BuildStatus,
+  KronosState,
+  MergeRequest,
+  Project,
+  ProjectBranchProfile,
+  ProjectConfig,
+  Ticket,
+} from '../state/types';
 import { unknownErrorMessage } from './errorUtils';
 import {
   ensurePrivateDirectoryPath,
@@ -143,7 +151,66 @@ function normalizeProjectConfig(value: unknown): ProjectConfig {
   if (gitlabProjectId !== undefined) { config.gitlab_project_id = gitlabProjectId; }
   const extraDirs = safeStringArray(raw['extra_dirs']);
   if (extraDirs.length > 0) { config.extra_dirs = extraDirs; }
+  const branchProfiles = normalizeBranchProfiles(raw['branch_profiles']);
+  if (branchProfiles.length > 0) {
+    config.branch_profiles = branchProfiles;
+    const active = safeProfileBranch(raw['active_branch_profile']);
+    if (active && branchProfiles.some(profile => profile.branch === active)) {
+      config.active_branch_profile = active;
+    }
+  }
   return config;
+}
+
+function normalizeBranchProfiles(value: unknown): ProjectBranchProfile[] {
+  if (!Array.isArray(value)) { return []; }
+  const profiles: ProjectBranchProfile[] = [];
+  const seen = new Set<string>();
+  for (const raw of value.slice(0, 20)) {
+    if (!isRecord(raw)) { continue; }
+    const branch = safeProfileBranch(raw['branch']);
+    if (!branch || seen.has(branch)) { continue; }
+    const jenkinsUrl = safeProviderUrl(raw['jenkins_url']);
+    const sonarProjectKey = safeString(raw['sonar_project_key']);
+    const sonarBranch = safeProfileBranch(raw['sonar_branch']);
+    if (sonarProjectKey && !/^[A-Za-z0-9_.:-]+$/.test(sonarProjectKey)) { continue; }
+    if (!jenkinsUrl && !sonarProjectKey) { continue; }
+    const profile: ProjectBranchProfile = { branch };
+    if (jenkinsUrl) { profile.jenkins_url = jenkinsUrl; }
+    if (sonarProjectKey) { profile.sonar_project_key = sonarProjectKey; }
+    if (sonarBranch) { profile.sonar_branch = sonarBranch; }
+    profiles.push(profile);
+    seen.add(branch);
+  }
+  return profiles;
+}
+
+function safeProfileBranch(value: unknown): string | undefined {
+  const branch = safeString(value);
+  return branch
+    && /^[A-Za-z0-9][A-Za-z0-9._/@+-]{0,499}$/.test(branch)
+    && !branch.includes('..')
+    && !branch.includes('@{')
+    && !branch.includes('//')
+    && !branch.endsWith('/')
+    && !branch.endsWith('.')
+    && !branch.endsWith('.lock')
+    ? branch
+    : undefined;
+}
+
+function safeProviderUrl(value: unknown): string | undefined {
+  const candidate = safeString(value);
+  if (!candidate) { return undefined; }
+  try {
+    const url = new URL(candidate);
+    const loopback = url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '::1';
+    return !url.username && !url.password && (url.protocol === 'https:' || (url.protocol === 'http:' && loopback))
+      ? url.toString()
+      : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function normalizeTicket(value: unknown, sourceSchemaVersion?: number): Ticket | undefined {

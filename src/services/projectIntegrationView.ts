@@ -11,6 +11,8 @@ export interface ProjectIntegrationFormProject {
   jenkinsUrl?: string;
   sonarProjectKey?: string;
   defaultBranch?: string;
+  branchProfiles?: string;
+  activeBranchProfile?: string;
 }
 
 export interface ProjectIntegrationPanelInput {
@@ -35,6 +37,8 @@ export function buildProjectIntegrationPanelHtml(input: ProjectIntegrationPanelI
       ${formField('Jenkins job URL', 'jenkinsUrl', project.jenkinsUrl || '', 'https://jenkins.example/job/team/job/service/', 'Use the job URL Kronos should poll for builds, stages, and tests.')}
       ${formField('SonarQube project key', 'sonarProjectKey', project.sonarProjectKey || '', 'team:service', 'The component key used for quality gates, measures, and issues.')}
       ${formField('Default monitoring branch', 'defaultBranch', project.defaultBranch || project.branch || '', 'main', 'Used by SonarQube until a linked merge request supplies its source branch.')}
+      ${formField('Active branch profile', 'activeBranchProfile', project.activeBranchProfile || '', 'release/2026.07', 'Optional exact fallback profile. A linked MR branch selects its own exact profile first.')}
+      ${formTextarea('Jenkins / SonarQube branch profiles', 'branchProfiles', project.branchProfiles || '', 'branch | Jenkins job URL | SonarQube key | SonarQube branch', 'One explicit profile per line, up to 20. Blank provider columns are allowed, but each line must configure Jenkins, SonarQube, or both. Profiles route reads only; they never switch Git branches.')}
     </div>
   </section>`).join('');
   const script = [
@@ -61,6 +65,8 @@ ${kronosWebviewBaseCss()}
 .field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .form-field label { display: block; margin-bottom: 5px; font-size: 11px; font-weight: 650; }
 .form-field input { width: 100%; }
+.form-field textarea { width: 100%; min-height: 112px; resize: vertical; font-family: var(--vscode-editor-font-family, monospace); }
+.form-field.wide { grid-column: 1 / -1; }
 .field-help { margin-top: 4px; color: var(--k-muted); font-size: 10px; line-height: 1.35; }
 .integration-actions { position: sticky; bottom: 0; z-index: 2; margin-top: 16px; padding: 12px; border: 1px solid var(--k-border); border-radius: var(--k-radius); background: color-mix(in srgb, var(--k-bg) 92%, transparent); backdrop-filter: blur(8px); }
 .privacy-copy { margin-left: auto; color: var(--k-muted); font-size: 11px; }
@@ -75,7 +81,7 @@ ${kronosWebviewBaseCss()}
     <span class="kronos-pill info">Local config only</span>
   </header>
   <section class="readiness-grid">${readiness}</section>
-  <div class="message warn">Provider credentials stay in the private Kronos environment file. This form saves only project identifiers, job URLs, and the default branch; it never tests, changes, or posts to a provider.</div>
+  <div class="message warn">Provider credentials stay in the private Kronos environment file. This form saves only project identifiers, job URLs, explicit branch routing profiles, and the default branch; it never switches Git, tests, changes, or posts to a provider.</div>
   <section class="integration-list">${projectCards || '<div class="kronos-empty">No registered local projects are available to configure.</div>'}</section>
   <div class="kronos-action-row integration-actions">
     <button type="button" class="kronos-button primary" data-action="save">Save Project Setup</button>
@@ -91,6 +97,15 @@ function formField(label: string, field: string, value: string, placeholder: str
   return `<div class="form-field">
     <label>${escapeHtml(label)}
       <input class="kronos-input" type="text" data-field="${escapeAttr(field)}" value="${escapeAttr(value)}" placeholder="${escapeAttr(placeholder)}" autocomplete="off" spellcheck="false">
+    </label>
+    <div class="field-help">${escapeHtml(help)}</div>
+  </div>`;
+}
+
+function formTextarea(label: string, field: string, value: string, placeholder: string, help: string): string {
+  return `<div class="form-field wide">
+    <label>${escapeHtml(label)}
+      <textarea class="kronos-input" data-field="${escapeAttr(field)}" maxlength="20000" placeholder="${escapeAttr(placeholder)}" spellcheck="false">${escapeHtml(value)}</textarea>
     </label>
     <div class="field-help">${escapeHtml(help)}</div>
   </div>`;

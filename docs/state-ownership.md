@@ -18,6 +18,8 @@ flowchart LR
   C --> X[Editable context composer]
   C --> K[Private bounded Context Basket]
   K --> X
+  S --> H[Private local handoff bundles]
+  E --> H
   X -->|one verified sendText execute=false| T[Explicitly attached VS Code terminal]
 ```
 
@@ -42,6 +44,8 @@ flowchart LR
 | Jira, GitLab, CI, and Git context artifacts | The matching `*ContextStore.ts` | Private content-addressed immutable JSON/Markdown pair, or one immutable Git artifact; byte and collection caps; SHA-256 identity | Existing content must match; incomplete pairs are refused; raw Jira attachments are immutable private bytes and are never parsed | Composer, session artifact reference, terminal reference |
 | Context Basket selections and bundles | `contextBasketStore.ts` | `context-basket.json` schema v1; at most 20 reference-only entries and 256 KiB; selected artifacts must remain inside `KRONOS_DIR`; immutable bundle contains paths, hashes, provenance, freshness, completeness, size, conflicts, warnings, and operator focus | Unsupported/corrupt state fails closed; exact artifacts deduplicate; changed hashes for one source remain visible as conflicts; remove/clear never deletes source artifacts; refresh is explicit | Context Basket webview, session artifact reference, terminal reference, audit |
 | Local evidence search index | `localEvidenceSearch.ts` | Ephemeral rebuild-on-open metadata projection; at most 2,000 entries across separately capped projects, sessions, ticket contexts, provider bindings, artifacts, and audit events | Never persisted, so closing/reloading removes it; every search rebuilds from current private canonical state; terminal bindings and contents are not accepted as inputs | Native VS Code Quick Pick and bounded result actions |
+| Local handoff bundle | `handoffBundleStore.ts` | Immutable private Markdown/JSON pair; at most 100 selections from capped context/audit candidates; 2 MiB per file; context paths must remain inside `KRONOS_DIR`; all text is credential-redacted | Missing/external context references, incomplete immutable pairs, invalid timestamps, and oversized selections fail closed; source payloads and terminal content are never copied | Operator-opened local document, audit decision reference |
+| Project branch profiles | `projectCatalog.ts` through `TerminalFirstState.ts`, normalized at `stateStore.ts` ingress | At most 20 exact branch profiles per explicitly registered project; each may carry a normalized Jenkins URL and/or SonarQube key/branch plus one optional active fallback | Duplicate/unsafe branches, credential URLs, unknown active profiles, and malformed persisted entries are rejected or omitted; profiles never create a ticket link or switch Git | Project setup, Jenkins/SonarQube target selection |
 | Setup and Doctor readiness | `operationsReadiness.ts` from `providerReadiness.ts` and local state issues | Computed secret-free snapshot; no persistence | Missing, present-needs-test, invalid, unavailable, and ready remain distinct; both views receive the same snapshot | Setup and Doctor |
 | Webview message | `webviewMessages.ts` plus the owning runtime handler | Allowlisted command and bounded identity/focus fields only | Unknown fields and commands are dropped; ticket/project/session identity is resolved again against current canonical state before action | Ticket workspace, Jira board, Setup, Doctor, composers |
 

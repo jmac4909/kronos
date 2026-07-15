@@ -3121,6 +3121,8 @@ test('Setup and Doctor render bounded operation dashboards with allowlisted acti
       jenkinsUrl: 'https://jenkins.example/job/app/',
       sonarProjectKey: 'app:key',
       defaultBranch: 'main',
+      branchProfiles: 'main | https://jenkins.example/job/app/main | app:key | main',
+      activeBranchProfile: 'main',
     }],
   }), {
     command: 'save',
@@ -3130,6 +3132,8 @@ test('Setup and Doctor render bounded operation dashboards with allowlisted acti
       jenkinsUrl: 'https://jenkins.example/job/app/',
       sonarProjectKey: 'app:key',
       defaultBranch: 'main',
+      branchProfiles: 'main | https://jenkins.example/job/app/main | app:key | main',
+      activeBranchProfile: 'main',
     }],
   });
 });

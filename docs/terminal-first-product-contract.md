@@ -110,6 +110,8 @@ Projects is the registered local repository inventory. It is a peer of Sessions 
 
 Each registered Project shows its current branch and clean, dirty, staged, or conflicted state. Refreshing the view asks VS Code's built-in Git model to load a registered repository when necessary, reads status without loading the full diff, and falls back to bounded local Git `HEAD` metadata for the branch. Selecting the project opens a complete bounded status/diff document; expanding it exposes secret-redacted Git-context insertion, an existing-MR or prefilled new-MR browser action, ticket-scoped MR/CI evidence insertion, and provider setup. The Projects toolbar refreshes branch/status, manages the registered project set and discovery roots, and can request the normal provider poll.
 
+Project setup may store at most 20 explicit branch-routing profiles. Each exact match branch can override the Jenkins job URL, SonarQube project key, and SonarQube provider branch for read-only evidence; one configured profile may be the fallback. An exact linked-MR source-branch profile wins before that fallback. Branch names and provider identifiers are validated, credential-bearing URLs are rejected, and malformed persisted profiles are omitted at Work-catalog ingress. Profiles belong only to an explicitly registered project and become ticket routing only through the existing explicit ticket-project link or an explicitly project-bound Session. They never infer a link from a Jira namespace, select or switch a Git branch, change a worktree, or contact a provider merely because setup was saved.
+
 These actions use VS Code's built-in Git read model and provider REST reads. They never stage, commit, push, create an MR through an API, or otherwise mutate Git or provider state.
 
 ### Attention
@@ -193,6 +195,8 @@ By default, private terminal-first state lives under `~/.kronos`, or the explici
 
 **Search Local Sessions and Evidence** builds a fresh in-memory index each time it opens. The index is capped at 2,000 separately budgeted metadata entries across registered projects/branches, sessions, explicit ticket contexts, provider bindings, saved artifact labels, and the newest audit-event summaries. It is never written to disk, includes no artifact payload or provider response body, and cannot accept terminal bindings, input, output, or scrollback as a source. Selecting a result performs only its existing bounded action: focus/reconnect a managed terminal, open a ticket workspace, read project Git evidence, open a private artifact, open a validated provider URL, or open the local session audit.
 
+**Create Private Local Handoff** starts from one explicitly selected work session. The operator chooses up to 100 saved context and audit references from capped local candidates, supplies a bounded title/note, and receives one immutable private Markdown/JSON pair under `KRONOS_DIR`. Context entries retain artifact path, completeness, warnings, and SHA-256; audit entries retain normalized event identity, time, source/type, summary, subject, and a canonical SHA-256. Credential-shaped text is redacted before publication. The bundle never copies provider payloads, attachment bytes, terminal content, or scrollback, and creation performs no provider request or mutation. The local audit records only the bundle reference/hash and selection count.
+
 The canonical owner, ingress, compatibility, and consumer for every record are listed in [State Ownership and Data Flow](state-ownership.md). Provider request, bound, normalization, completeness, and error behavior are listed in the [Provider Read Contract Matrix](provider-contract-matrix.md).
 
 Collection ceilings, local render/read timing gates, superseding Jira refresh behavior, and the automated versus human accessibility boundary are listed in [Scale, Responsiveness, and Accessibility Budget](scale-accessibility-budget.md).
@@ -225,8 +229,8 @@ The installed extension has zero third-party runtime dependencies. Kronos uses t
 The public terminal-first command surface is intentionally limited to:
 
 - Work: refresh the Jira board; search/filter/show completed/clear filters; open ticket workspace; start Claude for the selected ticket; manage a focused terminal; insert Jira/MR/CI context; open the Context Basket;
-- Sessions: create a project-oriented Claude session; add another Jira context; poll providers; search local session/evidence metadata; open audit; focus/reattach/detach terminal; stop or remove local management; pause/resume monitoring;
-- Projects: refresh registered branch/status; manage discovery and registration; view bounded status/diff; insert project Git/MR/CI evidence; open an existing or prefilled new MR page; configure project providers; open the Context Basket;
+- Sessions: create a project-oriented Claude session; add another Jira context; poll providers; search local session/evidence metadata; create a private local handoff; open audit; focus/reattach/detach terminal; stop or remove local management; pause/resume monitoring;
+- Projects: refresh registered branch/status; manage discovery and registration; view bounded status/diff; insert project Git/MR/CI evidence; open an existing or prefilled new MR page; configure project providers and explicit branch profiles; create a private local handoff; open the Context Basket;
 - Attention: acknowledge item and open provider;
 - Operations: search local session/evidence metadata from every view; open the Context Basket from Work, Sessions, or Projects; Setup, Doctor, and Settings.
 

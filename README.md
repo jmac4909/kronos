@@ -12,7 +12,7 @@
   <img alt="TypeScript strict" src="https://img.shields.io/badge/TypeScript-strict-3178C6">
   <img alt="VS Code 1.85 or newer" src="https://img.shields.io/badge/VS%20Code-%5E1.85-23A8F2">
   <img alt="Zero third-party runtime dependencies" src="https://img.shields.io/badge/runtime%20dependencies-0-22C55E">
-  <img alt="120 automated local tests" src="https://img.shields.io/badge/test%20suite-120%20local-22C55E">
+  <img alt="126 automated local tests" src="https://img.shields.io/badge/test%20suite-126%20local-22C55E">
   <img alt="Preview status" src="https://img.shields.io/badge/status-preview-F59E0B">
 </p>
 
@@ -33,6 +33,7 @@ Kronos solves a narrow enterprise-development problem: the evidence needed for a
 | **Context composer** | Review fetched evidence, edit the focus, and place one shell-inert line in the chosen terminal with submission disabled. |
 | **Context Basket** | Select multiple Jira, MR, CI, and local Git artifacts, review provenance/freshness/completeness/conflicts together, then place one reference-only bundle without copying or submitting provider content. |
 | **Local search** | Use one bounded Quick Pick to find session titles, explicit Jira contexts, registered projects/branches, provider bindings, event summaries, and artifact labels without reading terminal content. |
+| **Handoffs and branch profiles** | Export selected context/audit references and hashes to a private local Markdown/JSON pair, and explicitly route Jenkins/SonarQube reads for known branches without switching Git or posting anywhere. |
 
 ### A 60-second workflow
 
@@ -100,11 +101,11 @@ The installed extension uses the VS Code API and Node built-ins only. It has **z
 | Enterprise provider integrations | 4 |
 | Focused VS Code views | 4 |
 | Audited terminal-write paths | 2 |
-| Manifest-covered commands | 38 |
+| Manifest-covered commands | 39 |
 | Manifest-covered settings | 10 |
-| Reachable runtime modules checked for cycles/dead exports | 74 |
+| Reachable runtime modules checked for cycles/dead exports | 75 |
 | Third-party runtime dependencies | 0 |
-| Automated Node/DOM/board tests | 120 |
+| Automated Node/DOM/board tests | 126 |
 
 Automated gates also cover the runtime graph, security boundary, context governance, activation surface, provider transitions, private state, credential redaction, and packaged extension contents.
 

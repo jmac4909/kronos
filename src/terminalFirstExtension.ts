@@ -127,8 +127,13 @@ import {
   buildLocalEvidenceSearchIndex,
   type LocalEvidenceSearchEntry,
 } from './services/localEvidenceSearch';
+import {
+  buildHandoffCandidates,
+  writeLocalHandoffBundle,
+} from './services/handoffBundleStore';
 import { isRecord } from './services/records';
 import {
+  formatProjectBranchProfiles,
   listLocalProjects,
   projectConfigurationForTicket,
   readProjectGitBranch,
@@ -398,6 +403,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
     this.command('kronos.insertCiContext', async argument => this.insertCiContext(argument));
     this.command('kronos.openContextBasket', async () => this.openContextBasket());
     this.command('kronos.searchLocalEvidence', async () => this.searchLocalEvidence());
+    this.command('kronos.createLocalHandoff', async argument => this.createLocalHandoff(argument));
     this.command('kronos.pollManagedWorkSessions', async () => this.pollProviders(true));
     this.command('kronos.openWorkSessionAudit', async argument => this.openWorkSessionAudit(argument));
     this.command('kronos.focusWorkSessionTerminal', async argument => this.focusWorkSessionTerminal(argument));
@@ -800,6 +806,8 @@ class TerminalFirstRuntime implements vscode.Disposable {
         ...((config.default_branch || config.base_branch)
           ? { defaultBranch: config.default_branch || config.base_branch }
           : {}),
+        ...(config.branch_profiles ? { branchProfiles: formatProjectBranchProfiles(config.branch_profiles) } : {}),
+        ...(config.active_branch_profile ? { activeBranchProfile: config.active_branch_profile } : {}),
       };
     });
     const scriptUri = panel.webview.asWebviewUri(
@@ -1853,6 +1861,87 @@ class TerminalFirstRuntime implements vscode.Disposable {
     await this.openWorkSessionAudit({ sessionId: action.sessionId });
   }
 
+  private async createLocalHandoff(argument: unknown): Promise<void> {
+    const session = await this.resolveWorkSession(argument, true);
+    if (!session) { return; }
+    let events: ReturnType<typeof listMonitorEvents> = [];
+    try {
+      events = listMonitorEvents({ sessionId: session.id, limit: 500 });
+    } catch (error: unknown) {
+      this.log('Local handoff could not read the audit tail.', unknownErrorMessage(error, 'Audit references unavailable.'));
+      void vscode.window.showWarningMessage('Kronos could not include audit events in this handoff. Saved context references remain selectable.');
+    }
+    const candidates = buildHandoffCandidates(session, events);
+    if (candidates.length === 0) {
+      void vscode.window.showInformationMessage('This work session has no saved context or audit references to hand off yet.');
+      return;
+    }
+    const selected = await vscode.window.showQuickPick(candidates.map(candidate => ({
+      label: `$(${candidate.selection.kind === 'context' ? 'file-text' : 'history'}) ${candidate.label}`,
+      description: candidate.description,
+      detail: candidate.detail,
+      picked: candidate.picked,
+      candidate,
+    })), {
+      title: `Create Local Handoff — ${workSessionEventContext(session).label}`,
+      placeHolder: 'Choose up to 100 saved context and audit references',
+      canPickMany: true,
+      matchOnDescription: true,
+      matchOnDetail: true,
+    });
+    if (!selected || selected.length === 0) { return; }
+    if (selected.length > 100) {
+      void vscode.window.showWarningMessage('Choose at most 100 references for one local handoff.');
+      return;
+    }
+    const title = await vscode.window.showInputBox({
+      title: 'Local Handoff Title',
+      prompt: 'This title is saved only in the private local handoff bundle.',
+      value: `${session.title} handoff`,
+      validateInput: value => value.trim() && value.length <= 200 ? null : 'Enter a title of 200 characters or fewer.',
+      ignoreFocusOut: true,
+    });
+    if (!title) { return; }
+    const note = await vscode.window.showInputBox({
+      title: 'Local Handoff Note (Optional)',
+      prompt: 'Add the next decision, open question, or review focus. Credential-shaped text is redacted before save.',
+      placeHolder: 'What should the next operator know?',
+      validateInput: value => value.length <= 4_000 ? null : 'Use 4,000 characters or fewer.',
+      ignoreFocusOut: true,
+    });
+    if (note === undefined) { return; }
+    try {
+      const bundle = writeLocalHandoffBundle({
+        session,
+        selections: selected.map(value => value.candidate.selection),
+        title,
+        note,
+      });
+      appendMonitorEvent({
+        sessionId: session.id,
+        type: 'decision.recorded',
+        source: 'operator',
+        summary: `${workSessionEventContext(session).label} exported a private local handoff bundle.`,
+        subject: { kind: 'local-handoff', id: bundle.id, ...workSessionTicketMetadata(session) },
+        artifactPath: bundle.markdownPath,
+        metadata: {
+          selectionCount: bundle.selectionCount,
+          artifactSha256: bundle.contentSha256,
+          providerMutation: false,
+        },
+      });
+      await this.openLocalArtifact(bundle.markdownPath);
+      this.refreshTerminalFirstViews();
+      void vscode.window.showInformationMessage(
+        `Created ${bundle.id} with ${bundle.selectionCount} private local reference${bundle.selectionCount === 1 ? '' : 's'}. Nothing was posted to a provider.`,
+      );
+    } catch (error: unknown) {
+      const detail = unknownErrorMessage(error, 'Kronos could not create the local handoff bundle.');
+      this.log('Local handoff creation failed.', detail);
+      void vscode.window.showErrorMessage(detail);
+    }
+  }
+
   private async insertJiraContext(argument: unknown): Promise<void> {
     const ticketKey = await this.resolveTicketKey(argument, true);
     const ticket = ticketKey ? this.state.state?.tickets[ticketKey] : undefined;
@@ -2056,7 +2145,9 @@ class TerminalFirstRuntime implements vscode.Disposable {
       if (jenkinsUrl) {
         progress.report({ message: 'Reading Jenkins build, stages, and tests...' });
         try {
-          const jenkinsBranch = configuredSonarBranchName(this.state.state, ticketKey) || undefined;
+          const jenkinsBranch = savedTargets.jenkinsBranch
+            || configuredSonarBranchName(this.state.state, ticketKey)
+            || undefined;
           jenkins = await jenkinsRestClient.buildContext(
             jenkinsUrl,
             jenkinsBranch ? { branch: jenkinsBranch } : {},

@@ -65,7 +65,11 @@ import {
 } from './workSessionStore';
 import { optionalTrimmedStringFromUnknown } from './records';
 import { unknownErrorMessage } from './errorUtils';
-import { projectConfigurationForTicket, readProjectGitBranch } from './projectCatalog';
+import {
+  projectConfigurationForTicket,
+  readProjectGitBranch,
+  selectProjectBranchProfile,
+} from './projectCatalog';
 import {
   configuredGitLabProjectIdentity,
   effectiveTicketMergeRequest,
@@ -113,6 +117,7 @@ export interface ConfiguredGitLabPollingTarget {
 
 export interface ConfiguredCiPollingTargets {
   jenkinsUrl?: string;
+  jenkinsBranch?: string;
   sonar?: { projectKey: string; branch: string; providerUrl?: string };
 }
 
@@ -549,7 +554,8 @@ export class ManagedProviderMonitor {
     let sonarReadFailure: string | undefined;
     if (jenkinsUrl) {
       try {
-        const jenkinsBranch = sonarTarget?.branch
+        const jenkinsBranch = targets.jenkinsBranch
+          || sonarTarget?.branch
           || configuredSonarBranchName(state, session.ticketKey)
           || undefined;
         jenkins = await jenkinsRestClient.buildContext(
@@ -1470,18 +1476,21 @@ export function configuredCiPollingTargets(
     session.providerBindings,
     candidate => candidate.provider === 'sonar' && candidate.resource === 'quality-gate',
   );
-  const jenkinsUrl = optionalTrimmedStringFromUnknown(config.jenkins_url)
+  const branchCandidates = ticketProviderBranchCandidates(ticket);
+  const profile = selectProjectBranchProfile(config, branchCandidates);
+  const jenkinsUrl = optionalTrimmedStringFromUnknown(profile?.jenkins_url)
+    || optionalTrimmedStringFromUnknown(config.jenkins_url)
     || jenkinsJobBinding?.url
     || ticket?.build?.url
     || jenkinsBuildBinding?.url;
-  const configuredBranch = optionalTrimmedStringFromUnknown(config.sonar_branch)
-    || ticket?.mr?.source_branch
-    || ticket?.mr?.sourceBranch
-    || ticket?.mr?.branch
-    || ticket?.mr?.head_branch
+  const configuredBranch = optionalTrimmedStringFromUnknown(profile?.sonar_branch)
+    || optionalTrimmedStringFromUnknown(profile?.branch)
+    || optionalTrimmedStringFromUnknown(config.sonar_branch)
+    || branchCandidates.map(optionalTrimmedStringFromUnknown).find(Boolean)
     || optionalTrimmedStringFromUnknown(config.default_branch)
     || optionalTrimmedStringFromUnknown(config.base_branch);
-  const configuredProjectKey = optionalTrimmedStringFromUnknown(config.sonar_project_key);
+  const configuredProjectKey = optionalTrimmedStringFromUnknown(profile?.sonar_project_key)
+    || optionalTrimmedStringFromUnknown(config.sonar_project_key);
   const configuredSonar = configuredProjectKey && configuredBranch
     ? { projectKey: configuredProjectKey, branch: configuredBranch }
     : null;
@@ -1501,8 +1510,10 @@ export function configuredCiPollingTargets(
       ...(sonarBinding?.url ? { providerUrl: sonarBinding.url } : {}),
     };
   }
+  const jenkinsBranch = optionalTrimmedStringFromUnknown(profile?.branch);
   return {
     ...(jenkinsUrl ? { jenkinsUrl } : {}),
+    ...(jenkinsUrl && jenkinsBranch ? { jenkinsBranch } : {}),
     ...(sonar ? { sonar } : {}),
   };
 }
@@ -1513,7 +1524,9 @@ export function configuredSonarBranch(
 ): { projectKey: string; branch: string } | null {
   const ticket = state?.tickets[ticketKey];
   const config = projectConfigurationForTicket(state, ticket);
-  const projectKey = optionalTrimmedStringFromUnknown(config?.sonar_project_key);
+  const profile = selectProjectBranchProfile(config, ticketProviderBranchCandidates(ticket));
+  const projectKey = optionalTrimmedStringFromUnknown(profile?.sonar_project_key)
+    || optionalTrimmedStringFromUnknown(config?.sonar_project_key);
   const branch = configuredSonarBranchName(state, ticketKey);
   return projectKey && branch ? { projectKey, branch } : null;
 }
@@ -1524,14 +1537,24 @@ export function configuredSonarBranchName(
 ): string | null {
   const ticket = state?.tickets[ticketKey];
   const config = projectConfigurationForTicket(state, ticket);
-  const branch = optionalTrimmedStringFromUnknown(config?.sonar_branch)
-    || ticket?.mr?.source_branch
-    || ticket?.mr?.sourceBranch
-    || ticket?.mr?.branch
-    || ticket?.mr?.head_branch
+  const candidates = ticketProviderBranchCandidates(ticket);
+  const profile = selectProjectBranchProfile(config, candidates);
+  const branch = optionalTrimmedStringFromUnknown(profile?.sonar_branch)
+    || optionalTrimmedStringFromUnknown(profile?.branch)
+    || optionalTrimmedStringFromUnknown(config?.sonar_branch)
+    || candidates.map(optionalTrimmedStringFromUnknown).find(Boolean)
     || optionalTrimmedStringFromUnknown(config?.default_branch)
     || optionalTrimmedStringFromUnknown(config?.base_branch);
   return optionalTrimmedStringFromUnknown(branch) || null;
+}
+
+function ticketProviderBranchCandidates(ticket: KronosStateSnapshot['tickets'][string] | undefined): Array<string | undefined> {
+  return [
+    ticket?.mr?.source_branch,
+    ticket?.mr?.sourceBranch,
+    ticket?.mr?.branch,
+    ticket?.mr?.head_branch,
+  ];
 }
 
 export function gitLabIncompleteMonitorComponents(
