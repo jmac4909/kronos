@@ -60,7 +60,7 @@ test('board builder exposes useful Jira filters and only bounded terminal-first 
     assert.match(html, new RegExp(`id="${id}"`));
   }
   assert.match(html, /id="jira-board-hide-done" type="checkbox" data-default-checked="true" checked/);
-  assert.match(html, /data-completed-column="true" hidden/);
+  assert.match(html, /data-completed-column="true"[^>]* hidden/);
   assert.match(html, /data-ticket="KRONOS-3"[^>]+data-completed="false"/);
   assert.doesNotMatch(html, /<script>must escape<\/script>/);
   assert.match(html, /&lt;script&gt;must escape&lt;\/script&gt;/);
@@ -75,6 +75,70 @@ test('board builder exposes useful Jira filters and only bounded terminal-first 
   for (const forbidden of ['addToQueue', 'removeFromQueue', 'dispatch', 'runCenter', 'linkProject', 'triggerBuild']) {
     assert.doesNotMatch(html, new RegExp(forbidden, 'i'));
   }
+});
+
+test('board terminology and dense-card rendering keep Jira namespaces separate from local repositories', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'services', 'jiraWorkBoardView.ts'), 'utf8');
+  const filtersSource = fs.readFileSync(path.join(__dirname, '..', 'src', 'services', 'workTicketFilters.ts'), 'utf8');
+  assert.match(source, /const jiraProjects = uniqueFacet/);
+  assert.match(source, /const localProjects = listLocalProjects/);
+  assert.match(source, /const linkedProjectFilters = uniqueFacet/);
+  assert.doesNotMatch(source, /const projects = uniqueFacet/);
+  assert.match(filtersSource, /jiraProjects: string\[\];[^]*localProjects: string\[\];/);
+
+  const longSummary = `Long summary ${'segment-without-a-natural-break-'.repeat(60)}`;
+  const denseLabels = Array.from({ length: 30 }, (_, index) => `label-${index}`);
+  const html = buildJiraWorkBoardHtml({
+    state: state({
+      'KRONOS-80': ticket('In Progress', {
+        summary: longSummary,
+        labels: denseLabels,
+        jira_project_key: 'PLATFORM',
+        linked_local_project: 'Kronos',
+        custom_field_empty: null,
+      }),
+      'KRONOS-81': ticket('', { summary: '', priority: '', type: '', labels: undefined }),
+    }),
+    nonce: 'abcdef1234567890',
+    scriptUri: 'vscode-resource://kronos/media/kronos-jira-work-board.js',
+  });
+  assert.match(html, /jira-ticket-summary[^}]+overflow-wrap: anywhere/);
+  assert.match(html, /-webkit-line-clamp: 4/);
+  assert.match(html, /jira-ticket-chip[^}]+max-width: 100%/);
+  assert.match(html, />\+26 more<\/span>/);
+  assert.match(html, /Jira: PLATFORM/);
+  assert.match(html, /Project: Kronos/);
+  assert.match(html, /Untitled ticket/);
+  assert.match(html, /data-status="unknown"/);
+  assert.doesNotMatch(html, /custom_field_empty/);
+});
+
+test('board action and focus contract covers every declared action exactly once', () => {
+  const harness = createDomHarness('complete');
+  const messages = [];
+  assert.equal(boardRuntime.initialize(harness.document, { postMessage(message) { messages.push(message); } }), true);
+  for (const action of JIRA_WORK_BOARD_ACTIONS) {
+    const target = actionTarget(action, ['refreshTickets', 'openDoctor'].includes(action) ? '' : 'KRONOS-1');
+    const owner = ['refreshTickets', 'openDoctor'].includes(action) ? harness.dataStatus : harness.board;
+    owner.dispatch('click', {
+      target,
+      preventDefault() {},
+      stopPropagation() {},
+    });
+  }
+  assert.deepEqual(messages.map(message => message.command), JIRA_WORK_BOARD_ACTIONS);
+  assert.ok(messages.filter(message => message.ticket === 'KRONOS-1').length > 0);
+
+  const html = buildJiraWorkBoardHtml({
+    state: state({ 'KRONOS-1': ticket('In Progress') }),
+    nonce: 'abcdef1234567890',
+    scriptUri: 'vscode-resource://kronos/media/kronos-jira-work-board.js',
+  });
+  assert.match(html, /aria-label="Jira status: In Progress"/);
+  assert.match(html, /tabindex="0" aria-label="Open KRONOS-1:/);
+  assert.match(html, /data-action="startClaudeForTicket"[^>]+aria-label="Start Claude for KRONOS-1"/);
+  assert.ok(html.indexOf('aria-label="Jira board filters"') < html.indexOf('aria-label="Jira tickets by status"'));
+  assert.ok(html.indexOf('data-action="chooseTicketProject"') < html.indexOf('data-action="startClaudeForTicket"'));
 });
 
 test('completed status detection supports common names and explicit team statuses', () => {
@@ -96,7 +160,7 @@ test('board settings map custom completed statuses and the initial visibility de
   });
   assert.match(html, /data-completed="true"/);
   assert.match(html, /data-default-checked="false"/);
-  assert.doesNotMatch(html, /data-completed-column="true" hidden/);
+  assert.doesNotMatch(html, /data-completed-column="true"[^>]* hidden/);
   assert.match(html, />1 of 1 shown</);
   assert.doesNotMatch(html, /completed hidden/);
 });

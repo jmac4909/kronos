@@ -9,7 +9,9 @@
         { "file": "scripts/run-unit-tests.js", "test": "Work data status distinguishes empty, loading, partial, stale, error, and current results" },
         { "file": "scripts/run-jira-work-board-tests.js", "test": "board runtime filters cards and reveals a specifically selected completed status" },
         { "file": "scripts/run-jira-work-board-tests.js", "test": "board composes every search, status, Jira, local-project, and label filter subset" },
-        { "file": "scripts/run-jira-work-board-tests.js", "test": "board keyboard activation opens a focused card with Enter or Space exactly once" }
+        { "file": "scripts/run-jira-work-board-tests.js", "test": "board keyboard activation opens a focused card with Enter or Space exactly once" },
+        { "file": "scripts/run-jira-work-board-tests.js", "test": "board terminology and dense-card rendering keep Jira namespaces separate from local repositories" },
+        { "file": "scripts/run-jira-work-board-tests.js", "test": "board action and focus contract covers every declared action exactly once" }
       ],
       "humanGates": ["operator-terminal"]
     },
@@ -828,6 +830,88 @@
         { "file": "scripts/run-failure-contract-tests.js", "test": "failed monitoring remains visible while last-known-good timestamps stay retained" },
         { "file": "scripts/run-failure-contract-tests.js", "test": "Jira retains successful ticket and recent comment evidence when later comments and attachments are partial" }
       ]
+    },
+    {
+      "requirements": ["G08-goal:668506b3"],
+      "automated": [
+        { "file": "scripts/run-jira-work-board-tests.js", "test": "board terminology and dense-card rendering keep Jira namespaces separate from local repositories" },
+        { "file": "scripts/run-jira-work-board-tests.js", "test": "board action and focus contract covers every declared action exactly once" }
+      ],
+      "humanGates": ["operator-terminal", "real-vscode"]
+    },
+    {
+      "requirements": ["G08-case-01:0f43590e"],
+      "automated": [
+        { "file": "scripts/run-jira-work-board-tests.js", "test": "board terminology and dense-card rendering keep Jira namespaces separate from local repositories" },
+        { "file": "scripts/run-jira-work-board-tests.js", "test": "board filters Jira namespaces independently from explicit local projects" }
+      ]
+    },
+    {
+      "requirements": ["G08-case-02:d941470c"],
+      "automated": [
+        { "file": "scripts/run-jira-work-board-tests.js", "test": "board settings map custom completed statuses and the initial visibility default" },
+        { "file": "scripts/run-jira-work-board-tests.js", "test": "board reset returns to the configured completed-work default" }
+      ]
+    },
+    {
+      "requirements": ["G08-case-03:d9eab6a0"],
+      "automated": [
+        { "file": "scripts/run-jira-work-board-tests.js", "test": "board composes every search, status, Jira, local-project, and label filter subset" },
+        { "file": "scripts/run-jira-work-board-tests.js", "test": "board runtime filters cards and reveals a specifically selected completed status" }
+      ]
+    },
+    {
+      "requirements": ["G08-case-04:9e10e26d"],
+      "automated": [
+        { "file": "scripts/run-jira-work-board-tests.js", "test": "board filters survive a webview HTML rerender through VS Code webview state" },
+        { "file": "scripts/run-jira-work-board-tests.js", "test": "board reset returns to the configured completed-work default" }
+      ]
+    },
+    {
+      "requirements": ["G08-case-05:4d349f09"],
+      "automated": [
+        { "file": "scripts/run-jira-work-board-tests.js", "test": "board renders distinct current, empty, loading, partial, stale, and error data states" },
+        { "file": "scripts/run-jira-work-board-tests.js", "test": "board composes every search, status, Jira, local-project, and label filter subset" }
+      ]
+    },
+    {
+      "requirements": ["G08-case-06:f5e6f718"],
+      "automated": [
+        { "file": "scripts/run-jira-work-board-tests.js", "test": "board builder exposes useful Jira filters and only bounded terminal-first actions" },
+        { "file": "scripts/run-jira-work-board-tests.js", "test": "board lists registered local project paths and current Git branches" }
+      ]
+    },
+    {
+      "requirements": ["G08-case-07:d1123622"],
+      "automated": [
+        { "file": "scripts/run-jira-work-board-tests.js", "test": "board terminology and dense-card rendering keep Jira namespaces separate from local repositories" },
+        { "file": "scripts/run-scale-accessibility-tests.js", "test": "500-ticket board stays inside the checked render and output budget" }
+      ]
+    },
+    {
+      "requirements": ["G08-case-08:becdc77f"],
+      "automated": [
+        { "file": "scripts/run-jira-work-board-tests.js", "test": "board action and focus contract covers every declared action exactly once" },
+        { "file": "scripts/run-jira-work-board-tests.js", "test": "board keyboard activation opens a focused card with Enter or Space exactly once" }
+      ],
+      "humanGates": ["real-vscode"]
+    },
+    {
+      "requirements": ["G08-evidence-01:71190d3a"],
+      "automated": [
+        { "file": "scripts/run-jira-work-board-tests.js", "test": "board terminology and dense-card rendering keep Jira namespaces separate from local repositories" }
+      ]
+    },
+    {
+      "requirements": ["G08-evidence-02:9326a1b7"],
+      "automated": [
+        { "file": "scripts/run-jira-work-board-tests.js", "test": "board action and focus contract covers every declared action exactly once" },
+        { "file": "scripts/run-jira-work-board-tests.js", "test": "board composes every search, status, Jira, local-project, and label filter subset" }
+      ]
+    },
+    {
+      "requirements": ["G08-evidence-03:de86a8de"],
+      "humanGates": ["operator-terminal", "real-vscode"]
     },
     {
       "requirements": ["G16-goal:b55b5b6c"],

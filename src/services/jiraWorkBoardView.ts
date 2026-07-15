@@ -141,17 +141,17 @@ export function buildJiraWorkBoardHtml(input: JiraWorkBoardInput): string {
   .jira-ticket-card[data-ticket-type="bug"] { border-left-color: var(--k-danger); }
   .jira-ticket-card:hover, .jira-ticket-card:focus-within { border-color: var(--k-border-strong); background: var(--k-hover); }
   .jira-ticket-card:focus-visible { outline: 1px solid var(--vscode-focusBorder, var(--k-accent)); outline-offset: 2px; }
-  .jira-ticket-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-  .jira-ticket-heading-actions { display: flex; align-items: center; justify-content: flex-end; gap: 6px; min-width: 0; }
+  .jira-ticket-heading { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+  .jira-ticket-heading-actions { display: flex; align-items: center; justify-content: flex-end; flex: 1 1 180px; flex-wrap: wrap; gap: 6px; min-width: 0; }
   .jira-ticket-heading-actions .kronos-button { min-height: 23px; max-width: 170px; padding: 2px 7px; overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
   .jira-ticket-key { color: var(--k-accent); font-size: 11px; font-weight: 700; }
   .jira-ticket-open { margin: 0; padding: 0; border: 0; color: var(--k-accent); background: transparent; font: inherit; cursor: pointer; }
   .jira-ticket-open:hover { text-decoration: underline; }
   .jira-ticket-open:focus-visible { outline: 1px solid var(--vscode-focusBorder, var(--k-accent)); outline-offset: 2px; }
   .jira-ticket-priority { color: var(--k-muted); font-size: 10px; }
-  .jira-ticket-summary { font-size: 12px; font-weight: 550; line-height: 1.4; }
+  .jira-ticket-summary { display: -webkit-box; overflow: hidden; overflow-wrap: anywhere; font-size: 12px; font-weight: 550; line-height: 1.4; -webkit-box-orient: vertical; -webkit-line-clamp: 4; }
   .jira-ticket-meta, .jira-ticket-actions { display: flex; flex-wrap: wrap; gap: 5px; }
-  .jira-ticket-chip { display: inline-flex; align-items: center; min-height: 18px; padding: 1px 7px; border: 1px solid var(--k-border); border-radius: 999px; color: var(--k-muted); background: var(--k-surface-soft); font-size: 10px; line-height: 1.2; }
+  .jira-ticket-chip { display: inline-flex; align-items: center; max-width: 100%; min-height: 18px; padding: 1px 7px; overflow-wrap: anywhere; border: 1px solid var(--k-border); border-radius: 999px; color: var(--k-muted); background: var(--k-surface-soft); font-size: 10px; line-height: 1.2; }
   .jira-ticket-chip.project { color: var(--k-info); background: var(--k-info-bg); border-color: transparent; }
   .jira-ticket-chip.mr { color: var(--k-warn); background: var(--k-warn-bg); border-color: transparent; }
   .jira-ticket-chip.build { color: var(--k-ok); background: var(--k-ok-bg); border-color: transparent; }
@@ -327,7 +327,7 @@ function compareBoardTickets(left: BoardTicket, right: BoardTicket): number {
 
 function buildColumnHtml(column: BoardColumn, hideCompletedByDefault: boolean): string {
   const visibleByDefault = !hideCompletedByDefault || !column.completed;
-  return `<section class="jira-board-column" data-status-column="${escapeAttr(column.statusToken)}" data-completed-column="${column.completed ? 'true' : 'false'}"${visibleByDefault ? '' : ' hidden'}>
+  return `<section class="jira-board-column" data-status-column="${escapeAttr(column.statusToken)}" data-completed-column="${column.completed ? 'true' : 'false'}" aria-label="Jira status: ${escapeAttr(column.status)}"${visibleByDefault ? '' : ' hidden'}>
     <header class="jira-board-column-header"><span>${escapeHtml(column.status)}</span><span class="jira-board-column-count" data-column-count>${visibleByDefault ? column.tickets.length : 0}</span></header>
     <div class="jira-board-cards">${column.tickets.map(buildTicketCardHtml).join('')}</div>
   </section>`;
@@ -375,7 +375,8 @@ function buildTicketCardHtml(ticket: BoardTicket): string {
 
 function actionButton(action: JiraWorkBoardAction, label: string, ticket: string, primary = false): string {
   const ticketAttribute = ticket ? ` data-ticket="${escapeAttr(ticket)}"` : '';
-  return `<button type="button" class="kronos-button${primary ? ' primary' : ''}" data-action="${action}"${ticketAttribute}>${escapeHtml(label)}</button>`;
+  const accessibleLabel = ticket ? ` aria-label="${escapeAttr(`${label} for ${ticket}`)}"` : '';
+  return `<button type="button" class="kronos-button${primary ? ' primary' : ''}" data-action="${action}"${ticketAttribute}${accessibleLabel}>${escapeHtml(label)}</button>`;
 }
 
 function chip(label: string, className: string): string {
