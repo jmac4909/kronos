@@ -453,9 +453,27 @@ test('Attention stream identity is stable by project, provider, resource, logica
       equal: true,
     },
     {
-      label: 'provider read health does not replace MR state and review',
+      label: 'GitLab read health and MR state share one current Attention row',
       left: stream(projectSession, 'gitlab', 'merge-request', '77', 'provider_read_failed', { mergeRequestIid: 77 }),
       right: stream(projectSession, 'gitlab', 'merge-request', '77', 'changes_requested', { mergeRequestIid: 77 }),
+      equal: true,
+    },
+    {
+      label: 'Jenkins read health and build state share one current Attention row',
+      left: stream(projectSession, 'jenkins', 'provider-read', 'jenkins', 'provider_read_partial'),
+      right: stream(projectSession, 'jenkins', 'build', '32', 'jenkins_recovered', { buildNumber: 32 }),
+      equal: true,
+    },
+    {
+      label: 'SonarQube read health and quality state share one row for the same branch',
+      left: stream(projectSession, 'sonar', 'provider-read', 'sonar:app:main', 'provider_read_failed', { projectKey: 'app', branch: 'main' }),
+      right: stream(projectSession, 'sonar', 'quality-gate', 'app:main', 'sonar_gate_failed', { projectKey: 'app', branch: 'main' }),
+      equal: true,
+    },
+    {
+      label: 'SonarQube read health stays independent across branches',
+      left: stream(projectSession, 'sonar', 'provider-read', 'sonar:app:main', 'provider_read_failed', { projectKey: 'app', branch: 'main' }),
+      right: stream(projectSession, 'sonar', 'quality-gate', 'app:feature', 'sonar_gate_failed', { projectKey: 'app', branch: 'feature' }),
       equal: false,
     },
     {
@@ -1162,14 +1180,20 @@ test('registered project configuration polls GitLab Jenkins and Sonar without a 
       limit: 2000,
     });
     assert.ok(events.length > 0);
+    assert.equal(first.transitions, 3, 'GitLab, healthy Jenkins, and healthy SonarQube each establish one current result');
     assert.equal(events.every(event => event.subject?.ticketKey === undefined), true);
     assert.equal(events.every(event => event.subject?.project === 'Seamless'), true);
+    const healthyJenkins = events.find(event => event.source === 'jenkins'
+      && event.metadata?.transitionKind === 'initial_healthy');
+    assert.ok(healthyJenkins, 'the first successful Jenkins build must be visible in Attention');
+    assert.equal(healthyJenkins.after.state, 'success');
+    assert.equal(attentionPresentation.attentionSeverity(healthyJenkins), 'information');
     const current = attentionProjection.currentAttentionTransitions(
       events,
       [owner],
       [{ name: 'Seamless', path: projectRoot }],
     );
-    assert.ok(current.length > 0);
+    assert.equal(current.length, 3);
     assert.equal((await monitor.poll()).transitions, 0, 'unchanged project-owned polling stays quiet');
   } finally {
     gitLabRestModule.gitlabRestClient.discoverOpenMergeRequest = originals.discover;
@@ -1386,11 +1410,28 @@ test('managed SonarQube polling persists a branch-qualified dashboard binding', 
       warnings: [],
     },
   });
+  monitorEventStore.appendMonitorEvent({
+    id: 'legacy-sonar-read-failure-jira-902',
+    at: '2026-07-14T13:59:00.000Z',
+    sessionId: session.id,
+    type: 'provider.transition',
+    source: 'sonar',
+    summary: 'Legacy SonarQube provider read failed.',
+    subject: { kind: 'provider-read', id: 'sonar', ticketKey: 'JIRA-902' },
+    after: { state: 'monitoring/failed', fingerprint: 'legacy-sonar-read-failure' },
+    metadata: {
+      transitionKind: 'provider_read_failed',
+      readState: 'failed',
+      readReason: 'timeout',
+      readComponents: 'quality-gate',
+      readGeneration: 1,
+    },
+  });
   try {
     const result = await new managedProviderMonitor.ManagedProviderMonitor({ state: () => state }).poll();
     assert.equal(result.polled, 1);
     assert.equal(result.failures, 0);
-    assert.equal(result.transitions, 1, 'the first healthy SonarQube observation is visible in Attention');
+    assert.equal(result.transitions, 2, 'the legacy read failure recovers and the first healthy quality gate is visible');
     const updated = workSessions.readWorkSession(session.id);
     const binding = updated.providerBindings.find(candidate =>
       candidate.provider === 'sonar'
@@ -1401,13 +1442,24 @@ test('managed SonarQube polling persists a branch-qualified dashboard binding', 
       binding.url,
       'https://sonar.example/dashboard?id=team%3Aapplication&branch=feature%2FJIRA-902',
     );
-    const healthyEvent = monitorEventStore.listMonitorEvents({
+    const providerEvents = monitorEventStore.listMonitorEvents({
       sessionId: session.id,
       source: 'sonar',
       types: ['provider.transition'],
-    }).find(event => event.metadata?.transitionKind === 'initial_healthy');
+    });
+    const healthyEvent = providerEvents.find(event => event.metadata?.transitionKind === 'initial_healthy');
     assert.ok(healthyEvent);
     assert.equal(healthyEvent.after.state, 'ok');
+    const recovery = providerEvents.find(event => event.metadata?.transitionKind === 'provider_read_recovered');
+    assert.ok(recovery, 'legacy unscoped provider-read state is migrated on the next branch-qualified poll');
+    assert.equal(recovery.metadata.projectKey, 'team:application');
+    assert.equal(recovery.metadata.branch, 'feature/JIRA-902');
+    const currentAttention = attentionProjection.currentAttentionTransitions(providerEvents, [updated]);
+    assert.deepEqual(
+      currentAttention.map(event => event.id),
+      [healthyEvent.id],
+      'the recovery and healthy gate collapse to the current SonarQube result',
+    );
   } finally {
     sonarRestModule.sonarRestClient.branchContext = originalBranchContext;
     workSessions.removeWorkSession(session.id);

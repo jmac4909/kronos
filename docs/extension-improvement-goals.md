@@ -118,6 +118,9 @@ Cases to cover:
 - Restart and cross-window lease recovery do not duplicate transitions.
 - A configured registered project polls GitLab, Jenkins, and SonarQube without any Jira link or terminal Session.
 - Project-owned bindings, baselines, health, and Attention survive Session removal and extension reload.
+- The first completed healthy Jenkins build appears once, just like the first healthy MR and SonarQube gate.
+- Jenkins aborted, canceled, cancelled, and unstable results plus SonarQube warning gates use the same unhealthy classification for baselines and later transitions.
+- Provider-read failure or partial state replaces the related GitLab MR, Jenkins build, or SonarQube branch row; recovery reveals the newest provider result instead of adding a second green row.
 
 Completion evidence:
 

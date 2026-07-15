@@ -7,6 +7,7 @@ import { jenkinsRestClient, type JenkinsBuildContext } from './jenkinsRestClient
 import { isSonarRestConfigured, sonarDashboardUrl, sonarRestClient, type SonarBranchContext } from './sonarRestClient';
 import {
   compareGitLabPipelineDigests,
+  gitLabPipelineStatusIsUnhealthy,
   mergeGitLabPipelineDigest,
   normalizeGitLabPipelineDigest,
   type GitLabPipelineDigest,
@@ -40,8 +41,12 @@ import {
 import {
   buildCiMonitorDigest,
   compareCiMonitorDigests,
+  jenkinsStatusIsFailure,
+  jenkinsStatusIsSuccess,
   mergeCiMonitorDigest,
   normalizeCiMonitorDigest,
+  sonarGateStatusIsFailure,
+  sonarGateStatusIsSuccess,
   type CiMonitorDigest,
   type CiMonitorTransition,
 } from './ciTransitions';
@@ -157,9 +162,6 @@ export interface ManagedProviderMonitorOptions {
 }
 
 const LEASE_RENEWAL_MS = 60 * 1000;
-const FAILURE_PIPELINE_STATUSES = new Set(['failed', 'failure', 'error', 'canceled', 'cancelled']);
-const FAILURE_BUILD_STATUSES = new Set(['failed', 'failure', 'error', 'unstable', 'aborted']);
-const PASSING_SONAR_GATES = new Set(['ok', 'pass', 'passed', 'success']);
 type ProviderMonitoringOwner = WorkSessionRecord;
 
 export class ManagedProviderMonitor {
@@ -747,6 +749,10 @@ export class ManagedProviderMonitor {
           sonarReadFailure || (sonar?.completeness.complete ? 'complete' : 'bounded_read_incomplete'),
           sonar?.dashboardUrl || sonarTarget.providerUrl,
           sonar ? sonarIncompleteReadComponents(sonar) : [],
+          {
+            projectKey: sonar?.projectKey || sonarTarget.projectKey,
+            branch: sonar?.branch || sonarTarget.branch,
+          },
         );
         if (readNotice) { notices.push(readNotice); }
       } catch (error: unknown) {
@@ -1160,10 +1166,18 @@ function initialCiNotices(
 ): ManagedProviderNotice[] {
   const notices: ManagedProviderNotice[] = [];
   const jenkins = digest.jenkins;
-  if (jenkins && (FAILURE_BUILD_STATUSES.has(jenkins.status.toLowerCase())
+  const jenkinsUnhealthy = Boolean(jenkins && (jenkinsStatusIsFailure(jenkins.status)
     || jenkins.failedTestCount > 0
-    || jenkins.failedStageNames.length > 0)) {
-    const summary = `${monitoringOwnerLabel(session)} was first observed with Jenkins build ${jenkins.buildNumber} unhealthy (${jenkins.status}; ${jenkins.failedTestCount} failed test${jenkins.failedTestCount === 1 ? '' : 's'}; ${jenkins.failedStageNames.length} failed stage${jenkins.failedStageNames.length === 1 ? '' : 's'}).`;
+    || jenkins.failedStageNames.length > 0));
+  const jenkinsHealthy = Boolean(jenkins
+    && !jenkins.building
+    && jenkinsStatusIsSuccess(jenkins.status)
+    && !jenkinsUnhealthy);
+  if (jenkins && (jenkinsHealthy || jenkinsUnhealthy)) {
+    const healthy = jenkinsHealthy;
+    const summary = healthy
+      ? `${monitoringOwnerLabel(session)} was first observed with healthy Jenkins build ${jenkins.buildNumber} (${jenkins.status}).`
+      : `${monitoringOwnerLabel(session)} was first observed with Jenkins build ${jenkins.buildNumber} unhealthy (${jenkins.status}; ${jenkins.failedTestCount} failed test${jenkins.failedTestCount === 1 ? '' : 's'}; ${jenkins.failedStageNames.length} failed stage${jenkins.failedStageNames.length === 1 ? '' : 's'}).`;
     const event = appendTransitionOnce({
       session,
       source: 'jenkins',
@@ -1172,19 +1186,29 @@ function initialCiNotices(
       state: jenkins.status,
       fingerprint: jenkins.fingerprint,
       artifactPath,
-      transitionKey: `initial-unhealthy-build-${jenkins.buildNumber}`,
+      transitionKey: `initial-${healthy ? 'healthy' : 'unhealthy'}-build-${jenkins.buildNumber}`,
       metadata: {
-        transitionKind: 'initial_unhealthy',
+        transitionKind: healthy ? 'initial_healthy' : 'initial_unhealthy',
         buildNumber: jenkins.buildNumber,
         failedTestCount: jenkins.failedTestCount,
         failedStageCount: jenkins.failedStageNames.length,
       },
     });
-    if (event) { notices.push(notice(event, session, 'warning', jenkins.buildUrl, 'kronos.insertCiContext')); }
+    if (event) {
+      notices.push(notice(
+        event,
+        session,
+        healthy ? 'information' : 'warning',
+        jenkins.buildUrl,
+        'kronos.insertCiContext',
+      ));
+    }
   }
   const sonar = digest.sonar;
-  if (sonar && sonar.gateAvailable) {
-    const healthy = PASSING_SONAR_GATES.has(sonar.gateStatus.toLowerCase());
+  const sonarHealthy = Boolean(sonar?.gateAvailable && sonarGateStatusIsSuccess(sonar.gateStatus));
+  const sonarUnhealthy = Boolean(sonar?.gateAvailable && sonarGateStatusIsFailure(sonar.gateStatus));
+  if (sonar && (sonarHealthy || sonarUnhealthy)) {
+    const healthy = sonarHealthy;
     const summary = healthy
       ? `${monitoringOwnerLabel(session)} was first observed with a healthy SonarQube quality gate (${sonar.gateStatus}; ${sonar.unresolvedIssueCount} unresolved issue${sonar.unresolvedIssueCount === 1 ? '' : 's'}).`
       : `${monitoringOwnerLabel(session)} was first observed with SonarQube quality gate ${sonar.gateStatus} (${sonar.unresolvedIssueCount} unresolved issue${sonar.unresolvedIssueCount === 1 ? '' : 's'}).`;
@@ -1364,7 +1388,7 @@ function appendCiTransitionOnce(
 }
 
 function gitLabDigestUnhealthy(digest: GitLabPipelineDigest): boolean {
-  return FAILURE_PIPELINE_STATUSES.has(digest.status.toLowerCase())
+  return gitLabPipelineStatusIsUnhealthy(digest.status)
     || digest.failedJobs.length > 0
     || digest.tests.failed + digest.tests.error > 0;
 }
@@ -1535,16 +1559,23 @@ function appendProviderReadStatusTransition(
   reason: string,
   providerUrl: string | undefined,
   components: readonly string[],
+  resourceIdentity: { projectKey?: string; branch?: string } = {},
 ): ManagedProviderNotice | null {
   const normalizedComponents = [...new Set(components)].sort();
   const componentLabel = normalizedComponents.join(',') || 'none';
+  const subjectId = provider;
   const previous = listMonitorEvents({
     sessionId: session.id,
     source: provider,
     types: ['provider.transition'],
     limit: 2000,
   }).find(event => event.subject?.kind === 'provider-read'
-    && event.subject.id === provider
+    && event.subject.id === subjectId
+    && (provider !== 'sonar'
+      || (event.metadata?.['projectKey'] === resourceIdentity.projectKey
+        && event.metadata?.['branch'] === resourceIdentity.branch)
+      || (event.metadata?.['projectKey'] === undefined
+        && event.metadata?.['branch'] === undefined))
     && typeof event.metadata?.['readState'] === 'string');
   const previousState = previous?.metadata?.['readState'];
   const previousReason = previous?.metadata?.['readReason'];
@@ -1566,7 +1597,7 @@ function appendProviderReadStatusTransition(
       : state === 'partial'
         ? `${monitoringOwnerLabel(session)} ${providerName} provider reads are partial (${normalizedComponents.join(', ') || 'bounded data'}).`
         : `${monitoringOwnerLabel(session)} ${providerName} provider read failed (${readFailureLabel(reason)}).`,
-    subject: monitoringSubject(session, 'provider-read', provider),
+    subject: monitoringSubject(session, 'provider-read', subjectId),
     state: `monitoring/${state}`,
     fingerprint,
     artifactPath: ciMonitorSnapshotPath(session.id),
@@ -1580,6 +1611,8 @@ function appendProviderReadStatusTransition(
       readReason: reason,
       readComponents: componentLabel,
       readGeneration: generation,
+      ...(resourceIdentity.projectKey ? { projectKey: resourceIdentity.projectKey } : {}),
+      ...(resourceIdentity.branch ? { branch: resourceIdentity.branch } : {}),
     },
   };
   if (previous?.after?.fingerprint && typeof previousState === 'string') {

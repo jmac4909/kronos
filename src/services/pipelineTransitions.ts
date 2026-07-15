@@ -97,6 +97,12 @@ const PIPELINE_FAILURE_STATUSES = new Set(['failed', 'failure', 'error']);
 const PIPELINE_CANCELED_STATUSES = new Set(['canceled', 'cancelled']);
 const PIPELINE_SUCCESS_STATUSES = new Set(['success', 'succeeded', 'passed']);
 
+/** Shared baseline classification for GitLab pipeline terminal failures. */
+export function gitLabPipelineStatusIsUnhealthy(status: string): boolean {
+  const normalized = normalizedStatus(status);
+  return PIPELINE_FAILURE_STATUSES.has(normalized) || PIPELINE_CANCELED_STATUSES.has(normalized);
+}
+
 export function normalizeGitLabPipelineDigest(
   snapshot: GitLabMergeRequestContextSnapshot | GitLabMergeRequestMonitorSnapshot,
 ): GitLabPipelineDigest | null;

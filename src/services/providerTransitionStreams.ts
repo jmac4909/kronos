@@ -22,6 +22,8 @@ interface ProviderTransitionEventLike {
  * row for the same MR pipeline or project job. MR IIDs and SonarQube branches
  * remain subjects because multiple current MRs or analyzed branches may need
  * independent attention.
+ * Provider-read health deliberately resolves to the corresponding MR, build,
+ * or SonarQube project/branch resource so the projection shows one current row.
  */
 export function providerTransitionStreamKey(
   event: ProviderTransitionEventLike,
@@ -42,17 +44,14 @@ export function providerTransitionProjectResourceKey(
   event: ProviderTransitionEventLike,
   session: WorkSessionRecord | undefined,
 ): string | undefined {
-  const transitionKind = metadataString(event, 'transitionKind');
-  const providerRead = transitionKind.startsWith('provider_read_')
-    || event.subject?.kind === 'provider-read';
-  const resource = providerRead ? 'provider-read' : event.subject?.kind || 'provider-event';
+  const resource = attentionResource(event);
   const project = providerProjectIdentity(event, session);
   if (!project) { return undefined; }
   const identity = [
     project,
     event.source,
     resource,
-    logicalSubject(event, resource),
+    logicalSubject(event, resource, session),
     attentionFacet(resource),
   ];
   const digest = crypto.createHash('sha256').update(JSON.stringify(identity)).digest('hex');
@@ -63,10 +62,7 @@ function providerTransitionStreamIdentity(
   event: ProviderTransitionEventLike,
   session: WorkSessionRecord | undefined,
 ): readonly string[] {
-  const transitionKind = metadataString(event, 'transitionKind');
-  const providerRead = transitionKind.startsWith('provider_read_')
-    || event.subject?.kind === 'provider-read';
-  const resource = providerRead ? 'provider-read' : event.subject?.kind || 'provider-event';
+  const resource = attentionResource(event);
   const scope = session?.projectName
     ? `project:${session.projectName}`
     : `session:${event.sessionId}`;
@@ -74,12 +70,27 @@ function providerTransitionStreamIdentity(
     scope,
     event.source,
     resource,
-    logicalSubject(event, resource),
+    logicalSubject(event, resource, session),
     attentionFacet(resource),
   ];
 }
 
-function logicalSubject(event: ProviderTransitionEventLike, resource: string): string {
+function attentionResource(event: ProviderTransitionEventLike): string {
+  const transitionKind = metadataString(event, 'transitionKind');
+  const providerRead = transitionKind.startsWith('provider_read_')
+    || event.subject?.kind === 'provider-read';
+  if (!providerRead) { return event.subject?.kind || 'provider-event'; }
+  if (event.source === 'gitlab' && metadataValue(event, 'mergeRequestIid')) { return 'merge-request'; }
+  if (event.source === 'jenkins') { return 'build'; }
+  if (event.source === 'sonar') { return 'quality-gate'; }
+  return 'provider-read';
+}
+
+function logicalSubject(
+  event: ProviderTransitionEventLike,
+  resource: string,
+  session: WorkSessionRecord | undefined,
+): string {
   if (resource === 'provider-read') {
     return event.source === 'gitlab'
       ? metadataIdentity(event, 'mergeRequestIid', 'merge-request') || event.source
@@ -97,8 +108,30 @@ function logicalSubject(event: ProviderTransitionEventLike, resource: string): s
     const projectKey = metadataString(event, 'projectKey');
     const branch = metadataString(event, 'branch');
     if (projectKey || branch) { return `sonar:${projectKey || 'project'}:${branch || 'branch'}`; }
+    const bindingIdentity = newestSonarQualityGateIdentity(session);
+    if (bindingIdentity) { return bindingIdentity; }
+    if (event.subject?.kind === 'quality-gate') { return `sonar:${event.subject.id}`; }
   }
   return event.subject?.id || 'current';
+}
+
+function newestSonarQualityGateIdentity(session: WorkSessionRecord | undefined): string | undefined {
+  if (!session) { return undefined; }
+  let newest: { identity: string; attachedAt: string } | undefined;
+  for (const binding of session.providerBindings) {
+    if (binding.provider !== 'sonar' || binding.resource !== 'quality-gate') { continue; }
+    const projectKey = binding.projectId;
+    const branch = projectKey && binding.subjectId.startsWith(`${projectKey}:`)
+      ? binding.subjectId.slice(projectKey.length + 1)
+      : undefined;
+    const identity = projectKey && branch
+      ? `sonar:${projectKey}:${branch}`
+      : `sonar:${binding.subjectId}`;
+    if (!newest || binding.attachedAt > newest.attachedAt) {
+      newest = { identity, attachedAt: binding.attachedAt };
+    }
+  }
+  return newest?.identity;
 }
 
 function attentionFacet(resource: string): string {

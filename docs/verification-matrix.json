@@ -74,6 +74,7 @@
         { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "Jenkins and SonarQube transition matrices cover every declared CI transition" },
         { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "Attention projection rebuilds after restart without stale-row resurrection" },
         { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "Attention read-health state replaces failure, recovery, partial, and later failure in one stream" },
+        { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "Attention collapses provider-read health into GitLab MR, Jenkins build, and SonarQube branch truth" },
         { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "Attention collapses newer pipeline, build, test, gate, and issue occurrences without deleting audit history" },
         { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "Attention presentation covers information, warning, failure, recovery, partial, and blocked severities" },
         { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "Attention rows expose project, provider, subject, observed time, changed time, and why" },
@@ -659,6 +660,24 @@
       "automated": [
         { "file": "scripts/run-unit-tests.js", "test": "registered project configuration polls GitLab Jenkins and Sonar without a ticket or terminal Session" },
         { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "Attention projection rebuilds after restart without stale-row resurrection" }
+      ]
+    },
+    {
+      "requirements": ["G04-case-13:8e5225dd"],
+      "automated": [
+        { "file": "scripts/run-unit-tests.js", "test": "registered project configuration polls GitLab Jenkins and Sonar without a ticket or terminal Session" }
+      ]
+    },
+    {
+      "requirements": ["G04-case-14:55efc3d0"],
+      "automated": [
+        { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "Jenkins and SonarQube transition matrices cover every declared CI transition" }
+      ]
+    },
+    {
+      "requirements": ["G04-case-15:110cf2b2"],
+      "automated": [
+        { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "Attention collapses provider-read health into GitLab MR, Jenkins build, and SonarQube branch truth" }
       ]
     },
     {

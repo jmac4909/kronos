@@ -54,6 +54,12 @@ test('GitLab merge-request transition matrix covers every declared structural tr
 });
 
 test('GitLab pipeline transition matrix covers every declared pipeline, job, and test transition', () => {
+  for (const status of ['failed', 'failure', 'error', 'canceled', 'cancelled']) {
+    assert.equal(pipelines.gitLabPipelineStatusIsUnhealthy(status), true, `${status} must be unhealthy at baseline`);
+  }
+  for (const status of ['created', 'pending', 'running', 'success', 'skipped', 'manual']) {
+    assert.equal(pipelines.gitLabPipelineStatusIsUnhealthy(status), false, `${status} must not be a baseline failure`);
+  }
   const failedJob = { id: 4, name: 'verify', stage: 'test', status: 'failed', allow_failure: false };
   const cases = [
     ['new_pipeline', pipelineDigest({ id: 70 }), pipelineDigest({ id: 71 })],
@@ -112,6 +118,199 @@ test('Jenkins and SonarQube transition matrices cover every declared CI transiti
     const kinds = ci.compareSonarCiDigests(previous, current).map(transition => transition.kind);
     assert.ok(kinds.includes(expected), `${expected} was not emitted; received ${kinds.join(', ') || 'none'}`);
   }
+  for (const failureStatus of ['aborted', 'canceled', 'cancelled', 'unstable']) {
+    const failedKinds = ci.compareJenkinsCiDigests(
+      jenkinsDigest({ status: 'running' }),
+      jenkinsDigest({ status: failureStatus }),
+    ).map(transition => transition.kind);
+    assert.ok(failedKinds.includes('jenkins_failed'), `${failureStatus} must be a Jenkins failure transition`);
+    const recoveryKinds = ci.compareJenkinsCiDigests(
+      jenkinsDigest({ status: failureStatus }),
+      jenkinsDigest({ status: 'success' }),
+    ).map(transition => transition.kind);
+    assert.ok(recoveryKinds.includes('jenkins_recovered'), `${failureStatus} must recover to Jenkins success`);
+  }
+  assert.ok(
+    ci.compareSonarCiDigests(
+      sonarDigest({ gateStatus: 'OK' }),
+      sonarDigest({ gateStatus: 'WARN' }),
+    ).some(transition => transition.kind === 'sonar_gate_failed'),
+    'a SonarQube WARN gate must use the same unhealthy classification at baseline and transition time',
+  );
+  assert.ok(
+    ci.compareSonarCiDigests(
+      sonarDigest({ gateStatus: 'WARN' }),
+      sonarDigest({ gateStatus: 'OK' }),
+    ).some(transition => transition.kind === 'sonar_gate_recovered'),
+    'a SonarQube WARN gate must recover to OK',
+  );
+});
+
+test('Attention collapses provider-read health into GitLab MR, Jenkins build, and SonarQube branch truth', () => {
+  const session = workSession();
+  const sonarGate = resourceTransition(
+    'sonar-gate-failing',
+    '2026-07-15T11:00:00.000Z',
+    'sonar',
+    'quality-gate',
+    'app:main',
+    'initial_unhealthy',
+    { projectKey: 'app', branch: 'main' },
+  );
+  const sonarReadFailed = transitionEvent(
+    'sonar-read-failed',
+    '2026-07-15T11:01:00.000Z',
+    'provider_read_failed',
+    'monitoring/failed',
+    {
+      source: 'sonar',
+      subject: { kind: 'provider-read', id: 'sonar:app:main', project: 'Application', ticketKey: 'MATRIX-1' },
+      metadata: {
+        transitionKind: 'provider_read_failed',
+        readState: 'failed',
+        readReason: 'timeout',
+        projectKey: 'app',
+        branch: 'main',
+      },
+    },
+  );
+  const sonarReadRecovered = transitionEvent(
+    'sonar-read-recovered',
+    '2026-07-15T11:02:00.000Z',
+    'provider_read_recovered',
+    'monitoring/complete',
+    {
+      source: 'sonar',
+      subject: { kind: 'provider-read', id: 'sonar:app:main', project: 'Application', ticketKey: 'MATRIX-1' },
+      metadata: {
+        transitionKind: 'provider_read_recovered',
+        readState: 'complete',
+        readReason: 'complete',
+        projectKey: 'app',
+        branch: 'main',
+      },
+    },
+  );
+  assert.deepEqual(
+    currentAttentionTransitions([sonarGate, sonarReadFailed], [session]).map(event => event.id),
+    ['sonar-read-failed'],
+    'a failed read temporarily replaces stale quality data',
+  );
+  assert.deepEqual(
+    currentAttentionTransitions([sonarGate, sonarReadFailed, sonarReadRecovered], [session]).map(event => event.id),
+    ['sonar-gate-failing'],
+    'a recovered read reveals the newest quality-gate truth instead of adding a second green row',
+  );
+  const legacySession = {
+    ...session,
+    providerBindings: [{
+      id: 'sonar-main-binding',
+      provider: 'sonar',
+      resource: 'quality-gate',
+      subjectId: 'app:main',
+      projectId: 'app',
+      attachedAt: '2026-07-15T10:59:00.000Z',
+    }],
+  };
+  const legacySonarRead = {
+    ...sonarReadFailed,
+    id: 'legacy-sonar-read-failed',
+    subject: { ...sonarReadFailed.subject, id: 'sonar' },
+    metadata: {
+      transitionKind: 'provider_read_failed',
+      readState: 'failed',
+      readReason: 'timeout',
+    },
+  };
+  assert.deepEqual(
+    currentAttentionTransitions([sonarGate, legacySonarRead], [legacySession]).map(event => event.id),
+    ['legacy-sonar-read-failed'],
+    'persisted pre-fix SonarQube read-health rows collapse through the durable branch binding',
+  );
+
+  const jenkinsBuild = resourceTransition(
+    'jenkins-build-healthy',
+    '2026-07-15T11:03:00.000Z',
+    'jenkins',
+    'build',
+    '42',
+    'initial_healthy',
+    { buildNumber: 42 },
+  );
+  const jenkinsPartial = transitionEvent(
+    'jenkins-read-partial',
+    '2026-07-15T11:04:00.000Z',
+    'provider_read_partial',
+    'monitoring/partial',
+    {
+      source: 'jenkins',
+      subject: { kind: 'provider-read', id: 'jenkins', project: 'Application', ticketKey: 'MATRIX-1' },
+      metadata: { transitionKind: 'provider_read_partial', readState: 'partial', readReason: 'bounded' },
+    },
+  );
+  assert.deepEqual(
+    currentAttentionTransitions([jenkinsBuild, jenkinsPartial], [session]).map(event => event.id),
+    ['jenkins-read-partial'],
+  );
+
+  const gitLabMr = resourceTransition(
+    'gitlab-mr-open',
+    '2026-07-15T11:05:00.000Z',
+    'gitlab',
+    'merge-request',
+    '77',
+    'initial_mr_observed',
+    { mergeRequestIid: 77 },
+  );
+  const gitLabPartial = transitionEvent(
+    'gitlab-read-partial',
+    '2026-07-15T11:06:00.000Z',
+    'provider_read_partial',
+    'monitoring/partial',
+    {
+      source: 'gitlab',
+      subject: { kind: 'merge-request', id: '77', project: 'Application', ticketKey: 'MATRIX-1' },
+      metadata: { transitionKind: 'provider_read_partial', readState: 'partial', mergeRequestIid: 77 },
+    },
+  );
+  assert.deepEqual(
+    currentAttentionTransitions([gitLabMr, gitLabPartial], [session]).map(event => event.id),
+    ['gitlab-read-partial'],
+  );
+
+  const sameTimestampRecovery = { ...sonarReadRecovered, id: 'same-time-read-recovery', at: '2026-07-15T11:07:00.000Z' };
+  const sameTimestampGate = {
+    ...sonarGate,
+    id: 'same-time-gate-current',
+    at: '2026-07-15T11:07:00.000Z',
+    metadata: { ...sonarGate.metadata, transitionKind: 'sonar_gate_recovered' },
+  };
+  assert.deepEqual(
+    currentAttentionTransitions([sameTimestampRecovery, sameTimestampGate], [session]).map(event => event.id),
+    ['same-time-gate-current'],
+    'later append order wins when provider observations share one timestamp',
+  );
+  const sameTimestampPartial = {
+    ...sonarReadFailed,
+    id: 'same-time-read-partial',
+    at: '2026-07-15T11:08:00.000Z',
+    after: { state: 'monitoring/partial', fingerprint: 'same-time-read-partial-fingerprint' },
+    metadata: {
+      ...sonarReadFailed.metadata,
+      transitionKind: 'provider_read_partial',
+      readState: 'partial',
+    },
+  };
+  const sameTimestampPartialGate = {
+    ...sonarGate,
+    id: 'same-time-partial-gate',
+    at: '2026-07-15T11:08:00.000Z',
+  };
+  assert.deepEqual(
+    currentAttentionTransitions([sameTimestampPartial, sameTimestampPartialGate], [session]).map(event => event.id),
+    ['same-time-read-partial'],
+    'same-poll partial read health remains actionable even when bounded quality evidence was retained afterward',
+  );
 });
 
 test('Attention projection rebuilds after restart without stale-row resurrection', () => {

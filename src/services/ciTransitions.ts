@@ -150,10 +150,18 @@ const MAX_METRIC_VALUE_CHARS = 256;
 const MAX_SOURCE_ISSUES = 10_000;
 const MAX_COUNT = 1_000_000_000;
 
-const FAILURE_STATUSES = new Set(['error', 'failed', 'failure', 'unstable']);
-const SUCCESS_STATUSES = new Set(['ok', 'passed', 'success', 'succeeded']);
-const SONAR_GATE_FAILURE_STATUSES = new Set(['error', 'failed', 'failure']);
-const SONAR_GATE_SUCCESS_STATUSES = new Set(['ok', 'passed', 'success', 'succeeded']);
+const JENKINS_FAILURE_STATUSES = new Set([
+  'aborted',
+  'canceled',
+  'cancelled',
+  'error',
+  'failed',
+  'failure',
+  'unstable',
+]);
+const JENKINS_SUCCESS_STATUSES = new Set(['ok', 'pass', 'passed', 'success', 'succeeded', 'successful']);
+const SONAR_GATE_FAILURE_STATUSES = new Set(['error', 'failed', 'failure', 'warn', 'warning']);
+const SONAR_GATE_SUCCESS_STATUSES = new Set(['ok', 'pass', 'passed', 'success', 'succeeded', 'successful']);
 const RESOLVED_ISSUE_STATUSES = new Set([
   'closed',
   'false_positive',
@@ -687,11 +695,11 @@ function countUnresolvedIssues(value: unknown[]): number {
 }
 
 function jenkinsFailed(status: string): boolean {
-  return FAILURE_STATUSES.has(status) || status.startsWith('failed_') || status.endsWith('_failed');
+  return jenkinsStatusIsFailure(status);
 }
 
 function jenkinsSucceeded(status: string): boolean {
-  return SUCCESS_STATUSES.has(status);
+  return jenkinsStatusIsSuccess(status);
 }
 
 function stageFailed(status: string): boolean {
@@ -699,11 +707,32 @@ function stageFailed(status: string): boolean {
 }
 
 function sonarGateFailed(status: string): boolean {
-  return SONAR_GATE_FAILURE_STATUSES.has(status);
+  return sonarGateStatusIsFailure(status);
 }
 
 function sonarGateSucceeded(status: string): boolean {
-  return SONAR_GATE_SUCCESS_STATUSES.has(status);
+  return sonarGateStatusIsSuccess(status);
+}
+
+/** Shared baseline and transition classification for Jenkins result values. */
+export function jenkinsStatusIsFailure(status: string): boolean {
+  const normalized = normalizedStatus(status);
+  return JENKINS_FAILURE_STATUSES.has(normalized)
+    || normalized.startsWith('failed_')
+    || normalized.endsWith('_failed');
+}
+
+export function jenkinsStatusIsSuccess(status: string): boolean {
+  return JENKINS_SUCCESS_STATUSES.has(normalizedStatus(status));
+}
+
+/** Shared baseline and transition classification for SonarQube gate values. */
+export function sonarGateStatusIsFailure(status: string): boolean {
+  return SONAR_GATE_FAILURE_STATUSES.has(normalizedStatus(status));
+}
+
+export function sonarGateStatusIsSuccess(status: string): boolean {
+  return SONAR_GATE_SUCCESS_STATUSES.has(normalizedStatus(status));
 }
 
 function jenkinsResourceIdentity(value: string): string {

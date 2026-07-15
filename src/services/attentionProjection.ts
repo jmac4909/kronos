@@ -27,9 +27,9 @@ export function currentAttentionTransitions(
     .map((event, index) => ({ event, index }))
     .filter(({ event }) => event.type === 'provider.transition' && sessionsById.has(event.sessionId))
     .sort((left, right) => right.event.at.localeCompare(left.event.at)
-      || left.index - right.index
+      || right.index - left.index
       || right.event.id.localeCompare(left.event.id));
-  const latestByStream = new Map<string, MonitorEvent>();
+  const eventsByStream = new Map<string, MonitorEvent[]>();
   for (const { event } of newestFirst) {
     const session = sessionsById.get(event.sessionId);
     const projectSession = attentionProjectSessionForEvent(
@@ -39,11 +39,50 @@ export function currentAttentionTransitions(
       registeredProjects,
     );
     const stream = providerTransitionStreamKey(event, projectSession);
-    if (!latestByStream.has(stream)) { latestByStream.set(stream, event); }
+    const streamEvents = eventsByStream.get(stream) || [];
+    streamEvents.push(event);
+    eventsByStream.set(stream, streamEvents);
   }
-  return [...latestByStream.values()]
+  return [...eventsByStream.values()]
+    .map(currentStreamEvent)
+    .filter((event): event is MonitorEvent => event !== undefined)
     .filter(event => !acknowledged.has(attentionEventKey(event.sessionId, event.id)))
     .sort((left, right) => right.at.localeCompare(left.at) || right.id.localeCompare(left.id));
+}
+
+/** Read failure/partial wins until its own recovery, which reveals the latest retained provider result. */
+function currentStreamEvent(events: readonly MonitorEvent[]): MonitorEvent | undefined {
+  const newestRead = events.find(providerReadTransition);
+  if (!newestRead) { return events[0]; }
+  if (providerReadIncomplete(newestRead)) { return newestRead; }
+  if (providerReadRecovered(newestRead)) {
+    return events.find(event => !providerReadTransition(event)) || newestRead;
+  }
+  return events[0];
+}
+
+function providerReadTransition(event: MonitorEvent): boolean {
+  const transitionKind = event.metadata?.['transitionKind'];
+  return event.subject?.kind === 'provider-read'
+    || (typeof transitionKind === 'string' && transitionKind.startsWith('provider_read_'));
+}
+
+/** A successful read reveals the newest provider result instead of adding a second green row. */
+function providerReadRecovered(event: MonitorEvent): boolean {
+  if (!providerReadTransition(event)) { return false; }
+  const transitionKind = event.metadata?.['transitionKind'];
+  const readState = event.metadata?.['readState'];
+  return transitionKind === 'provider_read_recovered' || readState === 'complete';
+}
+
+function providerReadIncomplete(event: MonitorEvent): boolean {
+  if (!providerReadTransition(event)) { return false; }
+  const transitionKind = event.metadata?.['transitionKind'];
+  const readState = event.metadata?.['readState'];
+  return transitionKind === 'provider_read_failed'
+    || transitionKind === 'provider_read_partial'
+    || readState === 'failed'
+    || readState === 'partial';
 }
 
 /**
