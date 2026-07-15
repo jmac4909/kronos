@@ -20,6 +20,7 @@ All notable changes to the Kronos preview are documented here.
 
 ### Changed
 
+- Extracted project registration, identity, configuration, discovery, and Git-pointer coverage from the monolithic unit harness into a dedicated `project:catalog` suite retained by the single `npm test` gate.
 - Routed all operator-visible workflow failures and managed-provider polling logs through the shared bounded, credential-redacted failure vocabulary, with a source guard against raw arbitrary error text returning to those boundaries.
 - Made registered-project identity canonical by real path and separate from an editable display label; renaming a Project now leaves ticket links, sessions, provider configuration, and Git state untouched, while duplicate persisted paths fail closed to one inventory row.
 - Unified project-provider configuration normalization at Setup and `work.json` ingress so ambiguous GitLab identities, credential-bearing or unsafe Jenkins URLs, malformed SonarQube keys, unsafe branch names, and unknown fields never reach polling consumers.

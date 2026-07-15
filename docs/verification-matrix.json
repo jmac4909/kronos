@@ -5,7 +5,7 @@
       "id": "identity-and-work",
       "goals": ["G01", "G08"],
       "automated": [
-        { "file": "scripts/run-unit-tests.js", "test": "Jira project keys never auto-link a repository; only an explicit ticket link does" },
+        { "file": "scripts/run-project-catalog-tests.js", "test": "Jira project keys never auto-link a repository; only an explicit ticket link does" },
         { "file": "scripts/run-unit-tests.js", "test": "Work data status distinguishes empty, loading, partial, stale, error, and current results" },
         { "file": "scripts/run-jira-work-board-tests.js", "test": "board runtime filters cards and reveals a specifically selected completed status" }
       ],
@@ -52,7 +52,7 @@
         { "file": "scripts/run-unit-tests.js", "test": "managed monitoring lease omits unsupported open flags on Windows and fails closed on POSIX" },
         { "file": "scripts/run-unit-tests.js", "test": "managed monitoring lease acquires, blocks duplicate owners, renews, and releases" },
         { "file": "scripts/run-unit-tests.js", "test": "legacy ~/.claude/kronos state migrates once without helper scripts" },
-        { "file": "scripts/run-unit-tests.js", "test": "project configuration is canonical at setup and Work catalog ingress" }
+        { "file": "scripts/run-project-catalog-tests.js", "test": "project configuration is canonical at setup and Work catalog ingress" }
       ],
       "humanGates": ["windows-native", "multi-window"]
     },
@@ -60,8 +60,8 @@
       "id": "projects-and-git",
       "goals": ["G09"],
       "automated": [
-        { "file": "scripts/run-unit-tests.js", "test": "project discovery honors configured roots, depth, limits, and workspace folders" },
-        { "file": "scripts/run-unit-tests.js", "test": "project registration identity stays canonical by path while its display name remains editable" },
+        { "file": "scripts/run-project-catalog-tests.js", "test": "project discovery honors configured roots, depth, limits, and workspace folders" },
+        { "file": "scripts/run-project-catalog-tests.js", "test": "project registration identity stays canonical by path while its display name remains editable" },
         { "file": "scripts/run-unit-tests.js", "test": "project Git evidence reads only the bounded VS Code Git model" },
         { "file": "scripts/run-jira-work-board-tests.js", "test": "board lists registered local project paths and current Git branches" }
       ],
