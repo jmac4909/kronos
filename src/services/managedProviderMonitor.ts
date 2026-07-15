@@ -66,17 +66,18 @@ import {
 import { optionalTrimmedStringFromUnknown } from './records';
 import { boundedOperationFailure } from './errorUtils';
 import {
-  projectConfigurationForTicket,
   readProjectGitBranch,
-  selectProjectBranchProfile,
 } from './projectCatalog';
 import {
+  configuredCiPollingTargets,
+  configuredGitLabPollingTarget,
   configuredGitLabProjectIdentity,
+  configuredSonarBranchName,
   effectiveTicketMergeRequest,
   latestGitLabMergeRequestBinding,
   mergeRequestDiscoverySourceBranch,
-  reconcileKnownGitLabMergeRequestTarget,
-} from './ticketMergeRequestProjection';
+  projectConfigurationForMonitoringSession,
+} from './providerBindingReconciliation';
 import { providerTransitionStreamKey } from './providerTransitionStreams';
 import {
   appendTransitionOnce,
@@ -107,18 +108,6 @@ export interface ManagedProviderNotice {
   severity: 'warning' | 'information';
   providerUrl?: string;
   contextCommand?: 'kronos.insertGitLabContext' | 'kronos.insertCiContext';
-}
-
-export interface ConfiguredGitLabPollingTarget {
-  iid: number;
-  projectIdOrPath: string;
-  providerUrl?: string;
-}
-
-export interface ConfiguredCiPollingTargets {
-  jenkinsUrl?: string;
-  jenkinsBranch?: string;
-  sonar?: { projectKey: string; branch: string; providerUrl?: string };
 }
 
 export interface ManagedProviderMonitorOptions {
@@ -784,17 +773,6 @@ function monitorableWorkSession(session: WorkSessionRecord): MonitoredWorkSessio
   return ticketKey ? { ...session, ticketKey } : undefined;
 }
 
-function projectConfigurationForMonitoringSession(
-  state: KronosStateSnapshot | null,
-  session: MonitoredWorkSessionRecord,
-) {
-  const ticket = state?.tickets[session.ticketKey];
-  const config = projectConfigurationForTicket(state, ticket);
-  return session.projectName
-    ? { ...config, ...(state?.projects[session.projectName]?.config || {}) }
-    : config;
-}
-
 function combine(left: ManagedProviderPollResult, right: ManagedProviderPollResult): ManagedProviderPollResult {
   const value: ManagedProviderPollResult = {
     polled: left.polled + right.polled,
@@ -1437,124 +1415,6 @@ function notice(
   if (providerUrl) { value.providerUrl = providerUrl; }
   if (contextCommand) { value.contextCommand = contextCommand; }
   return value;
-}
-
-export function configuredGitLabPollingTarget(
-  state: KronosStateSnapshot | null,
-  session: TicketWorkSessionRecord,
-): ConfiguredGitLabPollingTarget | null {
-  const ticket = state?.tickets[session.ticketKey];
-  const config = projectConfigurationForMonitoringSession(state, session);
-  const target = reconcileKnownGitLabMergeRequestTarget(
-    ticket,
-    session,
-    configuredGitLabProjectIdentity(config),
-  );
-  if (!target) { return null; }
-  return {
-    iid: target.iid,
-    projectIdOrPath: target.projectIdOrPath,
-    ...(target.url ? { providerUrl: target.url } : {}),
-  };
-}
-
-export function configuredCiPollingTargets(
-  state: KronosStateSnapshot | null,
-  session: TicketWorkSessionRecord,
-): ConfiguredCiPollingTargets {
-  const ticket = state?.tickets[session.ticketKey];
-  const config = projectConfigurationForMonitoringSession(state, session);
-  const jenkinsJobBinding = newestWorkSessionProviderBinding(
-    session.providerBindings,
-    candidate => candidate.provider === 'jenkins' && candidate.resource === 'job',
-  );
-  const jenkinsBuildBinding = newestWorkSessionProviderBinding(
-    session.providerBindings,
-    candidate => candidate.provider === 'jenkins' && candidate.resource === 'build',
-  );
-  const sonarBinding = newestWorkSessionProviderBinding(
-    session.providerBindings,
-    candidate => candidate.provider === 'sonar' && candidate.resource === 'quality-gate',
-  );
-  const branchCandidates = ticketProviderBranchCandidates(ticket);
-  const profile = selectProjectBranchProfile(config, branchCandidates);
-  const jenkinsUrl = optionalTrimmedStringFromUnknown(profile?.jenkins_url)
-    || optionalTrimmedStringFromUnknown(config.jenkins_url)
-    || jenkinsJobBinding?.url
-    || ticket?.build?.url
-    || jenkinsBuildBinding?.url;
-  const configuredBranch = optionalTrimmedStringFromUnknown(profile?.sonar_branch)
-    || optionalTrimmedStringFromUnknown(profile?.branch)
-    || optionalTrimmedStringFromUnknown(config.sonar_branch)
-    || branchCandidates.map(optionalTrimmedStringFromUnknown).find(Boolean)
-    || optionalTrimmedStringFromUnknown(config.default_branch)
-    || optionalTrimmedStringFromUnknown(config.base_branch);
-  const configuredProjectKey = optionalTrimmedStringFromUnknown(profile?.sonar_project_key)
-    || optionalTrimmedStringFromUnknown(config.sonar_project_key);
-  const configuredSonar = configuredProjectKey && configuredBranch
-    ? { projectKey: configuredProjectKey, branch: configuredBranch }
-    : null;
-  const boundProjectKey = sonarBinding?.projectId;
-  const boundPrefix = boundProjectKey ? `${boundProjectKey}:` : '';
-  const boundBranch = boundPrefix && sonarBinding?.subjectId.startsWith(boundPrefix)
-    ? sonarBinding.subjectId.slice(boundPrefix.length).trim()
-    : '';
-  let sonar: ConfiguredCiPollingTargets['sonar'];
-  if (configuredSonar) {
-    const providerUrl = sonarDashboardUrl(configuredSonar.projectKey, configuredSonar.branch);
-    sonar = { ...configuredSonar, ...(providerUrl ? { providerUrl } : {}) };
-  } else if (boundProjectKey && boundBranch) {
-    sonar = {
-      projectKey: boundProjectKey,
-      branch: boundBranch,
-      ...(sonarBinding?.url ? { providerUrl: sonarBinding.url } : {}),
-    };
-  }
-  const jenkinsBranch = optionalTrimmedStringFromUnknown(profile?.branch);
-  return {
-    ...(jenkinsUrl ? { jenkinsUrl } : {}),
-    ...(jenkinsUrl && jenkinsBranch ? { jenkinsBranch } : {}),
-    ...(sonar ? { sonar } : {}),
-  };
-}
-
-export function configuredSonarBranch(
-  state: KronosStateSnapshot | null,
-  ticketKey: string,
-): { projectKey: string; branch: string } | null {
-  const ticket = state?.tickets[ticketKey];
-  const config = projectConfigurationForTicket(state, ticket);
-  const profile = selectProjectBranchProfile(config, ticketProviderBranchCandidates(ticket));
-  const projectKey = optionalTrimmedStringFromUnknown(profile?.sonar_project_key)
-    || optionalTrimmedStringFromUnknown(config?.sonar_project_key);
-  const branch = configuredSonarBranchName(state, ticketKey);
-  return projectKey && branch ? { projectKey, branch } : null;
-}
-
-export function configuredSonarBranchName(
-  state: KronosStateSnapshot | null,
-  ticketKey: string,
-): string | null {
-  const ticket = state?.tickets[ticketKey];
-  const config = projectConfigurationForTicket(state, ticket);
-  const candidates = ticketProviderBranchCandidates(ticket);
-  const profile = selectProjectBranchProfile(config, candidates);
-  const branch = optionalTrimmedStringFromUnknown(profile?.sonar_branch)
-    || optionalTrimmedStringFromUnknown(profile?.branch)
-    || optionalTrimmedStringFromUnknown(config?.sonar_branch)
-    || candidates.map(optionalTrimmedStringFromUnknown).find(Boolean)
-    || optionalTrimmedStringFromUnknown(config?.default_branch)
-    || optionalTrimmedStringFromUnknown(config?.base_branch);
-  return optionalTrimmedStringFromUnknown(branch) || null;
-}
-
-function ticketProviderBranchCandidates(ticket: KronosStateSnapshot['tickets'][string] | undefined): Array<string | undefined> {
-  return [
-    ticket?.mr?.source_branch,
-    ticket?.mr?.sourceBranch,
-    ticket?.mr?.branch,
-    ticket?.mr?.head_branch,
-  ];
 }
 
 export function gitLabIncompleteMonitorComponents(

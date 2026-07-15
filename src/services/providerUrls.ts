@@ -1,3 +1,5 @@
+import { redactSensitiveTokens } from './sensitiveText';
+
 export type ProviderUrlProvider = 'jira' | 'gitlab' | 'jenkins' | 'sonar';
 
 const CONTROL_PATTERN = /[\u0000-\u001f\u007f\u2028\u2029]/;
@@ -13,6 +15,7 @@ const MAX_SONAR_BRANCH_CHARS = 1_000;
 export function normalizeProviderPublicUrl(
   value: unknown,
   provider: ProviderUrlProvider,
+  env: NodeJS.ProcessEnv = process.env,
 ): string | undefined {
   if (typeof value !== 'string') { return undefined; }
   const trimmed = value.trim();
@@ -20,6 +23,9 @@ export function normalizeProviderPublicUrl(
   try {
     const url = new URL(trimmed);
     if (url.protocol !== 'http:' && url.protocol !== 'https:') { return undefined; }
+    const configuredOrigin = configuredProviderOrigin(provider, env);
+    if (configuredOrigin.configured
+      && (!configuredOrigin.origin || url.origin !== configuredOrigin.origin)) { return undefined; }
     const sonarProjectKey = provider === 'sonar' ? url.searchParams.get('id')?.trim() : undefined;
     const sonarBranch = provider === 'sonar' ? url.searchParams.get('branch')?.trim() : undefined;
     url.username = '';
@@ -42,4 +48,27 @@ export function normalizeProviderPublicUrl(
     return undefined;
   }
 }
-import { redactSensitiveTokens } from './sensitiveText';
+
+function configuredProviderOrigin(
+  provider: ProviderUrlProvider,
+  env: NodeJS.ProcessEnv,
+): { configured: boolean; origin?: string } {
+  const keys = provider === 'jira'
+    ? ['JIRA_BASE_URL']
+    : provider === 'gitlab'
+      ? ['GITLAB_API_BASE_URL', 'GITLAB_BASE_URL', 'GITLAB_URL', 'GITLAB_HOST']
+      : provider === 'jenkins'
+        ? ['JENKINS_URL']
+        : ['SONAR_HOST_URL', 'SONAR_URL'];
+  const configured = keys.map(key => env[key]?.trim()).find(Boolean);
+  if (!configured) { return { configured: false }; }
+  try {
+    const parsed = new URL(configured.includes('://') ? configured : `https://${configured}`);
+    if ((parsed.protocol !== 'https:' && parsed.protocol !== 'http:') || parsed.username || parsed.password) {
+      return { configured: true };
+    }
+    return { configured: true, origin: parsed.origin };
+  } catch {
+    return { configured: true };
+  }
+}

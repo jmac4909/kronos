@@ -77,10 +77,6 @@ import {
 import { buildWorkSessionAuditMarkdown } from './services/workSessionAuditView';
 import {
   ManagedProviderMonitor,
-  configuredCiPollingTargets,
-  configuredGitLabPollingTarget,
-  configuredSonarBranch,
-  configuredSonarBranchName,
   type ManagedProviderNotice,
   type ManagedProviderPollResult,
 } from './services/managedProviderMonitor';
@@ -153,6 +149,7 @@ import {
 } from './services/operationsReadiness';
 import { providerReadiness } from './services/providerReadiness';
 import { currentProviderReadDiagnostics } from './services/providerReadDiagnostics';
+import { normalizeProviderPublicUrl } from './services/providerUrls';
 import { WorkRefreshCoordinator } from './services/workRefreshCoordinator';
 import {
   CONTEXT_COMPOSER_SCRIPT,
@@ -166,13 +163,17 @@ import {
 } from './services/projectIntegrationView';
 import { readGitLabMergeRequestMonitorSnapshot } from './services/gitlabMergeRequestMonitorStore';
 import {
+  catalogGitLabBindingCandidate,
+  configuredCiPollingTargets,
+  configuredGitLabPollingTarget,
   configuredGitLabProjectIdentity,
-  latestGitLabMergeRequestBindingAcrossSessions,
-  latestGitLabMergeRequestBinding,
+  configuredSonarBranch,
+  configuredSonarBranchName,
+  latestGitLabMergeRequestUrlAcrossSessions,
   mergeRequestDiscoverySourceBranch,
   reconcileKnownGitLabMergeRequestTarget,
   withEffectiveTicketMergeRequest,
-} from './services/ticketMergeRequestProjection';
+} from './services/providerBindingReconciliation';
 
 const TICKET_WORKSPACE_ACTIONS = new Set([
   'startClaudeForTicket',
@@ -1411,22 +1412,9 @@ class TerminalFirstRuntime implements vscode.Disposable {
       if (ticket.jira_url) { binding.url = ticket.jira_url; }
       updated = this.requireTicketSession(addWorkSessionProviderBinding(updated.id, binding));
     }
-    const currentMergeRequest = latestGitLabMergeRequestBinding(updated);
-    const currentMatchesTicket = currentMergeRequest?.subjectId === String(ticket.mr?.iid || '');
-    const gitLabProject = configuredGitLabProjectIdentity(config);
-    const mergeRequestNeedsEnrichment = currentMatchesTicket && Boolean(
-      (gitLabProject && !currentMergeRequest?.projectId)
-      || (ticket.mr?.url && !currentMergeRequest?.url),
-    );
-    if (ticket.mr?.iid && (!currentMergeRequest || mergeRequestNeedsEnrichment)) {
-      const binding: Parameters<typeof addWorkSessionProviderBinding>[1] = {
-        provider: 'gitlab',
-        resource: 'merge-request',
-        subjectId: String(ticket.mr.iid),
-      };
-      if (gitLabProject) { binding.projectId = String(gitLabProject); }
-      if (ticket.mr.url) { binding.url = ticket.mr.url; }
-      updated = this.requireTicketSession(addWorkSessionProviderBinding(updated.id, binding));
+    const catalogMergeRequest = catalogGitLabBindingCandidate(ticket, updated, config);
+    if (catalogMergeRequest) {
+      updated = this.requireTicketSession(addWorkSessionProviderBinding(updated.id, catalogMergeRequest));
     }
     if (config?.jenkins_url) {
       updated = this.requireTicketSession(addWorkSessionProviderBinding(updated.id, {
@@ -2655,13 +2643,13 @@ class TerminalFirstRuntime implements vscode.Disposable {
     if (!project) { return; }
     const projectSessions = listWorkSessions({ kind: 'ticket', status: 'active' })
       .filter(session => session.projectName === project.projectName);
-    const knownUrl = latestGitLabMergeRequestBindingAcrossSessions(projectSessions)?.url;
+    const knownUrl = latestGitLabMergeRequestUrlAcrossSessions(projectSessions);
     const linkedTickets = Object.entries(this.state.state?.tickets || {})
       .filter(([, ticket]) => ticket.linked_local_project === project.projectName)
       .sort(([, left], [, right]) => String(right.updated || '').localeCompare(String(left.updated || '')));
-    const ticketMrUrl = linkedTickets
+    const ticketMrUrl = normalizeProviderPublicUrl(linkedTickets
       .map(([ticketKey, ticket]) => this.effectiveTicket(ticketKey, ticket).mr)
-      .find(mr => mr?.state === 'opened' && mr.url)?.url;
+      .find(mr => mr?.state === 'opened' && mr.url)?.url, 'gitlab');
     if (knownUrl || ticketMrUrl) {
       await this.openHttpUrl(knownUrl || ticketMrUrl || '');
       return;

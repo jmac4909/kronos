@@ -57,7 +57,13 @@
         { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "Attention projection rebuilds after restart without stale-row resurrection" },
         { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "Attention read-health state replaces failure, recovery, partial, and later failure in one stream" },
         { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "Attention collapses newer pipeline, build, test, gate, and issue occurrences without deleting audit history" },
-        { "file": "scripts/run-provider-reconciliation-tests.js", "test": "provider transition recorder remains deterministic across module reload and lease recovery" }
+        { "file": "scripts/run-provider-reconciliation-tests.js", "test": "provider transition recorder remains deterministic across module reload and lease recovery" },
+        { "file": "scripts/run-provider-binding-reconciliation-tests.js", "test": "one provider binding reconciliation owner feeds Work, Sessions, Projects, Attention, polling, and context insertion" },
+        { "file": "scripts/run-provider-binding-reconciliation-tests.js", "test": "bound MR identity wins stale catalog and only a matching monitor digest enriches it after reload" },
+        { "file": "scripts/run-provider-binding-reconciliation-tests.js", "test": "catalog MR binding candidates enrich only the same identity and never overwrite a newer binding" },
+        { "file": "scripts/run-provider-binding-reconciliation-tests.js", "test": "Jenkins job, build history, and SonarQube branch identities remain distinct under one resolver" },
+        { "file": "scripts/run-provider-binding-reconciliation-tests.js", "test": "reconciled provider URLs are credential-free and rejected outside the configured origin" },
+        { "file": "scripts/run-provider-binding-reconciliation-tests.js", "test": "multi-project reconciliation stays inside the explicitly linked project session set" }
       ],
       "humanGates": ["live-providers"]
     },
@@ -204,7 +210,8 @@
     { "id": "required-release-gates", "file": "scripts/check-roadmap-evidence.js", "marker": "checkRequiredReleaseGates" },
     { "id": "human-gates-required", "file": "scripts/check-roadmap-evidence.js", "marker": "gate.status !== 'required'" },
     { "id": "audited-context-placement-boundary", "file": "scripts/check-context-governance.js", "marker": "Exactly one audited non-submitting context insertion call is allowed." },
-    { "id": "canonical-attention-transition-key", "file": "docs/state-ownership.md", "marker": "scope + provider + resource + logical subject + facet" }
+    { "id": "canonical-attention-transition-key", "file": "docs/state-ownership.md", "marker": "scope + provider + resource + logical subject + facet" },
+    { "id": "provider-binding-reconciliation-owner", "file": "docs/state-ownership.md", "marker": "| Provider binding reconciliation |" }
   ],
   "requirementEvidence": [
     {
@@ -571,6 +578,85 @@
       "automated": [
         { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "Attention read-health state replaces failure, recovery, partial, and later failure in one stream" },
         { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "Attention collapses newer pipeline, build, test, gate, and issue occurrences without deleting audit history" }
+      ]
+    },
+    {
+      "requirements": ["G05-goal:b54ca459"],
+      "automated": [
+        { "file": "scripts/run-provider-binding-reconciliation-tests.js", "test": "one provider binding reconciliation owner feeds Work, Sessions, Projects, Attention, polling, and context insertion" },
+        { "file": "scripts/run-provider-binding-reconciliation-tests.js", "test": "bound MR identity wins stale catalog and only a matching monitor digest enriches it after reload" }
+      ],
+      "checks": ["provider-binding-reconciliation-owner"],
+      "humanGates": ["live-providers"]
+    },
+    {
+      "requirements": ["G05-case-01:d373b817", "G05-case-02:cb747cc0"],
+      "automated": [
+        { "file": "scripts/run-provider-binding-reconciliation-tests.js", "test": "bound MR identity wins stale catalog and only a matching monitor digest enriches it after reload" }
+      ]
+    },
+    {
+      "requirements": ["G05-case-03:0a83b72a"],
+      "automated": [
+        { "file": "scripts/run-unit-tests.js", "test": "GitLab discovery selects a unique current-branch MR before ticket search" }
+      ]
+    },
+    {
+      "requirements": ["G05-case-04:1c8db132"],
+      "automated": [
+        { "file": "scripts/run-unit-tests.js", "test": "GitLab discovery selects a unique current-branch MR before ticket search" },
+        { "file": "scripts/run-unit-tests.js", "test": "GitLab discovery falls back to ticket key and refuses ambiguous matches" }
+      ]
+    },
+    {
+      "requirements": ["G05-case-05:ef6657ed"],
+      "automated": [
+        { "file": "scripts/run-unit-tests.js", "test": "managed provider polling automatically discovers and locally binds a project MR" },
+        { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "GitLab merge-request transition matrix covers every declared structural transition" }
+      ]
+    },
+    {
+      "requirements": ["G05-case-06:8e863540"],
+      "automated": [
+        { "file": "scripts/run-provider-binding-reconciliation-tests.js", "test": "multi-project reconciliation stays inside the explicitly linked project session set" },
+        { "file": "scripts/run-unit-tests.js", "test": "extension activation registers the bounded surface and explicit launch commands create the right session kinds" }
+      ]
+    },
+    {
+      "requirements": ["G05-case-07:022228c4"],
+      "automated": [
+        { "file": "scripts/run-provider-binding-reconciliation-tests.js", "test": "reconciled provider URLs are credential-free and rejected outside the configured origin" },
+        { "file": "scripts/run-unit-tests.js", "test": "provider URLs retain only the SonarQube dashboard routing query" }
+      ]
+    },
+    {
+      "requirements": ["G05-case-08:2c719903"],
+      "automated": [
+        { "file": "scripts/run-provider-binding-reconciliation-tests.js", "test": "Jenkins job, build history, and SonarQube branch identities remain distinct under one resolver" }
+      ]
+    },
+    {
+      "requirements": ["G05-case-09:6a099e7f"],
+      "automated": [
+        { "file": "scripts/run-provider-binding-reconciliation-tests.js", "test": "Jenkins job, build history, and SonarQube branch identities remain distinct under one resolver" },
+        { "file": "scripts/run-handoff-branch-profile-tests.js", "test": "CI target selection uses an exact MR profile then explicit fallback without creating a ticket project link" }
+      ]
+    },
+    {
+      "requirements": ["G05-evidence-01:4b7db4b1", "G05-evidence-02:3f85f1c0"],
+      "automated": [
+        { "file": "scripts/run-provider-binding-reconciliation-tests.js", "test": "one provider binding reconciliation owner feeds Work, Sessions, Projects, Attention, polling, and context insertion" }
+      ],
+      "checks": ["provider-binding-reconciliation-owner"]
+    },
+    {
+      "requirements": ["G05-evidence-03:20cb6d15"],
+      "automated": [
+        { "file": "scripts/run-provider-binding-reconciliation-tests.js", "test": "bound MR identity wins stale catalog and only a matching monitor digest enriches it after reload" },
+        { "file": "scripts/run-provider-binding-reconciliation-tests.js", "test": "catalog MR binding candidates enrich only the same identity and never overwrite a newer binding" },
+        { "file": "scripts/run-provider-binding-reconciliation-tests.js", "test": "multi-project reconciliation stays inside the explicitly linked project session set" },
+        { "file": "scripts/run-unit-tests.js", "test": "GitLab discovery falls back to ticket key and refuses ambiguous matches" },
+        { "file": "scripts/run-unit-tests.js", "test": "managed provider polling automatically discovers and locally binds a project MR" }
       ]
     },
     {

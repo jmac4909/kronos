@@ -41,7 +41,7 @@ const mergeRequestTransitions = require('../out/services/gitlabMergeRequestTrans
 const mergeRequestMonitorStore = require('../out/services/gitlabMergeRequestMonitorStore.js');
 const monitorEventStore = require('../out/services/monitorEventStore.js');
 const providerTransitionStreams = require('../out/services/providerTransitionStreams.js');
-const ticketMergeRequestProjection = require('../out/services/ticketMergeRequestProjection.js');
+const providerBindingReconciliation = require('../out/services/providerBindingReconciliation.js');
 const ciTransitions = require('../out/services/ciTransitions.js');
 const { buildTicketWorkspaceHtml } = require('../out/services/ticketWorkspaceView.js');
 const { buildDoctorPanelHtml, buildSetupPanelHtml } = require('../out/services/operationsPanelView.js');
@@ -545,6 +545,22 @@ test('provider URLs retain only the SonarQube dashboard routing query', () => {
     providerUrls.normalizeProviderPublicUrl(`https://sonar.example/dashboard?id=${gitLabToken}&branch=main`, 'sonar'),
     'https://sonar.example/dashboard?branch=main',
   );
+  assert.equal(
+    providerUrls.normalizeProviderPublicUrl(
+      'https://gitlab.example/group/app/-/merge_requests/7?private_token=secret',
+      'gitlab',
+      { GITLAB_API_BASE_URL: 'https://gitlab.example/api/v4' },
+    ),
+    'https://gitlab.example/group/app/-/merge_requests/7',
+  );
+  assert.equal(
+    providerUrls.normalizeProviderPublicUrl(
+      'https://attacker.example/group/app/-/merge_requests/7',
+      'gitlab',
+      { GITLAB_API_BASE_URL: 'https://gitlab.example/api/v4' },
+    ),
+    undefined,
+  );
 });
 
 test('managed monitoring lease acquires, blocks duplicate owners, renews, and releases', () => {
@@ -855,7 +871,7 @@ test('managed provider polling automatically discovers and locally binds a proje
         && binding.projectId === 'team/application'
     ));
     const digest = mergeRequestMonitorStore.readGitLabMergeRequestMonitorSnapshot(session.id);
-    const projected = ticketMergeRequestProjection.withEffectiveTicketMergeRequest(
+    const projected = providerBindingReconciliation.withEffectiveTicketMergeRequest(
       state.tickets['JIRA-900'],
       updated,
       digest,
@@ -1341,7 +1357,7 @@ test('effective ticket MR rejects stale catalog and monitor identities after a n
     ],
   };
   assert.deepEqual(
-    ticketMergeRequestProjection.effectiveTicketMergeRequest(ticket, session, staleDigest),
+    providerBindingReconciliation.effectiveTicketMergeRequest(ticket, session, staleDigest),
     {
       iid: 88,
       state: 'opened',
@@ -1371,7 +1387,7 @@ test('GitLab target reconciliation gives one deterministic identity to polling a
       attachedAt: '2026-07-14T13:00:00.000Z',
     }],
   };
-  assert.deepEqual(ticketMergeRequestProjection.reconcileKnownGitLabMergeRequestTarget(
+  assert.deepEqual(providerBindingReconciliation.reconcileKnownGitLabMergeRequestTarget(
     ticket,
     boundSession,
     'configured/project',
@@ -1382,7 +1398,7 @@ test('GitLab target reconciliation gives one deterministic identity to polling a
     source: 'binding',
     url: 'https://gitlab.example/bound/project/-/merge_requests/88',
   });
-  assert.deepEqual(ticketMergeRequestProjection.reconcileKnownGitLabMergeRequestTarget(
+  assert.deepEqual(providerBindingReconciliation.reconcileKnownGitLabMergeRequestTarget(
     ticket,
     { ticketKey: 'JIRA-123', providerBindings: [] },
     'configured/project',
@@ -1392,17 +1408,17 @@ test('GitLab target reconciliation gives one deterministic identity to polling a
     source: 'catalog',
     url: 'https://gitlab.example/catalog/project/-/merge_requests/77',
   });
-  assert.equal(ticketMergeRequestProjection.reconcileKnownGitLabMergeRequestTarget(
+  assert.equal(providerBindingReconciliation.reconcileKnownGitLabMergeRequestTarget(
     fixtureTicket(),
     { ticketKey: 'JIRA-123', providerBindings: [] },
     'configured/project',
   ), undefined);
   assert.equal(
-    ticketMergeRequestProjection.mergeRequestDiscoverySourceBranch(ticket, 'fallback-branch'),
+    providerBindingReconciliation.mergeRequestDiscoverySourceBranch(ticket, 'fallback-branch'),
     'feature/JIRA-123',
   );
   assert.equal(
-    ticketMergeRequestProjection.mergeRequestDiscoverySourceBranch(fixtureTicket(), 'detached@1234567'),
+    providerBindingReconciliation.mergeRequestDiscoverySourceBranch(fixtureTicket(), 'detached@1234567'),
     undefined,
   );
 });

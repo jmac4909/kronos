@@ -9,10 +9,10 @@ import {
   WorkSessionProviderBinding,
   WorkSessionRecord,
   listWorkSessions,
-  newestWorkSessionProviderBinding,
 } from '../services/workSessionStore';
 import { currentAttentionTransitions } from '../services/attentionProjection';
 import { normalizeProviderPublicUrl } from '../services/providerUrls';
+import { providerBindingsForEvent } from '../services/providerBindingReconciliation';
 
 export interface AttentionCommandTarget {
   eventId: string;
@@ -238,23 +238,13 @@ function providerChoicesForEvent(
 ): AttentionProviderChoice[] {
   if (!session || (event.source !== 'sonar' && event.source !== 'jenkins')) { return []; }
   const source = event.source;
-  const candidates = session.providerBindings
-    .filter(binding => binding.provider === source
-      && Boolean(binding.url)
-      && (source !== 'jenkins' || binding.resource === 'build'))
+  const candidates = providerBindingsForEvent(event, session)
+    .filter(binding => source !== 'jenkins' || binding.resource === 'build')
     .map(binding => {
       const url = normalizeProviderPublicUrl(binding.url, source);
       return url ? { binding, url } : undefined;
     })
-    .filter((candidate): candidate is { binding: WorkSessionProviderBinding; url: string } => Boolean(candidate))
-    .sort((left, right) => {
-      const leftExact = left.binding.subjectId === event.subject?.id ? 1 : 0;
-      const rightExact = right.binding.subjectId === event.subject?.id ? 1 : 0;
-      return rightExact - leftExact
-        || right.binding.attachedAt.localeCompare(left.binding.attachedAt)
-        || right.binding.subjectId.localeCompare(left.binding.subjectId, undefined, { numeric: true, sensitivity: 'base' })
-        || right.binding.id.localeCompare(left.binding.id);
-    });
+    .filter((candidate): candidate is { binding: WorkSessionProviderBinding; url: string } => Boolean(candidate));
   const choices: AttentionProviderChoice[] = [];
   const seen = new Set<string>();
   for (const { binding, url } of candidates) {
@@ -302,28 +292,16 @@ export class AttentionMessageTreeItem extends vscode.TreeItem {
 }
 
 function providerUrlForEvent(event: MonitorEvent, session: WorkSessionRecord | undefined): string | undefined {
-  if (!session || !isProviderSource(event.source)) { return undefined; }
-  const providerBinding = (predicate: (binding: WorkSessionProviderBinding) => boolean) =>
-    newestWorkSessionProviderBinding(
-      session.providerBindings,
-      binding => binding.provider === event.source && Boolean(binding.url) && predicate(binding),
-    );
-  const exact = providerBinding(binding => binding.subjectId === event.subject?.id);
-  const resourceMatched = providerBinding(binding => subjectMatchesResource(event.subject?.kind, binding));
-  const candidate = exact?.url || resourceMatched?.url || providerBinding(() => true)?.url;
-  return candidate ? normalizeProviderPublicUrl(candidate, event.source) : undefined;
+  if (!isProviderUrlSource(event.source)) { return undefined; }
+  for (const binding of providerBindingsForEvent(event, session)) {
+    const normalized = normalizeProviderPublicUrl(binding.url, event.source);
+    if (normalized) { return normalized; }
+  }
+  return undefined;
 }
 
-function isProviderSource(source: MonitorEventSource): source is WorkSessionProviderBinding['provider'] {
+function isProviderUrlSource(source: MonitorEventSource): source is WorkSessionProviderBinding['provider'] {
   return source === 'jira' || source === 'gitlab' || source === 'jenkins' || source === 'sonar';
-}
-
-function subjectMatchesResource(kind: string | undefined, binding: WorkSessionProviderBinding): boolean {
-  if (!kind) { return false; }
-  if (kind === binding.resource) { return true; }
-  return (kind === 'pipeline' && binding.resource === 'merge-request')
-    || (kind === 'build' && binding.resource === 'job')
-    || (kind === 'quality-gate' && binding.resource === 'branch');
 }
 
 function eventDescription(event: MonitorEvent): string {

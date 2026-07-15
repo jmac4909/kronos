@@ -4,7 +4,7 @@ import { ticketWorkspaceActionButton, ticketWorkspaceActionScript } from './oper
 import { formatWebviewDateTime } from './webviewFormat';
 import { escapeAttr, escapeClass, escapeHtml, kronosWebviewBaseCss, safeHttpHref } from './webviewHtml';
 import type { LocalProjectSummary } from './projectCatalog';
-import { effectiveTicketMergeRequest } from './ticketMergeRequestProjection';
+import { effectiveTicketMergeRequest } from './providerBindingReconciliation';
 
 export interface TicketWorkspaceViewInput {
   ticketKey: string;

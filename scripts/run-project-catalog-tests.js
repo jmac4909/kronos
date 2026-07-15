@@ -13,7 +13,7 @@ const projectCatalog = require('../out/services/projectCatalog.js');
 const projectDiscovery = require('../out/services/projectDiscovery.js');
 const projectGitPresentation = require('../out/services/projectGitPresentation.js');
 const jiraWorkCatalog = require('../out/services/jiraWorkCatalog.js');
-const managedProviderMonitor = require('../out/services/managedProviderMonitor.js');
+const providerBindingReconciliation = require('../out/services/providerBindingReconciliation.js');
 const workSessions = require('../out/services/workSessionStore.js');
 
 test('explicit local project links preserve unrelated provider records and report branch without running Git', () => {
@@ -152,9 +152,9 @@ test('unlinked tickets stay unlinked across refresh, registration, reload, polli
   const reloaded = stateStore.normalizeWorkCatalog(refreshed, '/fixture/unlinked-reload.json').state;
   assert.equal(reloaded.tickets['ABC-200'].linked_local_project, undefined);
   const ticketSession = { ticketKey: 'ABC-200', ticketKeys: ['ABC-200'], providerBindings: [] };
-  assert.equal(managedProviderMonitor.configuredGitLabPollingTarget(reloaded, ticketSession), null);
-  assert.deepEqual(managedProviderMonitor.configuredCiPollingTargets(reloaded, ticketSession), {});
-  assert.equal(managedProviderMonitor.configuredSonarBranch(reloaded, 'ABC-200'), null);
+  assert.equal(providerBindingReconciliation.configuredGitLabPollingTarget(reloaded, ticketSession), null);
+  assert.deepEqual(providerBindingReconciliation.configuredCiPollingTargets(reloaded, ticketSession), {});
+  assert.equal(providerBindingReconciliation.configuredSonarBranch(reloaded, 'ABC-200'), null);
 
   const sessionOptions = { kronosDir: path.join(tempRoot, 'unlinked-standalone-session') };
   const standalone = workSessions.createStandaloneWorkSession({
@@ -220,7 +220,7 @@ test('project integration setup validates provider identifiers and explicit proj
     jenkins_url: 'https://jenkins.example/job/team/job/application',
     sonar_project_key: 'team:application',
   });
-  assert.deepEqual(managedProviderMonitor.configuredSonarBranch(configured, 'JIRA-123'), {
+  assert.deepEqual(providerBindingReconciliation.configuredSonarBranch(configured, 'JIRA-123'), {
     projectKey: 'team:application',
     branch: 'feature/local-branch',
   });
@@ -238,18 +238,18 @@ test('project integration setup validates provider identifiers and explicit proj
       { provider: 'sonar', resource: 'quality-gate', subjectId: 'old:key:old-branch', projectId: 'old:key' },
     ],
   };
-  assert.deepEqual(managedProviderMonitor.configuredGitLabPollingTarget(configured, existingSession), {
+  assert.deepEqual(providerBindingReconciliation.configuredGitLabPollingTarget(configured, existingSession), {
     iid: 77,
     projectIdOrPath: 'old/project',
     providerUrl: 'https://gitlab.example/old/project/-/merge_requests/77',
   });
-  assert.deepEqual(managedProviderMonitor.configuredCiPollingTargets(configured, existingSession), {
+  assert.deepEqual(providerBindingReconciliation.configuredCiPollingTargets(configured, existingSession), {
     jenkinsUrl: 'https://jenkins.example/job/team/job/application',
     sonar: { projectKey: 'team:application', branch: 'feature/local-branch' },
   });
   const savedBindingOnlyState = stateStore.emptyWorkCatalog();
   savedBindingOnlyState.tickets['JIRA-123'] = fixtureTicket();
-  assert.deepEqual(managedProviderMonitor.configuredCiPollingTargets(savedBindingOnlyState, existingSession), {
+  assert.deepEqual(providerBindingReconciliation.configuredCiPollingTargets(savedBindingOnlyState, existingSession), {
     jenkinsUrl: 'https://jenkins.example/job/old',
     sonar: { projectKey: 'old:key', branch: 'old-branch' },
   });

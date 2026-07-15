@@ -13,7 +13,7 @@ const {
   writeLocalHandoffBundle,
 } = require('../out/services/handoffBundleStore.js');
 const projectCatalog = require('../out/services/projectCatalog.js');
-const { configuredCiPollingTargets, configuredSonarBranch } = require('../out/services/managedProviderMonitor.js');
+const { configuredCiPollingTargets, configuredSonarBranch } = require('../out/services/providerBindingReconciliation.js');
 const { normalizeWorkCatalog } = require('../out/services/stateStore.js');
 
 test.after(() => fs.rmSync(kronosDir, { recursive: true, force: true }));
