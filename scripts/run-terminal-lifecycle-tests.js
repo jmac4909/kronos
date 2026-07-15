@@ -111,12 +111,15 @@ test('Sessions present project, branch, Jira contexts, attachment, monitoring, a
     1,
     300_000,
     'feature/session-inventory',
+    'Customer API',
   );
-  assert.equal(presentation.label, 'Application: Interactive investigation');
+  assert.equal(presentation.label, 'Customer API: Interactive investigation');
   assert.equal(
     presentation.description,
-    'Application @ feature/session-inventory • no Jira context • 1 terminal attached',
+    'Customer API @ feature/session-inventory • no Jira context • 1 terminal attached',
   );
+  assert.match(presentation.tooltip, /Project: Customer API/);
+  assert.match(presentation.tooltip, /Stable project identity: Application/);
 
   session = workSessions.addWorkSessionTicketContext(session.id, 'JIRA-301', options);
   session = workSessions.addWorkSessionTicketContext(session.id, 'JIRA-302', options);

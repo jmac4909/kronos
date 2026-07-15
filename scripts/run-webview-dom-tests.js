@@ -182,6 +182,7 @@ test('context basket preserves focus across explicit refresh and non-submitting 
 
 test('project integration form collects only bounded project setup fields', () => {
   const values = {
+    nickname: 'Customer API',
     gitlabProject: 'group/app',
     jenkinsUrl: 'https://jenkins.example/job/app/',
     sonarProjectKey: 'app:key',

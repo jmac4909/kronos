@@ -57,7 +57,7 @@ test('explicit local project links preserve unrelated provider records and repor
   assert.equal(unlinked.tickets['JIRA-123'].linked_local_project, undefined);
 });
 
-test('project registration identity stays canonical by path while its display name remains editable', () => {
+test('project nickname sets and clears while registration identity stays canonical by path', () => {
   const projectRoot = path.join(tempRoot, 'canonical-project-identity');
   fs.mkdirSync(projectRoot, { recursive: true });
   const aliasPath = path.join(projectRoot, '..', path.basename(projectRoot));
@@ -83,6 +83,11 @@ test('project registration identity stays canonical by path while its display na
     path: fs.realpathSync.native(projectRoot),
   }]);
   assert.equal(renamed.projects.Application.config.repo_name, 'Application');
+
+  const clearedNickname = projectCatalog.renameLocalProjectDisplayName(renamed, 'Application', '   ');
+  assert.equal(clearedNickname.projects.Application.display_name, undefined);
+  assert.equal(projectCatalog.listLocalProjects(clearedNickname)[0].displayName, 'Application');
+  assert.equal(clearedNickname.tickets['JIRA-123'].linked_local_project, 'Application', 'clearing a nickname keeps ticket identity');
 
   const persisted = stateStore.normalizeWorkCatalog({
     schemaVersion: 2,
@@ -263,12 +268,14 @@ test('project integration setup validates provider identifiers and explicit proj
 
   const configured = projectCatalog.setLocalProjectIntegrations(initial, [{
     name: 'Application',
+    nickname: 'Customer API',
     gitlabProject: 'group/application',
     jenkinsUrl: 'https://jenkins.example/job/team/job/application/#fragment',
     sonarProjectKey: 'team:application',
     defaultBranch: 'feature/local-branch',
   }]);
   assert.equal(configured.projects.Application.config.gitlab_project_path, 'group/application');
+  assert.equal(configured.projects.Application.display_name, 'Customer API');
   assert.equal(configured.projects.Application.config.jenkins_url, 'https://jenkins.example/job/team/job/application');
   assert.equal(configured.projects.Application.config.sonar_project_key, 'team:application');
   assert.equal(configured.projects.Application.config.default_branch, 'feature/local-branch');
@@ -342,12 +349,27 @@ test('project integration values round-trip, clear, and default to the observed 
     default_branch: 'release/current',
   });
 
-  const cleared = projectCatalog.setLocalProjectIntegrations(configured, [{ name: 'Application' }]);
+  const nicknamed = projectCatalog.setLocalProjectIntegrations(configured, [{
+    name: 'Application',
+    nickname: 'Release API',
+    gitlabProject: 'group/application',
+    jenkinsUrl: 'https://jenkins.example/job/application/',
+    sonarProjectKey: 'team:application',
+    defaultBranch: 'release/current',
+  }]);
+  assert.equal(nicknamed.projects.Application.display_name, 'Release API');
+  assert.equal(nicknamed.projects.Application.path, projectRoot);
+  assert.equal(nicknamed.projects.Application.config.gitlab_project_path, 'group/application');
+
+  const cleared = projectCatalog.setLocalProjectIntegrations(nicknamed, [{ name: 'Application', nickname: '' }]);
   assert.deepEqual(cleared.projects.Application.config, { repo_name: 'Application' });
+  assert.equal(cleared.projects.Application.display_name, undefined);
 
   const html = buildProjectIntegrationPanelHtml({
     projects: [{
       name: 'Application',
+      displayName: 'Customer API',
+      nickname: 'Customer API',
       path: projectRoot,
       branch: 'feature/observed-branch',
       gitlabProject: 'group/application',
@@ -359,10 +381,13 @@ test('project integration values round-trip, clear, and default to the observed 
     scriptUri: 'vscode-webview://fixture/kronos-project-integration.js',
   });
   assert.match(html, /value="group\/application"/);
+  assert.match(html, /Project nickname \(optional\)/);
+  assert.match(html, /value="Customer API"/);
+  assert.match(html, /Stable project: Application/);
   assert.match(html, /value="https:\/\/jenkins\.example\/job\/application"/);
   assert.match(html, /value="team:application"/);
   assert.match(html, /value="feature\/observed-branch"/);
-  assert.match(html, /Blank fields clear that optional integration/);
+  assert.match(html, /Blank fields clear that optional nickname or integration/);
   assert.doesNotMatch(html, /Connect registered folders/);
 });
 

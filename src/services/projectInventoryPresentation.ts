@@ -37,10 +37,10 @@ const REGISTERED_PROJECT_ACTIONS: readonly RegisteredProjectActionPresentation[]
   Object.freeze({ label: 'Insert Jenkins / Sonar evidence', icon: 'beaker', command: 'kronos.insertProjectCiContext' }),
   Object.freeze({ label: 'Configure provider polling', icon: 'settings-gear', command: 'kronos.configureProjectIntegrations' }),
   Object.freeze({
-    label: 'Rename display label',
+    label: 'Set project nickname',
     icon: 'edit',
     command: 'kronos.renameLocalProject',
-    description: 'identity and links stay unchanged',
+    description: 'optional; identity and links stay unchanged',
   }),
 ]);
 

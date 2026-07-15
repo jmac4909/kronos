@@ -19,6 +19,7 @@
         }
         return {
           name: card.getAttribute('data-project-name') || '',
+          nickname: value('nickname'),
           gitlabProject: value('gitlabProject'),
           jenkinsUrl: value('jenkinsUrl'),
           sonarProjectKey: value('sonarProjectKey'),

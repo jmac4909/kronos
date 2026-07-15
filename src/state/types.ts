@@ -8,7 +8,7 @@ export interface KronosState {
 
 export interface Project {
   path?: string;
-  /** Editable presentation only; project map keys and canonical paths remain stable identities. */
+  /** Optional project nickname for presentation only; map keys and canonical paths remain stable identities. */
   display_name?: string;
   config: ProjectConfig;
 }

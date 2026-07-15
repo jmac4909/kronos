@@ -42,6 +42,7 @@ export interface AttentionCommandTarget {
 export interface AttentionTreeProviderOptions {
   loadMonitorEvents?: () => MonitorEvent[];
   loadWorkSessions?: () => WorkSessionRecord[];
+  loadProjectDisplayName?: (projectName: string) => string | undefined;
 }
 
 interface AttentionEntry {
@@ -57,6 +58,7 @@ export class AttentionTreeProvider implements vscode.TreeDataProvider<AttentionT
   private readonly changeEmitter = new vscode.EventEmitter<AttentionTreeItem | undefined>();
   private readonly loadMonitorEvents: () => MonitorEvent[];
   private readonly loadWorkSessions: () => WorkSessionRecord[];
+  private readonly loadProjectDisplayName: (projectName: string) => string | undefined;
   readonly onDidChangeTreeData = this.changeEmitter.event;
 
   constructor(options: AttentionTreeProviderOptions = {}) {
@@ -66,6 +68,7 @@ export class AttentionTreeProvider implements vscode.TreeDataProvider<AttentionT
         limit: 2000,
       }));
     this.loadWorkSessions = options.loadWorkSessions ?? (() => listWorkSessions());
+    this.loadProjectDisplayName = options.loadProjectDisplayName ?? (() => undefined);
   }
 
   getTreeItem(element: AttentionTreeItem): vscode.TreeItem {
@@ -84,7 +87,11 @@ export class AttentionTreeProvider implements vscode.TreeDataProvider<AttentionT
     }
 
     return groupAttentionEntriesByProject(entries)
-      .map(group => new AttentionGroupTreeItem(group.entries, group.identity))
+      .map(group => new AttentionGroupTreeItem(
+        group.entries,
+        group.identity,
+        group.identity.projectName ? this.loadProjectDisplayName(group.identity.projectName) : undefined,
+      ))
       .sort((left, right) => right.newestAt.localeCompare(left.newestAt)
         || left.labelText.localeCompare(right.labelText));
   }
@@ -144,12 +151,14 @@ export class AttentionGroupTreeItem extends vscode.TreeItem {
   constructor(
     readonly entries: readonly AttentionEntry[],
     identity?: AttentionProjectGroupIdentity,
+    displayName?: string,
   ) {
     const newest = entries[0];
     if (!newest) { throw new Error('Attention groups require at least one event.'); }
     const group = identity || attentionProjectGroupIdentity(newest.session?.projectName);
     const projectName = group.projectName;
-    const label = group.label;
+    const nicknameIdentity = projectName && displayName ? attentionProjectGroupIdentity(displayName) : undefined;
+    const label = nicknameIdentity?.projectName ? nicknameIdentity.label : group.label;
     const sessionIds = [...new Set(entries.map(entry => entry.event.sessionId))];
     super(label, vscode.TreeItemCollapsibleState.Expanded);
     this.newestAt = newest.event.at;
@@ -159,7 +168,8 @@ export class AttentionGroupTreeItem extends vscode.TreeItem {
     this.contextValue = 'attention_group';
     this.description = `${entries.length} current item${entries.length === 1 ? '' : 's'} • newest ${displayTimestamp(this.newestAt)}`;
     this.tooltip = [
-      `Project: ${projectName || 'unassigned'}`,
+      `Project: ${label}`,
+      ...(projectName && label !== projectName ? [`Stable project identity: ${projectName}`] : []),
       `Contributing work sessions: ${sessionIds.length}`,
       `Unacknowledged provider transitions: ${entries.length}`,
       `Newest transition: ${this.newestAt}`,

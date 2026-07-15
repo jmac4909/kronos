@@ -114,7 +114,7 @@
       "automated": [
         { "file": "scripts/run-project-catalog-tests.js", "test": "project discovery honors configured roots, depth, limits, and workspace folders" },
         { "file": "scripts/run-project-catalog-tests.js", "test": "project discovery canonicalizes root aliases and skips symbolic child repositories" },
-        { "file": "scripts/run-project-catalog-tests.js", "test": "project registration identity stays canonical by path while its display name remains editable" },
+        { "file": "scripts/run-project-catalog-tests.js", "test": "project nickname sets and clears while registration identity stays canonical by path" },
         { "file": "scripts/run-project-catalog-tests.js", "test": "duplicate discovered names receive stable unique identities and duplicate real paths collapse" },
         { "file": "scripts/run-project-catalog-tests.js", "test": "missing registered folders remain visible until an authoritative uncheck removes them" },
         { "file": "scripts/run-unit-tests.js", "test": "project Git evidence reads only the bounded VS Code Git model" },
@@ -1036,9 +1036,9 @@
       "humanGates": ["operator-terminal"]
     },
     {
-      "requirements": ["G09-evidence-01:fbe41436"],
+      "requirements": ["G09-evidence-01:d509bcdf"],
       "automated": [
-        { "file": "scripts/run-project-catalog-tests.js", "test": "project registration identity stays canonical by path while its display name remains editable" },
+        { "file": "scripts/run-project-catalog-tests.js", "test": "project nickname sets and clears while registration identity stays canonical by path" },
         { "file": "scripts/run-project-catalog-tests.js", "test": "duplicate discovered names receive stable unique identities and duplicate real paths collapse" }
       ]
     },

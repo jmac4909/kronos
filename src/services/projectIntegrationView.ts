@@ -6,6 +6,7 @@ export const PROJECT_INTEGRATION_SCRIPT = 'kronos-project-integration.js';
 export interface ProjectIntegrationFormProject {
   name: string;
   displayName?: string;
+  nickname?: string;
   path: string;
   branch?: string;
   gitlabProject?: string;
@@ -30,10 +31,11 @@ export function buildProjectIntegrationPanelHtml(input: ProjectIntegrationPanelI
   </div>`).join('');
   const projectCards = input.projects.slice(0, 200).map(project => `<section class="integration-card" data-project-card data-project-name="${escapeAttr(project.name)}">
     <header>
-      <div><h2>${escapeHtml(project.displayName || project.name)}</h2><div class="project-path">${escapeHtml(project.path)}</div></div>
+      <div><h2>${escapeHtml(project.displayName || project.name)}</h2><div class="project-identity">Stable project: ${escapeHtml(project.name)}</div><div class="project-path">${escapeHtml(project.path)}</div></div>
       <span class="kronos-pill info">${escapeHtml(project.branch || 'branch unavailable')}</span>
     </header>
     <div class="field-grid">
+      ${formField('Project nickname (optional)', 'nickname', project.nickname || '', 'Customer API', 'Shown throughout Kronos so similar local folders are easy to distinguish. Blank uses the stable project name; links, paths, sessions, and provider mappings never change.', true, 200)}
       ${formField('GitLab project ID or path', 'gitlabProject', project.gitlabProject || '', '12345 or group/project', 'Used to read merge requests, review discussions, pipelines, jobs, and test reports.')}
       ${formField('Jenkins job URL', 'jenkinsUrl', project.jenkinsUrl || '', 'https://jenkins.example/job/team/job/service/', 'Use the job URL Kronos should poll for builds, stages, and tests.')}
       ${formField('SonarQube project key', 'sonarProjectKey', project.sonarProjectKey || '', 'team:service', 'The component key used for quality gates, measures, and issues.')}
@@ -62,7 +64,7 @@ ${kronosWebviewBaseCss()}
 .integration-card { padding: 16px; border: 1px solid var(--k-border); border-radius: var(--k-radius); background: var(--k-surface); }
 .integration-card > header { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; margin-bottom: 14px; }
 .integration-card h2 { margin: 0; font-size: 15px; }
-.project-path { margin-top: 3px; color: var(--k-muted); font-size: 11px; word-break: break-all; }
+.project-identity, .project-path { margin-top: 3px; color: var(--k-muted); font-size: 11px; word-break: break-all; }
 .field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .form-field label { display: block; margin-bottom: 5px; font-size: 11px; font-weight: 650; }
 .form-field input { width: 100%; }
@@ -77,27 +79,35 @@ ${kronosWebviewBaseCss()}
   <header class="kronos-header integration-header">
     <div>
       <h1 class="kronos-title">Project Integration Setup</h1>
-      <div class="kronos-subtitle">Map registered folders to the identifiers Kronos needs for read-only MR, pipeline, Jenkins, and SonarQube polling.</div>
+      <div class="kronos-subtitle">Give local projects recognizable nicknames and map them to the identifiers Kronos needs for read-only MR, pipeline, Jenkins, and SonarQube polling.</div>
     </div>
     <span class="kronos-pill info">Local config only</span>
   </header>
   <section class="readiness-grid">${readiness}</section>
-  <div class="message warn">Provider credentials stay in the private Kronos environment file. This form saves only project identifiers, job URLs, explicit branch routing profiles, and the default branch; it never switches Git, tests, changes, or posts to a provider.</div>
+  <div class="message warn">Provider credentials stay in the private Kronos environment file. This form saves only the local nickname, project identifiers, job URLs, explicit branch routing profiles, and default branch; it never switches Git, tests, changes, or posts to a provider.</div>
   <section class="integration-list">${projectCards || '<div class="kronos-empty">No registered local projects are available to configure.</div>'}</section>
   <div class="kronos-action-row integration-actions">
     <button type="button" class="kronos-button primary" data-action="save">Save Project Setup</button>
     <button type="button" class="kronos-button" data-action="cancel">Not Now</button>
-    <span class="privacy-copy">Blank fields clear that optional integration. Ctrl+Enter saves.</span>
+    <span class="privacy-copy">Blank fields clear that optional nickname or integration. Ctrl+Enter saves.</span>
   </div>
 </main>
 ${script}
 </body></html>`;
 }
 
-function formField(label: string, field: string, value: string, placeholder: string, help: string): string {
-  return `<div class="form-field">
+function formField(
+  label: string,
+  field: string,
+  value: string,
+  placeholder: string,
+  help: string,
+  wide = false,
+  maxLength?: number,
+): string {
+  return `<div class="form-field${wide ? ' wide' : ''}">
     <label>${escapeHtml(label)}
-      <input class="kronos-input" type="text" data-field="${escapeAttr(field)}" value="${escapeAttr(value)}" placeholder="${escapeAttr(placeholder)}" autocomplete="off" spellcheck="false">
+      <input class="kronos-input" type="text" data-field="${escapeAttr(field)}" value="${escapeAttr(value)}" placeholder="${escapeAttr(placeholder)}"${maxLength ? ` maxlength="${maxLength}"` : ''} autocomplete="off" spellcheck="false">
     </label>
     <div class="field-help">${escapeHtml(help)}</div>
   </div>`;

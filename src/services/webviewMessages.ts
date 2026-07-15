@@ -25,6 +25,7 @@ export type ProjectIntegrationMessage =
     command: 'save';
     projects: Array<{
       name: string;
+      nickname: string;
       gitlabProject: string;
       jenkinsUrl: string;
       sonarProjectKey: string;
@@ -100,18 +101,20 @@ export function normalizeProjectIntegrationMessage(raw: unknown): ProjectIntegra
   for (const value of message['projects']) {
     const project = recordFromUnknown(value);
     const name = boundedMessageString(project['name'], 200);
+    const nickname = boundedMessageString(project['nickname'], 200, true);
     const gitlabProject = boundedMessageString(project['gitlabProject'], 512, true);
     const jenkinsUrl = boundedMessageString(project['jenkinsUrl'], 4_000, true);
     const sonarProjectKey = boundedMessageString(project['sonarProjectKey'], 400, true);
     const defaultBranch = boundedMessageString(project['defaultBranch'], 500, true);
     const branchProfiles = boundedMultilineMessageString(project['branchProfiles'], 20_000);
     const activeBranchProfile = boundedMessageString(project['activeBranchProfile'], 500, true);
-    if (name === null || gitlabProject === null || jenkinsUrl === null || sonarProjectKey === null
+    if (name === null || nickname === null || gitlabProject === null || jenkinsUrl === null || sonarProjectKey === null
       || defaultBranch === null || branchProfiles === null || activeBranchProfile === null) {
       return null;
     }
     projects.push({
       name,
+      nickname,
       gitlabProject,
       jenkinsUrl,
       sonarProjectKey,

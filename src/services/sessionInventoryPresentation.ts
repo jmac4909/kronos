@@ -17,11 +17,13 @@ export function sessionInventoryPresentation(
   liveCount: number,
   pollIntervalMs: number,
   observedBranch?: string,
+  projectDisplayName?: string,
 ): SessionInventoryPresentation {
+  const projectLabel = normalizedProjectLabel(session, projectDisplayName);
   return {
-    label: sessionInventoryLabel(session),
-    description: sessionInventoryDescription(session, liveCount, pollIntervalMs, observedBranch),
-    tooltip: sessionInventoryTooltip(session, liveCount, pollIntervalMs, observedBranch),
+    label: sessionInventoryLabel(session, projectLabel),
+    description: sessionInventoryDescription(session, liveCount, pollIntervalMs, observedBranch, projectLabel),
+    tooltip: sessionInventoryTooltip(session, liveCount, pollIntervalMs, observedBranch, projectLabel),
   };
 }
 
@@ -32,8 +34,8 @@ export function sessionInventorySortOrder(left: WorkSessionRecord, right: WorkSe
     || left.id.localeCompare(right.id);
 }
 
-export function sessionInventoryLabel(session: WorkSessionRecord): string {
-  if (session.projectName) { return `${session.projectName}: ${session.title}`; }
+export function sessionInventoryLabel(session: WorkSessionRecord, projectDisplayName?: string): string {
+  if (session.projectName) { return `${normalizedProjectLabel(session, projectDisplayName)}: ${session.title}`; }
   return session.kind === 'ticket' ? `${session.ticketKey}: ${session.title}` : session.title;
 }
 
@@ -42,11 +44,13 @@ function sessionInventoryDescription(
   liveCount: number,
   pollIntervalMs: number,
   observedBranch?: string,
+  projectDisplayName?: string,
 ): string {
   const lifecycle = workSessionLifecycle(session, liveCount);
   const segments: string[] = [];
   if (session.projectName) {
-    segments.push(observedBranch ? `${session.projectName} @ ${observedBranch}` : session.projectName);
+    const projectLabel = normalizedProjectLabel(session, projectDisplayName);
+    segments.push(observedBranch ? `${projectLabel} @ ${observedBranch}` : projectLabel);
   } else if (observedBranch) {
     segments.push(`project @ ${observedBranch}`);
   }
@@ -74,6 +78,7 @@ function sessionInventoryTooltip(
   liveCount: number,
   pollIntervalMs: number,
   observedBranch?: string,
+  projectDisplayName?: string,
 ): string {
   const lifecycle = workSessionLifecycle(session, liveCount);
   const terminalCounts = { attached: 0, detached: 0, closed: 0 };
@@ -114,11 +119,22 @@ function sessionInventoryTooltip(
     `Created: ${session.createdAt}`,
     `Updated: ${session.updatedAt}`,
   ];
-  if (session.projectName) { lines.splice(4, 0, `Project: ${session.projectName}`); }
+  if (session.projectName) {
+    const projectLabel = normalizedProjectLabel(session, projectDisplayName);
+    lines.splice(4, 0, `Project: ${projectLabel}`);
+    if (projectLabel !== session.projectName) { lines.splice(5, 0, `Stable project identity: ${session.projectName}`); }
+  }
   if (session.projectPath) { lines.splice(5, 0, `Project path: ${session.projectPath}`); }
   if (observedBranch) { lines.splice(6, 0, `Git branch: ${observedBranch}`); }
   if (session.closedAt) { lines.push(`Closed: ${session.closedAt}`); }
   return lines.join('\n');
+}
+
+function normalizedProjectLabel(session: WorkSessionRecord, displayName?: string): string {
+  const normalized = typeof displayName === 'string'
+    ? displayName.replace(/[\u0000-\u001f\u007f\u2028\u2029]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200)
+    : '';
+  return normalized || session.projectName || 'Project';
 }
 
 function boundedListSummary(values: readonly string[], limit: number): string {

@@ -16,6 +16,7 @@ export interface ManagedSessionCommandTarget {
 }
 
 type WorkSessionLoader = () => WorkSessionRecord[];
+type ProjectDisplayNameLoader = (projectName: string) => string | undefined;
 type SessionTreeElement = ManagedSessionTreeItem | ManagedSessionMessageTreeItem;
 
 /** Operator-owned terminal sessions stay independent from registered project inventory. */
@@ -27,6 +28,7 @@ export class ManagedSessionTreeProvider implements vscode.TreeDataProvider<Sessi
     private readonly operatorTerminals: OperatorTerminalRegistry<vscode.Terminal>,
     private readonly loadWorkSessions: WorkSessionLoader = () => listWorkSessions(),
     private readonly pollIntervalMs: () => number = () => 300_000,
+    private readonly loadProjectDisplayName: ProjectDisplayNameLoader = () => undefined,
   ) {}
 
   getTreeItem(element: SessionTreeElement): vscode.TreeItem { return element; }
@@ -39,6 +41,7 @@ export class ManagedSessionTreeProvider implements vscode.TreeDataProvider<Sessi
         session,
         this.operatorTerminals.listBindings(session.id).map(binding => binding.bindingId),
         this.pollIntervalMs(),
+        session.projectName ? this.loadProjectDisplayName(session.projectName) : undefined,
       ))
       : [new ManagedSessionMessageTreeItem()];
   }
@@ -60,9 +63,20 @@ export class ManagedSessionTreeItem extends vscode.TreeItem implements ManagedSe
   readonly ticketKey?: string;
   readonly liveTerminalBindingIds: readonly string[];
 
-  constructor(readonly session: WorkSessionRecord, liveTerminalBindingIds: readonly string[], pollIntervalMs: number) {
+  constructor(
+    readonly session: WorkSessionRecord,
+    liveTerminalBindingIds: readonly string[],
+    pollIntervalMs: number,
+    projectDisplayName?: string,
+  ) {
     const branch = session.projectPath ? readProjectGitBranch(session.projectPath)?.branch : undefined;
-    const presentation = sessionInventoryPresentation(session, liveTerminalBindingIds.length, pollIntervalMs, branch);
+    const presentation = sessionInventoryPresentation(
+      session,
+      liveTerminalBindingIds.length,
+      pollIntervalMs,
+      branch,
+      projectDisplayName,
+    );
     super(presentation.label, vscode.TreeItemCollapsibleState.None);
     this.workSessionId = session.id;
     if (session.kind === 'ticket') { this.ticketKey = session.ticketKey; }

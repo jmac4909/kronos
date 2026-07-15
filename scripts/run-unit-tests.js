@@ -2937,7 +2937,7 @@ test('Setup and Doctor render bounded operation dashboards with allowlisted acti
   assert.equal(normalizeContextComposerMessage({ command: 'insertDraft', focus: 'x'.repeat(4_001) }), null);
 
   const projectSetup = buildProjectIntegrationPanelHtml({
-    projects: [{ name: 'App <one>', path: '/repos/app', branch: 'main', gitlabProject: 'group/app' }],
+    projects: [{ name: 'App <one>', displayName: 'Customer <API>', nickname: 'Customer <API>', path: '/repos/app', branch: 'main', gitlabProject: 'group/app' }],
     providerReadiness: [{ name: 'GitLab', ready: true, detail: 'Ready' }],
     nonce: 'project-nonce',
     scriptUri: 'vscode-webview://fixture/kronos-project-integration.js',
@@ -2945,11 +2945,14 @@ test('Setup and Doctor render bounded operation dashboards with allowlisted acti
   assert.match(projectSetup, /Project Integration Setup/);
   assert.match(projectSetup, /GitLab project ID or path/);
   assert.match(projectSetup, /SonarQube project key/);
-  assert.match(projectSetup, /App &lt;one&gt;/);
+  assert.match(projectSetup, /Customer &lt;API&gt;/);
+  assert.match(projectSetup, /Stable project: App &lt;one&gt;/);
+  assert.match(projectSetup, /Project nickname \(optional\)/);
   assert.deepEqual(normalizeProjectIntegrationMessage({
     command: 'save',
     projects: [{
       name: 'App',
+      nickname: 'Customer API',
       gitlabProject: 'group/app',
       jenkinsUrl: 'https://jenkins.example/job/app/',
       sonarProjectKey: 'app:key',
@@ -2961,6 +2964,7 @@ test('Setup and Doctor render bounded operation dashboards with allowlisted acti
     command: 'save',
     projects: [{
       name: 'App',
+      nickname: 'Customer API',
       gitlabProject: 'group/app',
       jenkinsUrl: 'https://jenkins.example/job/app/',
       sonarProjectKey: 'app:key',
@@ -3088,6 +3092,8 @@ test('extension activation registers the bounded surface and explicit launch com
   let gitRepositoryOpenCalls = 0;
   let openDialogResult;
   let lastOpenDialogOptions;
+  let inputBoxResult;
+  let lastInputBoxOptions;
   let multiPickHandler;
   let singlePickHandler;
   let lastMultiPickItems = [];
@@ -3179,6 +3185,12 @@ test('extension activation registers the bounded surface and explicit launch com
         lastOpenDialogOptions = options;
         const result = openDialogResult;
         openDialogResult = undefined;
+        return Promise.resolve(result);
+      },
+      showInputBox(options) {
+        lastInputBoxOptions = options;
+        const result = inputBoxResult;
+        inputBoxResult = undefined;
         return Promise.resolve(result);
       },
       showQuickPick(items, options) {
@@ -3354,7 +3366,7 @@ test('extension activation registers the bounded surface and explicit launch com
       'Insert MR evidence',
       'Insert Jenkins / Sonar evidence',
       'Configure provider polling',
-      'Rename display label',
+      'Set project nickname',
     ]);
     const panelsBeforeUnmanagedProjectContext = createdWebviewPanels.length;
     await commandHandlers.get('kronos.insertProjectGitContext')({ projectName: 'fixture', projectPath: tempRoot });
@@ -3555,10 +3567,19 @@ test('extension activation registers the bounded surface and explicit launch com
       after: { state: 'opened', fingerprint: 'attention-same-project-fingerprint' },
       metadata: { transitionKind: 'initial_observation' },
     });
-    const attentionGroup = attentionProvider.getChildren().find(item => item.label === 'fixture');
-    assert.equal(attentionGroup.label, 'fixture', 'Attention groups use the registered project identity');
+    inputBoxResult = 'Fixture API';
+    await commandHandlers.get('kronos.renameLocalProject')({ projectName: 'fixture', projectPath: tempRoot });
+    assert.match(lastInputBoxOptions.prompt, /Optional display name only/);
+    assert.equal(stateStore.readStateFileWithIssues().state.projects.fixture.display_name, 'Fixture API');
+    const attentionGroup = attentionProvider.getChildren().find(item => item.label === 'Fixture API');
+    assert.equal(attentionGroup.label, 'Fixture API', 'Attention uses the project nickname for presentation');
     assert.equal(attentionGroup.projectName, 'fixture');
+    assert.match(attentionGroup.tooltip, /Stable project identity: fixture/);
     assert.match(attentionGroup.tooltip, /Jira contexts are optional row-level actions and never define an Attention group/);
+    const namedSessionItem = (await registeredTreeProviders.get('kronosSessions').getChildren())
+      .find(item => item.workSessionId === attentionSession.id);
+    assert.match(namedSessionItem.label, /^Fixture API:/, 'Sessions use the current nickname without rewriting session identity');
+    assert.match(namedSessionItem.tooltip, /Stable project identity: fixture/);
     const groupedProjectItems = attentionProvider.getChildren(attentionGroup);
     assert.equal(groupedProjectItems.length, 2, 'provider transitions from separate sessions share one project group');
     const attentionItem = groupedProjectItems.find(item => item.eventId === 'attention-branch-picker-event');
@@ -3620,7 +3641,7 @@ test('extension activation registers the bounded surface and explicit launch com
 
     singlePickHandler = items => items.find(item => item.project?.name === 'fixture');
     await commandHandlers.get('kronos.chooseTicketProject')({ ticketKey: 'JIRA-123' });
-    assert.match(lastSinglePickItems[0].label, /^fixture.*\$\(check\)/);
+    assert.match(lastSinglePickItems[0].label, /^Fixture API.*\$\(check\)/);
     assert.match(lastSinglePickItems[1].label, /Unlink local project/);
     assert.equal(stateStore.readStateFileWithIssues().state.tickets['JIRA-123'].linked_local_project, 'fixture');
     assert.equal(workSessions.getWorkSessionByTicket('JIRA-123'), null, 'choosing a project before launch must not create a session');
@@ -4251,7 +4272,7 @@ test('extension activation registers the bounded surface and explicit launch com
     await commandHandlers.get('kronos.removeWorkSession')({ workSessionId: failedSession.id });
     assert.equal(workSessions.getWorkSessionByTicket('JIRA-999'), null, 'removing an old session deletes its local session record');
 
-    multiPickHandler = items => items.filter(item => item.registered && item.label !== 'fixture');
+    multiPickHandler = items => items.filter(item => item.registered && item.project?.name !== 'fixture');
     warningMessageResult = 'Unregister and Unlink';
     await commandHandlers.get('kronos.registerWorkspaceProject')();
     assert.match(lastWarningMessage, /will unlink 4 tickets/i);

@@ -217,7 +217,7 @@
       },
       {
         "command": "kronos.renameLocalProject",
-        "title": "Kronos: Rename Project Display Label",
+        "title": "Kronos: Set Project Nickname",
         "icon": "$(edit)"
       },
       {

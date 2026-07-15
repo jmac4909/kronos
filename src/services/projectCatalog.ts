@@ -33,6 +33,8 @@ export interface LocalProjectSummary {
 
 export interface LocalProjectIntegrationInput {
   name: string;
+  /** Optional presentation-only nickname. Omit to preserve it; pass blank to clear it. */
+  nickname?: string;
   gitlabProject?: string;
   jenkinsUrl?: string;
   sonarProjectKey?: string;
@@ -125,7 +127,6 @@ export function registerLocalProject(
     config: { ...(existing?.config || {}) },
   };
   if (existing?.display_name) { project.display_name = existing.display_name; }
-  else { project.display_name = projectName; }
   if (!project.config.repo_name) { project.config.repo_name = projectName; }
   return {
     ...state,
@@ -179,22 +180,26 @@ export function planLocalProjectRegistrations(
   return planned;
 }
 
-/** Changes only presentation; all project foreign keys remain stable. */
+/** Sets or clears presentation only; all project foreign keys remain stable. */
 export function renameLocalProjectDisplayName(
   state: KronosState,
   projectNameValue: string,
   displayNameValue: string,
 ): KronosState {
   const projectName = requiredSingleLine(projectNameValue, 'project name', 200);
-  const displayName = requiredSingleLine(displayNameValue, 'project display name', 200);
+  const displayName = safeSingleLine(displayNameValue, 200);
   const project = state.projects[projectName];
   if (!project?.path) { throw new Error(`Local project is not registered: ${projectName}`); }
-  if ((project.display_name || projectName) === displayName) { return state; }
+  const nickname = displayName && displayName !== projectName ? displayName : undefined;
+  if (project.display_name === nickname) { return state; }
+  const updated: Project = { ...project, config: { ...project.config } };
+  if (nickname) { updated.display_name = nickname; }
+  else { delete updated.display_name; }
   return {
     ...state,
     projects: {
       ...state.projects,
-      [projectName]: { ...project, display_name: displayName, config: { ...project.config } },
+      [projectName]: updated,
     },
   };
 }
@@ -297,6 +302,11 @@ export function setLocalProjectIntegrations(
     const name = requiredSingleLine(value.name, 'project name', 200);
     const project = projects[name];
     if (!project?.path) { throw new Error(`Local project is not registered: ${name}`); }
+    if (Object.prototype.hasOwnProperty.call(value, 'nickname')) {
+      const nickname = safeSingleLine(value.nickname, 200);
+      if (nickname && nickname !== name) { project.display_name = nickname; }
+      else { delete project.display_name; }
+    }
     const config = project.config;
     delete config.gitlab_project_id;
     delete config.gitlab_project_path;

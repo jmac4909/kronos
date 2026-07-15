@@ -82,7 +82,7 @@ test('registered project actions start ticket-free Claude before read-only and p
     { label: 'Insert MR evidence', icon: 'git-merge', command: 'kronos.insertProjectGitLabContext' },
     { label: 'Insert Jenkins / Sonar evidence', icon: 'beaker', command: 'kronos.insertProjectCiContext' },
     { label: 'Configure provider polling', icon: 'settings-gear', command: 'kronos.configureProjectIntegrations' },
-    { label: 'Rename display label', icon: 'edit', command: 'kronos.renameLocalProject', description: 'identity and links stay unchanged' },
+    { label: 'Set project nickname', icon: 'edit', command: 'kronos.renameLocalProject', description: 'optional; identity and links stay unchanged' },
   ]);
   const commands = registeredProjectActionInventory().map(action => action.command);
   assert.equal(commands.includes('kronos.startClaudeForTicket'), false);

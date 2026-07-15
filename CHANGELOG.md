@@ -6,6 +6,7 @@ All notable changes to the Kronos preview are documented here.
 
 ### Added
 
+- Added an optional local-project nickname to guided Project Integration Setup and the Project action menu. Nicknames become the presentation name across Projects, Work, Jira selectors, Sessions, Attention, and new project launches; clearing one falls back to the stable catalog name without rewriting paths, ticket/session links, provider mappings, or Git state.
 - Added a typed Claude launch permission-mode setting for Manual/default, Accept Edits, Plan, Auto, Don't Ask, and experimental Bypass Permissions. Raw permission flags remain blocked in the command setting; bypass requires a modal confirmation on every launch, and cancel/settings choices create no terminal or Session.
 - Added a focused cross-view product-contract suite covering the four-view button hierarchy, canonical Setup/project ownership, ticket-free project launch, project-only Attention grouping, provider icon/severity language, rich Jira filtering, ticket-workspace action boundaries, and healthy Doctor behavior.
 - Made Attention grouping strictly project-level: registered projects own their provider rows, and work without an explicit project appears under **Unassigned project** instead of a Jira-ticket/session group.

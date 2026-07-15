@@ -226,7 +226,7 @@ Cases to cover:
 
 Completion evidence:
 
-- Registration identity is stable by canonical path, with a separate editable display name.
+- Registration identity is stable by canonical path, with a separate optional nickname that can be set or cleared without rewriting links.
 - Branch/status refresh never invokes a Git executable or mutates repository state.
 - Integration status is visible without displaying credentials.
 

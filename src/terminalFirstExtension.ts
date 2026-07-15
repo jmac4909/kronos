@@ -309,13 +309,16 @@ class TerminalFirstRuntime implements vscode.Disposable {
     this.operatorTerminals,
     () => listWorkSessions(),
     () => this.configurationIntervalMs('managedProviderPollIntervalSec', 300),
+    projectName => this.state.state?.projects[projectName]?.display_name,
   );
   private readonly projectTree = new ProjectTreeProvider(
     () => this.state.state,
     () => listWorkSessions(),
     () => this.configurationIntervalMs('managedProviderPollIntervalSec', 300),
   );
-  private readonly attentionTree = new AttentionTreeProvider();
+  private readonly attentionTree = new AttentionTreeProvider({
+    loadProjectDisplayName: projectName => this.state.state?.projects[projectName]?.display_name,
+  });
   private readonly workRefresh = new WorkRefreshCoordinator<TerminalFirstRefreshResult>(signal => vscode.window.withProgress(
     { location: vscode.ProgressLocation.Notification, title: 'Kronos: Reading Jira work metadata...' },
     async () => this.state.refreshTickets({ signal }),
@@ -812,7 +815,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
         void this.pollProviders(false);
         panel.dispose();
         void vscode.window.showInformationMessage(
-          `Saved read-only provider polling setup for ${message.projects.length} project${message.projects.length === 1 ? '' : 's'}. Run Doctor to verify credentials and remaining prerequisites.`,
+          `Saved nickname and read-only provider polling setup for ${message.projects.length} project${message.projects.length === 1 ? '' : 's'}. Run Doctor to verify credentials and remaining prerequisites.`,
         );
       } catch (error: unknown) {
         const detail = boundedOperationFailure(error, 'Project integration setup could not be saved.').display;
@@ -821,11 +824,15 @@ class TerminalFirstRuntime implements vscode.Disposable {
       }
     });
     const projects: ProjectIntegrationFormProject[] = selectedProjects.map(project => {
-      const config = this.state.state?.projects[project.name]?.config || {};
+      const storedProject = this.state.state?.projects[project.name];
+      const config = storedProject?.config || {};
       const suggestedSonarKey = config.sonar_project_key || sonarProjectKeySuggestion(config.repo_name, project.name);
       return {
         name: project.name,
         displayName: project.displayName,
+        ...((storedProject?.display_name && storedProject.display_name !== project.name)
+          ? { nickname: storedProject.display_name }
+          : {}),
         path: project.path,
         ...(project.branch ? { branch: project.branch } : {}),
         ...((config.gitlab_project_id || config.gitlab_project_path)
@@ -2917,20 +2924,26 @@ class TerminalFirstRuntime implements vscode.Disposable {
   private async renameLocalProject(argument: unknown): Promise<void> {
     const project = this.resolveRegisteredProject(argument);
     if (!project) { return; }
+    const storedNickname = this.state.state?.projects[project.projectName]?.display_name;
+    const nickname = storedNickname && storedNickname !== project.projectName ? storedNickname : '';
     const value = await vscode.window.showInputBox({
-      title: `Rename ${project.displayName || project.projectName}`,
-      prompt: 'Change only the display label. Ticket links, sessions, provider configuration, and the canonical path stay unchanged.',
-      value: project.displayName || project.projectName,
-      validateInput: input => input.trim() ? undefined : 'Enter a project display name.',
+      title: `Set Nickname for ${project.displayName || project.projectName}`,
+      prompt: 'Optional display name only. Leave blank to use the stable project name; links, sessions, provider configuration, and the canonical path stay unchanged.',
+      value: nickname,
+      placeHolder: project.projectName,
+      validateInput: input => input.trim().length > 200 ? 'Project nickname must be 200 characters or fewer.' : undefined,
     });
     if (value === undefined) { return; }
     try {
       this.state.renameLocalProjectDisplayName(project.projectName, value);
       this.refreshTerminalFirstViews();
-      void vscode.window.showInformationMessage(`Project display label changed to ${value.trim()}. Existing links were not changed.`);
+      const normalized = value.replace(/\s+/g, ' ').trim();
+      void vscode.window.showInformationMessage(normalized
+        ? `Project nickname changed to ${normalized}. Existing links were not changed.`
+        : `Project nickname cleared. Kronos will display ${project.projectName}; existing links were not changed.`);
     } catch (error: unknown) {
-      const detail = boundedOperationFailure(error, 'Kronos could not rename the project display label.').display;
-      this.log('Could not rename project display label.', detail);
+      const detail = boundedOperationFailure(error, 'Kronos could not update the project nickname.').display;
+      this.log('Could not update project nickname.', detail);
       void vscode.window.showErrorMessage(detail);
     }
   }
