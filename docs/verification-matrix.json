@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "featureGroups": [
     {
       "id": "identity-and-work",
@@ -179,6 +179,291 @@
         { "file": "scripts/run-webview-dom-tests.js", "test": "ticket workspace action panel posts one normalized, ticket-scoped message" }
       ],
       "humanGates": ["operator-terminal", "windows-native", "multi-window", "live-providers"]
+    }
+  ],
+  "repositoryChecks": [
+    { "id": "roadmap-requirement-inventory", "file": "scripts/check-roadmap-evidence.js", "marker": "parseRoadmapRequirements" },
+    { "id": "feature-human-summary", "file": "scripts/check-quality-evidence.js", "marker": "Kronos quality evidence OK" },
+    { "id": "derived-doc-metrics", "file": "scripts/check-quality-evidence.js", "marker": "checkReadmeMetrics" },
+    { "id": "required-release-gates", "file": "scripts/check-roadmap-evidence.js", "marker": "checkRequiredReleaseGates" },
+    { "id": "human-gates-required", "file": "scripts/check-roadmap-evidence.js", "marker": "gate.status !== 'required'" }
+  ],
+  "requirementEvidence": [
+    {
+      "requirements": ["G16-goal:b55b5b6c"],
+      "checks": ["roadmap-requirement-inventory", "feature-human-summary", "human-gates-required"]
+    },
+    {
+      "requirements": ["G16-case-01:9a3fff3b"],
+      "automated": [
+        { "file": "scripts/run-provider-reconciliation-tests.js", "test": "provider transition recorder gives one deterministic event to one transition" },
+        { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "GitLab merge-request transition matrix covers every declared structural transition" }
+      ]
+    },
+    {
+      "requirements": ["G16-case-02:8012b4ef"],
+      "automated": [
+        { "file": "scripts/run-unit-tests.js", "test": "private file primitives atomically replace bounded state and reject symbolic paths" },
+        { "file": "scripts/run-unit-tests.js", "test": "legacy ~/.claude/kronos state migrates once without helper scripts" }
+      ]
+    },
+    {
+      "requirements": ["G16-case-03:3f9bdda3"],
+      "automated": [
+        { "file": "scripts/run-provider-contract-tests.js", "test": "sanitized Jira fixture retains rich fields and prior rows after a partial page read" },
+        { "file": "scripts/run-provider-contract-tests.js", "test": "sanitized GitLab fixture normalizes enterprise MR review, pipeline, job, and test evidence" },
+        { "file": "scripts/run-provider-contract-tests.js", "test": "sanitized Jenkins fixture resolves a multibranch build and treats missing stages as optional" },
+        { "file": "scripts/run-provider-contract-tests.js", "test": "sanitized SonarQube fixture retains branch-qualified gate, measures, and issues" }
+      ]
+    },
+    {
+      "requirements": ["G16-case-04:58b7a2c6"],
+      "automated": [
+        { "file": "scripts/run-webview-dom-tests.js", "test": "Setup and Doctor actions post only their allowlisted operation command field" },
+        { "file": "scripts/run-jira-work-board-tests.js", "test": "board runtime posts only normalized command and Jira ticket key" }
+      ]
+    },
+    {
+      "requirements": ["G16-case-05:109a7c60"],
+      "automated": [
+        { "file": "scripts/run-unit-tests.js", "test": "extension activation registers the bounded surface and explicit launch commands create the right session kinds" }
+      ]
+    },
+    {
+      "requirements": ["G16-case-06:12e7e7ff"],
+      "humanGates": ["operator-terminal", "real-vscode"]
+    },
+    {
+      "requirements": ["G16-case-07:4aae12f1"],
+      "automated": [
+        { "file": "scripts/run-unit-tests.js", "test": "managed monitoring lease omits unsupported open flags on Windows and fails closed on POSIX" },
+        { "file": "scripts/run-unit-tests.js", "test": "managed monitoring lease acquires, blocks duplicate owners, renews, and releases" }
+      ],
+      "humanGates": ["windows-native", "multi-window"]
+    },
+    {
+      "requirements": ["G16-case-08:2b61f818"],
+      "humanGates": ["live-providers"]
+    },
+    {
+      "requirements": ["G16-evidence-01:77fff6c7"],
+      "checks": ["roadmap-requirement-inventory"]
+    },
+    {
+      "requirements": ["G16-evidence-02:bea1d492"],
+      "checks": ["feature-human-summary"]
+    },
+    {
+      "requirements": ["G16-evidence-03:04cd668e"],
+      "checks": ["derived-doc-metrics"]
+    },
+    {
+      "requirements": ["G16-evidence-04:442ed52a"],
+      "checks": ["required-release-gates"]
+    },
+    {
+      "requirements": ["G16-evidence-05:1d8066fe"],
+      "checks": ["human-gates-required"]
+    },
+    {
+      "requirements": ["G19-goal:eb6d907a"],
+      "automated": [
+        { "file": "scripts/run-context-basket-tests.js", "test": "context basket stores bounded provenance beside private artifact references" },
+        { "file": "scripts/run-webview-dom-tests.js", "test": "context basket preserves focus across explicit refresh and non-submitting insert actions" }
+      ],
+      "humanGates": ["operator-terminal", "real-vscode"]
+    },
+    {
+      "requirements": ["G19-case-01:beef3c9b", "G19-case-02:4a133a6a"],
+      "automated": [
+        { "file": "scripts/run-context-basket-tests.js", "test": "context basket stores bounded provenance beside private artifact references" },
+        { "file": "scripts/run-context-basket-tests.js", "test": "basket bundles retain references and hashes without copying source payloads" }
+      ]
+    },
+    {
+      "requirements": ["G19-case-03:5292772d"],
+      "automated": [
+        { "file": "scripts/run-context-basket-tests.js", "test": "exact artifacts deduplicate while changed content for one source is marked conflicting" }
+      ]
+    },
+    {
+      "requirements": ["G19-case-04:277a12b1"],
+      "automated": [
+        { "file": "scripts/run-webview-dom-tests.js", "test": "context basket preserves focus across explicit refresh and non-submitting insert actions" }
+      ],
+      "humanGates": ["real-vscode"]
+    },
+    {
+      "requirements": ["G19-case-05:a26cea3a"],
+      "automated": [
+        { "file": "scripts/run-context-basket-tests.js", "test": "removing a basket selection never deletes its private source artifact" }
+      ]
+    },
+    {
+      "requirements": ["G19-case-06:10d7a4f9"],
+      "automated": [
+        { "file": "scripts/run-context-basket-tests.js", "test": "basket messages and HTML expose only bounded explicit actions" },
+        { "file": "scripts/run-webview-dom-tests.js", "test": "context basket preserves focus across explicit refresh and non-submitting insert actions" }
+      ],
+      "humanGates": ["operator-terminal", "real-vscode"]
+    },
+    {
+      "requirements": ["G19-evidence-01:00c5c253"],
+      "automated": [
+        { "file": "scripts/run-context-basket-tests.js", "test": "context basket stores bounded provenance beside private artifact references" },
+        { "file": "scripts/run-context-basket-tests.js", "test": "exact artifacts deduplicate while changed content for one source is marked conflicting" },
+        { "file": "scripts/run-context-basket-tests.js", "test": "removing a basket selection never deletes its private source artifact" },
+        { "file": "scripts/run-context-basket-tests.js", "test": "basket bundles retain references and hashes without copying source payloads" }
+      ]
+    },
+    {
+      "requirements": ["G19-evidence-02:c2d612e3"],
+      "automated": [
+        { "file": "scripts/run-webview-dom-tests.js", "test": "context basket preserves focus across explicit refresh and non-submitting insert actions" }
+      ],
+      "humanGates": ["operator-terminal", "real-vscode"]
+    },
+    {
+      "requirements": ["G20-goal:f281c380", "G20-case-01:56751ed2"],
+      "automated": [
+        { "file": "scripts/run-provider-health-visibility-tests.js", "test": "session provider health derives the next poll and legacy successful-poll fallback" },
+        { "file": "scripts/run-provider-health-visibility-tests.js", "test": "project provider health aggregates latest evidence and earliest scheduled poll" }
+      ],
+      "humanGates": ["real-vscode", "live-providers"]
+    },
+    {
+      "requirements": ["G20-case-02:855b2b7e"],
+      "automated": [
+        { "file": "scripts/run-provider-health-visibility-tests.js", "test": "monitoring results persist success, meaningful change, and quiet suppression separately" }
+      ]
+    },
+    {
+      "requirements": ["G20-case-03:81e22988"],
+      "automated": [
+        { "file": "scripts/run-provider-health-visibility-tests.js", "test": "current normalized provider error clears only after a non-failing result" },
+        { "file": "scripts/run-provider-health-visibility-tests.js", "test": "provider diagnostics retain current live failures and partial reads until their own recovery" }
+      ]
+    },
+    {
+      "requirements": ["G20-case-04:7f43a4b6"],
+      "humanGates": ["real-vscode", "live-providers"]
+    },
+    {
+      "requirements": ["G20-evidence-01:afbec531"],
+      "automated": [
+        { "file": "scripts/run-provider-health-visibility-tests.js", "test": "session provider health derives the next poll and legacy successful-poll fallback" },
+        { "file": "scripts/run-provider-health-visibility-tests.js", "test": "project provider health aggregates latest evidence and earliest scheduled poll" },
+        { "file": "scripts/run-provider-health-visibility-tests.js", "test": "monitoring results persist success, meaningful change, and quiet suppression separately" },
+        { "file": "scripts/run-provider-health-visibility-tests.js", "test": "provider diagnostics retain current live failures and partial reads until their own recovery" }
+      ]
+    },
+    {
+      "requirements": ["G20-evidence-02:ece917e9"],
+      "humanGates": ["real-vscode", "live-providers"]
+    },
+    {
+      "requirements": ["G21-goal:b821b05a", "G21-case-01:ca59ee31", "G21-case-02:bbe64695"],
+      "automated": [
+        { "file": "scripts/run-local-evidence-search-tests.js", "test": "local evidence search covers sessions, tickets, projects, branches, providers, artifacts, and events without terminal content" }
+      ],
+      "humanGates": ["real-vscode"]
+    },
+    {
+      "requirements": ["G21-case-03:295b5f42"],
+      "automated": [
+        { "file": "scripts/run-local-evidence-search-tests.js", "test": "local evidence search enforces independent source budgets and a 2000-entry total ceiling" }
+      ]
+    },
+    {
+      "requirements": ["G21-case-04:3bef2c66"],
+      "automated": [
+        { "file": "scripts/run-local-evidence-search-tests.js", "test": "local evidence search strips controls and bounds every visible field" }
+      ]
+    },
+    {
+      "requirements": ["G21-case-05:0dfa44f4"],
+      "automated": [
+        { "file": "scripts/run-local-evidence-search-tests.js", "test": "local evidence search covers sessions, tickets, projects, branches, providers, artifacts, and events without terminal content" }
+      ],
+      "humanGates": ["real-vscode"]
+    },
+    {
+      "requirements": ["G21-case-06:f60c04b9"],
+      "automated": [
+        { "file": "scripts/run-local-evidence-search-tests.js", "test": "local evidence search actions retain only the bounded local target needed to open a result" }
+      ]
+    },
+    {
+      "requirements": ["G21-evidence-01:9c677b31"],
+      "automated": [
+        { "file": "scripts/run-local-evidence-search-tests.js", "test": "local evidence search covers sessions, tickets, projects, branches, providers, artifacts, and events without terminal content" },
+        { "file": "scripts/run-local-evidence-search-tests.js", "test": "local evidence search enforces independent source budgets and a 2000-entry total ceiling" },
+        { "file": "scripts/run-local-evidence-search-tests.js", "test": "local evidence search strips controls and bounds every visible field" },
+        { "file": "scripts/run-local-evidence-search-tests.js", "test": "local evidence search actions retain only the bounded local target needed to open a result" }
+      ]
+    },
+    {
+      "requirements": ["G21-evidence-02:9b2fd3e9"],
+      "humanGates": ["real-vscode"]
+    },
+    {
+      "requirements": ["G22-goal:e70ab553"],
+      "automated": [
+        { "file": "scripts/run-handoff-branch-profile-tests.js", "test": "local handoff writes a private immutable Markdown and JSON reference pair without copying source payloads" },
+        { "file": "scripts/run-handoff-branch-profile-tests.js", "test": "project integration parses, formats, and stores explicit Jenkins and SonarQube branch profiles" }
+      ],
+      "humanGates": ["real-vscode", "live-providers"]
+    },
+    {
+      "requirements": ["G22-case-01:aefe01b1"],
+      "automated": [
+        { "file": "scripts/run-handoff-branch-profile-tests.js", "test": "handoff candidates cap context and audit metadata without accepting terminal content" },
+        { "file": "scripts/run-handoff-branch-profile-tests.js", "test": "local handoff writes a private immutable Markdown and JSON reference pair without copying source payloads" }
+      ]
+    },
+    {
+      "requirements": ["G22-case-02:6814f220"],
+      "automated": [
+        { "file": "scripts/run-handoff-branch-profile-tests.js", "test": "local handoff writes a private immutable Markdown and JSON reference pair without copying source payloads" },
+        { "file": "scripts/run-handoff-branch-profile-tests.js", "test": "local handoff refuses external artifact paths and oversized selections" }
+      ]
+    },
+    {
+      "requirements": ["G22-case-03:62f61057"],
+      "humanGates": ["operator-terminal", "live-providers"]
+    },
+    {
+      "requirements": ["G22-case-04:79ea1dfb"],
+      "automated": [
+        { "file": "scripts/run-handoff-branch-profile-tests.js", "test": "project integration parses, formats, and stores explicit Jenkins and SonarQube branch profiles" }
+      ]
+    },
+    {
+      "requirements": ["G22-case-05:8306c4e8"],
+      "automated": [
+        { "file": "scripts/run-handoff-branch-profile-tests.js", "test": "branch profile validation refuses duplicates, unsafe branches, credentials, and unknown active profiles" }
+      ]
+    },
+    {
+      "requirements": ["G22-case-06:e83b17fb"],
+      "automated": [
+        { "file": "scripts/run-handoff-branch-profile-tests.js", "test": "CI target selection uses an exact MR profile then explicit fallback without creating a ticket project link" }
+      ],
+      "humanGates": ["real-vscode", "live-providers"]
+    },
+    {
+      "requirements": ["G22-evidence-01:47919aeb"],
+      "automated": [
+        { "file": "scripts/run-handoff-branch-profile-tests.js", "test": "handoff candidates cap context and audit metadata without accepting terminal content" },
+        { "file": "scripts/run-handoff-branch-profile-tests.js", "test": "local handoff writes a private immutable Markdown and JSON reference pair without copying source payloads" },
+        { "file": "scripts/run-handoff-branch-profile-tests.js", "test": "local handoff refuses external artifact paths and oversized selections" },
+        { "file": "scripts/run-handoff-branch-profile-tests.js", "test": "branch profile validation refuses duplicates, unsafe branches, credentials, and unknown active profiles" },
+        { "file": "scripts/run-handoff-branch-profile-tests.js", "test": "CI target selection uses an exact MR profile then explicit fallback without creating a ticket project link" }
+      ]
+    },
+    {
+      "requirements": ["G22-evidence-02:2916c6c7"],
+      "humanGates": ["real-vscode", "live-providers"]
     }
   ],
   "humanGates": [

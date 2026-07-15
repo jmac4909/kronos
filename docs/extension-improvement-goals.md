@@ -407,25 +407,71 @@ Completion evidence:
 
 **Goal statement:** The operator may collect selected Jira, MR, project diff, Jenkins, and SonarQube artifacts into one bounded editable preview and place one non-submitting reference into the chosen managed terminal.
 
-The basket must show provenance, freshness, completeness, size, and conflicts; refresh remains explicit; removing one item never deletes its underlying audit artifact; no evidence is submitted automatically.
+Cases to cover:
+
+- Jira, GitLab MR, local Git, Jenkins, and SonarQube artifacts may be selected together without copying their payloads into basket state.
+- Every selection shows provenance, freshness, completeness, size, hash, warnings, and same-source content conflicts.
+- Exact artifacts deduplicate while a changed artifact from the same source remains an explicit conflict.
+- Refresh opens the ordinary source composer and never silently replaces a selection.
+- Removing or clearing selections never deletes their underlying private artifacts.
+- Placement remains editable, verifies the exact managed terminal, inserts one reference, and never submits it.
+
+Completion evidence:
+
+- Focused store tests cover bounds, provenance, deduplication, conflicts, removal, and reference-only immutable bundles.
+- DOM and operator-terminal tests cover explicit refresh, editable focus, exact placement, and non-submission.
 
 ### G20 — Add provider health and suppressed-noise visibility
 
 **Goal statement:** Projects and Sessions shall show last attempted poll, last successful poll, last meaningful change, next scheduled poll, current normalized error, and suppressed unchanged-result count without creating more Attention rows.
 
-This is operational visibility, not alert history or automated remediation.
+Cases to cover:
+
+- Sessions and Projects derive the same last-attempt, last-success, last-change, next-poll, current-error, and quiet-count model.
+- A successful unchanged poll advances success and quiet counts without changing the last meaningful transition.
+- A current normalized failure or partial result remains visible until that provider stream recovers.
+- Health-only updates never create Attention history or imply automated remediation.
+
+Completion evidence:
+
+- Focused health tests cover session projection, project aggregation, persistence, failure/partial recovery, and quiet suppression.
+- Real VS Code and live-provider feedback confirms the values agree across Sessions, Projects, Doctor, and actual polling.
 
 ### G21 — Add local session and evidence search
 
 **Goal statement:** The operator may search session titles, explicit ticket keys, project names, branches, provider bindings, event summaries, and artifact labels without indexing or reading terminal content.
 
-Search indexes must be bounded, private, rebuildable, and removable with local state.
+Cases to cover:
+
+- Search covers sessions, explicit Jira contexts, projects, branches, provider bindings, audit summaries, and artifact labels.
+- Terminal objects, input, output, and scrollback are structurally absent from index input.
+- Source-specific and total result budgets prevent one large source from starving the rest.
+- Every visible field is normalized and bounded before matching or display.
+- The index is private, ephemeral, rebuilt from canonical local state, and removed with that state.
+- Result actions retain only the bounded local target required to open the selected evidence.
+
+Completion evidence:
+
+- Focused search tests cover all sources, independent budgets, visible-field normalization, and bounded result actions.
+- A real VS Code Quick Pick pass confirms current-state rebuilds, expected navigation, and terminal-text exclusion.
 
 ### G22 — Add safe handoff bundles and branch profiles
 
 **Goal statement:** The operator may export selected redacted context/audit references and hashes to a local Markdown/JSON bundle, and may configure explicit per-project branch profiles for Jenkins and SonarQube variants.
 
-Export never posts to Jira or an MR. Branch profiles never switch Git branches and never infer a ticket-to-project link.
+Cases to cover:
+
+- Handoffs contain bounded redacted context/audit references, hashes, provenance, and operator notes without source payloads or terminal content.
+- Markdown and JSON publish as one private immutable pair and incomplete or external-path selections fail closed.
+- Handoff creation never contacts or writes Jira, GitLab, Jenkins, SonarQube, Git, or a terminal.
+- Branch profiles retain explicit Jenkins and SonarQube targets for up to the documented project limit.
+- Duplicate, unsafe, credential-bearing, or unknown active profiles are rejected without replacing valid setup.
+- CI routing uses an exact known MR branch, then only an explicit fallback; it never switches Git or creates a ticket-project link.
+
+Completion evidence:
+
+- Focused handoff/profile tests cover bounds, redaction, immutable pairs, invalid inputs, exact routing, and identity preservation.
+- Real project UI and live-provider feedback confirms profile round trips and provider routing without repository or provider mutation.
 
 ## Feature and edge-case coverage map
 

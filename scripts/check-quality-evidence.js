@@ -43,8 +43,8 @@ if (failures.length > 0) {
 }
 
 function checkVerificationMatrix(value, checklistSource, roadmapSource) {
-  if (!value || value.schemaVersion !== 1 || !Array.isArray(value.featureGroups) || !Array.isArray(value.humanGates)) {
-    fail('docs/verification-matrix.json must use schemaVersion 1 with featureGroups and humanGates arrays.');
+  if (!value || value.schemaVersion !== 2 || !Array.isArray(value.featureGroups) || !Array.isArray(value.humanGates)) {
+    fail('docs/verification-matrix.json must use schemaVersion 2 with featureGroups and humanGates arrays.');
     return;
   }
   const humanGateIds = uniqueIds(value.humanGates, 'human gate');
