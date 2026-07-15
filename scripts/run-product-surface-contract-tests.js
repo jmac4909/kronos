@@ -9,6 +9,7 @@ const {
   attentionProjectGroupIdentity,
   attentionProviderIconId,
   attentionSeverityColorId,
+  groupAttentionEntriesByProject,
 } = require('../out/services/attentionPresentation.js');
 const {
   registeredProjectActionInventory,
@@ -96,13 +97,6 @@ test('registered project actions start ticket-free Claude before read-only and p
 });
 
 test('Attention group identity is local-project-only and collision-safe for unassigned work', () => {
-  const treeSource = fs.readFileSync(path.join(root, 'src', 'views', 'AttentionTreeProvider.ts'), 'utf8');
-  const groupingLoop = treeSource.slice(
-    treeSource.indexOf('const grouped = new Map'),
-    treeSource.indexOf('return [...grouped.values()]'),
-  );
-  assert.match(groupingLoop, /attentionProjectGroupIdentity\(entry\.session\?\.projectName\)/);
-  assert.doesNotMatch(groupingLoop, /ticketKey|jira/i);
   assert.deepEqual(attentionProjectGroupIdentity('  Kronos\nExtension  '), {
     key: 'project:Kronos Extension',
     id: 'attention-group:project:Kronos Extension',
@@ -121,7 +115,20 @@ test('Attention group identity is local-project-only and collision-safe for unas
   assert.equal(projectNamedLikeFallback.key, 'project:unassigned-project');
   assert.notEqual(projectNamedLikeFallback.key, unassigned.key);
   assert.notEqual(projectNamedLikeFallback.id, unassigned.id);
-  assert.equal(attentionProjectGroupIdentity('ABC-123').label, 'ABC-123');
+  const groups = groupAttentionEntriesByProject([
+    { id: 'a', session: { projectName: 'Kronos' }, ticketKey: 'ABC-123' },
+    { id: 'b', session: { projectName: 'Kronos' }, ticketKey: 'OTHER-9' },
+    { id: 'c', session: { projectName: 'Payments' }, ticketKey: 'ABC-123' },
+    { id: 'd', ticketKey: 'ABC-123' },
+  ]);
+  assert.deepEqual(groups.map(group => ({
+    key: group.identity.key,
+    ids: group.entries.map(entry => entry.id),
+  })), [
+    { key: 'project:Kronos', ids: ['a', 'b'] },
+    { key: 'project:Payments', ids: ['c'] },
+    { key: 'unassigned-project', ids: ['d'] },
+  ]);
 });
 
 test('provider glyphs stay distinct while all Attention severities share green yellow red state colors', () => {

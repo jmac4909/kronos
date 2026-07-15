@@ -22,6 +22,8 @@ import {
   attentionSeverity,
   attentionSeverityColorId,
   attentionTicketKey,
+  groupAttentionEntriesByProject,
+  type AttentionProjectGroupIdentity,
   type AttentionProviderChoice,
 } from '../services/attentionPresentation';
 
@@ -81,19 +83,8 @@ export class AttentionTreeProvider implements vscode.TreeDataProvider<AttentionT
       return [new AttentionMessageTreeItem()];
     }
 
-    const grouped = new Map<string, AttentionEntry[]>();
-    for (const entry of entries) {
-      const group = attentionProjectGroupIdentity(entry.session?.projectName);
-      const existing = grouped.get(group.key);
-      if (existing) {
-        existing.push(entry);
-      } else {
-        grouped.set(group.key, [entry]);
-      }
-    }
-
-    return [...grouped.values()]
-      .map(groupEntries => new AttentionGroupTreeItem(groupEntries))
+    return groupAttentionEntriesByProject(entries)
+      .map(group => new AttentionGroupTreeItem(group.entries, group.identity))
       .sort((left, right) => right.newestAt.localeCompare(left.newestAt)
         || left.labelText.localeCompare(right.labelText));
   }
@@ -150,13 +141,13 @@ export class AttentionGroupTreeItem extends vscode.TreeItem {
   readonly labelText: string;
   readonly projectName: string | undefined;
 
-  constructor(readonly entries: readonly AttentionEntry[]) {
+  constructor(
+    readonly entries: readonly AttentionEntry[],
+    identity?: AttentionProjectGroupIdentity,
+  ) {
     const newest = entries[0];
     if (!newest) { throw new Error('Attention groups require at least one event.'); }
-    const projectNames = [...new Set(entries
-      .map(entry => entry.session?.projectName)
-      .filter((value): value is string => Boolean(value)))];
-    const group = attentionProjectGroupIdentity(projectNames.length === 1 ? projectNames[0] : undefined);
+    const group = identity || attentionProjectGroupIdentity(newest.session?.projectName);
     const projectName = group.projectName;
     const label = group.label;
     const sessionIds = [...new Set(entries.map(entry => entry.event.sessionId))];
