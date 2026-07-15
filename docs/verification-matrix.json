@@ -245,7 +245,12 @@
       "automated": [
         { "file": "scripts/run-command-routing-tests.js", "test": "runtime dependency surface is Node and VS Code only" },
         { "file": "scripts/run-jira-work-board-tests.js", "test": "board runtime posts only normalized command and Jira ticket key" },
-        { "file": "scripts/run-webview-dom-tests.js", "test": "ticket workspace action panel posts one normalized, ticket-scoped message" }
+        { "file": "scripts/run-webview-dom-tests.js", "test": "ticket workspace action panel posts one normalized, ticket-scoped message" },
+        { "file": "scripts/run-release-surface-tests.js", "test": "actual VSIX release surface is exact and runtime-dependency-free" },
+        { "file": "scripts/run-release-surface-tests.js", "test": "release surface validator fails closed on sensitive and development-only package files" },
+        { "file": "scripts/run-release-surface-tests.js", "test": "release documents and package metadata remain linked to current evidence" },
+        { "file": "scripts/run-release-surface-tests.js", "test": "public surface scan precedes both tests and release packaging" },
+        { "file": "scripts/run-release-surface-tests.js", "test": "publish verifier requires a clean named branch and exact remote head" }
       ],
       "humanGates": ["operator-terminal", "windows-native", "multi-window", "live-providers"]
     }
@@ -263,7 +268,13 @@
     { "id": "canonical-attention-transition-key", "file": "docs/state-ownership.md", "marker": "scope + provider + resource + logical subject + facet" },
     { "id": "provider-binding-reconciliation-owner", "file": "docs/state-ownership.md", "marker": "| Provider binding reconciliation |" },
     { "id": "private-persistence-lifecycle", "file": "docs/state-ownership.md", "marker": "## Private persistence lifecycle matrix" },
-    { "id": "runtime-responsibility-graph", "file": "scripts/check-runtime-graph.js", "marker": "no cycles or dead runtime exports" }
+    { "id": "runtime-responsibility-graph", "file": "scripts/check-runtime-graph.js", "marker": "no cycles or dead runtime exports" },
+    { "id": "terminal-first-manifest-contract", "file": "scripts/check-manifest.js", "marker": "EXPECTED_COMMANDS" },
+    { "id": "terminal-first-security-contract", "file": "scripts/check-security.js", "marker": "Kronos terminal-first runtime boundary failed" },
+    { "id": "exact-vsix-release-surface", "file": "scripts/release-surface.js", "marker": "releaseSurfaceFailures" },
+    { "id": "release-preflight-order", "file": "scripts/run-release-surface-tests.js", "marker": "manifest.scripts['release:preflight']" },
+    { "id": "product-claim-coherence", "file": "scripts/release-surface.js", "marker": "releaseDocumentationFailures" },
+    { "id": "published-branch-verifier", "file": "scripts/verify-published-branch.js", "marker": "local and remote branch heads do not match" }
   ],
   "requirementEvidence": [
     {
@@ -1586,6 +1597,69 @@
         { "file": "scripts/run-scale-accessibility-tests.js", "test": "shared webview accessibility CSS and form labels cover focus, forced colors, and narrow panels" }
       ],
       "humanGates": ["real-vscode", "operator-terminal"]
+    },
+    {
+      "requirements": ["G18-goal:257d3f43"],
+      "automated": [
+        { "file": "scripts/run-release-surface-tests.js", "test": "actual VSIX release surface is exact and runtime-dependency-free" },
+        { "file": "scripts/run-release-surface-tests.js", "test": "release surface validator fails closed on sensitive and development-only package files" },
+        { "file": "scripts/run-release-surface-tests.js", "test": "release documents and package metadata remain linked to current evidence" }
+      ],
+      "checks": ["exact-vsix-release-surface", "terminal-first-security-contract", "product-claim-coherence"]
+    },
+    {
+      "requirements": ["G18-case-01:24af5b20"],
+      "automated": [
+        { "file": "scripts/run-release-surface-tests.js", "test": "actual VSIX release surface is exact and runtime-dependency-free" },
+        { "file": "scripts/run-release-surface-tests.js", "test": "release surface validator fails closed on sensitive and development-only package files" }
+      ],
+      "checks": ["exact-vsix-release-surface"]
+    },
+    {
+      "requirements": ["G18-case-02:b4995dec"],
+      "automated": [
+        { "file": "scripts/run-command-routing-tests.js", "test": "runtime dependency surface is Node and VS Code only" },
+        { "file": "scripts/run-jira-work-board-tests.js", "test": "board runtime posts only normalized command and Jira ticket key" },
+        { "file": "scripts/run-webview-dom-tests.js", "test": "Setup and Doctor actions post only their allowlisted operation command field" },
+        { "file": "scripts/run-provider-binding-reconciliation-tests.js", "test": "reconciled provider URLs are credential-free and rejected outside the configured origin" }
+      ],
+      "checks": ["runtime-responsibility-graph", "terminal-first-manifest-contract", "terminal-first-security-contract", "audited-context-placement-boundary"]
+    },
+    {
+      "requirements": ["G18-case-03:cd011c42"],
+      "automated": [
+        { "file": "scripts/run-release-surface-tests.js", "test": "release documents and package metadata remain linked to current evidence" }
+      ],
+      "checks": ["product-claim-coherence", "derived-doc-metrics"]
+    },
+    {
+      "requirements": ["G18-evidence-01:fd6c064e"],
+      "automated": [
+        { "file": "scripts/run-release-surface-tests.js", "test": "actual VSIX release surface is exact and runtime-dependency-free" },
+        { "file": "scripts/run-release-surface-tests.js", "test": "release surface validator fails closed on sensitive and development-only package files" }
+      ],
+      "checks": ["exact-vsix-release-surface"]
+    },
+    {
+      "requirements": ["G18-evidence-02:49038b69"],
+      "automated": [
+        { "file": "scripts/run-release-surface-tests.js", "test": "public surface scan precedes both tests and release packaging" }
+      ],
+      "checks": ["release-preflight-order"]
+    },
+    {
+      "requirements": ["G18-evidence-03:43ec461f"],
+      "automated": [
+        { "file": "scripts/run-release-surface-tests.js", "test": "release documents and package metadata remain linked to current evidence" }
+      ],
+      "checks": ["product-claim-coherence", "feature-human-summary", "human-gates-required"]
+    },
+    {
+      "requirements": ["G18-evidence-04:275e2249"],
+      "automated": [
+        { "file": "scripts/run-release-surface-tests.js", "test": "publish verifier requires a clean named branch and exact remote head" }
+      ],
+      "checks": ["published-branch-verifier"]
     },
     {
       "requirements": ["G19-goal:eb6d907a"],
