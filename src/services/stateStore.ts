@@ -98,7 +98,10 @@ export function normalizeWorkCatalog(raw: unknown, filePath = STATE_FILE): State
     };
   }
   const state = emptyWorkCatalog();
-  state.refreshedAt = safeString(raw['refreshedAt']) || safeString(raw['last_updated']) || null;
+  const isLegacySchema = sourceSchemaVersion !== WORK_CATALOG_SCHEMA_VERSION;
+  state.refreshedAt = safeTimestamp(raw['refreshedAt'])
+    || (isLegacySchema ? safeTimestamp(raw['last_updated']) : undefined)
+    || null;
 
   const rawProjects = isRecord(raw['projects']) ? raw['projects'] : {};
   const seenProjectPaths = new Set<string>();
@@ -118,7 +121,7 @@ export function normalizeWorkCatalog(raw: unknown, filePath = STATE_FILE): State
   const rawTickets = isRecord(raw['tickets']) ? raw['tickets'] : {};
   for (const [rawKey, value] of Object.entries(rawTickets)) {
     const key = normalizeTicketKey(rawKey);
-    const ticket = normalizeTicket(value, sourceSchemaVersion);
+    const ticket = normalizeTicket(value, isLegacySchema);
     if (key && ticket) { state.tickets[key] = ticket; }
     else { issues.push({ filePath, detail: `Ignored invalid Jira ticket ${safeKey(rawKey)}.` }); }
   }
@@ -227,7 +230,7 @@ function safeProfileBranch(value: unknown): string | undefined {
   return normalizeProjectBranch(value);
 }
 
-function normalizeTicket(value: unknown, sourceSchemaVersion?: number): Ticket | undefined {
+function normalizeTicket(value: unknown, isLegacySchema: boolean): Ticket | undefined {
   if (!isRecord(value) || value['source'] === 'adhoc') { return undefined; }
   const summary = safeString(value['summary']);
   if (!summary) { return undefined; }
@@ -235,18 +238,20 @@ function normalizeTicket(value: unknown, sourceSchemaVersion?: number): Ticket |
     summary,
     type: safeString(value['type']) || 'Issue',
     priority: safeString(value['priority']) || 'Unknown',
-    jira_status: safeString(value['jira_status']) || safeString(value['status']) || 'Unknown',
+    jira_status: safeString(value['jira_status'])
+      || (isLegacySchema ? safeString(value['status']) : undefined)
+      || 'Unknown',
     source: 'jira',
-    mr: normalizeMergeRequest(value['mr']),
+    mr: normalizeMergeRequest(value['mr'], isLegacySchema),
     build: normalizeBuild(value['build']),
   };
-  const updated = safeString(value['updated']);
+  const updated = safeTimestamp(value['updated']);
   const jiraStatusCategory = safeString(value['jira_status_category']);
   const jiraProjectKey = safeString(value['jira_project_key']);
   const description = safeMultilineString(value['description']);
   const jiraUrl = safeHttpUrl(value['jira_url']);
   const linkedLocalProject = safeString(value['linked_local_project'])
-    || (sourceSchemaVersion !== WORK_CATALOG_SCHEMA_VERSION ? safeString(value['launch_project']) : undefined);
+    || (isLegacySchema ? safeString(value['launch_project']) : undefined);
   const labels = safeStringArray(value['labels']);
   const attachments = normalizeAttachments(value['attachments']);
   if (updated) { ticket.updated = updated; }
@@ -260,7 +265,7 @@ function normalizeTicket(value: unknown, sourceSchemaVersion?: number): Ticket |
   return ticket;
 }
 
-function normalizeMergeRequest(value: unknown): MergeRequest | null {
+function normalizeMergeRequest(value: unknown, isLegacySchema: boolean): MergeRequest | null {
   if (!isRecord(value)) { return null; }
   const iid = safePositiveInteger(value['iid']);
   const url = safeHttpUrl(value['url']);
@@ -273,9 +278,27 @@ function normalizeMergeRequest(value: unknown): MergeRequest | null {
     state: stateValue === 'merged' || stateValue === 'closed' ? stateValue : 'opened',
     review_status: reviewValue === 'approved' || reviewValue === 'changes_requested' ? reviewValue : 'pending_review',
   };
-  for (const key of ['title', 'author', 'last_comment_at', 'last_discussion_at', 'source_branch', 'target_branch', 'sourceBranch', 'targetBranch', 'branch', 'head_branch'] as const) {
+  for (const key of ['title', 'author'] as const) {
     const item = safeString(value[key]);
     if (item) { mr[key] = item; }
+  }
+  const lastCommentAt = safeTimestamp(value['last_comment_at']);
+  const lastDiscussionAt = safeTimestamp(value['last_discussion_at']);
+  const sourceBranch = normalizeProjectBranch(value['source_branch']);
+  const targetBranch = normalizeProjectBranch(value['target_branch']);
+  if (lastCommentAt) { mr.last_comment_at = lastCommentAt; }
+  if (lastDiscussionAt) { mr.last_discussion_at = lastDiscussionAt; }
+  if (sourceBranch) { mr.source_branch = sourceBranch; }
+  if (targetBranch) { mr.target_branch = targetBranch; }
+  if (isLegacySchema && !mr.source_branch) {
+    const legacySourceBranch = normalizeProjectBranch(value['sourceBranch'])
+      || normalizeProjectBranch(value['branch'])
+      || normalizeProjectBranch(value['head_branch']);
+    if (legacySourceBranch) { mr.source_branch = legacySourceBranch; }
+  }
+  if (isLegacySchema && !mr.target_branch) {
+    const legacyTargetBranch = normalizeProjectBranch(value['targetBranch']);
+    if (legacyTargetBranch) { mr.target_branch = legacyTargetBranch; }
   }
   for (const key of ['comment_count', 'discussion_count', 'unresolved_discussion_count', 'resolved_discussion_count'] as const) {
     const item = safeNonNegativeInteger(value[key]);
@@ -335,6 +358,13 @@ function safeMultilineString(value: unknown): string | undefined {
   return normalized ? normalized.slice(0, 128_000) : undefined;
 }
 
+function safeTimestamp(value: unknown): string | undefined {
+  const candidate = safeString(value);
+  if (!candidate) { return undefined; }
+  const parsed = new Date(candidate);
+  return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : undefined;
+}
+
 function safeStringArray(value: unknown): string[] {
   return Array.isArray(value)
     ? [...new Set(value.map(safeString).filter((item): item is string => Boolean(item)))].slice(0, 500)
@@ -356,7 +386,11 @@ function safeHttpUrl(value: unknown): string | undefined {
   if (!candidate) { return undefined; }
   try {
     const url = new URL(candidate);
-    return url.protocol === 'https:' || url.protocol === 'http:' ? url.toString() : undefined;
+    if ((url.protocol !== 'https:' && url.protocol !== 'http:') || url.username || url.password) {
+      return undefined;
+    }
+    url.hash = '';
+    return url.toString();
   } catch {
     return undefined;
   }

@@ -93,7 +93,12 @@
         { "file": "scripts/run-persistence-recovery-tests.js", "test": "lease renewal and release refuse an identity replacement without deleting its owner" },
         { "file": "scripts/run-persistence-recovery-tests.js", "test": "malformed, partial, oversized, future, and symbolic lease state fails closed" },
         { "file": "scripts/run-persistence-recovery-tests.js", "test": "catalog, session, and monitor readers reject incomplete or unsupported private JSON" },
-        { "file": "scripts/run-persistence-recovery-tests.js", "test": "disposing the monitor releases its lease and prevents late provider state writes" }
+        { "file": "scripts/run-persistence-recovery-tests.js", "test": "disposing the monitor releases its lease and prevents late provider state writes" },
+        { "file": "scripts/run-schema-invariant-tests.js", "test": "state ownership matrix covers every canonical record family and ingress boundary" },
+        { "file": "scripts/run-schema-invariant-tests.js", "test": "Work catalog migrates legacy aliases once and current schema exposes only canonical fields" },
+        { "file": "scripts/run-schema-invariant-tests.js", "test": "session and event normalizers strip unknown fields while preserving explicit partial state" },
+        { "file": "scripts/run-schema-invariant-tests.js", "test": "dates branches URLs paths and hashes fail closed at record ingress" },
+        { "file": "scripts/run-schema-invariant-tests.js", "test": "future schemas fail closed without compatibility probing" }
       ],
       "humanGates": ["windows-native", "multi-window"]
     },
@@ -245,6 +250,7 @@
   "repositoryChecks": [
     { "id": "roadmap-requirement-inventory", "file": "scripts/check-roadmap-evidence.js", "marker": "parseRoadmapRequirements" },
     { "id": "state-identity-ownership", "file": "docs/state-ownership.md", "marker": "| Ticket-to-project link |" },
+    { "id": "state-record-ownership", "file": "docs/state-ownership.md", "marker": "## Record ownership" },
     { "id": "state-terminal-ownership", "file": "docs/state-ownership.md", "marker": "| Live terminal object attachment |" },
     { "id": "feature-human-summary", "file": "scripts/check-quality-evidence.js", "marker": "Kronos quality evidence OK" },
     { "id": "derived-doc-metrics", "file": "scripts/check-quality-evidence.js", "marker": "checkReadmeMetrics" },
@@ -1377,6 +1383,70 @@
         { "file": "scripts/run-unit-tests.js", "test": "extension activation registers the bounded surface and explicit launch commands create the right session kinds" }
       ],
       "checks": ["runtime-responsibility-graph"]
+    },
+    {
+      "requirements": ["G15-goal:39594c16"],
+      "automated": [
+        { "file": "scripts/run-schema-invariant-tests.js", "test": "state ownership matrix covers every canonical record family and ingress boundary" },
+        { "file": "scripts/run-schema-invariant-tests.js", "test": "Work catalog migrates legacy aliases once and current schema exposes only canonical fields" },
+        { "file": "scripts/run-schema-invariant-tests.js", "test": "session and event normalizers strip unknown fields while preserving explicit partial state" },
+        { "file": "scripts/run-schema-invariant-tests.js", "test": "dates branches URLs paths and hashes fail closed at record ingress" },
+        { "file": "scripts/run-schema-invariant-tests.js", "test": "future schemas fail closed without compatibility probing" }
+      ],
+      "checks": ["state-record-ownership", "private-persistence-lifecycle"]
+    },
+    {
+      "requirements": ["G15-case-01:85626406"],
+      "automated": [
+        { "file": "scripts/run-schema-invariant-tests.js", "test": "state ownership matrix covers every canonical record family and ingress boundary" },
+        { "file": "scripts/run-schema-invariant-tests.js", "test": "session and event normalizers strip unknown fields while preserving explicit partial state" },
+        { "file": "scripts/run-project-catalog-tests.js", "test": "project configuration is canonical at setup and Work catalog ingress" },
+        { "file": "scripts/run-persistence-recovery-tests.js", "test": "catalog, session, and monitor readers reject incomplete or unsupported private JSON" }
+      ],
+      "checks": ["state-record-ownership"]
+    },
+    {
+      "requirements": ["G15-case-02:accb0dd5"],
+      "automated": [
+        { "file": "scripts/run-schema-invariant-tests.js", "test": "session and event normalizers strip unknown fields while preserving explicit partial state" },
+        { "file": "scripts/run-failure-contract-tests.js", "test": "context completion reports every provider, artifact, snapshot, insertion, session, and audit stage" }
+      ]
+    },
+    {
+      "requirements": ["G15-case-03:3e575fa3"],
+      "automated": [
+        { "file": "scripts/run-schema-invariant-tests.js", "test": "dates branches URLs paths and hashes fail closed at record ingress" },
+        { "file": "scripts/run-project-catalog-tests.js", "test": "project configuration is canonical at setup and Work catalog ingress" }
+      ]
+    },
+    {
+      "requirements": ["G15-case-04:051a8e8c"],
+      "automated": [
+        { "file": "scripts/run-schema-invariant-tests.js", "test": "future schemas fail closed without compatibility probing" },
+        { "file": "scripts/run-persistence-recovery-tests.js", "test": "catalog, session, and monitor readers reject incomplete or unsupported private JSON" }
+      ]
+    },
+    {
+      "requirements": ["G15-evidence-01:0a237c1d"],
+      "automated": [
+        { "file": "scripts/run-schema-invariant-tests.js", "test": "state ownership matrix covers every canonical record family and ingress boundary" }
+      ],
+      "checks": ["state-record-ownership"]
+    },
+    {
+      "requirements": ["G15-evidence-02:10796fc3"],
+      "automated": [
+        { "file": "scripts/run-schema-invariant-tests.js", "test": "Work catalog migrates legacy aliases once and current schema exposes only canonical fields" },
+        { "file": "scripts/run-schema-invariant-tests.js", "test": "session and event normalizers strip unknown fields while preserving explicit partial state" },
+        { "file": "scripts/run-schema-invariant-tests.js", "test": "dates branches URLs paths and hashes fail closed at record ingress" }
+      ]
+    },
+    {
+      "requirements": ["G15-evidence-03:c8382be4"],
+      "automated": [
+        { "file": "scripts/run-schema-invariant-tests.js", "test": "Work catalog migrates legacy aliases once and current schema exposes only canonical fields" },
+        { "file": "scripts/run-schema-invariant-tests.js", "test": "future schemas fail closed without compatibility probing" }
+      ]
     },
     {
       "requirements": ["G16-goal:b55b5b6c"],

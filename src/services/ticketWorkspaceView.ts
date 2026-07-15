@@ -190,8 +190,8 @@ function buildMergeRequestSummary(ticket: Ticket, workSession: WorkSessionRecord
     }
     return '<section class="kronos-card"><h2>Merge Request</h2><div class="muted">No linked merge request.</div></section>';
   }
-  const sourceBranch = singleLine(mr.source_branch || mr.sourceBranch || mr.branch || mr.head_branch, 240);
-  const targetBranch = singleLine(mr.target_branch || mr.targetBranch, 240);
+  const sourceBranch = singleLine(mr.source_branch, 240);
+  const targetBranch = singleLine(mr.target_branch, 240);
   return `<section class="kronos-card">
     <h2>Merge Request !${escapeHtml(mr.iid)}</h2>
     ${mr.title ? `<div>${escapeHtml(singleLine(mr.title, 1_000))}</div>` : ''}

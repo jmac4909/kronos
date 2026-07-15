@@ -76,10 +76,6 @@ export interface MergeRequest {
   discussions_resolved?: boolean;
   source_branch?: string;
   target_branch?: string;
-  sourceBranch?: string;
-  targetBranch?: string;
-  branch?: string;
-  head_branch?: string;
 }
 
 export interface BuildStatus {

@@ -324,7 +324,7 @@ export function readWorkSession(
   const filePath = workSessionRecordPath(sessionId, options);
   if (!assertSafeRegularFileIfPresent(filePath, 'work session record')) { return null; }
   const parsed = JSON.parse(readSafeRegularFile(filePath, 'work session record')) as unknown;
-  const record = normalizeWorkSessionRecord(parsed);
+  const record = normalizeWorkSessionRecord(parsed, options);
   if (record.id !== normalizeEntityId(sessionId, 'work session id')) {
     throw new Error(`Work session record id does not match ${path.basename(path.dirname(filePath))}.`);
   }
@@ -677,7 +677,10 @@ export function reopenWorkSession(
   });
 }
 
-export function normalizeWorkSessionRecord(value: unknown): WorkSessionRecord {
+export function normalizeWorkSessionRecord(
+  value: unknown,
+  options: WorkSessionStoreOptions = {},
+): WorkSessionRecord {
   if (!isRecord(value)) { throw new Error('Work session record must be an object.'); }
   if (value['schemaVersion'] !== SCHEMA_VERSION) { throw new Error('Unsupported work session schema version.'); }
   const kind = normalizeWorkSessionKind(value['kind'], value['ticketKey']);
@@ -691,7 +694,7 @@ export function normalizeWorkSessionRecord(value: unknown): WorkSessionRecord {
     updatedAt: normalizeTimestamp(value['updatedAt'], 'work session updatedAt'),
     terminals: normalizeTerminalBindings(value['terminals']),
     providerBindings: normalizeProviderBindings(value['providerBindings']),
-    artifacts: normalizeArtifacts(value['artifacts']),
+    artifacts: normalizeArtifacts(value['artifacts'], options),
     monitoring: normalizeMonitoring(value['monitoring']),
   };
   const record: WorkSessionRecord = kind === 'ticket'
@@ -725,13 +728,13 @@ function mutateWorkSession(
   const at = nowIso(options.now);
   mutation(record, at);
   record.updatedAt = at;
-  const normalized = normalizeWorkSessionRecord(record);
+  const normalized = normalizeWorkSessionRecord(record, options);
   writeWorkSessionRecord(normalized, options);
   return cloneWorkSession(normalized);
 }
 
 function writeWorkSessionRecord(record: WorkSessionRecord, options: WorkSessionStoreOptions): void {
-  const normalized = normalizeWorkSessionRecord(record);
+  const normalized = normalizeWorkSessionRecord(record, options);
   const base = path.resolve(options.kronosDir || KRONOS_DIR);
   ensurePrivateDirectory(base, 'Kronos data directory');
   const root = workSessionsDirectory(options);
@@ -798,16 +801,21 @@ function normalizeProviderBinding(value: unknown): WorkSessionProviderBinding {
   return binding;
 }
 
-function normalizeArtifacts(value: unknown): WorkSessionContextArtifact[] {
+function normalizeArtifacts(
+  value: unknown,
+  options: WorkSessionStoreOptions,
+): WorkSessionContextArtifact[] {
   if (!Array.isArray(value)) { throw new Error('Work session artifacts must be an array.'); }
   if (value.length > MAX_ARTIFACTS) { throw new Error(`Work session artifacts exceed the ${MAX_ARTIFACTS}-entry limit.`); }
   return value.map(item => {
     if (!isRecord(item)) { throw new Error('Context artifact must be an object.'); }
+    const promptPath = requiredAbsolutePath(item['promptPath'], 'context artifact prompt path');
+    assertArtifactInsideKronos(promptPath, options);
     const artifact: WorkSessionContextArtifact = {
       id: normalizeEntityId(item['id'], 'context artifact id'),
       kind: requiredSingleLine(item['kind'], 'context artifact kind', 100),
       label: requiredSingleLine(item['label'], 'context artifact label', 300),
-      promptPath: requiredAbsolutePath(item['promptPath'], 'context artifact prompt path'),
+      promptPath,
       fetchedAt: normalizeTimestamp(item['fetchedAt'], 'context artifact fetchedAt'),
       recordedAt: normalizeTimestamp(item['recordedAt'], 'context artifact recordedAt'),
       complete: normalizeBoolean(item['complete'], 'context artifact complete'),

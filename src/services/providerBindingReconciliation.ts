@@ -91,9 +91,6 @@ export function mergeRequestDiscoverySourceBranch(
   observedProjectBranch?: string,
 ): string | undefined {
   const branch = ticket?.mr?.source_branch
-    || ticket?.mr?.sourceBranch
-    || ticket?.mr?.branch
-    || ticket?.mr?.head_branch
     || observedProjectBranch;
   return branch && !branch.startsWith('detached@') ? branch : undefined;
 }
@@ -189,11 +186,9 @@ export function effectiveTicketMergeRequest(
   if (observed.title) { projected.title = observed.title; }
   if (observed.sourceBranch) {
     projected.source_branch = observed.sourceBranch;
-    projected.sourceBranch = observed.sourceBranch;
   }
   if (observed.targetBranch) {
     projected.target_branch = observed.targetBranch;
-    projected.targetBranch = observed.targetBranch;
   }
   if (observed.discussionsComplete) {
     projected.unresolved_discussion_count = observed.unresolvedDiscussions.count;
@@ -357,7 +352,7 @@ export function providerBindingsForEvent(
 }
 
 function ticketProviderBranchCandidates(ticket: Ticket | undefined): Array<string | undefined> {
-  return [ticket?.mr?.source_branch, ticket?.mr?.sourceBranch, ticket?.mr?.branch, ticket?.mr?.head_branch];
+  return [ticket?.mr?.source_branch];
 }
 
 function isProviderSource(source: string): source is WorkSessionProviderBinding['provider'] {

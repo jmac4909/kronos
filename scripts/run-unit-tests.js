@@ -884,9 +884,7 @@ test('managed provider polling automatically discovers and locally binds a proje
       url: 'https://gitlab.example/team/application/-/merge_requests/90',
       title: 'JIRA-900 Automatic MR discovery',
       source_branch: 'feature/JIRA-900',
-      sourceBranch: 'feature/JIRA-900',
       target_branch: 'main',
-      targetBranch: 'main',
       unresolved_discussion_count: 0,
       discussions_resolved: true,
     });

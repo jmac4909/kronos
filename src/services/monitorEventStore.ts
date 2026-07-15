@@ -127,7 +127,7 @@ export function appendMonitorEvent(
     schemaVersion: SCHEMA_VERSION,
     id: input.id || `event-${crypto.randomUUID()}`,
     at: input.at || nowIso(options.now),
-  });
+  }, options);
   const line = `${JSON.stringify(event)}\n`;
   if (Buffer.byteLength(line, 'utf8') > MAX_EVENT_BYTES) {
     throw new Error(`Monitor event exceeds the ${MAX_EVENT_BYTES}-byte limit.`);
@@ -165,7 +165,7 @@ export function listMonitorEvents(
     if (!line) { continue; }
     let event: MonitorEvent;
     try {
-      event = normalizeMonitorEvent(JSON.parse(line) as unknown);
+      event = normalizeMonitorEvent(JSON.parse(line) as unknown, options);
     } catch {
       continue;
     }
@@ -213,7 +213,10 @@ export function acknowledgeMonitorEvent(
   return appendMonitorEvent(input, options);
 }
 
-export function normalizeMonitorEvent(value: unknown): MonitorEvent {
+export function normalizeMonitorEvent(
+  value: unknown,
+  options: MonitorEventStoreOptions = {},
+): MonitorEvent {
   if (!isRecord(value)) { throw new Error('Monitor event must be an object.'); }
   if (value['schemaVersion'] !== SCHEMA_VERSION) { throw new Error('Unsupported monitor event schema version.'); }
   const event: MonitorEvent = {
@@ -229,7 +232,7 @@ export function normalizeMonitorEvent(value: unknown): MonitorEvent {
   if (value['before'] !== undefined) { event.before = normalizeState(value['before'], 'before'); }
   if (value['after'] !== undefined) { event.after = normalizeState(value['after'], 'after'); }
   if (value['artifactPath'] !== undefined) {
-    event.artifactPath = normalizeArtifactPath(value['artifactPath']);
+    event.artifactPath = normalizeArtifactPath(value['artifactPath'], options);
   }
   if (value['metadata'] !== undefined) { event.metadata = normalizeMetadata(value['metadata']); }
   return event;
@@ -363,7 +366,7 @@ function normalizeTimestamp(value: unknown, label: string): string {
   return date.toISOString();
 }
 
-function normalizeArtifactPath(value: unknown): string {
+function normalizeArtifactPath(value: unknown, options: MonitorEventStoreOptions): string {
   if (typeof value !== 'string' || !value.trim() || CONTROL_PATTERN.test(value)) {
     throw new Error('Monitor event artifact path is invalid.');
   }
@@ -371,9 +374,18 @@ function normalizeArtifactPath(value: unknown): string {
   if (!path.isAbsolute(candidate) && !path.win32.isAbsolute(candidate)) {
     throw new Error('Monitor event artifact path must be absolute.');
   }
-  return path.win32.isAbsolute(candidate) && !path.isAbsolute(candidate)
+  const normalized = path.win32.isAbsolute(candidate) && !path.isAbsolute(candidate)
     ? path.win32.normalize(candidate)
     : path.resolve(candidate);
+  if (path.win32.isAbsolute(normalized) && !path.isAbsolute(normalized)) {
+    if (process.platform !== 'win32') { return normalized; }
+  }
+  const root = path.resolve(options.kronosDir || KRONOS_DIR);
+  const relative = path.relative(root, path.resolve(normalized));
+  if (relative.startsWith('..') || path.isAbsolute(relative)) {
+    throw new Error('Monitor event artifact path must stay inside the Kronos data directory.');
+  }
+  return normalized;
 }
 
 function nowIso(now?: Date): string {
