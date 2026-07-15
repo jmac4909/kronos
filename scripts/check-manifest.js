@@ -69,6 +69,30 @@ const EXPECTED_MENU_LOCATIONS = [
   'view/item/context',
 ];
 
+const EXPECTED_VIEW_TITLE_ITEMS = [
+  'kronos.refreshTickets|view == kronosWork|navigation@1',
+  'kronos.openJiraBoard|view == kronosWork|navigation@2',
+  'kronos.filterWork|view == kronosWork|navigation@3',
+  'kronos.clearWorkFilter|view == kronosWork|work@1',
+  'kronos.newClaudeSession|view == kronosSessions|navigation@1',
+  'kronos.manageActiveTerminal|view == kronosSessions|navigation@2',
+  'kronos.refreshProjects|view == kronosProjects|navigation@1',
+  'kronos.registerWorkspaceProject|view == kronosProjects|navigation@2',
+  'kronos.pollManagedWorkSessions|view == kronosAttention|navigation@1',
+  'kronos.pollManagedWorkSessions|view == kronosSessions|sessions@1',
+  'kronos.pollManagedWorkSessions|view == kronosProjects|projects@1',
+  'kronos.openContextBasket|view == kronosWork|work@2',
+  'kronos.openContextBasket|view == kronosSessions|sessions@2',
+  'kronos.openContextBasket|view == kronosProjects|projects@2',
+  'kronos.searchLocalEvidence|view == kronosWork|work@3',
+  'kronos.searchLocalEvidence|view == kronosSessions|sessions@3',
+  'kronos.searchLocalEvidence|view == kronosProjects|projects@3',
+  'kronos.searchLocalEvidence|view == kronosAttention|attention@1',
+  'kronos.createLocalHandoff|view == kronosSessions|sessions@4',
+  'kronos.createLocalHandoff|view == kronosProjects|projects@4',
+  'kronos.setup|view == kronosWork|work@4',
+];
+
 const ALLOWED_CODICONS = new Set([
   'add',
   'archive',
@@ -256,6 +280,23 @@ function checkMenus() {
   checkExactUnorderedValues('menu locations', locations, EXPECTED_MENU_LOCATIONS);
   const allowed = new Set(EXPECTED_COMMANDS);
   const expectedViews = new Set(EXPECTED_VIEWS.map(view => view.id));
+  const viewTitleItems = Array.isArray(menus?.['view/title']) ? menus['view/title'] : [];
+  checkExactOrderedValues(
+    'view-title action hierarchy',
+    viewTitleItems.map(item => `${item?.command}|${item?.when}|${item?.group}`),
+    EXPECTED_VIEW_TITLE_ITEMS,
+  );
+  const primaryByView = new Map(EXPECTED_VIEWS.map(view => [view.id, []]));
+  for (const item of viewTitleItems.filter(item => String(item?.group || '').startsWith('navigation@'))) {
+    const match = /^view == ([A-Za-z0-9_.-]+)$/.exec(String(item?.when || ''));
+    if (match && primaryByView.has(match[1])) { primaryByView.get(match[1]).push(item.command); }
+  }
+  for (const [view, commands] of primaryByView) {
+    if (commands.length > 3) { fail(`${view} exposes ${commands.length} primary toolbar icons; the audited maximum is 3.`); }
+  }
+  if (viewTitleItems.some(item => item?.command === 'kronos.configureProjectDiscoveryFolders')) {
+    fail('project discovery-folder selection belongs in Setup, not a repeated view toolbar button.');
+  }
 
   for (const [location, items] of Object.entries(menus || {})) {
     if (!Array.isArray(items)) {

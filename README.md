@@ -55,7 +55,7 @@ Kronos has two intentional terminal-write boundaries:
 
 | Boundary | Allowed behavior | Guardrail |
 | --- | --- | --- |
-| Explicit Claude launch | Create and focus a new terminal after **New Claude** or **Start Claude for Ticket** | Accepts only a validated `claude` or `claude-*` executable and narrowly allowlisted, non-escalating interactive flags |
+| Explicit Claude launch | Create and focus a new terminal after **New Claude** from Sessions/a Project or **Start Claude for Ticket** | Accepts only a validated `claude` or `claude-*` executable and narrowly allowlisted, non-escalating interactive flags |
 | Context insertion | Place a reviewed reference and editable focus in an attached terminal | Uses shell-inert quoting and VS Code's `sendText(..., false)`; Kronos never presses Enter |
 
 Kronos reads, organizes, inserts, monitors, and audits. It does **not**:
@@ -127,6 +127,8 @@ code --install-extension kronos-0.1.0.vsix --force
 ```
 
 Reload VS Code and open the Kronos activity icon. The extension exposes exactly four views: **Work**, **Sessions**, **Projects**, and **Attention**.
+
+Each view keeps only its primary workflow icons visible: Work owns Jira refresh/board/filter, Sessions owns terminal creation/attachment, Projects owns repository refresh/registration, and Attention owns manual polling. Basket, search, handoff, and other secondary actions remain in the relevant view's **…** menu; Setup is the single configuration hub.
 
 ### Isolated synthetic fixture
 

@@ -49,7 +49,7 @@ interface AttentionEntry {
   providerChoices: AttentionProviderChoice[];
 }
 
-/** Shows only the newest unacknowledged state per provider stream, grouped by project when known. */
+/** Shows only the newest unacknowledged state per provider stream, grouped only by local project. */
 export class AttentionTreeProvider implements vscode.TreeDataProvider<AttentionTreeItem>, vscode.Disposable {
   private readonly changeEmitter = new vscode.EventEmitter<AttentionTreeItem | undefined>();
   private readonly loadMonitorEvents: () => MonitorEvent[];
@@ -84,7 +84,7 @@ export class AttentionTreeProvider implements vscode.TreeDataProvider<AttentionT
     for (const entry of entries) {
       const groupKey = entry.session?.projectName
         ? `project:${entry.session.projectName}`
-        : `session:${entry.event.sessionId}`;
+        : 'unassigned-project';
       const existing = grouped.get(groupKey);
       if (existing) {
         existing.push(entry);
@@ -149,34 +149,32 @@ export type AttentionTreeItem = AttentionGroupTreeItem | AttentionEventTreeItem 
 export class AttentionGroupTreeItem extends vscode.TreeItem {
   readonly newestAt: string;
   readonly labelText: string;
-  readonly workSessionId: string;
-  readonly ticketKey: string | undefined;
+  readonly projectName: string | undefined;
 
   constructor(readonly entries: readonly AttentionEntry[]) {
     const newest = entries[0];
     if (!newest) { throw new Error('Attention groups require at least one event.'); }
-    const session = newest.session;
-    const ticketKeys = [...new Set(entries.map(entry => entry.ticketKey).filter((value): value is string => Boolean(value)))];
-    const ticketKey = ticketKeys.length === 1 ? ticketKeys[0] : undefined;
-    const projectName = session?.projectName;
-    const label = projectName
-      ? projectName
-      : ticketKey ? `${ticketKey}: ${session?.title || 'Provider changes'}`
-        : session?.title || `Work session ${newest.event.sessionId}`;
+    const projectNames = [...new Set(entries
+      .map(entry => entry.session?.projectName)
+      .filter((value): value is string => Boolean(value)))];
+    const projectName = projectNames.length === 1 ? projectNames[0] : undefined;
+    const label = projectName || 'Unassigned project';
+    const sessionIds = [...new Set(entries.map(entry => entry.event.sessionId))];
     super(label, vscode.TreeItemCollapsibleState.Expanded);
     this.newestAt = newest.event.at;
     this.labelText = label;
-    this.workSessionId = newest.event.sessionId;
-    this.ticketKey = ticketKey;
-    this.id = `attention-group:${projectName || this.workSessionId}`;
+    this.projectName = projectName;
+    this.id = projectName
+      ? `attention-group:project:${projectName}`
+      : 'attention-group:unassigned-project';
     this.contextValue = 'attention_group';
-    this.description = `${entries.length} unacknowledged • newest ${displayTimestamp(this.newestAt)}`;
+    this.description = `${entries.length} current item${entries.length === 1 ? '' : 's'} • newest ${displayTimestamp(this.newestAt)}`;
     this.tooltip = [
-      `Work session: ${this.workSessionId}`,
-      `Project: ${projectName || 'none'}`,
-      `Ticket contexts: ${ticketKeys.join(', ') || 'none'}`,
+      `Project: ${projectName || 'unassigned'}`,
+      `Contributing work sessions: ${sessionIds.length}`,
       `Unacknowledged provider transitions: ${entries.length}`,
       `Newest transition: ${this.newestAt}`,
+      'Jira contexts are optional row-level actions and never define an Attention group.',
     ].join('\n');
     this.iconPath = new vscode.ThemeIcon('bell-dot', new vscode.ThemeColor('charts.yellow'));
   }
@@ -269,7 +267,7 @@ function eventTooltip(entry: AttentionEntry): string {
     'Current Attention state (audit history is retained after clearing)',
     `Event: ${event.id}`,
     `Project: ${presentation.project}`,
-    `Ticket: ${entry.ticketKey || 'unknown'}`,
+    `Optional Jira context: ${entry.ticketKey || 'none'}`,
     `Work session: ${event.sessionId}`,
     `Provider: ${presentation.provider}`,
     `Subject: ${presentation.subject}`,

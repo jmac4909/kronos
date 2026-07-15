@@ -33,7 +33,7 @@ export function buildTicketWorkspaceHtml(input: TicketWorkspaceViewInput): strin
   const workSession = input.workSession || undefined;
   const liveTerminalCount = resolveLiveTerminalCount(workSession, input.liveTerminalCount);
   const mrIid = connectedMergeRequestIid(ticket, workSession);
-  const actionButtons = [
+  const terminalActions = [
     ticketWorkspaceActionButton(
       'chooseTicketProject',
       input.localProject ? `Change / Unlink Project: ${input.localProject.name}` : 'Add Project / Branch',
@@ -41,6 +41,8 @@ export function buildTicketWorkspaceHtml(input: TicketWorkspaceViewInput): strin
     ),
     ticketWorkspaceActionButton('startClaudeForTicket', 'Start Claude for Ticket', { ticket: ticketKey, primary: true }),
     ticketWorkspaceActionButton('manageActiveTerminal', 'Manage Focused Terminal', { ticket: ticketKey }),
+  ];
+  const contextActions = [
     ...(ticket.source === 'jira'
       ? [ticketWorkspaceActionButton('insertJiraContext', `Insert [${ticketKey}]`, { ticket: ticketKey })]
       : []),
@@ -63,7 +65,10 @@ export function buildTicketWorkspaceHtml(input: TicketWorkspaceViewInput): strin
   .workspace-grid { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(280px, .65fr); gap: 14px; }
   .terminal-workspace { border-color: color-mix(in srgb, var(--k-accent) 60%, var(--k-border)); background: linear-gradient(145deg, var(--k-accent-bg), var(--k-surface) 42%); }
   .terminal-workspace h2 { color: var(--k-fg); font-size: 15px; text-transform: none; }
-  .workspace-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0; }
+  .workspace-action-groups { display: grid; gap: 10px; margin: 14px 0; }
+  .workspace-action-group { display: grid; gap: 5px; }
+  .workspace-action-label { color: var(--k-muted); font-size: 10px; font-weight: 650; text-transform: uppercase; }
+  .workspace-actions { display: flex; flex-wrap: wrap; gap: 8px; }
   .workspace-actions .kronos-button { min-height: 30px; }
   .workspace-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
   .workspace-fact { min-width: 0; padding: 9px 10px; border: 1px solid var(--k-border); border-radius: var(--k-radius-sm); background: var(--k-surface-soft); }
@@ -100,7 +105,10 @@ ${ticketWorkspaceActionScript(input.nonce, input.actionScriptUri)}
 
   <section class="kronos-card terminal-workspace">
     <h2>Terminal Workspace</h2>
-    <div class="workspace-actions">${actionButtons.join('')}</div>
+    <div class="workspace-action-groups">
+      <div class="workspace-action-group"><span class="workspace-action-label">Terminal</span><div class="workspace-actions">${terminalActions.join('')}</div></div>
+      <div class="workspace-action-group"><span class="workspace-action-label">Context</span><div class="workspace-actions">${contextActions.join('')}</div></div>
+    </div>
     ${buildTerminalWorkspaceFacts(workSession, liveTerminalCount, input.localProject)}
     ${buildProviderLinks(ticket, workSession)}
   </section>

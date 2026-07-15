@@ -7,8 +7,8 @@ export interface SetupStep {
   title: string;
   detail: string;
   status: OperationsStatus;
-  action: string;
-  actionLabel: string;
+  action?: string;
+  actionLabel?: string;
 }
 
 export interface SetupPanelInput {
@@ -53,7 +53,7 @@ export function buildSetupPanelHtml(input: SetupPanelInput): string {
         <div class="setup-detail">${escapeHtml(step.detail)}</div>
       </div>
     </div>
-    ${operationsActionButton(step.action, step.actionLabel)}
+    ${step.action && step.actionLabel ? operationsActionButton(step.action, step.actionLabel) : ''}
   </article>`).join('');
 
   return `<!DOCTYPE html>
@@ -85,8 +85,6 @@ ${operationsPanelCss()}
   </header>
   <div class="kronos-action-row operations-actions">
     ${operationsActionButton('openDoctor', 'Run Doctor', true)}
-    ${operationsActionButton('openJiraBoard', 'Open Jira Board')}
-    ${operationsActionButton('openSettings', 'Advanced VS Code Settings')}
     ${operationsActionButton('refreshPanel', 'Refresh')}
   </div>
   <section class="operations-hero ${escapeClass(tone)}">
@@ -126,7 +124,7 @@ export function buildDoctorPanelHtml(input: DoctorPanelInput): string {
     <div>
       <h2>${escapeHtml(check.name)}</h2>
       <div class="doctor-detail">${escapeHtml(check.detail)}</div>
-      ${check.action && check.actionLabel
+      ${check.status !== 'pass' && check.action && check.actionLabel
         ? `<div class="doctor-action">${operationsActionButton(check.action, check.actionLabel)}</div>`
         : ''}
     </div>
@@ -174,8 +172,6 @@ ${operationsPanelCss()}
   <div class="kronos-action-row operations-actions">
     ${operationsActionButton('refreshPanel', 'Run Checks Again', true)}
     ${operationsActionButton('openSetup', 'Guided Setup')}
-    ${operationsActionButton('openSettings', 'Advanced Settings')}
-    ${operationsActionButton('openJiraBoard', 'Jira Board')}
   </div>
   <section class="doctor-summary" aria-label="Doctor check totals">
     <div class="doctor-stat pass"><strong>${summary.pass}</strong><span>Ready</span></div>

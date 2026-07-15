@@ -16,11 +16,7 @@
     openDoctor: true,
     openTicketWorkspace: true,
     startClaudeForTicket: true,
-    manageActiveTerminal: true,
     chooseTicketProject: true,
-    insertJiraContext: true,
-    insertGitLabContext: true,
-    insertCiContext: true,
   });
   var GENERAL_ACTIONS = Object.freeze({ refreshTickets: true, openDoctor: true });
 

@@ -9,7 +9,8 @@ export type OperationsReadinessAction =
   | 'openClaudeSettings'
   | 'openProviderEnvironment'
   | 'chooseProjectDiscoveryFolders'
-  | 'manageLocalProjects'
+  | 'openProjectsView'
+  | 'openSessionsView'
   | 'configureProjectIntegrations'
   | 'openJiraBoard'
   | 'pollProvidersNow';
@@ -21,6 +22,7 @@ export interface OperationsReadinessItem {
   status: OperationsReadinessStatus;
   action: OperationsReadinessAction;
   actionLabel: string;
+  actionWhenReady?: boolean;
   surfaces: readonly OperationsReadinessSurface[];
 }
 
@@ -102,8 +104,8 @@ export function buildOperationsReadiness(input: OperationsReadinessInput): Opera
       title: 'Registered local projects',
       detail: input.projects.detail,
       status: projectStatus,
-      action: 'manageLocalProjects',
-      actionLabel: 'Manage Projects',
+      action: 'openProjectsView',
+      actionLabel: 'Open Projects',
       surfaces: both,
     },
     {
@@ -153,8 +155,8 @@ export function buildOperationsReadiness(input: OperationsReadinessInput): Opera
       title: 'Private work-session state',
       detail: `${input.sessions.count} session${input.sessions.count === 1 ? '' : 's'}; ${input.sessions.issues} invalid record${input.sessions.issues === 1 ? '' : 's'}${input.sessions.firstIssue ? ` — ${input.sessions.firstIssue}` : ''}.`,
       status: sessionStatus,
-      action: 'refreshPanel',
-      actionLabel: 'Recheck State',
+      action: 'openSessionsView',
+      actionLabel: 'Open Sessions',
       surfaces: both,
     },
   ];
@@ -176,6 +178,7 @@ function providerItem(
     action: currentDiagnostic?.action || 'openProviderEnvironment',
     actionLabel: currentDiagnostic?.actionLabel
       || (provider.state === 'ready' ? 'Review Private Config' : 'Repair Private Config'),
+    actionWhenReady: false,
     surfaces: ['setup', 'doctor'],
   };
 }

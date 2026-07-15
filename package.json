@@ -117,7 +117,7 @@
       },
       {
         "command": "kronos.registerWorkspaceProject",
-        "title": "Kronos: Discover and Manage Local Projects",
+        "title": "Kronos: Manage Local Projects",
         "icon": "$(folder-library)"
       },
       {
@@ -306,17 +306,7 @@
         {
           "command": "kronos.clearWorkFilter",
           "when": "view == kronosWork",
-          "group": "navigation@4"
-        },
-        {
-          "command": "kronos.configureProjectDiscoveryFolders",
-          "when": "view == kronosWork",
-          "group": "navigation@5"
-        },
-        {
-          "command": "kronos.registerWorkspaceProject",
-          "when": "view == kronosWork",
-          "group": "navigation@6"
+          "group": "work@1"
         },
         {
           "command": "kronos.newClaudeSession",
@@ -339,44 +329,69 @@
           "group": "navigation@2"
         },
         {
-          "command": "kronos.configureProjectDiscoveryFolders",
-          "when": "view == kronosProjects",
-          "group": "navigation@3"
+          "command": "kronos.pollManagedWorkSessions",
+          "when": "view == kronosAttention",
+          "group": "navigation@1"
         },
         {
           "command": "kronos.pollManagedWorkSessions",
-          "when": "view == kronosSessions || view == kronosProjects || view == kronosAttention",
-          "group": "navigation@4"
+          "when": "view == kronosSessions",
+          "group": "sessions@1"
+        },
+        {
+          "command": "kronos.pollManagedWorkSessions",
+          "when": "view == kronosProjects",
+          "group": "projects@1"
         },
         {
           "command": "kronos.openContextBasket",
-          "when": "view == kronosWork || view == kronosSessions || view == kronosProjects",
-          "group": "navigation@7"
+          "when": "view == kronosWork",
+          "group": "work@2"
+        },
+        {
+          "command": "kronos.openContextBasket",
+          "when": "view == kronosSessions",
+          "group": "sessions@2"
+        },
+        {
+          "command": "kronos.openContextBasket",
+          "when": "view == kronosProjects",
+          "group": "projects@2"
         },
         {
           "command": "kronos.searchLocalEvidence",
-          "when": "view == kronosWork || view == kronosSessions || view == kronosProjects || view == kronosAttention",
-          "group": "navigation@6"
+          "when": "view == kronosWork",
+          "group": "work@3"
+        },
+        {
+          "command": "kronos.searchLocalEvidence",
+          "when": "view == kronosSessions",
+          "group": "sessions@3"
+        },
+        {
+          "command": "kronos.searchLocalEvidence",
+          "when": "view == kronosProjects",
+          "group": "projects@3"
+        },
+        {
+          "command": "kronos.searchLocalEvidence",
+          "when": "view == kronosAttention",
+          "group": "attention@1"
         },
         {
           "command": "kronos.createLocalHandoff",
-          "when": "view == kronosSessions || view == kronosProjects",
-          "group": "navigation@5"
+          "when": "view == kronosSessions",
+          "group": "sessions@4"
+        },
+        {
+          "command": "kronos.createLocalHandoff",
+          "when": "view == kronosProjects",
+          "group": "projects@4"
         },
         {
           "command": "kronos.setup",
-          "when": "view == kronosWork || view == kronosSessions || view == kronosProjects || view == kronosAttention",
-          "group": "navigation@8"
-        },
-        {
-          "command": "kronos.doctor",
-          "when": "view == kronosWork || view == kronosSessions || view == kronosProjects || view == kronosAttention",
-          "group": "navigation@9"
-        },
-        {
-          "command": "kronos.settings",
-          "when": "view == kronosWork || view == kronosSessions || view == kronosProjects || view == kronosAttention",
-          "group": "navigation@10"
+          "when": "view == kronosWork",
+          "group": "work@4"
         }
       ],
       "view/item/context": [
@@ -461,7 +476,7 @@
           "group": "management@3"
         },
         {
-          "command": "kronos.openProjectGitStatus",
+          "command": "kronos.newClaudeSession",
           "when": "viewItem == registered_project",
           "group": "inline@1"
         },
@@ -549,7 +564,7 @@
           },
           "default": [],
           "scope": "machine",
-          "description": "Parent folders Kronos may inspect for local Git projects when discovery is explicitly opened. Use Kronos: Choose Project Discovery Folders for the native multi-folder picker. Open workspace folders are always offered. Use ~ for the current home folder."
+          "description": "Parent folders Kronos may inspect for local Git projects when Manage Local Projects is explicitly opened. Choose folders from Kronos Setup or use this advanced setting. Open workspace folders are always offered. Use ~ for the current home folder."
         },
         "kronos.projectDiscoveryDepth": {
           "type": "integer",

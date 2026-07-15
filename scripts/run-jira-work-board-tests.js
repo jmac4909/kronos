@@ -69,8 +69,18 @@ test('board builder exposes useful Jira filters and only bounded terminal-first 
   assert.match(html, /kronos-jira-work-board\.js/);
   assert.match(html, /jira-ticket-heading-actions[^]*data-action="chooseTicketProject"[^]*\+ Add Project/);
 
-  for (const action of JIRA_WORK_BOARD_ACTIONS) {
+  assert.deepEqual(JIRA_WORK_BOARD_ACTIONS, [
+    'refreshTickets',
+    'openDoctor',
+    'openTicketWorkspace',
+    'startClaudeForTicket',
+    'chooseTicketProject',
+  ]);
+  for (const action of JIRA_WORK_BOARD_ACTIONS.filter(action => action !== 'openDoctor')) {
     assert.match(html, new RegExp(`data-action="${action}"`));
+  }
+  for (const workspaceOnlyAction of ['manageActiveTerminal', 'insertJiraContext', 'insertGitLabContext', 'insertCiContext']) {
+    assert.doesNotMatch(html, new RegExp(`data-action="${workspaceOnlyAction}"`));
   }
   for (const forbidden of ['addToQueue', 'removeFromQueue', 'dispatch', 'runCenter', 'linkProject', 'triggerBuild']) {
     assert.doesNotMatch(html, new RegExp(forbidden, 'i'));
@@ -229,8 +239,9 @@ test('board lists registered local project paths and current Git branches', () =
 test('board runtime posts only normalized command and Jira ticket key', () => {
   const messages = [];
   const vscodeApi = { postMessage(message) { messages.push(message); } };
-  assert.equal(boardRuntime.postTicketAction(vscodeApi, 'insertJiraContext', ' kronos-42 '), true);
-  assert.deepEqual(messages, [{ command: 'insertJiraContext', ticket: 'KRONOS-42' }]);
+  assert.equal(boardRuntime.postTicketAction(vscodeApi, 'startClaudeForTicket', ' kronos-42 '), true);
+  assert.deepEqual(messages, [{ command: 'startClaudeForTicket', ticket: 'KRONOS-42' }]);
+  assert.equal(boardRuntime.postTicketAction(vscodeApi, 'insertJiraContext', 'KRONOS-42'), false);
   assert.equal(boardRuntime.postTicketAction(vscodeApi, 'removeFromQueue', 'KRONOS-42'), false);
   assert.equal(boardRuntime.postTicketAction(vscodeApi, 'openTicketWorkspace', 'not-a-ticket'), false);
   assert.equal(boardRuntime.postTicketAction(vscodeApi, 'refreshTickets', ''), true);

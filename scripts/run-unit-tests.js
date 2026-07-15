@@ -2819,13 +2819,20 @@ test('Setup and Doctor render bounded operation dashboards with allowlisted acti
     providerEnvPath: 'C:\\fixture\\<kronos>\\.env',
   };
   const setup = buildSetupPanelHtml({
-    steps: [{
-      title: 'Claude <terminal>',
-      detail: 'Ready & operator-owned',
-      status: 'pass',
-      action: 'openClaudeSettings',
-      actionLabel: 'Claude Settings',
-    }],
+    steps: [
+      {
+        title: 'Claude <terminal>',
+        detail: 'Ready & operator-owned',
+        status: 'pass',
+        action: 'openClaudeSettings',
+        actionLabel: 'Claude Settings',
+      },
+      {
+        title: 'Healthy provider status',
+        detail: 'Configured and ready without a duplicate config action.',
+        status: 'pass',
+      },
+    ],
     runtime,
     nonce: 'setup-nonce',
     actionScriptUri: 'vscode-webview://fixture/kronos-action-panel.js',
@@ -2833,12 +2840,14 @@ test('Setup and Doctor render bounded operation dashboards with allowlisted acti
   assert.match(setup, /Kronos Setup/);
   assert.match(setup, /data-action="openDoctor"/);
   assert.match(setup, /data-action="openClaudeSettings"/);
+  assert.match(setup, /Healthy provider status/);
+  assert.doesNotMatch(setup, /Review Private Config/);
   assert.match(setup, /Claude &lt;terminal&gt;/);
   assert.match(setup, /C:\\fixture\\&lt;kronos&gt;\\\.env/);
   assert.match(setup, /Runtime paths and reload behavior/);
   assert.match(setup, /Developer: Reload Window/);
   assert.match(setup, /\$env:KRONOS_DIR/);
-  assert.match(setup, /Advanced VS Code Settings/);
+  assert.doesNotMatch(setup, /Advanced VS Code Settings/);
   assert.doesNotMatch(setup, /Claude <terminal>/);
 
   const doctor = buildDoctorPanelHtml({
@@ -2873,7 +2882,7 @@ test('Setup and Doctor render bounded operation dashboards with allowlisted acti
   assert.match(doctor, /data-action="pollProvidersNow"/);
   assert.match(doctor, /C:\\fixture\\&lt;kronos&gt;/);
   assert.match(doctor, /Guided Setup/);
-  assert.match(doctor, /Advanced Settings/);
+  assert.doesNotMatch(doctor, /Advanced Settings/);
 
   assert.deepEqual(
     normalizeOperationsActionMessage({ command: 'openDoctor', ticket: 'JIRA-123', runId: 'legacy' }, new Set(['openDoctor'])),
@@ -3313,6 +3322,7 @@ test('extension activation registers the bounded surface and explicit launch com
     assert.match(projectItems[0].tooltip, /Suppressed unchanged polls since last change: 0/);
     const projectActions = await registeredTreeProviders.get('kronosProjects').getChildren(projectItems[0]);
     assert.deepEqual(projectActions.map(item => item.label), [
+      'Start Claude in project',
       'View Git status and diff',
       'Insert working diff in context',
       'Open merge request page',
@@ -3398,8 +3408,16 @@ test('extension activation registers the bounded surface and explicit launch com
     failureEvent('attention-failure-after-recovery', '2026-07-14T10:03:00.000Z', 'failed', 'timeout', 4);
     failureEvent('attention-partial-after-failure', '2026-07-14T10:04:00.000Z', 'partial', 'stages', 5);
     const attentionProvider = registeredTreeProviders.get('kronosAttention');
-    const failureGroup = attentionProvider.getChildren().find(item => item.ticketKey === 'JIRA-654');
-    const retainedFailureItems = attentionProvider.getChildren(failureGroup);
+    const failureGroup = attentionProvider.getChildren().find(item => item.label === 'Unassigned project');
+    assert.ok(failureGroup, 'Attention uses one explicit project-level fallback instead of a ticket group');
+    assert.equal(failureGroup.id, 'attention-group:unassigned-project');
+    assert.equal(
+      attentionProvider.getChildren().some(item => String(item.label).includes('JIRA-654')),
+      false,
+      'a Jira key never becomes an Attention group label',
+    );
+    const retainedFailureItems = attentionProvider.getChildren(failureGroup)
+      .filter(item => item.sessionId === failureSession.id);
     assert.equal(retainedFailureItems.length, 1, 'only the newest state for a provider stream remains in Attention');
     assert.deepEqual(
       retainedFailureItems.map(item => item.entry.event.id),
@@ -3419,8 +3437,12 @@ test('extension activation registers the bounded surface and explicit launch com
       event.type === 'notification.acknowledged'
       && event.metadata?.acknowledgedEventId === retainedFailureItems[0].eventId
     ));
+    const refreshedUnassignedGroup = attentionProvider.getChildren()
+      .find(item => item.label === 'Unassigned project');
     assert.equal(
-      attentionProvider.getChildren().some(item => item.ticketKey === 'JIRA-654'),
+      refreshedUnassignedGroup
+        ? attentionProvider.getChildren(refreshedUnassignedGroup).some(item => item.sessionId === failureSession.id)
+        : false,
       false,
       'acknowledging the newest state must not resurrect an older superseded event',
     );
@@ -3452,9 +3474,11 @@ test('extension activation registers the bounded surface and explicit launch com
       after: { state: 'SUCCESS', fingerprint: 'build-32-success' },
       metadata: { transitionKind: 'build_recovered', buildNumber: 32 },
     });
-    const replacementGroup = attentionProvider.getChildren().find(item => item.ticketKey === 'JIRA-655');
+    const replacementGroup = attentionProvider.getChildren().find(item => item.label === 'Unassigned project');
     assert.deepEqual(
-      attentionProvider.getChildren(replacementGroup).map(item => item.eventId),
+      attentionProvider.getChildren(replacementGroup)
+        .filter(item => item.sessionId === replacementSession.id)
+        .map(item => item.eventId),
       ['attention-new-build-success'],
       'a newer Jenkins build replaces the stale result even though its provider subject id changed',
     );
@@ -3508,6 +3532,8 @@ test('extension activation registers the bounded surface and explicit launch com
     });
     const attentionGroup = attentionProvider.getChildren().find(item => item.label === 'fixture');
     assert.equal(attentionGroup.label, 'fixture', 'Attention groups use the registered project identity');
+    assert.equal(attentionGroup.projectName, 'fixture');
+    assert.match(attentionGroup.tooltip, /Jira contexts are optional row-level actions and never define an Attention group/);
     const groupedProjectItems = attentionProvider.getChildren(attentionGroup);
     assert.equal(groupedProjectItems.length, 2, 'provider transitions from separate sessions share one project group');
     const attentionItem = groupedProjectItems.find(item => item.eventId === 'attention-branch-picker-event');
@@ -3552,11 +3578,16 @@ test('extension activation registers the bounded surface and explicit launch com
     assert.ok(doctorPanel);
     assert.match(doctorPanel.webview.html, /Kronos Doctor/);
     assert.match(doctorPanel.webview.html, /Claude launch settings/);
+    assert.doesNotMatch(doctorPanel.webview.html, />Choose Folders<\/button>/);
     await commandHandlers.get('kronos.doctor')();
     assert.equal(createdWebviewPanels.filter(panel => panel.viewType === 'kronosDoctor').length, 1);
     assert.deepEqual(doctorPanel.revealCalls, [vscode.ViewColumn.One]);
     await setupPanel.receive({ command: 'openClaudeSettings' });
     assert.deepEqual(executedCommands.at(-1), ['workbench.action.openSettings', '@ext:jmacke01.kronos claude']);
+    await setupPanel.receive({ command: 'openProjectsView' });
+    assert.deepEqual(executedCommands.at(-1), ['kronosProjects.focus']);
+    await setupPanel.receive({ command: 'openSessionsView' });
+    assert.deepEqual(executedCommands.at(-1), ['kronosSessions.focus']);
     const setupRevealCount = setupPanel.revealCalls.length;
     await commandHandlers.get('kronos.settings')();
     assert.equal(createdWebviewPanels.filter(panel => panel.viewType === 'kronosSetup').length, 1);
@@ -3661,6 +3692,22 @@ test('extension activation registers the bounded surface and explicit launch com
     closeTerminalHandler(noWorkspaceTerminalRecord.terminal);
     workSessions.removeWorkSession(noWorkspaceSession.id);
     vscode.window.terminals = vscode.window.terminals.filter(terminal => terminal !== noWorkspaceTerminalRecord.terminal);
+    vscode.window.activeTerminal = createdTerminals[0].terminal;
+
+    await commandHandlers.get('kronos.newClaudeSession')({ projectName: 'fixture', projectPath: tempRoot });
+    assert.equal(createdTerminals.length, 2, 'a Project action creates exactly one project-scoped terminal');
+    const projectTerminalRecord = createdTerminals.at(-1);
+    assert.equal(projectTerminalRecord.options.cwd, tempRoot);
+    assert.equal(projectTerminalRecord.options.name, 'Claude @ feature/runtime-project');
+    const projectStandalone = workSessions.listWorkSessions().find(session =>
+      session.kind === 'standalone' && session.id !== standalone.id && session.projectName === 'fixture');
+    assert.ok(projectStandalone);
+    assert.equal(projectStandalone.projectPath, tempRoot);
+    assert.deepEqual(projectStandalone.ticketKeys, [], 'a project-scoped launch must not invent a Jira context');
+    closeTerminalHandler(projectTerminalRecord.terminal);
+    workSessions.removeWorkSession(projectStandalone.id);
+    vscode.window.terminals = vscode.window.terminals.filter(terminal => terminal !== projectTerminalRecord.terminal);
+    createdTerminals.pop();
     vscode.window.activeTerminal = createdTerminals[0].terminal;
 
     await commandHandlers.get('kronos.startClaudeForTicket')({ ticketKey: 'JIRA-123' });

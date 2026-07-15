@@ -143,19 +143,20 @@ class ProjectActionTreeItem extends vscode.TreeItem {
 
 class ProjectMessageTreeItem extends vscode.TreeItem {
   constructor() {
-    super('Discover and register projects', vscode.TreeItemCollapsibleState.None);
+    super('Manage local projects', vscode.TreeItemCollapsibleState.None);
     this.contextValue = 'registered_project_empty';
-    this.description = 'choose local parent folders';
+    this.description = 'discover, register, or remove';
     this.iconPath = new vscode.ThemeIcon('folder-opened');
     this.command = {
       command: 'kronos.registerWorkspaceProject',
-      title: 'Discover and Manage Local Projects',
+      title: 'Manage Local Projects',
     };
   }
 }
 
 function projectActions(target: RegisteredProjectCommandTarget): ProjectActionTreeItem[] {
   return [
+    new ProjectActionTreeItem('Start Claude in project', 'terminal', 'kronos.newClaudeSession', target, 'no Jira ticket'),
     new ProjectActionTreeItem('View Git status and diff', 'diff', 'kronos.openProjectGitStatus', target, 'read-only'),
     new ProjectActionTreeItem('Insert working diff in context', 'symbol-keyword', 'kronos.insertProjectGitContext', target, 'non-submitting'),
     new ProjectActionTreeItem('Open merge request page', 'git-merge', 'kronos.openProjectMergeRequest', target),

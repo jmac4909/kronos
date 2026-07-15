@@ -206,7 +206,8 @@ const OPERATIONS_PANEL_ACTIONS = new Set([
   'openClaudeSettings',
   'openProviderEnvironment',
   'chooseProjectDiscoveryFolders',
-  'manageLocalProjects',
+  'openProjectsView',
+  'openSessionsView',
   'configureProjectIntegrations',
   'openJiraBoard',
   'pollProvidersNow',
@@ -413,7 +414,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
         chooseTicketProject: async argument => this.chooseTicketProject(argument),
       },
       terminals: {
-        newClaudeSession: async () => this.newClaudeSession(),
+        newClaudeSession: async argument => this.newClaudeSession(argument),
         startClaudeForTicket: async argument => this.startClaudeForTicket(argument),
         manageActiveTerminal: async argument => this.manageFocusedTerminal(argument),
       },
@@ -862,12 +863,10 @@ class TerminalFirstRuntime implements vscode.Disposable {
     const projects = listLocalProjects(this.state.state).filter(project => project.available);
     if (projects.length === 0) {
       const action = await vscode.window.showWarningMessage(
-        'No local project folder is registered. Choose parent folders to discover or scan the folders already configured.',
-        'Choose Discovery Folders',
-        'Discover Projects',
+        'No local project is registered. Use the Projects view to discover, register, or remove local repositories.',
+        'Open Projects',
       );
-      if (action === 'Choose Discovery Folders') { await this.configureProjectDiscoveryFolders(); }
-      if (action === 'Discover Projects') { await this.registerWorkspaceProject(); }
+      if (action === 'Open Projects') { await vscode.commands.executeCommand('kronosProjects.focus'); }
       return;
     }
     const current = ticketLocalProject(this.state.state, ticket);
@@ -1224,14 +1223,20 @@ class TerminalFirstRuntime implements vscode.Disposable {
     );
   }
 
-  private async newClaudeSession(): Promise<void> {
+  private async newClaudeSession(argument?: unknown): Promise<void> {
     if (!this.canLaunchClaude()) { return; }
+    const requestedProject = stringProperty(argument, 'projectName') || stringProperty(argument, 'projectPath');
+    const project = requestedProject ? this.resolveRegisteredProject(argument) : undefined;
+    if (requestedProject && !project) { return; }
     const workspaceName = vscode.workspace.name?.trim();
     const launchedAt = new Date().toISOString().slice(0, 19).replace('T', ' ');
-    const title = workspaceName
-      ? `${workspaceName} Claude · ${launchedAt}`
-      : `Claude session · ${launchedAt}`;
-    await this.launchClaudeSession({ title });
+    const projectLabel = project?.displayName || project?.projectName;
+    const title = projectLabel
+      ? `${projectLabel} Claude · ${launchedAt}`
+      : workspaceName
+        ? `${workspaceName} Claude · ${launchedAt}`
+        : `Claude session · ${launchedAt}`;
+    await this.launchClaudeSession(project ? { title, project } : { title });
   }
 
   private async startClaudeForTicket(argument: unknown): Promise<void> {
@@ -1250,8 +1255,15 @@ class TerminalFirstRuntime implements vscode.Disposable {
     return false;
   }
 
-  private async launchClaudeSession(input: { title: string; ticketKey?: string; ticket?: Ticket }): Promise<void> {
-    const launchKey = input.ticketKey ? `ticket:${input.ticketKey}` : 'standalone';
+  private async launchClaudeSession(input: {
+    title: string;
+    ticketKey?: string;
+    ticket?: Ticket;
+    project?: RegisteredProjectCommandTarget;
+  }): Promise<void> {
+    const launchKey = input.ticketKey
+      ? `ticket:${input.ticketKey}`
+      : input.project ? `project:${input.project.projectName}:${input.project.projectPath}` : 'standalone';
     const now = Date.now();
     for (const [key, expiresAt] of this.claudeLaunchCooldownUntil) {
       if (expiresAt <= now) { this.claudeLaunchCooldownUntil.delete(key); }
@@ -1270,7 +1282,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
     let closeSessionIfNotSubmitted = false;
     let session: WorkSessionRecord | undefined;
     try {
-      const launch = this.claudeLaunchConfiguration(input.ticketKey, input.ticket);
+      const launch = this.claudeLaunchConfiguration(input.ticketKey, input.ticket, input.project);
       if (input.ticketKey && input.ticket) {
         const previousSession = getWorkSessionByTicket(input.ticketKey);
         const sessionInput: Parameters<typeof createOrGetWorkSessionByTicket>[0] = {
@@ -1290,7 +1302,10 @@ class TerminalFirstRuntime implements vscode.Disposable {
         session = ticketSession;
         session = this.ensureProviderBindings(ticketSession, input.ticket);
       } else {
-        session = createStandaloneWorkSession({ title: input.title, ...this.standaloneProjectDetails(launch.cwd) });
+        const projectDetails = input.project
+          ? { projectName: input.project.projectName, projectPath: input.project.projectPath }
+          : this.standaloneProjectDetails(launch.cwd);
+        session = createStandaloneWorkSession({ title: input.title, ...projectDetails });
         closeSessionIfNotSubmitted = true;
       }
       const launched = launchClaudeTerminal(vscode.window, launch);
@@ -1309,7 +1324,9 @@ class TerminalFirstRuntime implements vscode.Disposable {
       void vscode.window.showInformationMessage(
         input.ticketKey
           ? `Submitted Claude for ${input.ticketKey}. When Claude is ready, use Insert [${input.ticketKey}] to add the fetched Jira context.`
-          : 'Submitted a standalone Claude command in a focused terminal. No Jira ticket was attached.',
+          : input.project
+            ? `Submitted Claude in ${input.project.displayName || input.project.projectName}. No Jira ticket was attached.`
+            : 'Submitted a standalone Claude command in a focused terminal. No Jira ticket was attached.',
       );
     } catch (error: unknown) {
       if (!commandSubmitted && closeSessionIfNotSubmitted && session) {
@@ -1342,18 +1359,22 @@ class TerminalFirstRuntime implements vscode.Disposable {
     }
   }
 
-  private claudeLaunchConfiguration(ticketKey?: string, ticket?: Ticket): { command: string; name: string; cwd?: string } {
+  private claudeLaunchConfiguration(
+    ticketKey?: string,
+    ticket?: Ticket,
+    project?: RegisteredProjectCommandTarget,
+  ): { command: string; name: string; cwd?: string } {
     const configuration = vscode.workspace.getConfiguration('kronos');
     const command = configuration.get<string>('claudeCommand', DEFAULT_CLAUDE_COMMAND);
     const configuredName = configuration.get<string>('claudeTerminalName', DEFAULT_CLAUDE_TERMINAL_NAME);
     const mode = configuration.get<string>('claudeLaunchCwd', 'ticketProject');
     const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     const ticketProjectPath = ticketLocalProject(this.state.state, ticket)?.path;
-    const cwd = mode === 'home'
+    const cwd = project?.projectPath || (mode === 'home'
       ? os.homedir()
       : mode === 'workspace'
         ? workspacePath || os.homedir()
-        : ticketProjectPath || workspacePath || os.homedir();
+        : ticketProjectPath || workspacePath || os.homedir());
     const branch = readProjectGitBranch(cwd)?.branch;
     const name = buildClaudeTerminalTitle(configuredName, ticketKey, branch);
     return normalizeClaudeTerminalLaunch({ command, name, cwd });
@@ -3143,8 +3164,10 @@ class TerminalFirstRuntime implements vscode.Disposable {
         await this.openProviderEnvironment();
       } else if (action === 'chooseProjectDiscoveryFolders') {
         await this.configureProjectDiscoveryFolders();
-      } else if (action === 'manageLocalProjects') {
-        await this.registerWorkspaceProject();
+      } else if (action === 'openProjectsView') {
+        await vscode.commands.executeCommand('kronosProjects.focus');
+      } else if (action === 'openSessionsView') {
+        await vscode.commands.executeCommand('kronosSessions.focus');
       } else if (action === 'configureProjectIntegrations') {
         this.openProjectIntegrationSetup();
       } else if (action === 'openJiraBoard') {
@@ -3200,8 +3223,9 @@ class TerminalFirstRuntime implements vscode.Disposable {
         title: item.title,
         detail: item.detail,
         status: item.status,
-        action: item.action,
-        actionLabel: item.actionLabel,
+        ...((item.status !== 'pass' || item.actionWhenReady !== false)
+          ? { action: item.action, actionLabel: item.actionLabel }
+          : {}),
       }));
   }
 
@@ -3222,13 +3246,16 @@ class TerminalFirstRuntime implements vscode.Disposable {
   private doctorChecks(readiness: readonly OperationsReadinessItem[]): DoctorCheck[] {
     return readiness
       .filter(item => item.surfaces.includes('doctor'))
-      .map(item => ({
-        name: item.title,
-        status: item.status,
-        detail: item.detail,
-        action: item.action,
-        actionLabel: item.actionLabel,
-      }));
+      .map(item => {
+        const setupOwnsDiscoveryFolders = item.action === 'chooseProjectDiscoveryFolders';
+        return {
+          name: item.title,
+          status: item.status,
+          detail: item.detail,
+          action: setupOwnsDiscoveryFolders ? 'openSetup' : item.action,
+          actionLabel: setupOwnsDiscoveryFolders ? 'Open Guided Setup' : item.actionLabel,
+        };
+      });
   }
 
   private operationsRuntimeGuide(): OperationsRuntimeGuide {

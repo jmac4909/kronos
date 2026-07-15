@@ -20,11 +20,7 @@ export const JIRA_WORK_BOARD_ACTIONS = [
   'openDoctor',
   'openTicketWorkspace',
   'startClaudeForTicket',
-  'manageActiveTerminal',
   'chooseTicketProject',
-  'insertJiraContext',
-  'insertGitLabContext',
-  'insertCiContext',
 ] as const;
 
 export type JiraWorkBoardAction = typeof JIRA_WORK_BOARD_ACTIONS[number];
@@ -189,7 +185,7 @@ ${webviewRuntimeScriptTag(input.nonce, webviewRuntimeScriptUri(input.scriptUri))
     <div class="jira-projects-header"><h2>Local Projects</h2><span class="kronos-subtitle">Branch is read locally from Git HEAD</span></div>
     ${localProjects.length > 0
     ? `<div class="jira-projects-grid">${localProjects.map(project => `<div class="jira-project"><div class="jira-project-heading"><span class="jira-project-name">${escapeHtml(project.displayName || project.name)}</span><span class="jira-project-branch">${escapeHtml(project.branch || (project.available ? 'branch unavailable' : 'folder unavailable'))}</span></div><div class="jira-project-path">${escapeHtml(project.path)}</div></div>`).join('')}</div>`
-    : '<div class="kronos-empty">No local projects registered. Open a project folder or configure discovery roots, then use Discover and Manage Local Projects from the Work toolbar.</div>'}
+    : '<div class="kronos-empty">No local projects registered. Open the Projects view and choose Manage Local Projects; Kronos will offer discovery-folder setup when needed.</div>'}
   </section>
 
   <section class="jira-board-filters" aria-label="Jira board filters">
@@ -220,9 +216,10 @@ ${webviewRuntimeScriptTag(input.nonce, webviewRuntimeScriptUri(input.scriptUri))
 
 function buildDataStatusHtml(presentation: WorkDataPresentation): string {
   const isError = presentation.mode === 'error';
+  const needsRepair = presentation.mode === 'partial' || presentation.mode === 'stale' || presentation.mode === 'error';
   const actions = presentation.mode === 'loading'
-    ? actionButton('openDoctor', 'Doctor', '')
-    : `${actionButton('refreshTickets', 'Refresh Jira', '', presentation.mode !== 'ready')}${actionButton('openDoctor', 'Doctor', '')}`;
+    ? ''
+    : `${actionButton('refreshTickets', 'Refresh Jira', '', presentation.mode !== 'ready')}${needsRepair ? actionButton('openDoctor', 'Doctor', '') : ''}`;
   return `<section id="jira-board-data-status" class="jira-data-status" data-work-data-state="${escapeAttr(presentation.mode)}" role="${isError ? 'alert' : 'status'}" aria-live="${isError ? 'assertive' : 'polite'}">
     <div class="jira-data-status-copy"><div class="jira-data-status-title">${escapeHtml(presentation.title)}</div><div class="jira-data-status-detail">${escapeHtml(presentation.detail)}${presentation.refreshedAt ? ` Last Jira result: ${escapeHtml(presentation.refreshedAt)}.` : ''}</div></div>
     <div class="jira-data-status-actions" aria-label="Jira data actions">${actions}</div>
@@ -365,10 +362,6 @@ function buildTicketCardHtml(ticket: BoardTicket): string {
     <div class="jira-ticket-actions" aria-label="Actions for ${escapeAttr(ticket.key)}">
       ${actionButton('startClaudeForTicket', 'Start Claude', ticket.key, true)}
       ${actionButton('openTicketWorkspace', 'Workspace', ticket.key)}
-      ${actionButton('manageActiveTerminal', 'Manage Focused', ticket.key)}
-      ${actionButton('insertJiraContext', `[${ticket.key}]`, ticket.key)}
-      ${actionButton('insertGitLabContext', 'Insert MR Evidence', ticket.key)}
-      ${actionButton('insertCiContext', 'Insert CI Evidence', ticket.key)}
     </div>
   </article>`;
 }
