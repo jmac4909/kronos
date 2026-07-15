@@ -89,7 +89,11 @@
         { "file": "scripts/run-provider-binding-reconciliation-tests.js", "test": "multi-project reconciliation stays inside the explicitly linked project session set" },
         { "file": "scripts/run-product-surface-contract-tests.js", "test": "Attention group identity is local-project-only and collision-safe for unassigned work" },
         { "file": "scripts/run-product-surface-contract-tests.js", "test": "provider glyphs stay distinct while all Attention severities share green yellow red state colors" },
-        { "file": "scripts/run-conditional-unit-tests.js", "test": "GitLab pipeline snapshot persistence covers missing, complete, malformed, and unsafe identities" }
+        { "file": "scripts/run-conditional-unit-tests.js", "test": "GitLab pipeline snapshot persistence covers missing, complete, malformed, and unsafe identities" },
+        { "file": "scripts/run-attention-conditional-tests.js", "test": "provider read health maps every bounded failure and operator label without leaking raw errors" },
+        { "file": "scripts/run-attention-conditional-tests.js", "test": "provider read fingerprints and incomplete-component lists change only with normalized evidence" },
+        { "file": "scripts/run-attention-conditional-tests.js", "test": "Attention tree groups newest project state, preserves nicknames, and redacts loader failures" },
+        { "file": "scripts/run-attention-conditional-tests.js", "test": "Attention rows exhaust primary actions, provider choices, tooltips, and generic severity icons" }
       ],
       "humanGates": ["live-providers"]
     },
@@ -112,7 +116,9 @@
         { "file": "scripts/run-schema-invariant-tests.js", "test": "Work catalog migrates legacy aliases once and current schema exposes only canonical fields" },
         { "file": "scripts/run-schema-invariant-tests.js", "test": "session and event normalizers strip unknown fields while preserving explicit partial state" },
         { "file": "scripts/run-schema-invariant-tests.js", "test": "dates branches URLs paths and hashes fail closed at record ingress" },
-        { "file": "scripts/run-schema-invariant-tests.js", "test": "future schemas fail closed without compatibility probing" }
+        { "file": "scripts/run-schema-invariant-tests.js", "test": "future schemas fail closed without compatibility probing" },
+        { "file": "scripts/run-attention-conditional-tests.js", "test": "monitor event ledger round-trips full records, filters independently, and acknowledges once" },
+        { "file": "scripts/run-attention-conditional-tests.js", "test": "monitor event normalization fails closed on unsafe identities, payloads, metadata, and paths" }
       ],
       "humanGates": ["windows-native", "multi-window"]
     },

@@ -237,23 +237,36 @@ export class AttentionEventTreeItem extends vscode.TreeItem implements Attention
     this.description = presentation.description;
     this.tooltip = eventTooltip(entry);
     this.iconPath = eventIcon(entry.event);
-    this.command = this.providerUrl
-      ? {
-        command: 'kronos.openProvider',
-        title: 'Open Provider Page',
-        arguments: [target],
-      }
-      : entry.session?.projectName && entry.session.projectPath
-        ? {
-          command: 'kronos.configureProjectIntegrations',
-          title: 'Repair Provider Setup',
-          arguments: [target],
-        }
-        : {
-          command: 'kronos.doctor',
-          title: 'Open Kronos Doctor',
-        };
+    this.command = attentionPrimaryCommand(
+      target,
+      Boolean(entry.session?.projectName && entry.session.projectPath),
+    );
   }
+}
+
+/** Keeps the row's only primary action inside the validated read/setup boundary. */
+export function attentionPrimaryCommand(
+  target: AttentionCommandTarget,
+  hasProjectConfigurationTarget: boolean,
+): vscode.Command {
+  if (target.providerUrl) {
+    return {
+      command: 'kronos.openProvider',
+      title: 'Open Provider Page',
+      arguments: [target],
+    };
+  }
+  if (hasProjectConfigurationTarget) {
+    return {
+      command: 'kronos.configureProjectIntegrations',
+      title: 'Repair Provider Setup',
+      arguments: [target],
+    };
+  }
+  return {
+    command: 'kronos.doctor',
+    title: 'Open Kronos Doctor',
+  };
 }
 
 export class AttentionMessageTreeItem extends vscode.TreeItem {

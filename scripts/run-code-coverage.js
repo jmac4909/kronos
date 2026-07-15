@@ -4,10 +4,13 @@ const { spawnSync } = require('node:child_process');
 const { testSuiteFiles } = require('./test-suite-files.js');
 
 const root = path.resolve(__dirname, '..');
-const COVERAGE_THRESHOLDS = Object.freeze({ lines: 80.5, branches: 71.75, functions: 86.5 });
+const COVERAGE_THRESHOLDS = Object.freeze({ lines: 81, branches: 73, functions: 86.75 });
 const CRITICAL_FILE_THRESHOLDS = Object.freeze({
   'dateValues.js': Object.freeze({ lines: 100, branches: 100, functions: 100 }),
   'gitlabPipelineMonitorStore.js': Object.freeze({ lines: 92, branches: 69, functions: 76 }),
+  'monitorEventStore.js': Object.freeze({ lines: 94, branches: 92, functions: 90 }),
+  'providerReadHealth.js': Object.freeze({ lines: 94, branches: 88, functions: 78 }),
+  'AttentionTreeProvider.js': Object.freeze({ lines: 98, branches: 89, functions: 89 }),
   'ManagedSessionTreeProvider.js': Object.freeze({ lines: 95, branches: 87, functions: 76 }),
   'ProjectTreeProvider.js': Object.freeze({ lines: 96, branches: 78, functions: 82 }),
 });

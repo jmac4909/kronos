@@ -1,20 +1,43 @@
 import * as crypto from 'crypto';
 import type { JenkinsBuildContext } from './jenkinsRestClient';
 import type { SonarBranchContext } from './sonarRestClient';
-import { boundedOperationFailure } from './errorUtils';
+import { boundedOperationFailure, type OperationFailureKind } from './errorUtils';
 
 export type ProviderReadState = 'complete' | 'partial' | 'failed';
 
+const DIRECT_READ_FAILURE_REASONS: Partial<Record<OperationFailureKind, string>> = Object.freeze({
+  authentication: 'authentication',
+  permission: 'permission',
+  not_found: 'not_found',
+  rate_limit: 'rate_limited',
+  response_limit: 'safety_limit',
+  configuration: 'configuration',
+  timeout: 'timeout',
+  dns: 'dns',
+  tls: 'tls',
+  network: 'network',
+});
+
+const READ_FAILURE_LABELS: Readonly<Record<string, string>> = Object.freeze({
+  authentication: 'authentication unavailable',
+  permission: 'read permission unavailable',
+  not_found: 'merge request not found',
+  rate_limited: 'provider rate limited',
+  provider_5xx: 'provider server error',
+  provider_4xx: 'provider request refused',
+  timeout: 'request timed out',
+  dns: 'provider hostname unavailable',
+  tls: 'provider TLS verification failed',
+  safety_limit: 'bounded read limit reached',
+  configuration: 'provider configuration unavailable',
+  network: 'network unavailable',
+  malformed_response: 'provider response was malformed',
+});
+
 export function providerReadFailureReason(error: unknown): string {
   const failure = boundedOperationFailure(error, 'Provider read unavailable.');
-  if (failure.kind === 'authentication' || failure.kind === 'permission') { return failure.kind; }
-  if (failure.kind === 'not_found') { return 'not_found'; }
-  if (failure.kind === 'rate_limit') { return 'rate_limited'; }
-  if (failure.kind === 'response_limit') { return 'safety_limit'; }
-  if (failure.kind === 'configuration') { return 'configuration'; }
-  if (failure.kind === 'timeout' || failure.kind === 'dns' || failure.kind === 'tls' || failure.kind === 'network') {
-    return failure.kind;
-  }
+  const directReason = DIRECT_READ_FAILURE_REASONS[failure.kind];
+  if (directReason) { return directReason; }
   const statusMatch = /\bhttp\s+(\d{3})\b/.exec(failure.summary.toLowerCase());
   const status = statusMatch?.[1] ? Number(statusMatch[1]) : undefined;
   if (status !== undefined && status >= 500) { return 'provider_5xx'; }
@@ -23,20 +46,10 @@ export function providerReadFailureReason(error: unknown): string {
 }
 
 export function readFailureLabel(reason: string): string {
-  if (reason === 'authentication') { return 'authentication unavailable'; }
-  if (reason === 'permission') { return 'read permission unavailable'; }
-  if (reason === 'not_found') { return 'merge request not found'; }
-  if (reason === 'rate_limited') { return 'provider rate limited'; }
-  if (reason === 'provider_5xx') { return 'provider server error'; }
-  if (reason === 'provider_4xx') { return 'provider request refused'; }
-  if (reason === 'timeout') { return 'request timed out'; }
-  if (reason === 'dns') { return 'provider hostname unavailable'; }
-  if (reason === 'tls') { return 'provider TLS verification failed'; }
-  if (reason === 'safety_limit') { return 'bounded read limit reached'; }
-  if (reason === 'configuration') { return 'provider configuration unavailable'; }
-  if (reason === 'network') { return 'network unavailable'; }
-  if (reason === 'malformed_response') { return 'provider response was malformed'; }
-  return 'provider unavailable';
+  if (!Object.prototype.hasOwnProperty.call(READ_FAILURE_LABELS, reason)) {
+    return 'provider unavailable';
+  }
+  return READ_FAILURE_LABELS[reason]!;
 }
 
 export function deterministicReadStatusFingerprint(
