@@ -2,6 +2,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { fork } = require('node:child_process');
 const test = require('node:test');
 
 const root = path.resolve(__dirname, '..');
@@ -64,6 +65,39 @@ test('expired monitor lease is reclaimed while a current owner remains exclusive
   assert.equal(first.renew({ now: new Date('2026-07-15T12:00:02.100Z') }), false);
   assert.equal(first.release(), false);
   assert.equal(recovered.release(), true);
+});
+
+test('distinct processes sharing one Kronos directory enforce one polling owner and clean handoff', async () => {
+  const kronosDir = path.join(tempRoot, 'cross-process-lease');
+  const owner = startLeaseWorker();
+  const contender = startLeaseWorker();
+  try {
+    const first = await leaseWorkerRequest(owner, { command: 'acquire', kronosDir, ttlMs: 30_000 });
+    assert.equal(first.acquired, true);
+    assert.equal(first.pid, owner.pid);
+    assert.match(first.ownerId, /^[a-f0-9]{48}$/);
+
+    const blocked = await leaseWorkerRequest(contender, { command: 'acquire', kronosDir, ttlMs: 30_000 });
+    assert.equal(blocked.acquired, false);
+    assert.equal(blocked.reason, 'active');
+    assert.equal(blocked.pid, contender.pid);
+
+    const ownerRelease = await leaseWorkerRequest(owner, { command: 'release' });
+    assert.equal(ownerRelease.released, true);
+    assert.equal(ownerRelease.pid, owner.pid);
+    const handedOff = await leaseWorkerRequest(contender, { command: 'acquire', kronosDir, ttlMs: 30_000 });
+    assert.equal(handedOff.acquired, true);
+    assert.notEqual(handedOff.ownerId, first.ownerId);
+
+    const reverseBlocked = await leaseWorkerRequest(owner, { command: 'acquire', kronosDir, ttlMs: 30_000 });
+    assert.equal(reverseBlocked.acquired, false);
+    assert.equal(reverseBlocked.reason, 'active');
+    const contenderRelease = await leaseWorkerRequest(contender, { command: 'release' });
+    assert.equal(contenderRelease.released, true);
+    assert.equal(contenderRelease.pid, contender.pid);
+  } finally {
+    await Promise.all([stopLeaseWorker(owner), stopLeaseWorker(contender)]);
+  }
 });
 
 test('lease renewal and release refuse an identity replacement without deleting its owner', () => {
@@ -261,4 +295,77 @@ function writeLeaseFixture(kronosDir, content) {
     fs.chmodSync(leasePath, 0o600);
   }
   return leasePath;
+}
+
+let leaseWorkerRequestId = 0;
+
+function startLeaseWorker() {
+  const worker = fork(path.join(__dirname, 'managed-monitor-lease-worker.js'), [], {
+    cwd: root,
+    stdio: ['ignore', 'ignore', 'pipe', 'ipc'],
+  });
+  let stderr = '';
+  worker.stderr.on('data', chunk => { stderr = `${stderr}${chunk}`.slice(-2_000); });
+  worker.kronosStderr = () => stderr;
+  return worker;
+}
+
+function leaseWorkerRequest(worker, input, timeoutMs = 5_000) {
+  const requestId = ++leaseWorkerRequestId;
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      clearTimeout(timeout);
+      worker.off('message', onMessage);
+      worker.off('exit', onExit);
+      worker.off('error', onError);
+    };
+    const onMessage = message => {
+      if (!message || message.requestId !== requestId) { return; }
+      cleanup();
+      if (message.error) {
+        reject(new Error(`Lease worker rejected ${input.command}: ${message.error}`));
+        return;
+      }
+      resolve(message);
+    };
+    const onExit = (code, signal) => {
+      cleanup();
+      reject(new Error(
+        `Lease worker exited before ${input.command} completed (code ${code}, signal ${signal || 'none'}). ${worker.kronosStderr()}`.trim(),
+      ));
+    };
+    const onError = error => {
+      cleanup();
+      reject(error);
+    };
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(new Error(`Lease worker timed out during ${input.command}. ${worker.kronosStderr()}`.trim()));
+    }, timeoutMs);
+    worker.on('message', onMessage);
+    worker.once('exit', onExit);
+    worker.once('error', onError);
+    worker.send({ requestId, ...input }, error => {
+      if (!error) { return; }
+      cleanup();
+      reject(error);
+    });
+  });
+}
+
+async function stopLeaseWorker(worker) {
+  if (worker.exitCode !== null || worker.signalCode !== null) { return; }
+  try { await leaseWorkerRequest(worker, { command: 'shutdown' }, 1_000); } catch { /* cleanup below */ }
+  if (worker.connected) { worker.disconnect(); }
+  if (worker.exitCode !== null || worker.signalCode !== null) { return; }
+  await new Promise(resolve => {
+    const timer = setTimeout(() => {
+      worker.kill();
+      resolve();
+    }, 1_000);
+    worker.once('exit', () => {
+      clearTimeout(timer);
+      resolve();
+    });
+  });
 }

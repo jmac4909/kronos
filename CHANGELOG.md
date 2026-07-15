@@ -26,6 +26,7 @@ All notable changes to the Kronos preview are documented here.
 
 ### Changed
 
+- Added a separate-process monitoring-lease regression: two independent Node processes sharing one Kronos directory prove exclusive ownership, blocked duplicate polling, release, reverse contention, and clean ownership handoff without substituting for the remaining real Windows/VS Code signoff.
 - Roadmap evidence now distinguishes automated-only, automated-plus-human, human-only, and open requirements instead of merging all operator signoff into one count. Added direct negative regressions proving health-only persistence creates no Attention event and private handoff creation performs no provider, Git, or terminal action.
 - Added five cross-feature journey tests covering stable project identity across Work/Projects/Sessions/Attention, project sessions gaining explicit Jira context without changing kind, manifest-to-runtime Claude mode consistency, safe project unregistration, and rich Work/Jira-board search parity.
 - Expanded Jira free-text filtering consistently across Work and the board to include update timestamps, attachment names and MIME types, MR IID/author/source and target branches, and build numbers in addition to the existing ticket, project, label, MR state, and build-status fields.

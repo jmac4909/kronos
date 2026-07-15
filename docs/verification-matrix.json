@@ -101,6 +101,7 @@
         { "file": "scripts/run-project-catalog-tests.js", "test": "project configuration is canonical at setup and Work catalog ingress" },
         { "file": "scripts/run-persistence-recovery-tests.js", "test": "one private open-flag layer omits unsupported Windows flags and fails closed on POSIX" },
         { "file": "scripts/run-persistence-recovery-tests.js", "test": "expired monitor lease is reclaimed while a current owner remains exclusive" },
+        { "file": "scripts/run-persistence-recovery-tests.js", "test": "distinct processes sharing one Kronos directory enforce one polling owner and clean handoff" },
         { "file": "scripts/run-persistence-recovery-tests.js", "test": "lease renewal and release refuse an identity replacement without deleting its owner" },
         { "file": "scripts/run-persistence-recovery-tests.js", "test": "malformed, partial, oversized, future, and symbolic lease state fails closed" },
         { "file": "scripts/run-persistence-recovery-tests.js", "test": "catalog, session, and monitor readers reject incomplete or unsupported private JSON" },
@@ -789,7 +790,8 @@
     {
       "requirements": ["G06-case-05:8b1bb19e"],
       "automated": [
-        { "file": "scripts/run-unit-tests.js", "test": "managed monitoring lease acquires, blocks duplicate owners, renews, and releases" }
+        { "file": "scripts/run-unit-tests.js", "test": "managed monitoring lease acquires, blocks duplicate owners, renews, and releases" },
+        { "file": "scripts/run-persistence-recovery-tests.js", "test": "distinct processes sharing one Kronos directory enforce one polling owner and clean handoff" }
       ],
       "humanGates": ["multi-window"]
     },
@@ -1532,7 +1534,8 @@
       "requirements": ["G16-case-07:4aae12f1"],
       "automated": [
         { "file": "scripts/run-unit-tests.js", "test": "managed monitoring lease omits unsupported open flags on Windows and fails closed on POSIX" },
-        { "file": "scripts/run-unit-tests.js", "test": "managed monitoring lease acquires, blocks duplicate owners, renews, and releases" }
+        { "file": "scripts/run-unit-tests.js", "test": "managed monitoring lease acquires, blocks duplicate owners, renews, and releases" },
+        { "file": "scripts/run-persistence-recovery-tests.js", "test": "distinct processes sharing one Kronos directory enforce one polling owner and clean handoff" }
       ],
       "humanGates": ["windows-native", "multi-window"]
     },
