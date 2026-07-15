@@ -140,6 +140,9 @@
       "id": "provider-variants",
       "goals": ["G13"],
       "automated": [
+        { "file": "scripts/run-provider-contract-tests.js", "test": "provider contract matrix covers requests, bounds, normalization, completeness, and errors for every provider" },
+        { "file": "scripts/run-provider-contract-tests.js", "test": "sanitized provider fixture set is bounded, credential-free, and reserved-origin only" },
+        { "file": "scripts/run-provider-contract-tests.js", "test": "GitLab enterprise paths retain paginated evidence and explain permission and rate-limit gaps" },
         { "file": "scripts/run-unit-tests.js", "test": "Jira Work search uses GET token pagination and bounded fields" },
         { "file": "scripts/run-unit-tests.js", "test": "Jenkins resolves multibranch parents and scopes the TLS exception to Jenkins requests" },
         { "file": "scripts/run-unit-tests.js", "test": "GitLab discovery falls back to ticket key and refuses ambiguous matches" },
@@ -1247,6 +1250,86 @@
         { "file": "scripts/run-provider-readiness-tests.js", "test": "one readiness snapshot feeds Setup and Doctor and gives every non-ready row an action" },
         { "file": "scripts/run-unit-tests.js", "test": "Setup and Doctor render bounded operation dashboards with allowlisted actions" }
       ]
+    },
+    {
+      "requirements": ["G13-goal:e06a716f"],
+      "automated": [
+        { "file": "scripts/run-provider-contract-tests.js", "test": "provider contract matrix covers requests, bounds, normalization, completeness, and errors for every provider" },
+        { "file": "scripts/run-provider-contract-tests.js", "test": "GitLab enterprise paths retain paginated evidence and explain permission and rate-limit gaps" },
+        { "file": "scripts/run-unit-tests.js", "test": "all provider evidence paths share the complete credential redaction vocabulary" },
+        { "file": "scripts/run-unit-tests.js", "test": "runtime dependency surface is Node and VS Code only" }
+      ],
+      "humanGates": ["live-providers"]
+    },
+    {
+      "requirements": ["G13-case-01:b42ac691"],
+      "automated": [
+        { "file": "scripts/run-unit-tests.js", "test": "Jira Work search uses GET token pagination and bounded fields" },
+        { "file": "scripts/run-unit-tests.js", "test": "default Jira Work search fetches active and recent completed tickets for local filtering" },
+        { "file": "scripts/run-unit-tests.js", "test": "Jira ticket context asks for newest comments first but renders retained comments chronologically" },
+        { "file": "scripts/run-unit-tests.js", "test": "Jira downloads arbitrary attachment types as private raw files for Claude to inspect" },
+        { "file": "scripts/run-unit-tests.js", "test": "Jira artifacts retain custom fields behind an untrusted-data boundary" },
+        { "file": "scripts/run-jira-work-board-tests.js", "test": "completed status detection supports common names and explicit team statuses" },
+        { "file": "scripts/run-provider-contract-tests.js", "test": "sanitized Jira fixture retains rich fields and prior rows after a partial page read" }
+      ]
+    },
+    {
+      "requirements": ["G13-case-02:59922c61"],
+      "automated": [
+        { "file": "scripts/run-provider-contract-tests.js", "test": "GitLab enterprise paths retain paginated evidence and explain permission and rate-limit gaps" },
+        { "file": "scripts/run-provider-contract-tests.js", "test": "sanitized GitLab fixture normalizes enterprise MR review, pipeline, job, and test evidence" },
+        { "file": "scripts/run-unit-tests.js", "test": "GitLab discovery selects a unique current-branch MR before ticket search" },
+        { "file": "scripts/run-unit-tests.js", "test": "GitLab discovery falls back to ticket key and refuses ambiguous matches" }
+      ]
+    },
+    {
+      "requirements": ["G13-case-03:93220be9"],
+      "automated": [
+        { "file": "scripts/run-provider-contract-tests.js", "test": "sanitized Jenkins fixture resolves a multibranch build and treats missing stages as optional" },
+        { "file": "scripts/run-unit-tests.js", "test": "Jenkins resolves multibranch parents and scopes the TLS exception to Jenkins requests" },
+        { "file": "scripts/run-unit-tests.js", "test": "Jenkins context extracts only literal SonarQube configuration from bounded config.xml" },
+        { "file": "scripts/run-failure-contract-tests.js", "test": "Jenkins keeps the valid build while unavailable JUnit and stage APIs stay explicit" },
+        { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "Jenkins and SonarQube transition matrices cover every declared CI transition" }
+      ]
+    },
+    {
+      "requirements": ["G13-case-04:a82a8712"],
+      "automated": [
+        { "file": "scripts/run-provider-contract-tests.js", "test": "sanitized SonarQube fixture retains branch-qualified gate, measures, and issues" },
+        { "file": "scripts/run-unit-tests.js", "test": "provider URLs retain only the SonarQube dashboard routing query" },
+        { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "Attention Jenkins builds and SonarQube branches are validated and latest-first" }
+      ]
+    },
+    {
+      "requirements": ["G13-case-05:10289db2"],
+      "automated": [
+        { "file": "scripts/run-provider-contract-tests.js", "test": "GitLab enterprise paths retain paginated evidence and explain permission and rate-limit gaps" },
+        { "file": "scripts/run-failure-contract-tests.js", "test": "failure vocabulary distinguishes configuration, credentials, permission, transport, and bounded payload faults" },
+        { "file": "scripts/run-failure-contract-tests.js", "test": "Jira retains successful ticket and recent comment evidence when later comments and attachments are partial" },
+        { "file": "scripts/run-failure-contract-tests.js", "test": "Jenkins keeps the valid build while unavailable JUnit and stage APIs stay explicit" },
+        { "file": "scripts/run-provider-contract-tests.js", "test": "sanitized provider fixture set is bounded, credential-free, and reserved-origin only" }
+      ]
+    },
+    {
+      "requirements": ["G13-evidence-01:018ecd61"],
+      "automated": [
+        { "file": "scripts/run-provider-contract-tests.js", "test": "provider contract matrix covers requests, bounds, normalization, completeness, and errors for every provider" }
+      ]
+    },
+    {
+      "requirements": ["G13-evidence-02:9aefc129"],
+      "automated": [
+        { "file": "scripts/run-provider-contract-tests.js", "test": "sanitized provider fixture set is bounded, credential-free, and reserved-origin only" },
+        { "file": "scripts/run-provider-contract-tests.js", "test": "sanitized Jira fixture retains rich fields and prior rows after a partial page read" },
+        { "file": "scripts/run-provider-contract-tests.js", "test": "sanitized GitLab fixture normalizes enterprise MR review, pipeline, job, and test evidence" },
+        { "file": "scripts/run-provider-contract-tests.js", "test": "sanitized Jenkins fixture resolves a multibranch build and treats missing stages as optional" },
+        { "file": "scripts/run-provider-contract-tests.js", "test": "sanitized SonarQube fixture retains branch-qualified gate, measures, and issues" },
+        { "file": "scripts/run-unit-tests.js", "test": "runtime dependency surface is Node and VS Code only" }
+      ]
+    },
+    {
+      "requirements": ["G13-evidence-03:47f18393"],
+      "humanGates": ["live-providers"]
     },
     {
       "requirements": ["G16-goal:b55b5b6c"],

@@ -8,8 +8,40 @@ const fixtureRoot = path.join(root, 'test-fixtures', 'providers');
 const stateStore = require('../out/services/stateStore.js');
 const jiraWorkCatalog = require('../out/services/jiraWorkCatalog.js');
 const gitlabContext = require('../out/services/gitlabMergeRequestContext.js');
+const { GitLabRestClient } = require('../out/services/gitlabRestClient.js');
 const { JenkinsRestClient } = require('../out/services/jenkinsRestClient.js');
 const { SonarRestClient } = require('../out/services/sonarRestClient.js');
+
+test('provider contract matrix covers requests, bounds, normalization, completeness, and errors for every provider', () => {
+  const matrix = fs.readFileSync(path.join(root, 'docs', 'provider-contract-matrix.md'), 'utf8');
+  const heading = '| Provider | Requests and enterprise variants | Collection and response bounds | Normalization and retained evidence | Completeness and optional evidence | Error behavior |';
+  assert.match(matrix, new RegExp(escapeRegex(heading)));
+  for (const provider of ['Jira', 'GitLab', 'Jenkins', 'SonarQube']) {
+    const row = matrix.split('\n').find(line => line.startsWith(`| ${provider} |`));
+    assert.ok(row, `${provider} contract row is present`);
+    assert.equal(row.split('|').length, 8, `${provider} retains every contract column`);
+  }
+  assert.match(matrix, /origin-pinned, read-only HTTP requests/);
+  assert.match(matrix, /no provider SDK or third-party runtime library/);
+});
+
+test('sanitized provider fixture set is bounded, credential-free, and reserved-origin only', () => {
+  const fixtureNames = fs.readdirSync(fixtureRoot).sort();
+  assert.deepEqual(fixtureNames, [
+    'gitlab-merge-request-enterprise.json',
+    'jenkins-multibranch.json',
+    'jira-work-partial.json',
+    'sonarqube-branch.json',
+  ]);
+  for (const name of fixtureNames) {
+    const raw = fs.readFileSync(path.join(fixtureRoot, name), 'utf8');
+    assert.ok(Buffer.byteLength(raw, 'utf8') < 16 * 1024, `${name} stays inside the fixture bound`);
+    assert.doesNotMatch(raw, /(?:authorization|access[_-]?token|api[_-]?token|private[_-]?token|password|secret)\s*[":=]/i);
+    for (const match of raw.matchAll(/https?:\/\/[^\s"<>]+/g)) {
+      assert.match(new URL(match[0]).hostname, /\.(?:example|invalid)$/);
+    }
+  }
+});
 
 test('sanitized Jira fixture retains rich fields and prior rows after a partial page read', () => {
   const fixture = readFixture('jira-work-partial.json');
@@ -45,6 +77,54 @@ test('sanitized GitLab fixture normalizes enterprise MR review, pipeline, job, a
   assert.equal(context.testReport.failedCount, fixture.expected.failedTests);
   assert.equal(context.completeness.complete, true);
   assert.equal(Object.hasOwn(context.mergeRequest, 'provider_extra'), false);
+});
+
+test('GitLab enterprise paths retain paginated evidence and explain permission and rate-limit gaps', async () => {
+  const fixture = readFixture('gitlab-merge-request-enterprise.json');
+  const requests = [];
+  const encodedProject = encodeURIComponent(fixture.projectRef);
+  const mergeRequestPath = `/api/v4/projects/${encodedProject}/merge_requests/${fixture.iid}`;
+  const client = new GitLabRestClient({
+    env: { GITLAB_API_BASE_URL: 'https://gitlab.example/api/v4', GITLAB_TOKEN: 'fixture-only' },
+    transport: async request => {
+      requests.push(request);
+      const url = new URL(request.url);
+      if (url.pathname === `/api/v4/projects/${encodedProject}`) {
+        return jsonResponse({ id: 4815, provider_extra: true });
+      }
+      if (url.pathname === `/api/v4/projects/4815/merge_requests/${fixture.iid}`) {
+        return jsonResponse(fixture.snapshot.mr);
+      }
+      if (url.pathname === mergeRequestPath) { return jsonResponse(fixture.snapshot.mr); }
+      if (url.pathname === `${mergeRequestPath}/notes`) {
+        return Number(url.searchParams.get('page')) === 1
+          ? jsonResponse(fixture.snapshot.notes, { 'x-next-page': '2' })
+          : { statusCode: 429, body: '{"private":"not displayed"}', headers: {} };
+      }
+      if (url.pathname === `${mergeRequestPath}/discussions`) { return jsonResponse(fixture.snapshot.discussions); }
+      if (url.pathname === `${mergeRequestPath}/approvals`) {
+        return { statusCode: 403, body: '{"private":"not displayed"}', headers: {} };
+      }
+      if (url.pathname === `${mergeRequestPath}/diffs`) { return jsonResponse(fixture.snapshot.diffs); }
+      if (url.pathname === `${mergeRequestPath}/pipelines`) { return jsonResponse([]); }
+      return { statusCode: 404, body: '', headers: {} };
+    },
+  });
+
+  assert.equal(await client.projectId(fixture.projectRef), 4815);
+  assert.equal((await client.mergeRequest({ projectIdOrPath: '4815', iid: fixture.iid })).iid, fixture.iid);
+  const snapshot = await client.mergeRequestContext({ projectIdOrPath: fixture.projectRef, iid: fixture.iid });
+  assert.equal(snapshot.notes.length, fixture.snapshot.notes.length);
+  assert.equal(snapshot.discussions.length, fixture.snapshot.discussions.length);
+  assert.equal(snapshot.completeness.notesComplete, false);
+  assert.equal(snapshot.approvals, undefined);
+  assert.match(snapshot.completeness.warnings.join(' '), /HTTP 429/);
+  assert.match(snapshot.completeness.warnings.join(' '), /HTTP 403/);
+  assert.doesNotMatch(snapshot.completeness.warnings.join(' '), /"private"|not displayed"/);
+  assert.ok(requests.every(request => request.method === 'GET'));
+  assert.ok(requests.every(request => new URL(request.url).origin === 'https://gitlab.example'));
+  assert.ok(requests.some(request => request.url.includes(`/projects/${encodedProject}/`)));
+  assert.ok(requests.some(request => request.url.includes('/projects/4815/merge_requests/')));
 });
 
 test('sanitized Jenkins fixture resolves a multibranch build and treats missing stages as optional', async () => {
@@ -97,6 +177,10 @@ function readFixture(name) {
   return JSON.parse(fs.readFileSync(path.join(fixtureRoot, name), 'utf8'));
 }
 
-function jsonResponse(value) {
-  return { statusCode: 200, body: JSON.stringify(value), headers: {} };
+function jsonResponse(value, headers = {}) {
+  return { statusCode: 200, body: JSON.stringify(value), headers };
+}
+
+function escapeRegex(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

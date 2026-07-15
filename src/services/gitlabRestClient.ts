@@ -1,6 +1,6 @@
 import * as http from 'http';
 import * as https from 'https';
-import { unknownErrorMessage } from './errorUtils';
+import { unknownErrorCode, unknownErrorMessage } from './errorUtils';
 import { parseJsonWithLabel } from './jsonFiles';
 import { arrayFromUnknown, isRecord, optionalFiniteNumberFromUnknown, optionalTrimmedStringFromUnknown } from './records';
 
@@ -245,8 +245,8 @@ export class GitLabRestClient {
     const optional = async (path: string, label: string): Promise<unknown | undefined> => {
       try {
         return (await request(path, label)).value;
-      } catch {
-        warnings.push(`${label} was unavailable; the GitLab monitor snapshot is partial.`);
+      } catch (error: unknown) {
+        warnings.push(`${safeGitLabPartialWarning(label, error)} The GitLab monitor snapshot is partial.`);
         return undefined;
       }
     };
@@ -363,8 +363,8 @@ export class GitLabRestClient {
     ): Promise<unknown | undefined> => {
       try {
         return (await request(path, label, query)).value;
-      } catch (e: unknown) {
-        warnings.push(`${label} was unavailable; the GitLab context is partial.`);
+      } catch (error: unknown) {
+        warnings.push(`${safeGitLabPartialWarning(label, error)} The GitLab context is partial.`);
         return undefined;
       }
     };
@@ -495,8 +495,11 @@ export class GitLabRestClient {
       let response: Awaited<ReturnType<typeof request>>;
       try {
         response = await request(path, `${label} page ${page}`, { ...query, page, per_page: 100 });
-      } catch {
-        warnings.push(`${label} stopped at page ${page}; ${values.length} previously fetched item${values.length === 1 ? '' : 's'} were retained.`);
+      } catch (error: unknown) {
+        warnings.push(
+          `${label} stopped at page ${page}; ${values.length} previously fetched item${values.length === 1 ? '' : 's'} were retained. `
+          + safeGitLabPartialWarning(`${label} page ${page}`, error),
+        );
         return { values, complete: false, warnings };
       }
       pagesFetched += 1;
@@ -642,6 +645,12 @@ class GitLabRestError extends Error {
     Object.setPrototypeOf(this, GitLabRestError.prototype);
     this.name = 'GitLabRestError';
   }
+}
+
+function safeGitLabPartialWarning(label: string, error: unknown): string {
+  if (error instanceof GitLabRestError) { return error.message; }
+  const code = unknownErrorCode(error);
+  return `${label} could not be fetched${code ? ` (${code})` : ''}; response content is not displayed.`;
 }
 
 function mergeRequestPath(target: GitLabMergeRequestTarget): string {
