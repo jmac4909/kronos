@@ -1,17 +1,43 @@
 {
   "name": "kronos",
-  "displayName": "Kronos — Claude Code Orchestrator",
-  "description": "Multi-project orchestration dashboard for Claude Code. Track projects, tickets, MRs, builds, and overnight automation from VS Code.",
+  "displayName": "Kronos — Terminal Work Companion",
+  "description": "Terminal-first Jira, merge-request, pipeline, and audit context for interactive sessions. Kronos reads, inserts, monitors, audits, and launches Claude only from an explicit operator action.",
   "version": "0.1.0",
   "publisher": "jmacke01",
-  "license": "UNLICENSED",
+  "author": {
+    "name": "Jeremy Mackey",
+    "url": "https://github.com/jmac4909"
+  },
+  "license": "SEE LICENSE IN LICENSE",
+  "preview": true,
+  "homepage": "https://github.com/jmac4909/Kronos#readme",
+  "bugs": {
+    "url": "https://github.com/jmac4909/Kronos/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jmac4909/kronos.git"
+  },
   "keywords": [
-    "claude",
-    "orchestration",
+    "vscode-extension",
+    "typescript",
+    "terminal",
     "jira",
     "gitlab",
-    "automation"
+    "jenkins",
+    "sonarqube",
+    "pipeline",
+    "audit",
+    "claude-code",
+    "ai-assisted-development",
+    "developer-tools",
+    "human-in-the-loop"
   ],
+  "icon": "media/kronos-marketplace-icon.png",
+  "galleryBanner": {
+    "color": "#0b1220",
+    "theme": "dark"
+  },
   "engines": {
     "vscode": "^1.85.0"
   },
@@ -25,7 +51,7 @@
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": "limited",
-      "description": "Read-only Kronos dashboards and review panels are available in Restricted Mode. Dispatching agents, modifying repositories, publishing evidence, and destructive cleanup require workspace trust."
+      "description": "Kronos reads provider context, writes private local context and audit records, and can insert non-submitting references into an operator-owned terminal. Claude launch is disabled in untrusted workspaces. Kronos never executes workspace code, runs project commands, or changes Git."
     }
   },
   "contributes": {
@@ -41,1193 +67,593 @@
     "views": {
       "kronos": [
         {
-          "id": "kronosProjects",
-          "name": "Projects"
-        },
-        {
-          "id": "kronosTickets",
-          "name": "Tickets"
-        },
-        {
-          "id": "kronosQueue",
-          "name": "Work Queue"
-        },
-        {
-          "id": "kronosReview",
-          "name": "Review"
+          "id": "kronosWork",
+          "name": "Work"
         },
         {
           "id": "kronosSessions",
           "name": "Sessions"
         },
         {
-          "id": "kronosTasks",
-          "name": "Ad-hoc Tasks"
+          "id": "kronosProjects",
+          "name": "Projects"
+        },
+        {
+          "id": "kronosAttention",
+          "name": "Attention"
         }
       ]
     },
     "commands": [
       {
-        "command": "kronos.refresh",
-        "title": "Kronos: Pull Tickets from Jira",
+        "command": "kronos.refreshTickets",
+        "title": "Kronos: Refresh Jira Tickets",
         "icon": "$(refresh)"
       },
       {
-        "command": "kronos.pollReviewMergeRequests",
-        "title": "Kronos: Poll MRs Now",
-        "icon": "$(refresh)"
-      },
-      {
-        "command": "kronos.openReview",
-        "title": "Kronos: Open Review",
-        "icon": "$(open-preview)"
-      },
-      {
-        "command": "kronos.refreshProject",
-        "title": "Kronos: Refresh Project",
-        "icon": "$(refresh)"
-      },
-      {
-        "command": "kronos.openExternalUrl",
-        "title": "Kronos: Open External URL",
-        "icon": "$(link-external)"
-      },
-      {
-        "command": "kronos.filterTickets",
-        "title": "Kronos: Filter Tickets",
-        "icon": "$(filter)"
-      },
-      {
-        "command": "kronos.ticketSavedView",
-        "title": "Kronos: Ticket Saved View",
-        "icon": "$(list-selection)"
-      },
-      {
-        "command": "kronos.clearTicketFilters",
-        "title": "Kronos: Clear Ticket Filters",
-        "icon": "$(clear-all)"
-      },
-      {
-        "command": "kronos.filterReviews",
-        "title": "Kronos: Filter Reviews",
-        "icon": "$(filter)"
-      },
-      {
-        "command": "kronos.clearReviewFilters",
-        "title": "Kronos: Clear Review Filters",
-        "icon": "$(clear-all)"
-      },
-      {
-        "command": "kronos.discover",
-        "title": "Kronos: Discover Projects",
-        "icon": "$(search)"
-      },
-      {
-        "command": "kronos.register",
-        "title": "Kronos: Register Project",
-        "icon": "$(add)"
-      },
-      {
-        "command": "kronos.implement",
-        "title": "Kronos: Implement Ticket",
-        "icon": "$(play)"
-      },
-      {
-        "command": "kronos.deployMonitor",
-        "title": "Kronos: Monitor Deploy",
-        "icon": "$(eye)"
-      },
-      {
-        "command": "kronos.verifyFix",
-        "title": "Kronos: Verify Fix",
-        "icon": "$(check)"
-      },
-      {
-        "command": "kronos.startNext",
-        "title": "Kronos: Start Next Queue Item",
-        "icon": "$(play-circle)"
-      },
-      {
-        "command": "kronos.nextBestAction",
-        "title": "Kronos: Next Best Action",
-        "icon": "$(compass)"
-      },
-      {
-        "command": "kronos.queuePlanner",
-        "title": "Kronos: Queue Planner",
-        "icon": "$(list-tree)"
-      },
-      {
-        "command": "kronos.backlogTriage",
-        "title": "Kronos: Backlog Triage",
-        "icon": "$(list-unordered)"
-      },
-      {
-        "command": "kronos.projectBatchPlan",
-        "title": "Kronos: Project Batch Plan",
-        "icon": "$(project)"
-      },
-      {
-        "command": "kronos.releaseBatchPlan",
-        "title": "Kronos: Release Batch Plan",
-        "icon": "$(milestone)"
-      },
-      {
-        "command": "kronos.collisionReport",
-        "title": "Kronos: Collision Report",
-        "icon": "$(warning)"
-      },
-      {
-        "command": "kronos.planNextTwoHours",
-        "title": "Kronos: Plan Next 2 Hours",
-        "icon": "$(clockface)"
-      },
-      {
-        "command": "kronos.overnightCandidates",
-        "title": "Kronos: Overnight Candidates",
-        "icon": "$(watch)"
-      },
-      {
-        "command": "kronos.addTask",
-        "title": "Kronos: Add Ad-hoc Task",
-        "icon": "$(add)"
-      },
-      {
-        "command": "kronos.completeTask",
-        "title": "Kronos: Complete Task",
-        "icon": "$(check)"
-      },
-      {
-        "command": "kronos.openDashboard",
-        "title": "Kronos: Open Dashboard",
-        "icon": "$(dashboard)"
-      },
-      {
-        "command": "kronos.setupWizard",
-        "title": "Kronos: Setup Wizard",
-        "icon": "$(checklist)"
-      },
-      {
-        "command": "kronos.mrAutopilot",
-        "title": "Kronos: MR Autopilot",
-        "icon": "$(run-all)"
-      },
-      {
-        "command": "kronos.specBeanstalk",
-        "title": "Kronos: Spec Beanstalk",
-        "icon": "$(notebook)"
-      },
-      {
-        "command": "kronos.specBeanstalkGenerate",
-        "title": "Kronos: Generate Spec from Excel",
-        "icon": "$(export)"
-      },
-      {
-        "command": "kronos.specBeanstalkStart",
-        "title": "Kronos: Start Spec Beanstalk",
-        "icon": "$(play)"
-      },
-      {
-        "command": "kronos.openProject",
-        "title": "Kronos: Open in Terminal",
-        "icon": "$(terminal)"
-      },
-      {
-        "command": "kronos.openInClaude",
-        "title": "Kronos: Open in Claude Code",
-        "icon": "$(comment-discussion)"
-      },
-      {
-        "command": "kronos.registerDiscovered",
-        "title": "Kronos: Register Discovered Project",
-        "icon": "$(add)"
-      },
-      {
-        "command": "kronos.startQueueItem",
-        "title": "Kronos: Start",
-        "icon": "$(play)"
-      },
-      {
-        "command": "kronos.setup",
-        "title": "Kronos: Setup / Auth Check",
-        "icon": "$(gear)"
-      },
-      {
-        "command": "kronos.settings",
-        "title": "Kronos: Settings",
-        "icon": "$(settings-gear)"
-      },
-      {
-        "command": "kronos.queueMoveUp",
-        "title": "Kronos: Move Up",
-        "icon": "$(arrow-up)"
-      },
-      {
-        "command": "kronos.queueMoveDown",
-        "title": "Kronos: Move Down",
-        "icon": "$(arrow-down)"
-      },
-      {
-        "command": "kronos.queuePinTop",
-        "title": "Kronos: Pin to Top",
-        "icon": "$(pin)"
-      },
-      {
-        "command": "kronos.openMrDiff",
-        "title": "Kronos: View Diff",
-        "icon": "$(diff)"
-      },
-      {
-        "command": "kronos.openMrInGitlab",
-        "title": "Kronos: Open in GitLab",
-        "icon": "$(link-external)"
-      },
-      {
-        "command": "kronos.sonarScan",
-        "title": "Kronos: Run SonarQube Scan",
-        "icon": "$(shield)"
-      },
-      {
-        "command": "kronos.sonarReport",
-        "title": "Kronos: SonarQube Report",
-        "icon": "$(graph)"
-      },
-      {
-        "command": "kronos.linkMrToTicket",
-        "title": "Kronos: Link MR to Ticket",
-        "icon": "$(link)"
-      },
-      {
-        "command": "kronos.sonarCombined",
-        "title": "Kronos: Fix Sonar on All Branches",
-        "icon": "$(shield)"
-      },
-      {
-        "command": "kronos.fixSonarIssues",
-        "title": "Kronos: Fix SonarQube Issues",
-        "icon": "$(tools)"
-      },
-      {
-        "command": "kronos.fixFinding",
-        "title": "Kronos: Fix Verification Finding",
-        "icon": "$(tools)"
-      },
-      {
-        "command": "kronos.verifyDevelop",
-        "title": "Kronos: Verify Develop",
-        "icon": "$(beaker)"
-      },
-      {
-        "command": "kronos.resolveConflicts",
-        "title": "Kronos: Resolve Merge Conflicts",
-        "icon": "$(merge)"
-      },
-      {
-        "command": "kronos.verifyCombined",
-        "title": "Kronos: Verify All Combined",
-        "icon": "$(beaker)"
-      },
-      {
-        "command": "kronos.verifyTest",
-        "title": "Kronos: Verify in TEST",
-        "icon": "$(cloud)"
-      },
-      {
-        "command": "kronos.rejectReview",
-        "title": "Kronos: Send Back to Queue",
-        "icon": "$(debug-reverse-continue)"
-      },
-      {
-        "command": "kronos.removeProject",
-        "title": "Kronos: Remove Project",
-        "icon": "$(trash)"
-      },
-      {
-        "command": "kronos.verifyLocal",
-        "title": "Kronos: Verify Ticket Locally",
-        "icon": "$(beaker)"
-      },
-      {
-        "command": "kronos.verifyRemote",
-        "title": "Kronos: Verify Ticket Remotely",
-        "icon": "$(cloud)"
-      },
-      {
-        "command": "kronos.jiraBoard",
-        "title": "Kronos: Jira Board",
+        "command": "kronos.openJiraBoard",
+        "title": "Kronos: Open Jira Work Board",
         "icon": "$(layout)"
       },
       {
-        "command": "kronos.viewTicket",
-        "title": "Kronos: View Ticket Details",
+        "command": "kronos.filterWork",
+        "title": "Kronos: Filter Work",
+        "icon": "$(filter)"
+      },
+      {
+        "command": "kronos.clearWorkFilter",
+        "title": "Kronos: Clear Work Filter",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "kronos.openTicketWorkspace",
+        "title": "Kronos: Open Ticket Workspace",
         "icon": "$(open-preview)"
       },
       {
-        "command": "kronos.addEvidence",
-        "title": "Kronos: Add Evidence Note",
-        "icon": "$(notebook)"
+        "command": "kronos.configureProjectDiscoveryFolders",
+        "title": "Kronos: Choose Project Discovery Folders",
+        "icon": "$(folder-opened)"
       },
       {
-        "command": "kronos.addEvidenceCheck",
-        "title": "Kronos: Add Evidence Check",
-        "icon": "$(beaker)"
+        "command": "kronos.registerWorkspaceProject",
+        "title": "Kronos: Manage Local Projects",
+        "icon": "$(folder-library)"
       },
       {
-        "command": "kronos.recordEnvironmentResult",
-        "title": "Kronos: Record Environment Result",
-        "icon": "$(server-environment)"
+        "command": "kronos.chooseTicketProject",
+        "title": "Kronos: Choose Ticket Project and Branch",
+        "icon": "$(repo)"
       },
       {
-        "command": "kronos.extractAcceptanceCriteria",
-        "title": "Kronos: Extract Acceptance Criteria",
-        "icon": "$(checklist)"
-      },
-      {
-        "command": "kronos.updateAcceptanceCriteria",
-        "title": "Kronos: Update Acceptance Criteria",
-        "icon": "$(check-all)"
-      },
-      {
-        "command": "kronos.evidenceGate",
-        "title": "Kronos: Evidence Gate",
-        "icon": "$(verified)"
-      },
-      {
-        "command": "kronos.exportEvidence",
-        "title": "Kronos: Export / Copy Evidence",
-        "icon": "$(export)"
-      },
-      {
-        "command": "kronos.evidenceHandoff",
-        "title": "Kronos: Evidence Handoff",
-        "icon": "$(comment-discussion)"
-      },
-      {
-        "command": "kronos.publishEvidence",
-        "title": "Kronos: Publish Evidence",
-        "icon": "$(cloud-upload)"
-      },
-      {
-        "command": "kronos.addToQueue",
-        "title": "Kronos: Add to Queue",
+        "command": "kronos.newClaudeSession",
+        "title": "Kronos: New Claude Session",
         "icon": "$(add)"
       },
       {
-        "command": "kronos.removeFromQueue",
-        "title": "Kronos: Remove from Queue",
-        "icon": "$(trash)"
+        "command": "kronos.startClaudeForTicket",
+        "title": "Kronos: Start Claude for Ticket",
+        "icon": "$(terminal)"
       },
       {
-        "command": "kronos.linkTicket",
-        "title": "Kronos: Link to Project",
-        "icon": "$(link)"
+        "command": "kronos.manageActiveTerminal",
+        "title": "Kronos: Manage Focused Terminal",
+        "icon": "$(terminal)"
       },
       {
-        "command": "kronos.unlinkTicket",
-        "title": "Kronos: Unlink from Project",
-        "icon": "$(close)"
+        "command": "kronos.insertJiraContext",
+        "title": "Kronos: Insert Jira Context",
+        "icon": "$(symbol-keyword)"
       },
       {
-        "command": "kronos.sessionHistory",
-        "title": "Kronos: Session History",
-        "icon": "$(history)"
+        "command": "kronos.insertOtherTicket",
+        "title": "Kronos: Insert Other Ticket into Session",
+        "icon": "$(symbol-keyword)"
       },
       {
-        "command": "kronos.stats",
-        "title": "Kronos: Session Stats",
-        "icon": "$(graph)"
+        "command": "kronos.insertGitLabContext",
+        "title": "Kronos: Insert Merge Request and Pipeline Context",
+        "icon": "$(git-merge)"
       },
       {
-        "command": "kronos.agentQualityScore",
-        "title": "Kronos: Agent Quality Score",
-        "icon": "$(pulse)"
+        "command": "kronos.insertCiContext",
+        "title": "Kronos: Insert Jenkins and SonarQube Context",
+        "icon": "$(beaker)"
       },
       {
-        "command": "kronos.trendMetrics",
-        "title": "Kronos: Trend Metrics",
-        "icon": "$(graph-line)"
-      },
-      {
-        "command": "kronos.agingReport",
-        "title": "Kronos: Aging Report",
-        "icon": "$(watch)"
-      },
-      {
-        "command": "kronos.runCenter",
-        "title": "Kronos: Run Center",
-        "icon": "$(server-process)"
-      },
-      {
-        "command": "kronos.openRunArtifact",
-        "title": "Kronos: Open Run Log / Workspace",
-        "icon": "$(go-to-file)"
-      },
-      {
-        "command": "kronos.retryRun",
-        "title": "Kronos: Retry Run from Saved Prompt",
-        "icon": "$(debug-rerun)"
-      },
-      {
-        "command": "kronos.resumeRun",
-        "title": "Kronos: Resume Run",
-        "icon": "$(debug-continue)"
-      },
-      {
-        "command": "kronos.pauseRun",
-        "title": "Kronos: Pause Run",
-        "icon": "$(debug-pause)"
-      },
-      {
-        "command": "kronos.continueRun",
-        "title": "Kronos: Continue Run",
-        "icon": "$(debug-continue)"
-      },
-      {
-        "command": "kronos.archiveRun",
-        "title": "Kronos: Archive Run",
+        "command": "kronos.openContextBasket",
+        "title": "Kronos: Open Context Basket",
         "icon": "$(archive)"
       },
       {
-        "command": "kronos.cancelRun",
-        "title": "Kronos: Cancel Run",
-        "icon": "$(debug-stop)"
+        "command": "kronos.searchLocalEvidence",
+        "title": "Kronos: Search Local Sessions and Evidence",
+        "icon": "$(search)"
+      },
+      {
+        "command": "kronos.createLocalHandoff",
+        "title": "Kronos: Create Private Local Handoff",
+        "icon": "$(export)"
+      },
+      {
+        "command": "kronos.pollManagedWorkSessions",
+        "title": "Kronos: Poll Managed Providers",
+        "icon": "$(sync)"
+      },
+      {
+        "command": "kronos.openWorkSessionAudit",
+        "title": "Kronos: Open Work Session Audit",
+        "icon": "$(history)"
+      },
+      {
+        "command": "kronos.focusWorkSessionTerminal",
+        "title": "Kronos: Open Session Terminal",
+        "icon": "$(terminal)"
+      },
+      {
+        "command": "kronos.reattachWorkSessionTerminal",
+        "title": "Kronos: Reconnect Focused Terminal to Session",
+        "icon": "$(link)"
+      },
+      {
+        "command": "kronos.detachWorkSessionTerminal",
+        "title": "Kronos: Detach Terminal",
+        "icon": "$(debug-disconnect)"
+      },
+      {
+        "command": "kronos.closeWorkSession",
+        "title": "Kronos: Stop Managing Work Session",
+        "icon": "$(close)"
+      },
+      {
+        "command": "kronos.removeWorkSession",
+        "title": "Kronos: Remove Session from Kronos",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "kronos.refreshProjects",
+        "title": "Kronos: Refresh Project Branches and Status",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "kronos.renameLocalProject",
+        "title": "Kronos: Rename Project Display Label",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "kronos.openProjectGitStatus",
+        "title": "Kronos: View Project Git Status and Diff",
+        "icon": "$(open-preview)"
+      },
+      {
+        "command": "kronos.insertProjectGitContext",
+        "title": "Kronos: Insert Project Working Diff Context",
+        "icon": "$(symbol-keyword)"
+      },
+      {
+        "command": "kronos.openProjectMergeRequest",
+        "title": "Kronos: Open Project Merge Request Page",
+        "icon": "$(git-merge)"
+      },
+      {
+        "command": "kronos.insertProjectGitLabContext",
+        "title": "Kronos: Insert Project Merge Request Evidence",
+        "icon": "$(git-merge)"
+      },
+      {
+        "command": "kronos.insertProjectCiContext",
+        "title": "Kronos: Insert Project Jenkins and SonarQube Evidence",
+        "icon": "$(beaker)"
+      },
+      {
+        "command": "kronos.configureProjectIntegrations",
+        "title": "Kronos: Configure Project Provider Polling",
+        "icon": "$(settings-gear)"
+      },
+      {
+        "command": "kronos.pauseWorkSessionMonitoring",
+        "title": "Kronos: Pause Work Session Monitoring",
+        "icon": "$(debug-pause)"
+      },
+      {
+        "command": "kronos.resumeWorkSessionMonitoring",
+        "title": "Kronos: Resume Work Session Monitoring",
+        "icon": "$(debug-start)"
+      },
+      {
+        "command": "kronos.acknowledgeAttention",
+        "title": "Kronos: Clear Attention Item (Audit Retained)",
+        "icon": "$(check)"
+      },
+      {
+        "command": "kronos.openProvider",
+        "title": "Kronos: Open Provider Page",
+        "icon": "$(link-external)"
+      },
+      {
+        "command": "kronos.setup",
+        "title": "Kronos: Setup",
+        "icon": "$(tools)"
       },
       {
         "command": "kronos.doctor",
         "title": "Kronos: Doctor",
-        "icon": "$(tools)"
+        "icon": "$(pulse)"
       },
       {
-        "command": "kronos.integrationManifest",
-        "title": "Kronos: Integration Manifest",
-        "icon": "$(json)"
-      },
-      {
-        "command": "kronos.integrationContractReport",
-        "title": "Kronos: Integration Contracts",
-        "icon": "$(checklist)"
-      },
-      {
-        "command": "kronos.snapshotIntegrationManifest",
-        "title": "Kronos: Snapshot Integration Manifest",
-        "icon": "$(save)"
-      },
-      {
-        "command": "kronos.profiles",
-        "title": "Kronos: Profiles",
+        "command": "kronos.settings",
+        "title": "Kronos: Guided Settings",
         "icon": "$(settings-gear)"
-      },
-      {
-        "command": "kronos.promptManager",
-        "title": "Kronos: Prompt Manager",
-        "icon": "$(symbol-keyword)"
-      },
-      {
-        "command": "kronos.promptSmokeTests",
-        "title": "Kronos: Prompt Smoke Tests",
-        "icon": "$(beaker)"
-      },
-      {
-        "command": "kronos.snapshotPromptPack",
-        "title": "Kronos: Snapshot Prompt Pack",
-        "icon": "$(save)"
-      },
-      {
-        "command": "kronos.promptHistory",
-        "title": "Kronos: Prompt History",
-        "icon": "$(history)"
-      },
-      {
-        "command": "kronos.repairPromptPack",
-        "title": "Kronos: Repair Prompt Pack",
-        "icon": "$(tools)"
-      },
-      {
-        "command": "kronos.humanReviewInbox",
-        "title": "Kronos: Human Review Inbox",
-        "icon": "$(inbox)"
-      },
-      {
-        "command": "kronos.recoveryCenter",
-        "title": "Kronos: Recovery Center",
-        "icon": "$(history)"
-      },
-      {
-        "command": "kronos.stateAuditLog",
-        "title": "Kronos: State Audit Log",
-        "icon": "$(history)"
-      },
-      {
-        "command": "kronos.cleanupWorktrees",
-        "title": "Kronos: Cleanup Stale Worktrees",
-        "icon": "$(clear-all)"
       }
     ],
     "menus": {
-      "commandPalette": [
-        {
-          "command": "kronos.openExternalUrl",
-          "when": "false"
-        },
-        {
-          "command": "kronos.implement",
-          "when": "false"
-        },
-        {
-          "command": "kronos.completeTask",
-          "when": "false"
-        },
-        {
-          "command": "kronos.openProject",
-          "when": "false"
-        },
-        {
-          "command": "kronos.openInClaude",
-          "when": "false"
-        },
-        {
-          "command": "kronos.viewTicket",
-          "when": "false"
-        },
-        {
-          "command": "kronos.addEvidence",
-          "when": "false"
-        },
-        {
-          "command": "kronos.addEvidenceCheck",
-          "when": "false"
-        },
-        {
-          "command": "kronos.recordEnvironmentResult",
-          "when": "false"
-        },
-        {
-          "command": "kronos.extractAcceptanceCriteria",
-          "when": "false"
-        },
-        {
-          "command": "kronos.updateAcceptanceCriteria",
-          "when": "false"
-        },
-        {
-          "command": "kronos.exportEvidence",
-          "when": "false"
-        },
-        {
-          "command": "kronos.evidenceHandoff",
-          "when": "false"
-        },
-        {
-          "command": "kronos.publishEvidence",
-          "when": "false"
-        },
-        {
-          "command": "kronos.addToQueue",
-          "when": "false"
-        },
-        {
-          "command": "kronos.removeFromQueue",
-          "when": "false"
-        },
-        {
-          "command": "kronos.linkTicket",
-          "when": "false"
-        },
-        {
-          "command": "kronos.unlinkTicket",
-          "when": "false"
-        },
-        {
-          "command": "kronos.removeProject",
-          "when": "false"
-        },
-        {
-          "command": "kronos.registerDiscovered",
-          "when": "false"
-        },
-        {
-          "command": "kronos.startQueueItem",
-          "when": "false"
-        },
-        {
-          "command": "kronos.queueMoveUp",
-          "when": "false"
-        },
-        {
-          "command": "kronos.queueMoveDown",
-          "when": "false"
-        },
-        {
-          "command": "kronos.queuePinTop",
-          "when": "false"
-        },
-        {
-          "command": "kronos.openMrDiff",
-          "when": "false"
-        },
-        {
-          "command": "kronos.openMrInGitlab",
-          "when": "false"
-        },
-        {
-          "command": "kronos.rejectReview",
-          "when": "false"
-        },
-        {
-          "command": "kronos.verifyLocal",
-          "when": "false"
-        },
-        {
-          "command": "kronos.verifyRemote",
-          "when": "false"
-        }
-      ],
       "view/title": [
         {
-          "command": "kronos.refresh",
-          "when": "view == kronosTickets",
-          "group": "navigation"
+          "command": "kronos.refreshTickets",
+          "when": "view == kronosWork",
+          "group": "navigation@1"
         },
         {
-          "command": "kronos.jiraBoard",
-          "when": "view == kronosTickets",
-          "group": "navigation"
+          "command": "kronos.openJiraBoard",
+          "when": "view == kronosWork",
+          "group": "navigation@2"
         },
         {
-          "command": "kronos.filterTickets",
-          "when": "view == kronosTickets",
-          "group": "navigation"
+          "command": "kronos.filterWork",
+          "when": "view == kronosWork",
+          "group": "navigation@3"
         },
         {
-          "command": "kronos.ticketSavedView",
-          "when": "view == kronosTickets",
-          "group": "navigation"
+          "command": "kronos.clearWorkFilter",
+          "when": "view == kronosWork",
+          "group": "work@1"
         },
         {
-          "command": "kronos.clearTicketFilters",
-          "when": "view == kronosTickets",
-          "group": "navigation"
+          "command": "kronos.newClaudeSession",
+          "when": "view == kronosSessions",
+          "group": "navigation@1"
         },
         {
-          "command": "kronos.refresh",
+          "command": "kronos.manageActiveTerminal",
+          "when": "view == kronosSessions",
+          "group": "navigation@2"
+        },
+        {
+          "command": "kronos.refreshProjects",
           "when": "view == kronosProjects",
-          "group": "navigation"
+          "group": "navigation@1"
         },
         {
-          "command": "kronos.discover",
+          "command": "kronos.registerWorkspaceProject",
           "when": "view == kronosProjects",
-          "group": "navigation"
+          "group": "navigation@2"
         },
         {
-          "command": "kronos.register",
-          "when": "view == kronosProjects",
-          "group": "navigation"
+          "command": "kronos.pollManagedWorkSessions",
+          "when": "view == kronosAttention",
+          "group": "navigation@1"
         },
         {
-          "command": "kronos.openDashboard",
-          "when": "view == kronosProjects",
-          "group": "navigation"
+          "command": "kronos.pollManagedWorkSessions",
+          "when": "view == kronosSessions",
+          "group": "sessions@1"
         },
         {
-          "command": "kronos.specBeanstalk",
+          "command": "kronos.pollManagedWorkSessions",
           "when": "view == kronosProjects",
-          "group": "navigation"
+          "group": "projects@1"
+        },
+        {
+          "command": "kronos.openContextBasket",
+          "when": "view == kronosWork",
+          "group": "work@2"
+        },
+        {
+          "command": "kronos.openContextBasket",
+          "when": "view == kronosSessions",
+          "group": "sessions@2"
+        },
+        {
+          "command": "kronos.openContextBasket",
+          "when": "view == kronosProjects",
+          "group": "projects@2"
+        },
+        {
+          "command": "kronos.searchLocalEvidence",
+          "when": "view == kronosWork",
+          "group": "work@3"
+        },
+        {
+          "command": "kronos.searchLocalEvidence",
+          "when": "view == kronosSessions",
+          "group": "sessions@3"
+        },
+        {
+          "command": "kronos.searchLocalEvidence",
+          "when": "view == kronosProjects",
+          "group": "projects@3"
+        },
+        {
+          "command": "kronos.searchLocalEvidence",
+          "when": "view == kronosAttention",
+          "group": "attention@1"
+        },
+        {
+          "command": "kronos.createLocalHandoff",
+          "when": "view == kronosSessions",
+          "group": "sessions@4"
+        },
+        {
+          "command": "kronos.createLocalHandoff",
+          "when": "view == kronosProjects",
+          "group": "projects@4"
         },
         {
           "command": "kronos.setup",
-          "when": "view == kronosProjects"
-        },
-        {
-          "command": "kronos.settings",
-          "when": "view == kronosProjects"
-        },
-        {
-          "command": "kronos.doctor",
-          "when": "view == kronosProjects"
-        },
-        {
-          "command": "kronos.integrationManifest",
-          "when": "view == kronosProjects"
-        },
-        {
-          "command": "kronos.profiles",
-          "when": "view == kronosProjects"
-        },
-        {
-          "command": "kronos.refresh",
-          "when": "view == kronosQueue",
-          "group": "navigation"
-        },
-        {
-          "command": "kronos.startNext",
-          "when": "view == kronosQueue",
-          "group": "navigation"
-        },
-        {
-          "command": "kronos.pollReviewMergeRequests",
-          "when": "view == kronosReview",
-          "group": "navigation"
-        },
-        {
-          "command": "kronos.filterReviews",
-          "when": "view == kronosReview",
-          "group": "navigation"
-        },
-        {
-          "command": "kronos.clearReviewFilters",
-          "when": "view == kronosReview",
-          "group": "navigation"
-        },
-        {
-          "command": "kronos.verifyCombined",
-          "when": "view == kronosReview",
-          "group": "navigation"
-        },
-        {
-          "command": "kronos.resolveConflicts",
-          "when": "view == kronosReview"
-        },
-        {
-          "command": "kronos.verifyTest",
-          "when": "view == kronosReview",
-          "group": "navigation"
-        },
-        {
-          "command": "kronos.sonarCombined",
-          "when": "view == kronosReview",
-          "group": "navigation"
-        },
-        {
-          "command": "kronos.addTask",
-          "when": "view == kronosTasks",
-          "group": "navigation"
-        },
-        {
-          "command": "kronos.runCenter",
-          "when": "view == kronosSessions",
-          "group": "navigation"
-        },
-        {
-          "command": "kronos.agentQualityScore",
-          "when": "view == kronosSessions",
-          "group": "navigation"
-        },
-        {
-          "command": "kronos.trendMetrics",
-          "when": "view == kronosSessions",
-          "group": "navigation"
-        },
-        {
-          "command": "kronos.openRunArtifact",
-          "when": "view == kronosSessions",
-          "group": "navigation"
-        },
-        {
-          "command": "kronos.retryRun",
-          "when": "view == kronosSessions",
-          "group": "navigation"
-        },
-        {
-          "command": "kronos.resumeRun",
-          "when": "view == kronosSessions",
-          "group": "navigation"
-        },
-        {
-          "command": "kronos.pauseRun",
-          "when": "view == kronosSessions",
-          "group": "navigation"
-        },
-        {
-          "command": "kronos.continueRun",
-          "when": "view == kronosSessions",
-          "group": "navigation"
-        },
-        {
-          "command": "kronos.archiveRun",
-          "when": "view == kronosSessions",
-          "group": "navigation"
-        },
-        {
-          "command": "kronos.cancelRun",
-          "when": "view == kronosSessions",
-          "group": "navigation"
-        },
-        {
-          "command": "kronos.nextBestAction",
-          "when": "view == kronosQueue",
-          "group": "navigation"
-        },
-        {
-          "command": "kronos.queuePlanner",
-          "when": "view == kronosQueue",
-          "group": "navigation"
-        },
-        {
-          "command": "kronos.backlogTriage",
-          "when": "view == kronosQueue",
-          "group": "navigation"
-        },
-        {
-          "command": "kronos.projectBatchPlan",
-          "when": "view == kronosQueue",
-          "group": "navigation"
-        },
-        {
-          "command": "kronos.releaseBatchPlan",
-          "when": "view == kronosQueue",
-          "group": "navigation"
-        },
-        {
-          "command": "kronos.collisionReport",
-          "when": "view == kronosQueue",
-          "group": "navigation"
-        },
-        {
-          "command": "kronos.planNextTwoHours",
-          "when": "view == kronosQueue",
-          "group": "navigation"
-        },
-        {
-          "command": "kronos.overnightCandidates",
-          "when": "view == kronosQueue",
-          "group": "navigation"
-        },
-        {
-          "command": "kronos.promptManager",
-          "when": "view == kronosProjects",
-          "group": "navigation"
-        },
-        {
-          "command": "kronos.promptSmokeTests",
-          "when": "view == kronosProjects",
-          "group": "navigation"
-        },
-        {
-          "command": "kronos.snapshotIntegrationManifest",
-          "when": "view == kronosProjects",
-          "group": "navigation"
-        },
-        {
-          "command": "kronos.snapshotPromptPack",
-          "when": "view == kronosProjects",
-          "group": "navigation"
-        },
-        {
-          "command": "kronos.promptHistory",
-          "when": "view == kronosProjects",
-          "group": "navigation"
-        },
-        {
-          "command": "kronos.repairPromptPack",
-          "when": "view == kronosProjects",
-          "group": "navigation"
-        },
-        {
-          "command": "kronos.humanReviewInbox",
-          "when": "view == kronosProjects",
-          "group": "navigation"
-        },
-        {
-          "command": "kronos.agingReport",
-          "when": "view == kronosProjects",
-          "group": "navigation"
-        },
-        {
-          "command": "kronos.evidenceGate",
-          "when": "view == kronosProjects",
-          "group": "navigation"
-        },
-        {
-          "command": "kronos.recoveryCenter",
-          "when": "view == kronosProjects",
-          "group": "navigation"
+          "when": "view == kronosWork",
+          "group": "work@4"
         }
       ],
       "view/item/context": [
         {
-          "command": "kronos.openProject",
-          "when": "viewItem == project"
+          "command": "kronos.openTicketWorkspace",
+          "when": "viewItem == work_ticket",
+          "group": "inline@1"
         },
         {
-          "command": "kronos.removeProject",
-          "when": "viewItem == project"
+          "command": "kronos.startClaudeForTicket",
+          "when": "viewItem == work_ticket",
+          "group": "inline@2"
         },
         {
-          "command": "kronos.openInClaude",
-          "when": "viewItem == project"
+          "command": "kronos.manageActiveTerminal",
+          "when": "viewItem == work_ticket",
+          "group": "terminal@1"
         },
         {
-          "command": "kronos.deployMonitor",
-          "when": "viewItem == project"
+          "command": "kronos.chooseTicketProject",
+          "when": "viewItem == work_ticket",
+          "group": "project@1"
         },
         {
-          "command": "kronos.verifyDevelop",
-          "when": "viewItem == project"
+          "command": "kronos.insertJiraContext",
+          "when": "viewItem == work_ticket",
+          "group": "context@1"
         },
         {
-          "command": "kronos.implement",
-          "when": "viewItem == ticket_implement",
-          "group": "inline"
+          "command": "kronos.insertGitLabContext",
+          "when": "viewItem == work_ticket",
+          "group": "context@2"
         },
         {
-          "command": "kronos.verifyFix",
-          "when": "viewItem == ticket_verify"
+          "command": "kronos.insertCiContext",
+          "when": "viewItem == work_ticket",
+          "group": "context@3"
         },
         {
-          "command": "kronos.completeTask",
-          "when": "viewItem == adhoc_todo",
-          "group": "inline"
+          "command": "kronos.focusWorkSessionTerminal",
+          "when": "viewItem == work_session_attached || viewItem == work_session_attached_paused || viewItem == standalone_session_attached",
+          "group": "inline@1"
         },
         {
-          "command": "kronos.registerDiscovered",
-          "when": "viewItem == discovered_project",
-          "group": "inline"
+          "command": "kronos.reattachWorkSessionTerminal",
+          "when": "viewItem == work_session_detached || viewItem == work_session_detached_paused || viewItem == work_session_closed || viewItem == standalone_session_detached || viewItem == standalone_session_closed",
+          "group": "inline@1"
         },
         {
-          "command": "kronos.startQueueItem",
-          "when": "viewItem == queue_item",
-          "group": "inline"
+          "command": "kronos.openWorkSessionAudit",
+          "when": "viewItem == work_session_attached || viewItem == work_session_detached || viewItem == work_session_attached_paused || viewItem == work_session_detached_paused || viewItem == work_session_closed || viewItem == standalone_session_attached || viewItem == standalone_session_detached || viewItem == standalone_session_closed",
+          "group": "audit@1"
         },
         {
-          "command": "kronos.queueMoveUp",
-          "when": "viewItem == queue_item"
+          "command": "kronos.insertOtherTicket",
+          "when": "viewItem == work_session_attached || viewItem == work_session_attached_paused || viewItem == standalone_session_attached",
+          "group": "context@1"
         },
         {
-          "command": "kronos.queueMoveDown",
-          "when": "viewItem == queue_item"
+          "command": "kronos.pauseWorkSessionMonitoring",
+          "when": "viewItem == work_session_attached || viewItem == work_session_detached",
+          "group": "monitoring@1"
         },
         {
-          "command": "kronos.queuePinTop",
-          "when": "viewItem == queue_item"
+          "command": "kronos.resumeWorkSessionMonitoring",
+          "when": "viewItem == work_session_attached_paused || viewItem == work_session_detached_paused",
+          "group": "monitoring@1"
         },
         {
-          "command": "kronos.openMrDiff",
-          "when": "viewItem == review_item",
-          "group": "inline"
+          "command": "kronos.detachWorkSessionTerminal",
+          "when": "viewItem == work_session_attached || viewItem == work_session_attached_paused || viewItem == standalone_session_attached",
+          "group": "management@1"
         },
         {
-          "command": "kronos.openMrInGitlab",
-          "when": "viewItem == review_item",
-          "group": "inline"
+          "command": "kronos.closeWorkSession",
+          "when": "viewItem == work_session_attached || viewItem == work_session_detached || viewItem == work_session_attached_paused || viewItem == work_session_detached_paused || viewItem == standalone_session_attached || viewItem == standalone_session_detached",
+          "group": "management@2"
         },
         {
-          "command": "kronos.rejectReview",
-          "when": "viewItem == review_item",
-          "group": "inline"
+          "command": "kronos.removeWorkSession",
+          "when": "viewItem == work_session_attached || viewItem == work_session_detached || viewItem == work_session_attached_paused || viewItem == work_session_detached_paused || viewItem == work_session_closed || viewItem == standalone_session_attached || viewItem == standalone_session_detached || viewItem == standalone_session_closed",
+          "group": "management@3"
         },
         {
-          "command": "kronos.verifyLocal",
-          "when": "viewItem == review_item",
-          "group": "inline"
+          "command": "kronos.newClaudeSession",
+          "when": "viewItem == registered_project",
+          "group": "inline@1"
         },
         {
-          "command": "kronos.verifyRemote",
-          "when": "viewItem == review_item",
-          "group": "inline"
+          "command": "kronos.insertProjectGitContext",
+          "when": "viewItem == registered_project",
+          "group": "inline@2"
         },
         {
-          "command": "kronos.deployMonitor",
-          "when": "viewItem == review_item"
+          "command": "kronos.openProjectMergeRequest",
+          "when": "viewItem == registered_project",
+          "group": "project@1"
         },
         {
-          "command": "kronos.sonarScan",
-          "when": "viewItem == project"
+          "command": "kronos.insertProjectGitLabContext",
+          "when": "viewItem == registered_project",
+          "group": "context@1"
         },
         {
-          "command": "kronos.sonarReport",
-          "when": "viewItem == project"
+          "command": "kronos.insertProjectCiContext",
+          "when": "viewItem == registered_project",
+          "group": "context@2"
         },
         {
-          "command": "kronos.sonarReport",
-          "when": "viewItem == review_item"
+          "command": "kronos.configureProjectIntegrations",
+          "when": "viewItem == registered_project",
+          "group": "management@1"
         },
         {
-          "command": "kronos.linkMrToTicket",
-          "when": "viewItem == review_item"
+          "command": "kronos.renameLocalProject",
+          "when": "viewItem == registered_project",
+          "group": "management@2"
         },
         {
-          "command": "kronos.verifyLocal",
-          "when": "viewItem == ticket_implement || viewItem == ticket_verify || viewItem == ticket_review || viewItem == ticket"
+          "command": "kronos.acknowledgeAttention",
+          "when": "viewItem =~ /^attention_(provider|repair)/",
+          "group": "inline@1"
         },
         {
-          "command": "kronos.verifyRemote",
-          "when": "viewItem == ticket_implement || viewItem == ticket_verify || viewItem == ticket_review || viewItem == ticket"
+          "command": "kronos.openProvider",
+          "when": "viewItem =~ /^attention_provider/",
+          "group": "inline@2"
         },
         {
-          "command": "kronos.addEvidence",
-          "when": "viewItem == ticket_implement || viewItem == ticket_verify || viewItem == ticket || viewItem == ticket_review || viewItem == review_item"
+          "command": "kronos.openTicketWorkspace",
+          "when": "viewItem =~ /^attention_(provider|repair)_ticket/",
+          "group": "ticket@1"
         },
         {
-          "command": "kronos.addEvidenceCheck",
-          "when": "viewItem == ticket_implement || viewItem == ticket_verify || viewItem == ticket || viewItem == ticket_review || viewItem == review_item"
+          "command": "kronos.insertGitLabContext",
+          "when": "viewItem =~ /^attention_(provider|repair)_ticket_gitlab$/",
+          "group": "context@1"
         },
         {
-          "command": "kronos.recordEnvironmentResult",
-          "when": "viewItem == ticket_implement || viewItem == ticket_verify || viewItem == ticket || viewItem == ticket_review || viewItem == review_item"
+          "command": "kronos.insertCiContext",
+          "when": "viewItem =~ /^attention_(provider|repair)_ticket_ci$/",
+          "group": "context@2"
         },
         {
-          "command": "kronos.extractAcceptanceCriteria",
-          "when": "viewItem == ticket_implement || viewItem == ticket_verify || viewItem == ticket || viewItem == ticket_review || viewItem == review_item"
-        },
-        {
-          "command": "kronos.updateAcceptanceCriteria",
-          "when": "viewItem == ticket_implement || viewItem == ticket_verify || viewItem == ticket || viewItem == ticket_review || viewItem == review_item"
-        },
-        {
-          "command": "kronos.evidenceGate",
-          "when": "viewItem == ticket_implement || viewItem == ticket_verify || viewItem == ticket || viewItem == ticket_review || viewItem == review_item"
-        },
-        {
-          "command": "kronos.exportEvidence",
-          "when": "viewItem == ticket_implement || viewItem == ticket_verify || viewItem == ticket || viewItem == ticket_review || viewItem == review_item"
-        },
-        {
-          "command": "kronos.evidenceHandoff",
-          "when": "viewItem == ticket_implement || viewItem == ticket_verify || viewItem == ticket || viewItem == ticket_review || viewItem == review_item"
-        },
-        {
-          "command": "kronos.publishEvidence",
-          "when": "viewItem == ticket_implement || viewItem == ticket_verify || viewItem == ticket || viewItem == ticket_review || viewItem == review_item"
-        },
-        {
-          "command": "kronos.addToQueue",
-          "when": "viewItem == ticket_implement || viewItem == ticket_verify || viewItem == ticket || viewItem == ticket_review",
-          "group": "inline"
-        },
-        {
-          "command": "kronos.linkTicket",
-          "when": "viewItem == ticket_implement || viewItem == ticket_verify || viewItem == ticket || viewItem == ticket_review",
-          "group": "inline"
-        },
-        {
-          "command": "kronos.removeFromQueue",
-          "when": "viewItem == queue_item"
-        },
-        {
-          "command": "kronos.runCenter",
-          "when": "viewItem == run",
-          "group": "inline"
-        },
-        {
-          "command": "kronos.openRunArtifact",
-          "when": "viewItem == run",
-          "group": "inline"
-        },
-        {
-          "command": "kronos.retryRun",
-          "when": "viewItem == run"
-        },
-        {
-          "command": "kronos.resumeRun",
-          "when": "viewItem == run"
-        },
-        {
-          "command": "kronos.pauseRun",
-          "when": "viewItem == run"
-        },
-        {
-          "command": "kronos.continueRun",
-          "when": "viewItem == run"
-        },
-        {
-          "command": "kronos.archiveRun",
-          "when": "viewItem == run"
-        },
-        {
-          "command": "kronos.cancelRun",
-          "when": "viewItem == run"
-        },
-        {
-          "command": "kronos.unlinkTicket",
-          "when": "viewItem == linked_project",
-          "group": "inline"
+          "command": "kronos.openWorkSessionAudit",
+          "when": "viewItem =~ /^attention_(provider|repair)/",
+          "group": "audit@1"
         }
       ]
     },
     "configuration": {
-      "title": "Kronos",
+      "title": "Kronos — Terminal Work Companion",
       "properties": {
-        "kronos.pollIntervalSec": {
+        "kronos.refreshIntervalSec": {
           "type": "number",
           "default": 300,
-          "description": "How often to auto-refresh project status (seconds)"
+          "minimum": 15,
+          "description": "How often Kronos refreshes Jira work metadata, in seconds."
         },
-        "kronos.sessionPollIntervalMs": {
-          "type": "number",
-          "default": 5000,
-          "description": "How often to poll claude agents for session status (ms)"
-        },
-        "kronos.reviewPollIntervalSec": {
+        "kronos.managedProviderPollIntervalSec": {
           "type": "number",
           "default": 300,
-          "description": "How often to poll review merge requests for status changes (seconds)"
+          "minimum": 15,
+          "description": "How often Kronos reads GitLab, Jenkins, and SonarQube status for monitored work sessions, in seconds."
         },
-        "kronos.profile": {
-          "type": "string",
-          "default": "enterprise-gitlab-jira",
-          "enum": [
-            "enterprise-gitlab-jira",
-            "personal-local",
-            "github-actions",
-            "no-sonar"
-          ],
-          "description": "Kronos integration profile for provider/default-branch assumptions."
+        "kronos.projectDiscoveryRoots": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "scope": "machine",
+          "description": "Parent folders Kronos may inspect for local Git projects when Manage Local Projects is explicitly opened. Choose folders from Kronos Setup or use this advanced setting. Open workspace folders are always offered. Use ~ for the current home folder."
         },
-        "kronos.dispatchModel": {
-          "type": "string",
-          "default": "claude-opus-4-6",
-          "description": "Claude model ID for dispatched sessions (e.g. claude-opus-4-6, claude-opus-4-6[1m])"
-        },
-        "kronos.pythonPath": {
-          "type": "string",
-          "default": "",
-          "description": "Optional Python executable path for Spec Beanstalk .xlsx analysis. Leave blank to try python3, python, then py -3."
-        },
-        "kronos.defaultBaseBranch": {
-          "type": "string",
-          "default": "develop",
-          "description": "Default base branch for Kronos worktrees when project config does not set base_branch or default_branch."
-        },
-        "kronos.trendWindowDays": {
-          "type": "number",
-          "default": 14,
-          "description": "Lookback window in days for Kronos trend metrics."
-        },
-        "kronos.staleReviewDays": {
-          "type": "number",
-          "default": 3,
-          "description": "Days before an open MR waiting for review is reported as stale."
-        },
-        "kronos.staleBuildFailureDays": {
-          "type": "number",
-          "default": 1,
-          "description": "Days before a failing build or fix_build ticket is reported as stale."
-        },
-        "kronos.staleBlockedDays": {
-          "type": "number",
+        "kronos.projectDiscoveryDepth": {
+          "type": "integer",
           "default": 2,
-          "description": "Days before a blocked ticket is reported as stale."
+          "minimum": 0,
+          "maximum": 5,
+          "scope": "machine",
+          "description": "Maximum child-directory depth inspected below each configured project discovery root. Discovery is bounded and read-only."
         },
-        "kronos.staleVerificationDays": {
-          "type": "number",
-          "default": 5,
-          "description": "Days before a verify or deploy-monitor ticket is reported as stale."
+        "kronos.projectDiscoveryLimit": {
+          "type": "integer",
+          "default": 100,
+          "minimum": 1,
+          "maximum": 500,
+          "scope": "machine",
+          "description": "Maximum number of local project candidates shown by one explicit discovery action."
         },
-        "kronos.staleTicketDays": {
-          "type": "number",
-          "default": 14,
-          "description": "Days before an implement or in-progress ticket is reported as stale."
+        "kronos.hideCompletedJiraWork": {
+          "type": "boolean",
+          "default": true,
+          "description": "Hide completed Jira tickets by default in both the Work tree and Jira board. Explicit filters and saved board choices still take precedence."
+        },
+        "kronos.completedJiraStatuses": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Additional Jira status names that Kronos should treat as completed, for teams whose workflow does not use Jira's Done status category."
+        },
+        "kronos.claudeCommand": {
+          "type": "string",
+          "default": "claude",
+          "scope": "machine",
+          "description": "Validated Claude CLI command submitted only after New Claude Session or Start Claude for Ticket. Only claude/claude-* plus approved interactive model, effort, safe-mode, IDE, display, and non-escalating permission flags are accepted."
+        },
+        "kronos.claudeTerminalName": {
+          "type": "string",
+          "default": "Claude",
+          "description": "Base name for terminals created by an explicit Kronos Claude launch."
+        },
+        "kronos.claudeLaunchCwd": {
+          "type": "string",
+          "enum": [
+            "ticketProject",
+            "workspace",
+            "home"
+          ],
+          "enumDescriptions": [
+            "Use the ticket's configured project folder, then fall back to the workspace or home folder.",
+            "Use the first open workspace folder, then fall back to the home folder.",
+            "Use the current user's home folder."
+          ],
+          "default": "ticketProject",
+          "description": "Starting directory for terminals created by an explicit Claude launch."
         }
       }
     }
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
-    "compile": "node node_modules/typescript/bin/tsc -p ./",
-    "watch": "node node_modules/typescript/bin/tsc -watch -p ./",
-    "package": "npx @vscode/vsce package --no-dependencies --allow-missing-repository",
-    "test": "node scripts/check-manifest.js && node scripts/check-security.js && node scripts/check-prompt-governance.js && npm run compile && node scripts/run-unit-tests.js && npm run webview:dom",
+    "compile": "node scripts/clean-output.js && node node_modules/typescript/bin/tsc -p ./",
+    "watch": "node scripts/clean-output.js && node node_modules/typescript/bin/tsc -watch -p ./",
+    "package": "npm run release:preflight && npx --yes @vscode/vsce@3.9.2 package --no-dependencies --allow-missing-repository --githubBranch main",
+    "release:preflight": "npm run public:check && node scripts/check-manifest.js && node scripts/check-runtime-graph.js && node scripts/check-security.js && node scripts/check-context-governance.js && node scripts/check-roadmap-evidence.js && node scripts/check-quality-evidence.js && npm run compile && npm run release:surface",
+    "release:surface": "node scripts/run-release-surface-tests.js",
+    "publish:verify": "node scripts/verify-published-branch.js",
+    "test": "npm run public:check && node scripts/check-manifest.js && node scripts/check-runtime-graph.js && node scripts/check-security.js && node scripts/check-context-governance.js && node scripts/check-roadmap-evidence.js && node scripts/check-quality-evidence.js && npm run compile && npm run command:routing && npm run product:surface && npm run terminal:lifecycle && npm run persistence:recovery && npm run schema:invariants && npm run failure:contract && npm run provider:readiness && npm run project:catalog && npm run provider:bindings && node scripts/run-unit-tests.js && npm run work:orchestration && npm run provider:reconciliation && npm run attention:matrix && npm run provider:health && npm run provider:fixtures && npm run context:basket && npm run local:search && npm run handoff:profiles && npm run scale:a11y && npm run release:surface && npm run webview:dom && npm run webview:jira-board",
+    "public:check": "node scripts/check-public-surface.js",
     "webview:dom": "node scripts/run-webview-dom-tests.js",
+    "webview:jira-board": "node scripts/run-jira-work-board-tests.js",
+    "provider:fixtures": "node scripts/run-provider-contract-tests.js",
+    "scale:a11y": "node scripts/run-scale-accessibility-tests.js",
+    "provider:readiness": "node scripts/run-provider-readiness-tests.js",
+    "project:catalog": "node scripts/run-project-catalog-tests.js",
+    "provider:bindings": "node scripts/run-provider-binding-reconciliation-tests.js",
+    "terminal:lifecycle": "node scripts/run-terminal-lifecycle-tests.js",
+    "command:routing": "node scripts/run-command-routing-tests.js",
+    "product:surface": "node scripts/run-product-surface-contract-tests.js",
+    "persistence:recovery": "node scripts/run-persistence-recovery-tests.js",
+    "schema:invariants": "node scripts/run-schema-invariant-tests.js",
+    "failure:contract": "node scripts/run-failure-contract-tests.js",
+    "work:orchestration": "node scripts/run-work-orchestration-tests.js",
+    "provider:reconciliation": "node scripts/run-provider-reconciliation-tests.js",
+    "attention:matrix": "node scripts/run-attention-transition-matrix-tests.js",
+    "provider:health": "node scripts/run-provider-health-visibility-tests.js",
+    "context:basket": "node scripts/run-context-basket-tests.js",
+    "local:search": "node scripts/run-local-evidence-search-tests.js",
+    "handoff:profiles": "node scripts/run-handoff-branch-profile-tests.js",
     "feedback:state": "node scripts/create-feedback-state.js",
     "feedback:state:force": "node scripts/create-feedback-state.js --force",
     "feedback:smoke": "node scripts/run-feedback-smoke.js",
@@ -1235,9 +661,7 @@
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
-    "@types/vscode": "^1.85.0",
-    "@vscode/test-electron": "^3.0.0",
-    "jsdom": "^29.1.1",
+    "@types/vscode": "1.85.0",
     "typescript": "^5.4.0"
   }
 }

@@ -16,11 +16,3 @@ export function safeFileStem(value: string, options: SafeFileStemOptions = {}): 
   const prefixLength = Math.max(1, maxLength - hashLength - 1);
   return `${sanitized.substring(0, prefixLength)}-${hash}`;
 }
-
-export function safePromptFileName(name: string): string {
-  const trimmed = name.trim();
-  if (!/^[a-zA-Z0-9_.-]+$/.test(trimmed) || trimmed === '.' || trimmed === '..' || trimmed.includes('..')) {
-    throw new Error(`Invalid prompt template name: ${name}`);
-  }
-  return `${trimmed}.md`;
-}

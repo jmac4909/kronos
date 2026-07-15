@@ -10,10 +10,6 @@ export function arrayFromUnknown(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
 }
 
-export function definedValues<T>(values: Array<T | null | undefined>): T[] {
-  return values.filter((value): value is T => value !== undefined && value !== null);
-}
-
 export function trimmedStringFromUnknown(value: unknown, fallback = ''): string {
   return typeof value === 'string' ? value.trim() : fallback;
 }
@@ -34,26 +30,10 @@ export function optionalFiniteNumberFromUnknown(value: unknown): number | undefi
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
-export function finiteNumberFromUnknown(value: unknown, fallback = 0): number {
-  return optionalFiniteNumberFromUnknown(value) ?? fallback;
-}
-
-export function recordsFromUnknown(value: unknown): Record<string, unknown>[] {
-  return arrayFromUnknown(value).filter(isRecord);
-}
-
 export function recordEntriesFromUnknown<T>(value: Record<string, T> | null | undefined): Array<[string, T]>;
 export function recordEntriesFromUnknown(value: unknown): Array<[string, unknown]>;
 export function recordEntriesFromUnknown(value: unknown): Array<[string, unknown]> {
   return isRecord(value) ? Object.entries(value) : [];
-}
-
-export function recordKeysFromUnknown(value: unknown): string[] {
-  return isRecord(value) ? Object.keys(value) : [];
-}
-
-export function recordValuesFromUnknown(value: unknown): Record<string, unknown>[] {
-  return isRecord(value) ? Object.values(value).filter(isRecord) : [];
 }
 
 export function recordString(record: Record<string, unknown>, key: string): string {

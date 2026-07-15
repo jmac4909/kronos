@@ -1,164 +1,178 @@
 import * as vscode from 'vscode';
-import { countLabel } from '../services/countLabels';
-import { formatRelativeTime } from '../services/relativeTime';
-import { ticketStringArray } from '../services/ticketFields';
-import { KronosState } from '../state/KronosState';
-import { Project, DiscoveredProject } from '../state/types';
+import type { KronosState, ProjectConfig } from '../state/types';
+import { boundedOperationFailure } from '../services/errorUtils';
+import { listLocalProjects } from '../services/projectCatalog';
+import { projectGitStatusPresentation } from '../services/projectGitPresentation';
+import { providerReadiness } from '../services/providerReadiness';
+import {
+  projectIntegrationStatusLines,
+  registeredProjectActionInventory,
+} from '../services/projectInventoryPresentation';
+import {
+  readProjectGitEvidence,
+  type ProjectGitEvidence,
+} from '../services/vscodeGitReadService';
+import { listWorkSessions, type WorkSessionRecord } from '../services/workSessionStore';
+import {
+  projectProviderMonitoringHealth,
+  providerMonitoringHealthSummary,
+  type ProviderMonitoringHealth,
+} from '../services/providerMonitoringHealth';
 
-type TreeElement = ProjectItem | DetailItem | DiscoveredItem | WelcomeItem | FolderItem;
-
-export class ProjectTreeProvider implements vscode.TreeDataProvider<TreeElement> {
-  private _onDidChangeTreeData = new vscode.EventEmitter<TreeElement | undefined>();
-  readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
-  private readonly stateSubscription: vscode.Disposable;
-
-  constructor(private kronosState: KronosState) {
-    this.stateSubscription = kronosState.onDidChange(() => this._onDidChangeTreeData.fire(undefined));
-  }
-
-  getTreeItem(element: TreeElement): vscode.TreeItem { return element; }
-
-  getChildren(element?: TreeElement): TreeElement[] {
-    const state = this.kronosState.state;
-    if (!state) {
-      return [
-        new WelcomeItem('Welcome to Kronos', 'Click Discover to scan your repos', 'kronos.discover'),
-      ];
-    }
-
-    if (!element) {
-      const items: TreeElement[] = [];
-      const projects = state.projects;
-      const tickets = state.tickets;
-
-      if (Object.keys(projects).length === 0) {
-        items.push(new WelcomeItem('No projects registered', 'Use Discover or Register', 'kronos.discover'));
-      } else {
-        for (const [name, proj] of Object.entries(projects)) {
-          const linkedCount = Object.values(tickets).filter(t => ticketStringArray(t.projects).includes(name)).length;
-          items.push(new ProjectItem(name, proj, linkedCount));
-        }
-      }
-
-      const discovered = state.discovered_projects
-        .filter(d => !projects[d.repo_name]);
-      if (discovered.length > 0) {
-        const byFolder: Record<string, typeof discovered> = {};
-        for (const d of discovered) {
-          const parts = d.path.replace(/\\/g, '/').split('/');
-          const parent = parts.length >= 2 ? parts[parts.length - 2] : undefined;
-          const folder = parent || 'Other';
-          discoveredFolderBucket(byFolder, folder).push(d);
-        }
-        for (const [folder, repos] of Object.entries(byFolder).sort((a, b) => b[1].length - a[1].length)) {
-          items.push(new FolderItem(folder, repos));
-        }
-      }
-      return items;
-    }
-
-    if (element instanceof FolderItem) {
-      return element.repos.map(d => new DiscoveredItem(d));
-    }
-
-    if (element instanceof ProjectItem) {
-      const items: TreeElement[] = [];
-      const proj = element.project;
-      if (proj.open_mr_count > 0) {
-        items.push(new DetailItem(countLabel(proj.open_mr_count, 'open MR')));
-      }
-      if (proj.last_polled) {
-        items.push(new DetailItem(`Refreshed ${formatRelativeTime(proj.last_polled)}`));
-      }
-      items.push(new DetailItem(`Path: ${proj.path}`));
-      return items;
-    }
-
-    return [];
-  }
-
-  dispose(): void {
-    this.stateSubscription.dispose();
-    this._onDidChangeTreeData.dispose();
-  }
+export interface RegisteredProjectCommandTarget {
+  projectName: string;
+  projectPath: string;
+  displayName?: string;
 }
 
-class WelcomeItem extends vscode.TreeItem {
-  constructor(label: string, detail: string, command?: string) {
-    super(label, vscode.TreeItemCollapsibleState.None);
-    this.tooltip = detail;
-    this.description = detail;
-    if (command) { this.command = { command, title: label }; }
-  }
-}
+type StateLoader = () => KronosState | null;
+type WorkSessionLoader = () => WorkSessionRecord[];
+type ProjectTreeElement = RegisteredProjectTreeItem | ProjectActionTreeItem | ProjectMessageTreeItem;
 
-class ProjectItem extends vscode.TreeItem {
+/** Registered local work belongs in its own view, separate from operator-owned terminal sessions. */
+export class ProjectTreeProvider implements vscode.TreeDataProvider<ProjectTreeElement>, vscode.Disposable {
+  private readonly changeEmitter = new vscode.EventEmitter<ProjectTreeElement | undefined>();
+  readonly onDidChangeTreeData = this.changeEmitter.event;
+
   constructor(
-    public readonly projectName: string,
-    public readonly project: Project,
-    linkedCount: number
+    private readonly loadState: StateLoader = () => null,
+    private readonly loadWorkSessions: WorkSessionLoader = () => listWorkSessions(),
+    private readonly pollIntervalMs: () => number = () => 300_000,
+  ) {}
+
+  getTreeItem(element: ProjectTreeElement): vscode.TreeItem { return element; }
+
+  async getChildren(element?: ProjectTreeElement): Promise<ProjectTreeElement[]> {
+    if (element instanceof RegisteredProjectTreeItem) { return projectActions(element.target); }
+    if (element) { return []; }
+
+    const state = this.safeLoadState();
+    const projects = listLocalProjects(state);
+    if (projects.length === 0) { return [new ProjectMessageTreeItem()]; }
+    const sessions = this.safeLoadWorkSessions();
+    return Promise.all(projects.map(async project => {
+      const evidence = await readProjectGitEvidence(project.path, {
+        includeDiff: false,
+        openRepositoryIfNeeded: true,
+      });
+      const config = state?.projects[project.name]?.config || {};
+      const linkedSessions = sessions.filter(session =>
+        session.projectName === project.name
+          && session.ticketKeys.length > 0
+          && session.status === 'active'
+          && session.monitoring.enabled
+      );
+      return new RegisteredProjectTreeItem(
+        { projectName: project.name, projectPath: project.path, displayName: project.displayName },
+        evidence,
+        config,
+        linkedSessions.length,
+        projectProviderMonitoringHealth(linkedSessions, this.pollIntervalMs()),
+      );
+    }));
+  }
+
+  refresh(): void { this.changeEmitter.fire(undefined); }
+  dispose(): void { this.changeEmitter.dispose(); }
+
+  private safeLoadState(): KronosState | null {
+    try { return this.loadState(); }
+    catch (error: unknown) {
+      console.warn(`Kronos project refresh failed: ${boundedOperationFailure(error, 'Project state could not be read.').display}`);
+      return null;
+    }
+  }
+
+  private safeLoadWorkSessions(): WorkSessionRecord[] {
+    try { return this.loadWorkSessions(); }
+    catch (error: unknown) {
+      console.warn(`Kronos project session refresh failed: ${boundedOperationFailure(error, 'Project session state could not be read.').display}`);
+      return [];
+    }
+  }
+}
+
+class RegisteredProjectTreeItem extends vscode.TreeItem {
+  constructor(
+    readonly target: RegisteredProjectCommandTarget,
+    evidence: ProjectGitEvidence,
+    config: ProjectConfig,
+    linkedSessionCount: number,
+    monitoringHealth: ProviderMonitoringHealth,
   ) {
-    super(projectName, vscode.TreeItemCollapsibleState.Collapsed);
-    this.contextValue = 'project';
-    this.description = `${linkedCount} tickets · ${project.summary}`;
-    const jiraKey = project.config.jira_project_key || '';
-    this.tooltip = new vscode.MarkdownString(
-      `**${projectName}**${jiraKey ? ` (${jiraKey})` : ''}\n\n` +
-      `Health: ${project.health} | ${linkedCount} linked tickets\n\n` +
-      `${project.summary}\n\n` +
-      `Path: \`${project.path}\``
-    );
-    this.iconPath = new vscode.ThemeIcon('circle-filled', healthToIcon(project.health));
+    super(target.displayName || target.projectName, vscode.TreeItemCollapsibleState.Collapsed);
+    const gitStatus = projectGitStatusPresentation(evidence);
+    this.id = `registered-project:${target.projectName}`;
+    this.contextValue = 'registered_project';
+    this.iconPath = projectIcon(evidence);
+    this.description = `${evidence.branch || 'branch unavailable'} • ${gitStatus.label} • ${providerMonitoringHealthSummary(monitoringHealth)}`;
+    const readiness = providerReadiness();
+    const providers = projectIntegrationStatusLines(config, {
+      gitlab: readiness.gitlab.configured,
+      jenkins: readiness.jenkins.configured,
+      sonar: readiness.sonar.configured,
+    }, linkedSessionCount);
+    this.tooltip = [
+      `Project: ${target.displayName || target.projectName}`,
+      `Stable identity: ${target.projectName}`,
+      `Path: ${target.projectPath}`,
+      `Git branch: ${evidence.branch || 'unavailable'}`,
+      `Git status: ${gitStatus.tooltip}`,
+      'Git source: VS Code built-in Git model plus bounded local HEAD fallback',
+      `Active monitored ticket sessions: ${linkedSessionCount}`,
+      `Last monitoring attempt: ${monitoringHealth.lastAttemptAt || 'never'}`,
+      `Last successful poll: ${monitoringHealth.lastSuccessfulAt || 'never'}`,
+      `Last meaningful provider change: ${monitoringHealth.lastMeaningfulChangeAt || 'never'}`,
+      `Next scheduled poll: ${monitoringHealth.nextScheduledAt || 'not scheduled'}`,
+      `Current normalized error: ${monitoringHealth.currentError || 'none'}`,
+      `Suppressed unchanged polls since last change: ${monitoringHealth.suppressedUnchangedCount}`,
+      ...providers,
+      ...(evidence.warning ? [`Git read note: ${evidence.warning}`] : []),
+      'Select to open the full read-only status and diff; expand for project actions.',
+    ].join('\n');
+    this.command = { command: 'kronos.openProjectGitStatus', title: 'Open Project Git Status', arguments: [target] };
   }
 }
 
-class FolderItem extends vscode.TreeItem {
-  constructor(public readonly folderName: string, public readonly repos: DiscoveredProject[]) {
-    super(folderName, vscode.TreeItemCollapsibleState.Collapsed);
-    this.description = `${repos.length} repos`;
-    this.iconPath = new vscode.ThemeIcon('folder');
-    this.contextValue = 'discovered_folder';
-  }
-}
-
-class DiscoveredItem extends vscode.TreeItem {
-  public readonly projectPath: string;
-  constructor(discovered: DiscoveredProject) {
-    super(discovered.repo_name, vscode.TreeItemCollapsibleState.None);
-    this.projectPath = discovered.path;
-    this.contextValue = 'discovered_project';
-    const jiraTag = discovered.suggested_jira_key ? `Jira: ${discovered.suggested_jira_key}` : 'no Jira key';
-    const configTag = discovered.has_project_json ? 'has config' : '';
-    this.description = [jiraTag, configTag].filter(Boolean).join(' | ');
-    this.tooltip = `Click to register\nPath: ${discovered.path}`;
-    this.iconPath = new vscode.ThemeIcon('add', new vscode.ThemeColor('disabledForeground'));
-    this.command = { command: 'kronos.registerDiscovered', title: 'Register', arguments: [discovered.path] };
-  }
-}
-
-class DetailItem extends vscode.TreeItem {
-  constructor(label: string) {
+class ProjectActionTreeItem extends vscode.TreeItem {
+  constructor(label: string, icon: string, command: string, target: RegisteredProjectCommandTarget, description?: string) {
     super(label, vscode.TreeItemCollapsibleState.None);
-    this.contextValue = 'detail';
+    this.contextValue = 'registered_project_action';
+    this.iconPath = new vscode.ThemeIcon(icon);
+    if (description) { this.description = description; }
+    this.command = { command, title: label, arguments: [target] };
   }
 }
 
-function healthToIcon(health: string): vscode.ThemeColor | undefined {
-  switch (health) {
-    case 'green': return new vscode.ThemeColor('testing.iconPassed');
-    case 'yellow': return new vscode.ThemeColor('testing.iconQueued');
-    case 'red': return new vscode.ThemeColor('testing.iconFailed');
-    default: return new vscode.ThemeColor('disabledForeground');
+class ProjectMessageTreeItem extends vscode.TreeItem {
+  constructor() {
+    super('Manage local projects', vscode.TreeItemCollapsibleState.None);
+    this.contextValue = 'registered_project_empty';
+    this.description = 'discover, register, or remove';
+    this.iconPath = new vscode.ThemeIcon('folder-opened');
+    this.command = {
+      command: 'kronos.registerWorkspaceProject',
+      title: 'Manage Local Projects',
+    };
   }
 }
 
-function discoveredFolderBucket(
-  byFolder: Record<string, DiscoveredProject[]>,
-  folder: string,
-): DiscoveredProject[] {
-  const existing = byFolder[folder];
-  if (existing) { return existing; }
-  const created: DiscoveredProject[] = [];
-  byFolder[folder] = created;
-  return created;
+function projectActions(target: RegisteredProjectCommandTarget): ProjectActionTreeItem[] {
+  return registeredProjectActionInventory().map(action => new ProjectActionTreeItem(
+    action.label,
+    action.icon,
+    action.command,
+    target,
+    action.description,
+  ));
+}
+
+function projectIcon(evidence: ProjectGitEvidence): vscode.ThemeIcon {
+  const state = projectGitStatusPresentation(evidence).state;
+  if (state === 'unavailable') {
+    return new vscode.ThemeIcon('repo', new vscode.ThemeColor('problemsWarningIcon.foreground'));
+  }
+  return state === 'clean'
+    ? new vscode.ThemeIcon('repo', new vscode.ThemeColor('testing.iconPassed'))
+    : new vscode.ThemeIcon('repo', new vscode.ThemeColor('gitDecoration.modifiedResourceForeground'));
 }

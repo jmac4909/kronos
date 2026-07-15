@@ -2,271 +2,268 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const test = require('node:test');
-const { JSDOM, VirtualConsole } = require('jsdom');
+const vm = require('node:vm');
 
-const ROOT = path.join(__dirname, '..');
-const WEBVIEW_READY_COMMAND = '__kronosWebviewReady';
+const actionPanelSource = fs.readFileSync(path.join(__dirname, '..', 'media', 'kronos-action-panel.js'), 'utf8');
+const contextBasketSource = fs.readFileSync(path.join(__dirname, '..', 'media', 'kronos-context-basket.js'), 'utf8');
+const contextComposerSource = fs.readFileSync(path.join(__dirname, '..', 'media', 'kronos-context-composer.js'), 'utf8');
+const projectIntegrationSource = fs.readFileSync(path.join(__dirname, '..', 'media', 'kronos-project-integration.js'), 'utf8');
 
-function mediaSource(file) {
-  return fs.readFileSync(path.join(ROOT, 'media', file), 'utf8');
-}
-
-const runtimeScript = mediaSource('kronos-webview-runtime.js');
-const actionPanelScript = mediaSource('kronos-action-panel.js');
-const jiraBoardScript = mediaSource('kronos-jira-board.js');
-
-function htmlAttr(value) {
-  return String(value)
-    .replace(/&/g, '&amp;')
-    .replace(/"/g, '&quot;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-}
-
-function createWebviewDom(body) {
+function createHarness(options = {}) {
   const messages = [];
-  const warnings = [];
-  const errors = [];
-  const virtualConsole = new VirtualConsole();
-  virtualConsole.on('jsdomError', error => errors.push(error.message || String(error)));
-  const dom = new JSDOM(`<!doctype html><html><head></head><body>${body}</body></html>`, {
-    pretendToBeVisual: true,
-    runScripts: 'outside-only',
-    url: 'https://kronos.test/',
-    virtualConsole,
-  });
-  dom.window.acquireVsCodeApi = () => ({
-    postMessage: message => messages.push(JSON.parse(JSON.stringify(message))),
-  });
-  dom.window.console = {
-    info() {},
-    warn(...args) { warnings.push(args.map(String).join(' ')); },
-    error(...args) { errors.push(args.map(String).join(' ')); },
+  const attributes = new Map();
+  const listeners = new Map();
+  const scriptAttributes = new Map([
+    ['data-kronos-webview-name', options.webviewName || 'Kronos Ticket Workspace'],
+    ['data-kronos-ready-command', '__kronosWebviewReady'],
+    ['data-kronos-action-fields', JSON.stringify(options.fields || [
+      { messageKey: 'ticket', dataAttribute: 'data-ticket' },
+    ])],
+  ]);
+  const document = {
+    currentScript: { getAttribute: name => scriptAttributes.get(name) || null },
+    documentElement: {
+      setAttribute: (name, value) => attributes.set(name, value),
+      getAttribute: name => attributes.get(name) || null,
+    },
+    readyState: 'complete',
+    addEventListener(name, listener) {
+      const values = listeners.get(name) || [];
+      values.push(listener);
+      listeners.set(name, values);
+    },
+    getElementById() { return null; },
+    querySelector() { return null; },
   };
-  return { dom, messages, warnings, errors };
-}
-
-function runScript(dom, source, name) {
-  dom.window.eval(`${source}\n//# sourceURL=${name}`);
-}
-
-async function flushWebview(dom) {
-  await new Promise(resolve => dom.window.setTimeout(resolve, 0));
-  await new Promise(resolve => dom.window.setTimeout(resolve, 0));
-}
-
-async function loadRuntimeAndScript(env, source, name) {
-  runScript(env.dom, runtimeScript, 'kronos-webview-runtime.js');
-  runScript(env.dom, source, name);
-  env.dom.window.document.dispatchEvent(new env.dom.window.Event('DOMContentLoaded', { bubbles: true }));
-  await flushWebview(env.dom);
-}
-
-function click(window, element) {
-  element.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true }));
-}
-
-function input(window, element, value) {
-  element.value = value;
-  element.dispatchEvent(new window.Event('input', { bubbles: true }));
-}
-
-function actionMessages(messages) {
-  return messages.filter(message => message.command !== WEBVIEW_READY_COMMAND);
-}
-
-function buttonByText(document, text) {
-  const button = [...document.querySelectorAll('button')].find(item => item.textContent === text);
-  assert.ok(button, `expected button ${text}`);
-  return button;
-}
-
-test('action panel posts normalized payloads from nested action clicks once', async () => {
-  const fields = [
-    { messageKey: 'ticket', dataAttribute: 'data-ticket' },
-    { messageKey: 'runId', dataAttribute: 'data-run-id' },
-    { messageKey: 'itemId', dataAttribute: 'data-item-id' },
-  ];
-  const env = createWebviewDom(`
-    <button id="run-center" data-action="runCenter" data-ticket="KRONOS-FB-1" data-run-id="feedback-run-needs-human" data-item-id="queue-1">
-      <span id="run-center-label">Run Center</span>
-    </button>
-    <script
-      id="kronos-action-panel-script"
-      data-kronos-script-kind="action-panel"
-      data-kronos-webview-name="Kronos DOM Action Panel"
-      data-kronos-ready-command="${WEBVIEW_READY_COMMAND}"
-      data-kronos-action-fields="${htmlAttr(JSON.stringify(fields))}"></script>
-  `);
-
-  await loadRuntimeAndScript(env, actionPanelScript, 'kronos-action-panel.js');
-
-  const { document } = env.dom.window;
-  assert.equal(document.documentElement.getAttribute('data-kronos-script-ready'), 'true');
-  assert.equal(document.documentElement.getAttribute('data-kronos-action-handler-attached'), 'true');
-  assert.equal(document.documentElement.getAttribute('data-kronos-actions-ready'), 'true');
-  assert.ok(env.messages.some(message => message.command === WEBVIEW_READY_COMMAND && message.webviewName === 'Kronos DOM Action Panel'));
-
-  click(env.dom.window, document.getElementById('run-center-label'));
-  assert.deepEqual(actionMessages(env.messages).at(-1), {
-    command: 'runCenter',
-    ticket: 'KRONOS-FB-1',
-    runId: 'feedback-run-needs-human',
-    itemId: 'queue-1',
+  const runtime = {
+    createReadyPoster({ readyCommand, webviewName }) {
+      return () => messages.push({ command: readyCommand, webviewName });
+    },
+    markReady(name) { attributes.set('ready-name', name); },
+    installDiagnostics(name) { attributes.set('diagnostics-name', name); },
+    vscodeApi() { return { postMessage: message => messages.push(JSON.parse(JSON.stringify(message))) }; },
+  };
+  const context = vm.createContext({
+    document,
+    KronosWebviewRuntime: runtime,
+    console: { info() {}, warn() {}, error() {} },
+    setTimeout(callback) { callback(); return 1; },
+    clearTimeout() {},
   });
+  context.globalThis = context;
+  context.window = context;
+  return { context, document, attributes, listeners, messages };
+}
 
-  const beforeDuplicateLoadActionCount = actionMessages(env.messages).length;
-  runScript(env.dom, actionPanelScript, 'kronos-action-panel.js');
-  await flushWebview(env.dom);
-  click(env.dom.window, document.getElementById('run-center-label'));
-  assert.equal(actionMessages(env.messages).length, beforeDuplicateLoadActionCount + 1);
-  assert.deepEqual(actionMessages(env.messages).at(-1), {
-    command: 'runCenter',
-    ticket: 'KRONOS-FB-1',
-    runId: 'feedback-run-needs-human',
-    itemId: 'queue-1',
+test('ticket workspace action panel posts one normalized, ticket-scoped message', () => {
+  const harness = createHarness();
+  vm.runInContext(actionPanelSource, harness.context, { filename: 'kronos-action-panel.js' });
+
+  assert.equal(harness.attributes.get('data-kronos-action-handler-attached'), 'true');
+  assert.equal(harness.attributes.get('data-kronos-actions-ready'), 'true');
+  assert.equal(harness.listeners.get('click').length, 1);
+
+  const buttonAttributes = new Map([
+    ['data-action', 'insertJiraContext'],
+    ['data-ticket', 'JIRA-123'],
+  ]);
+  const button = { getAttribute: name => buttonAttributes.get(name) || null };
+  let prevented = false;
+  harness.listeners.get('click')[0]({
+    target: { closest: selector => selector === '[data-action]' ? button : null },
+    preventDefault() { prevented = true; },
   });
-  assert.deepEqual(env.errors, []);
+  assert.equal(prevented, true);
+  assert.deepEqual(harness.messages.at(-1), { command: 'insertJiraContext', ticket: 'JIRA-123' });
 });
 
-test('jira board filters cards, opens ticket modal, renders comments, and posts actions', async () => {
-  const ticketData = {
-    'KRONOS-FB-1': {
-      summary: 'Review-ready fixture ticket',
-      type: 'Story',
-      priority: 'High',
-      status: 'In Review',
-      description: 'Acceptance criteria are ready for human review.',
-      projects: ['sandbox-project'],
-      labels: ['kronos-feedback', 'safe-fixture'],
-      attachments: [{ filename: 'evidence.md', size: 2048 }],
-      mr: { iid: 41, status: 'pending_review' },
-      build: { number: 142, status: 'SUCCESS' },
-      evidenceCount: 3,
-      hasJiraUrl: true,
-      hasMrUrl: true,
-      isQueued: true,
+test('loading the action panel twice does not attach a duplicate click handler', () => {
+  const harness = createHarness();
+  vm.runInContext(actionPanelSource, harness.context, { filename: 'kronos-action-panel.js' });
+  vm.runInContext(actionPanelSource, harness.context, { filename: 'kronos-action-panel.js' });
+  assert.equal(harness.listeners.get('click').length, 1);
+});
+
+test('Setup and Doctor actions post only their allowlisted operation command field', () => {
+  const harness = createHarness({ webviewName: 'Kronos Setup', fields: [] });
+  vm.runInContext(actionPanelSource, harness.context, { filename: 'kronos-action-panel.js' });
+  const buttonAttributes = new Map([
+    ['data-action', 'openDoctor'],
+    ['data-ticket', 'JIRA-123'],
+  ]);
+  const button = { getAttribute: name => buttonAttributes.get(name) || null };
+  harness.listeners.get('click')[0]({
+    target: { closest: selector => selector === '[data-action]' ? button : null },
+    preventDefault() {},
+  });
+  assert.deepEqual(harness.messages.at(-1), { command: 'openDoctor' });
+});
+
+test('context composer posts edited focus only after Insert or Ctrl+Enter', () => {
+  const focusListeners = new Map();
+  const focus = {
+    value: 'Review latest comments',
+    addEventListener(name, listener) { focusListeners.set(name, listener); },
+    focus() {},
+  };
+  const harness = createFormHarness({
+    scriptId: 'kronos-context-composer-script',
+    elements: new Map([['context-focus', focus]]),
+  });
+  vm.runInContext(contextComposerSource, harness.context, { filename: 'kronos-context-composer.js' });
+  assert.equal(harness.messages.length, 1, 'only the ready message is posted on load');
+  let ordinaryEnterPrevented = false;
+  focusListeners.get('keydown')({
+    key: 'Enter',
+    ctrlKey: false,
+    metaKey: false,
+    preventDefault() { ordinaryEnterPrevented = true; },
+  });
+  assert.equal(ordinaryEnterPrevented, false, 'ordinary Enter remains available for editing');
+  assert.equal(harness.messages.length, 1, 'ordinary Enter never requests context placement');
+  harness.click('insertDraft');
+  assert.deepEqual(harness.messages.at(-1), { command: 'insertDraft', focus: 'Review latest comments' });
+  focus.value = 'Focus on unresolved discussion';
+  let prevented = false;
+  focusListeners.get('keydown')({ key: 'Enter', ctrlKey: true, metaKey: false, preventDefault() { prevented = true; } });
+  assert.equal(prevented, true);
+  assert.deepEqual(harness.messages.at(-1), { command: 'insertDraft', focus: 'Focus on unresolved discussion' });
+  harness.click('addToBasket');
+  assert.deepEqual(harness.messages.at(-1), { command: 'addToBasket' });
+});
+
+test('context composer initialization is idempotent and one Insert click posts once', () => {
+  const focusListeners = [];
+  const focus = {
+    value: 'Review the immutable evidence',
+    addEventListener(name, listener) {
+      if (name === 'keydown') { focusListeners.push(listener); }
     },
-    'KRONOS-FB-3': {
-      summary: 'Unlinked backlog ticket',
-      type: 'Task',
-      priority: 'Low',
-      status: 'To Do',
-      description: 'Needs a project link before work can start.',
-      projects: [],
-      labels: [],
-      attachments: [],
-      mr: null,
-      build: null,
-      evidenceCount: 0,
-      hasJiraUrl: false,
-      hasMrUrl: false,
-      isQueued: false,
+    focus() {},
+  };
+  const harness = createFormHarness({
+    scriptId: 'kronos-context-composer-script',
+    elements: new Map([['context-focus', focus]]),
+  });
+  vm.runInContext(contextComposerSource, harness.context, { filename: 'kronos-context-composer.js' });
+  vm.runInContext(contextComposerSource, harness.context, { filename: 'kronos-context-composer.js' });
+
+  assert.equal(harness.attributes.get('data-kronos-context-composer-handler-attached'), 'true');
+  assert.equal(harness.listeners.get('click').length, 1);
+  assert.equal(focusListeners.length, 1);
+  harness.click('insertDraft');
+  assert.equal(harness.messages.filter(message => message.command === 'insertDraft').length, 1);
+});
+
+test('context basket preserves focus across explicit refresh and non-submitting insert actions', () => {
+  const focusListeners = new Map();
+  const focus = {
+    value: 'Compare Jira and MR evidence',
+    addEventListener(name, listener) { focusListeners.set(name, listener); },
+    focus() {},
+  };
+  const harness = createFormHarness({
+    scriptId: 'kronos-context-basket-script',
+    elements: new Map([['basket-focus', focus]]),
+  });
+  vm.runInContext(contextBasketSource, harness.context, { filename: 'kronos-context-basket.js' });
+  harness.click('refresh', { 'data-entry-id': 'basket-abc123' });
+  assert.deepEqual(harness.messages.at(-1), {
+    command: 'refresh',
+    entryId: 'basket-abc123',
+    focus: 'Compare Jira and MR evidence',
+  });
+  focus.value = 'Place the combined evidence';
+  let prevented = false;
+  focusListeners.get('keydown')({ key: 'Enter', ctrlKey: true, metaKey: false, preventDefault() { prevented = true; } });
+  assert.equal(prevented, true);
+  assert.deepEqual(harness.messages.at(-1), { command: 'insert', focus: 'Place the combined evidence' });
+});
+
+test('project integration form collects only bounded project setup fields', () => {
+  const values = {
+    gitlabProject: 'group/app',
+    jenkinsUrl: 'https://jenkins.example/job/app/',
+    sonarProjectKey: 'app:key',
+    defaultBranch: 'main',
+    branchProfiles: 'main | https://jenkins.example/job/app/main | app:key | main',
+    activeBranchProfile: 'main',
+  };
+  const card = {
+    getAttribute(name) { return name === 'data-project-name' ? 'Application' : null; },
+    querySelector(selector) {
+      const match = /^\[data-field="([A-Za-z]+)"\]$/.exec(selector);
+      return match ? { value: values[match[1]] || '' } : null;
     },
   };
-  const env = createWebviewDom(`
-    <input id="board-filter" />
-    <span id="board-filter-summary"></span>
-    <main class="board">
-      <section class="column" id="queued-column">
-        <span data-count>0</span>
-        <div data-empty></div>
-        <article class="card" tabindex="0" data-ticket="KRONOS-FB-1" data-search="review-ready fixture ticket triage sandbox">
-          <button id="remove-fb1" data-action="removeFromQueue" data-ticket="KRONOS-FB-1">Remove</button>
-          <span class="card-title">Review-ready fixture ticket</span>
-        </article>
-      </section>
-      <section class="column" id="todo-column">
-        <span data-count>0</span>
-        <div data-empty></div>
-        <article class="card" tabindex="0" data-ticket="KRONOS-FB-3" data-search="unlinked backlog setup">
-          <span class="card-title">Unlinked backlog ticket</span>
-        </article>
-      </section>
-    </main>
-    <div id="modal-overlay">
-      <button id="modal-close">Close</button>
-      <h1 id="modal-key"></h1>
-      <h2 id="modal-summary"></h2>
-      <p id="modal-meta"></p>
-      <div id="modal-desc"></div>
-      <div id="modal-projects"></div>
-      <div id="modal-labels"></div>
-      <div id="modal-evidence"></div>
-      <div id="modal-mr"></div>
-      <div id="modal-build"></div>
-      <div id="modal-attachments"></div>
-      <div id="modal-actions"></div>
-      <div id="modal-comments"></div>
-    </div>
-    <textarea id="kronos-jira-ticket-data">${JSON.stringify(ticketData)}</textarea>
-    <script
-      id="kronos-jira-board-script"
-      data-kronos-script-kind="jira-board"
-      data-kronos-webview-name="Kronos DOM Jira Board"
-      data-kronos-ready-command="${WEBVIEW_READY_COMMAND}"></script>
-  `);
-
-  await loadRuntimeAndScript(env, jiraBoardScript, 'kronos-jira-board.js');
-
-  const { document } = env.dom.window;
-  assert.equal(document.documentElement.getAttribute('data-kronos-jira-board-attached'), 'true');
-  assert.equal(document.documentElement.getAttribute('data-kronos-actions-ready'), 'true');
-  assert.equal(document.getElementById('board-filter-summary').textContent, '2 total');
-  assert.equal(document.querySelector('#queued-column [data-count]').textContent, '1');
-  assert.equal(document.querySelector('#todo-column [data-count]').textContent, '1');
-
-  input(env.dom.window, document.getElementById('board-filter'), 'triage');
-  assert.equal(document.getElementById('board-filter-summary').textContent, '1 of 2 visible');
-  assert.equal(document.querySelector('[data-ticket="KRONOS-FB-1"]').hidden, false);
-  assert.equal(document.querySelector('[data-ticket="KRONOS-FB-3"]').hidden, true);
-  assert.equal(document.querySelector('#queued-column [data-count]').textContent, '1');
-  assert.equal(document.querySelector('#todo-column [data-count]').textContent, '0');
-  assert.equal(document.querySelector('#todo-column [data-empty]').textContent, 'No matching tickets.');
-  assert.equal(document.getElementById('todo-column').classList.contains('filtered-empty'), true);
-
-  click(env.dom.window, document.getElementById('remove-fb1'));
-  assert.deepEqual(actionMessages(env.messages).at(-1), { command: 'removeFromQueue', ticket: 'KRONOS-FB-1' });
-  assert.equal(document.getElementById('modal-overlay').classList.contains('show'), false);
-
-  click(env.dom.window, document.querySelector('[data-ticket="KRONOS-FB-1"] .card-title'));
-  assert.equal(document.getElementById('modal-overlay').classList.contains('show'), true);
-  assert.equal(document.getElementById('modal-key').textContent, 'KRONOS-FB-1');
-  assert.equal(document.getElementById('modal-summary').textContent, 'Review-ready fixture ticket');
-  assert.equal(document.getElementById('modal-meta').textContent, 'Story - High - In Review');
-  assert.equal(document.getElementById('modal-projects').textContent, 'sandbox-project');
-  assert.equal(document.getElementById('modal-labels').textContent, 'kronos-feedback, safe-fixture');
-  assert.equal(document.getElementById('modal-evidence').textContent, '3 items');
-  assert.match(document.getElementById('modal-mr').textContent, /MR !41 - pending review/);
-  assert.equal(document.getElementById('modal-build').textContent, 'Build #142 - SUCCESS');
-  assert.equal(document.getElementById('modal-attachments').textContent, 'evidence.md (2KB)');
-  assert.ok([...document.querySelectorAll('#modal-actions button')].some(button => button.textContent === 'Verify Local'));
-  assert.ok([...document.querySelectorAll('#modal-actions button')].some(button => button.textContent === 'Verify Remote'));
-  assert.ok(env.messages.some(message => message.command === 'getComments' && message.ticket === 'KRONOS-FB-1'));
-
-  env.dom.window.dispatchEvent(new env.dom.window.MessageEvent('message', {
-    data: {
-      command: 'comments',
-      ticket: 'KRONOS-FB-1',
-      data: [{ author: 'Reviewer', created: '2026-07-06', body: 'Ready for manual pass.' }],
-    },
-  }));
-  assert.match(document.getElementById('modal-comments').textContent, /Reviewer/);
-  assert.match(document.getElementById('modal-comments').textContent, /Ready for manual pass\./);
-
-  click(env.dom.window, buttonByText(document, 'Handoff'));
-  assert.deepEqual(actionMessages(env.messages).at(-1), { command: 'evidenceHandoff', ticket: 'KRONOS-FB-1' });
-  assert.equal(document.getElementById('modal-overlay').classList.contains('show'), false);
-
-  input(env.dom.window, document.getElementById('board-filter'), '');
-  click(env.dom.window, document.querySelector('[data-ticket="KRONOS-FB-3"] .card-title'));
-  assert.equal(document.getElementById('modal-summary').textContent, 'Unlinked backlog ticket');
-  assert.equal(document.getElementById('modal-projects').textContent, 'Not linked');
-  assert.match(document.getElementById('modal-actions').textContent, /Link to a project first to start or queue\./);
-  assert.equal([...document.querySelectorAll('#modal-actions button')].some(button => button.textContent === 'Start Work'), false);
-  assert.ok([...document.querySelectorAll('#modal-actions button')].some(button => button.textContent === 'Verify Local'));
-  assert.ok([...document.querySelectorAll('#modal-actions button')].some(button => button.textContent === 'Verify Remote'));
-  assert.ok([...document.querySelectorAll('#modal-actions button')].some(button => button.textContent === 'Add Evidence'));
-  assert.ok(env.messages.some(message => message.command === 'getComments' && message.ticket === 'KRONOS-FB-3'));
-  assert.deepEqual(env.errors, []);
+  const harness = createFormHarness({
+    scriptId: 'kronos-project-integration-script',
+    querySelectorAll: selector => selector === '[data-project-card]' ? [card] : [],
+  });
+  vm.runInContext(projectIntegrationSource, harness.context, { filename: 'kronos-project-integration.js' });
+  harness.click('save');
+  assert.deepEqual(harness.messages.at(-1), {
+    command: 'save',
+    projects: [{ name: 'Application', ...values }],
+  });
 });
+
+function createFormHarness(options) {
+  const messages = [];
+  const attributes = new Map();
+  const listeners = new Map();
+  const script = {
+    getAttribute(name) { return name === 'data-kronos-ready-command' ? '__kronosWebviewReady' : null; },
+  };
+  const document = {
+    currentScript: script,
+    documentElement: {
+      setAttribute: (name, value) => attributes.set(name, value),
+      getAttribute: name => attributes.get(name) || null,
+    },
+    readyState: 'complete',
+    addEventListener(name, listener) {
+      const values = listeners.get(name) || [];
+      values.push(listener);
+      listeners.set(name, values);
+    },
+    getElementById(id) {
+      if (id === options.scriptId) { return script; }
+      return options.elements?.get(id) || null;
+    },
+    querySelectorAll(selector) { return options.querySelectorAll ? options.querySelectorAll(selector) : []; },
+  };
+  const runtime = {
+    createReadyPoster({ readyCommand, webviewName }) {
+      return () => messages.push({ command: readyCommand, webviewName });
+    },
+    markReady() {},
+    installDiagnostics() {},
+    vscodeApi() { return { postMessage: message => messages.push(JSON.parse(JSON.stringify(message))) }; },
+  };
+  const context = vm.createContext({
+    document,
+    KronosWebviewRuntime: runtime,
+    console: { info() {}, warn() {}, error() {} },
+    setTimeout(callback) { callback(); return 1; },
+    clearTimeout() {},
+  });
+  context.globalThis = context;
+  context.window = context;
+  return {
+    context,
+    attributes,
+    listeners,
+    messages,
+    click(action, extraAttributes = {}) {
+      const target = {
+        getAttribute(name) { return name === 'data-action' ? action : extraAttributes[name] || null; },
+      };
+      const event = {
+        target: { closest: selector => selector === '[data-action]' ? target : null },
+        preventDefault() {},
+      };
+      for (const listener of listeners.get('click') || []) { listener(event); }
+    },
+  };
+}

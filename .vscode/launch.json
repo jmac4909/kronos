@@ -21,7 +21,7 @@
         "--extensionDevelopmentPath=${workspaceFolder}"
       ],
       "env": {
-        "KRONOS_DIR": "${workspaceFolder}/.claude/kronos-feedback-state"
+        "KRONOS_DIR": "${workspaceFolder}/.kronos/feedback-state"
       },
       "outFiles": [
         "${workspaceFolder}/out/**/*.js"

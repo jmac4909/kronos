@@ -1,138 +1,61 @@
-const fs = require('fs');
-const os = require('os');
-const path = require('path');
-const { spawnSync } = require('child_process');
-const { downloadAndUnzipVSCode, runTests } = require('@vscode/test-electron');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const { spawnSync } = require('node:child_process');
 
-const ROOT = path.resolve(__dirname, '..');
-const KRONOS_DIR = path.join(ROOT, '.claude', 'kronos-feedback-state');
-const WORKSPACE_DIR = path.join(KRONOS_DIR, 'sandbox-project');
-const USER_DATA_DIR = path.join(ROOT, '.vscode-test', 'feedback-user-data');
-const EXTENSIONS_DIR = path.join(ROOT, '.vscode-test', 'feedback-extensions');
+const root = path.resolve(__dirname, '..');
+const fixtureDir = path.join(root, '.kronos', 'feedback-state');
 
-function run(command, args, options = {}) {
-  const result = spawnSync(command, args, {
-    cwd: ROOT,
-    encoding: 'utf8',
-    stdio: options.capture ? 'pipe' : 'inherit',
-    env: { ...process.env, ...(options.env || {}) },
-  });
-  if (result.error) {
-    throw new Error(`${command} ${args.join(' ')} failed: ${result.error.message}`);
-  }
-  if (result.status !== 0) {
-    const detail = options.capture ? `\n${result.stdout || ''}${result.stderr || ''}` : '';
-    throw new Error(`${command} ${args.join(' ')} exited with ${result.status}${detail}`);
-  }
-  return result.stdout || '';
+function run(command, args) {
+  const result = spawnSync(command, args, { cwd: root, encoding: 'utf8', stdio: 'inherit' });
+  if (result.error) { throw result.error; }
+  if (result.status !== 0) { throw new Error(`${command} ${args.join(' ')} exited with ${result.status}`); }
 }
 
-function ensureXvfbOnHeadlessLinux() {
-  if (process.platform !== 'linux' || process.env.DISPLAY) { return; }
-  if (process.env.KRONOS_SMOKE_UNDER_XVFB === '1') { return; }
-  const xvfb = spawnSync('sh', ['-lc', 'command -v xvfb-run'], { encoding: 'utf8', stdio: 'pipe' });
-  if (xvfb.status !== 0 || !xvfb.stdout.trim()) {
-    throw new Error('No DISPLAY is set and xvfb-run is unavailable. Run this smoke in a graphical session or install xvfb.');
-  }
-  const rerun = spawnSync('xvfb-run', ['-a', process.execPath, __filename], {
-    cwd: ROOT,
-    env: { ...process.env, KRONOS_SMOKE_UNDER_XVFB: '1' },
-    stdio: 'inherit',
-  });
-  process.exit(rerun.status === null ? 1 : rerun.status);
+run(process.execPath, ['scripts/create-feedback-state.js', '--force']);
+run('npm', ['test']);
+
+const work = JSON.parse(fs.readFileSync(path.join(fixtureDir, 'work.json'), 'utf8'));
+assert.equal(work.schemaVersion, 2);
+assert.deepEqual(Object.keys(work.tickets).sort(), ['JIRA-123', 'JIRA-456', 'JIRA-789']);
+assert.equal(fs.existsSync(path.join(fixtureDir, 'queue.json')), false);
+assert.equal(fs.existsSync(path.join(fixtureDir, 'runs')), false);
+
+const packageJson = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+assert.deepEqual(packageJson.contributes.views.kronos.map(view => view.id), [
+  'kronosWork',
+  'kronosSessions',
+  'kronosProjects',
+  'kronosAttention',
+]);
+assert.equal(packageJson.contributes.commands.length, 40);
+assert.equal(Object.keys(packageJson.contributes.configuration.properties).length, 10);
+assert.equal(work.tickets['JIRA-123'].linked_local_project, 'fixture-service');
+assert.equal(
+  fs.readFileSync(path.join(fixtureDir, 'fixture-repo', '.git', 'HEAD'), 'utf8').trim(),
+  'ref: refs/heads/feature/kronos-feedback',
+);
+const workSessionStore = require('../out/services/workSessionStore.js');
+const monitorEventStore = require('../out/services/monitorEventStore.js');
+assert.deepEqual(workSessionStore.listWorkSessionStoreIssues({ kronosDir: fixtureDir }), []);
+const sessions = workSessionStore.listWorkSessions({ kronosDir: fixtureDir });
+assert.deepEqual(sessions.map(session => session.kind).sort(), ['standalone', 'ticket']);
+assert.ok(sessions.every(session => session.terminals.length === 0));
+const ticketSession = sessions.find(session => session.kind === 'ticket');
+assert.equal(ticketSession.ticketKey, 'JIRA-456');
+assert.equal(ticketSession.monitoring.enabled, false);
+assert.equal(ticketSession.providerBindings.filter(binding => binding.provider === 'jenkins').length, 2);
+assert.equal(ticketSession.providerBindings.filter(binding => binding.provider === 'sonar').length, 2);
+const monitorEvents = monitorEventStore.listMonitorEvents({ limit: 100 }, { kronosDir: fixtureDir });
+assert.equal(monitorEvents.length, 6);
+assert.equal(monitorEvents.filter(event => event.metadata?.transitionKind === 'provider_read_failed').length, 2);
+assert.ok(monitorEvents.some(event => event.metadata?.transitionKind === 'initial_mr_observed'));
+if (process.platform !== 'win32') {
+  assert.equal(fs.statSync(path.join(fixtureDir, 'monitor-events.jsonl')).mode & 0o777, 0o600);
+  assert.equal(fs.statSync(path.join(fixtureDir, 'work-sessions')).mode & 0o777, 0o700);
 }
 
-function readOsRelease() {
-  try {
-    return fs.readFileSync('/etc/os-release', 'utf8');
-  } catch {
-    return '';
-  }
-}
-
-function linuxInstallHint(missingLibraries) {
-  const osRelease = readOsRelease().toLowerCase();
-  const needsGtk = missingLibraries.includes('libgtk-3.so.0');
-  if (!needsGtk) {
-    return 'Install the missing Linux shared libraries required by the VS Code Electron runtime.';
-  }
-  if (osRelease.includes('id=amzn') || osRelease.includes('id_like=fedora') || osRelease.includes('id_like="fedora')) {
-    return 'Install GTK 3 before rerunning this smoke, for example: sudo dnf install gtk3';
-  }
-  if (osRelease.includes('id=ubuntu') || osRelease.includes('id=debian') || osRelease.includes('id_like=debian')) {
-    return 'Install GTK 3 before rerunning this smoke, for example: sudo apt-get install libgtk-3-0';
-  }
-  return 'Install the GTK 3 runtime package for this Linux distribution before rerunning this smoke.';
-}
-
-function missingLinuxSharedLibraries(executablePath) {
-  if (process.platform !== 'linux') { return []; }
-  const result = spawnSync('ldd', [executablePath], { encoding: 'utf8', stdio: 'pipe' });
-  if (result.error) {
-    throw new Error(`Unable to check VS Code native dependencies with ldd: ${result.error.message}`);
-  }
-  const combined = `${result.stdout || ''}\n${result.stderr || ''}`;
-  const missing = [];
-  for (const line of combined.split(/\r?\n/)) {
-    const match = /^\s*(\S+)\s+=>\s+not found\s*$/.exec(line);
-    if (match) { missing.push(match[1]); }
-  }
-  return Array.from(new Set(missing)).sort();
-}
-
-function assertNativeDependencies(executablePath) {
-  const missingLibraries = missingLinuxSharedLibraries(executablePath);
-  if (missingLibraries.length === 0) { return; }
-  throw new Error([
-    'VS Code extension-host smoke cannot start because native GUI libraries are missing.',
-    `Executable: ${executablePath}`,
-    `Missing: ${missingLibraries.join(', ')}`,
-    linuxInstallHint(missingLibraries),
-  ].join('\n'));
-}
-
-async function main() {
-  ensureXvfbOnHeadlessLinux();
-  console.log('Preparing Kronos feedback smoke state.');
-  run(process.execPath, ['scripts/create-feedback-state.js', '--force']);
-  console.log('Compiling Kronos extension.');
-  run('npm', ['run', 'compile']);
-
-  fs.rmSync(USER_DATA_DIR, { recursive: true, force: true });
-  fs.rmSync(EXTENSIONS_DIR, { recursive: true, force: true });
-  fs.mkdirSync(USER_DATA_DIR, { recursive: true });
-  fs.mkdirSync(EXTENSIONS_DIR, { recursive: true });
-
-  console.log('Resolving VS Code test binary.');
-  const vscodeExecutablePath = await downloadAndUnzipVSCode({ extensionDevelopmentPath: ROOT });
-  assertNativeDependencies(vscodeExecutablePath);
-
-  console.log('Launching VS Code extension-host smoke.');
-  await runTests({
-    vscodeExecutablePath,
-    extensionDevelopmentPath: ROOT,
-    extensionTestsPath: path.join(ROOT, 'test', 'feedback-smoke', 'index.js'),
-    extensionTestsEnv: {
-      KRONOS_DIR,
-      KRONOS_FEEDBACK_SMOKE: '1',
-    },
-    launchArgs: [
-      WORKSPACE_DIR,
-      '--disable-extensions',
-      '--disable-workspace-trust',
-      '--user-data-dir',
-      USER_DATA_DIR,
-      '--extensions-dir',
-      EXTENSIONS_DIR,
-      '--skip-welcome',
-      '--skip-release-notes',
-      '--disable-gpu',
-      '--no-sandbox',
-    ],
-  });
-}
-
-main().catch(error => {
-  console.error(error && error.stack ? error.stack : error);
-  process.exit(1);
-});
+console.log('Kronos terminal-first feedback smoke: PASS');
+console.log(`Fixture: ${fixtureDir}`);
+console.log('Synthetic detached Sessions and Attention evidence validated.');
+console.log('No provider endpoint, project command, terminal process, or live Git repository was touched.');

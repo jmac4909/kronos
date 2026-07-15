@@ -1,9 +1,9 @@
-const fs = require('fs');
-const path = require('path');
-const { createHash } = require('crypto');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 
-const ROOT = process.cwd();
-const DEFAULT_DIR = path.join(ROOT, '.claude', 'kronos-feedback-state');
+const root = path.resolve(__dirname, '..');
+const defaultDir = path.join(root, '.kronos', 'feedback-state');
 
 function fail(message) {
   console.error(`Feedback state failed: ${message}`);
@@ -11,384 +11,339 @@ function fail(message) {
 }
 
 function parseArgs(argv) {
-  const options = { targetDir: DEFAULT_DIR, force: false };
+  const options = { targetDir: defaultDir, force: false };
   for (let index = 0; index < argv.length; index += 1) {
-    const arg = argv[index];
-    if (arg === '--force') {
-      options.force = true;
-      continue;
-    }
-    if (arg === '--dir') {
+    const argument = argv[index];
+    if (argument === '--force') { options.force = true; continue; }
+    if (argument === '--dir') {
       const value = argv[index + 1];
       if (!value) { fail('--dir requires a path'); }
       options.targetDir = path.resolve(value);
       index += 1;
       continue;
     }
-    if (arg === '--help' || arg === '-h') {
-      printHelp();
+    if (argument === '--help' || argument === '-h') {
+      console.log('Usage: node scripts/create-feedback-state.js [--dir <path>] [--force]');
       process.exit(0);
     }
-    fail(`unknown argument: ${arg}`);
+    fail(`unknown argument: ${argument}`);
   }
   return options;
 }
 
-function printHelp() {
-  console.log([
-    'Create an isolated Kronos feedback state directory.',
-    '',
-    'Usage:',
-    '  node scripts/create-feedback-state.js [--dir <path>] [--force]',
-    '',
-    'The default target is .claude/kronos-feedback-state in this repo.',
-    'Point the extension at it with KRONOS_DIR before launching VS Code.',
-  ].join('\n'));
-}
-
-function ensureSafeTarget(targetDir) {
+function assertSafeTarget(targetDir) {
   const resolved = path.resolve(targetDir);
-  const homeKronos = path.resolve(process.env.HOME || '', '.claude', 'kronos');
-  if (resolved === homeKronos && !process.env.KRONOS_ALLOW_HOME_FEEDBACK_STATE) {
-    fail('refusing to write directly to ~/.claude/kronos; choose --dir or set KRONOS_ALLOW_HOME_FEEDBACK_STATE=1');
+  const homeKronos = path.join(os.homedir(), '.kronos');
+  if (resolved === homeKronos || !resolved.startsWith(`${path.resolve(root)}${path.sep}`)) {
+    fail('the feedback fixture must stay in this repository and cannot replace ~/.kronos');
   }
   return resolved;
 }
 
-function writeJson(filePath, data) {
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(filePath, JSON.stringify(data, null, 2) + '\n');
+function writePrivate(filePath, content) {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true, mode: 0o700 });
+  fs.writeFileSync(filePath, content, { mode: 0o600 });
+  if (process.platform !== 'win32') { fs.chmodSync(filePath, 0o600); }
 }
 
-function writeText(filePath, text) {
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(filePath, text);
-}
-
-function shortHash(text) {
-  return createHash('sha256').update(text).digest('hex').slice(0, 12);
-}
-
-function buildFixture(now, targetDir) {
-  const sandboxProject = path.join(targetDir, 'sandbox-project');
-  const runId = 'feedback-run-needs-human';
-  const pausedRunId = 'feedback-run-paused-stale';
-  const logPath = path.join(targetDir, 'runs', `${runId}.log`);
-  const promptPath = path.join(targetDir, 'runs', `${runId}.prompt.txt`);
-  const pausedLogPath = path.join(targetDir, 'runs', `${pausedRunId}.log`);
-  const pausedPromptPath = path.join(targetDir, 'runs', `${pausedRunId}.prompt.txt`);
-  const promptText = 'Fixture prompt for Kronos human feedback. Do not dispatch against production systems.\n';
-  const pausedPromptText = 'Fixture prompt for a stale paused Kronos run. Continue only inside the feedback state.\n';
-  const nowMs = new Date(now).getTime();
-  const pausedStartedAt = new Date(nowMs - 4 * 60 * 60 * 1000).toISOString();
-  const pausedAt = new Date(nowMs - 3 * 60 * 60 * 1000).toISOString();
-  const state = {
-    version: 3,
-    last_updated: now,
-    settings: {
-      scan_dirs: [sandboxProject],
-      jira_project_key: 'KRONOS',
-      overnight: {
-        enabled: false,
-        max_concurrent: 1,
-        max_open_mrs_per_project: 1,
-        nightly_implement_cap: 1,
-        vpn_check_host: '',
-        vpn_check_port: 0,
-        vpn_check_interval_sec: 60,
-      },
-    },
+function fixture(now, targetDir) {
+  const projectPath = path.join(targetDir, 'fixture-repo');
+  return {
+    schemaVersion: 2,
+    refreshedAt: now,
     projects: {
-      'feedback-service': {
-        path: sandboxProject,
-        priority: 10,
+      'fixture-service': {
+        path: projectPath,
         config: {
-          repo_name: 'feedback-service',
-          jira_project_key: 'KRONOS',
-          jira_ticket_filter: 'project = KRONOS AND labels = kronos-feedback',
+          repo_name: 'fixture-service',
           gitlab_project_id: 1001,
-          jenkins_url: 'https://example.invalid/jenkins/job/feedback-service',
-          sonar_project_key: 'feedback-service',
-          base_branch: 'develop',
+          jenkins_url: 'https://jenkins.example.invalid/job/fixture-service',
+          sonar_project_key: 'fixture-service',
+          default_branch: 'main',
         },
-        health: 'yellow',
-        summary: 'Synthetic project for safe Kronos cockpit review.',
-        last_polled: now,
-        open_mr_count: 2,
       },
     },
     tickets: {
-      'KRONOS-FB-1': {
-        summary: 'Review-ready fixture with evidence and a linked MR',
+      'JIRA-123': {
+        summary: 'Terminal-owned session with linked MR and build',
         type: 'Story',
         priority: 'High',
         jira_status: 'In Review',
+        jira_project_key: 'JIRA',
         source: 'jira',
         updated: now,
-        description: 'AC1: Dashboard shows next action.\nAC2: Evidence handoff is safe to paste.',
-        labels: ['kronos-feedback', 'safe-fixture'],
-        fixVersion: 'feedback-r1',
-        jira_url: 'https://example.invalid/browse/KRONOS-FB-1',
-        projects: ['feedback-service'],
+        description: 'Use this ticket to evaluate Manage Focused Terminal and explicit context insertion.',
+        labels: ['terminal-first', 'safe-fixture'],
+        jira_url: 'https://jira.example.invalid/browse/JIRA-123',
+        linked_local_project: 'fixture-service',
         mr: {
-          iid: 41,
+          iid: 77,
           state: 'opened',
           review_status: 'pending_review',
-          url: 'https://example.invalid/gitlab/feedback-service/-/merge_requests/41',
-          title: 'Fixture review-ready change',
-          source_branch: 'feature/kronos-fb-1',
-          target_branch: 'develop',
-          comment_count: 2,
+          url: 'https://gitlab.example.invalid/group/fixture-service/-/merge_requests/77',
+          title: 'Terminal-first fixture MR',
+          source_branch: 'feature/jira-123',
+          target_branch: 'main',
           unresolved_discussion_count: 1,
         },
         build: {
           number: 142,
           status: 'SUCCESS',
-          url: 'https://example.invalid/jenkins/job/feedback-service/142',
-        },
-        next_action: 'await_review',
-        last_action: 'verify-local',
-        last_action_at: now,
-        evidence: {
-          updated_at: now,
-          notes: [
-            { at: now, kind: 'decision', text: 'Fixture ticket is safe for evidence mutation during human feedback.' },
-            { at: now, kind: 'test', text: 'Synthetic local verification passed.' },
-          ],
-          acceptance_criteria: [
-            { id: 'ac-1', text: 'Dashboard shows next action.', checked: true, source: 'description' },
-            { id: 'ac-2', text: 'Evidence handoff is safe to paste.', checked: true, source: 'description' },
-          ],
-          checks: [
-            {
-              id: 'check-feedback-local',
-              at: now,
-              name: 'Synthetic local smoke',
-              result: 'pass',
-              command: 'npm test',
-              environment: 'feedback-fixture',
-              confidence: 'high',
-              summary: 'Fixture check only; no external provider was contacted.',
-            },
-          ],
-          environment_results: {
-            local: {
-              environment: 'local',
-              status: 'pass',
-              checked_at: now,
-              detail: 'Synthetic local feedback state loaded.',
-            },
-          },
+          url: 'https://jenkins.example.invalid/job/fixture-service/142',
         },
       },
-      'KRONOS-FB-2': {
-        summary: 'Failed build fixture that should draw operator attention',
+      'JIRA-456': {
+        summary: 'Attention-state fixture with requested changes',
         type: 'Bug',
         priority: 'Critical',
         jira_status: 'In Progress',
+        jira_project_key: 'JIRA',
         source: 'jira',
         updated: now,
-        description: 'AC1: Failed build is visible before retry.',
-        labels: ['kronos-feedback', 'needs-attention'],
-        jira_url: 'https://example.invalid/browse/KRONOS-FB-2',
-        projects: ['feedback-service'],
+        description: 'Provider URLs intentionally use .invalid and must never be mutated.',
+        labels: ['terminal-first', 'needs-attention'],
+        jira_url: 'https://jira.example.invalid/browse/JIRA-456',
+        linked_local_project: 'fixture-service',
         mr: {
-          iid: 42,
+          iid: 78,
           state: 'opened',
           review_status: 'changes_requested',
-          url: 'https://example.invalid/gitlab/feedback-service/-/merge_requests/42',
-          title: 'Fixture failed-build change',
-          source_branch: 'feature/kronos-fb-2',
-          target_branch: 'develop',
+          url: 'https://gitlab.example.invalid/group/fixture-service/-/merge_requests/78',
+          source_branch: 'fix/jira-456',
+          target_branch: 'main',
+          unresolved_discussion_count: 2,
         },
         build: {
           number: 143,
           status: 'FAILURE',
-          url: 'https://example.invalid/jenkins/job/feedback-service/143',
-        },
-        next_action: 'fix_build',
-        last_action: 'implement',
-        last_action_at: now,
-        evidence: {
-          updated_at: now,
-          notes: [
-            { at: now, kind: 'risk', text: 'Fixture failure should stay inside the sandbox feedback state.' },
-          ],
-          checks: [
-            {
-              id: 'check-feedback-build',
-              at: now,
-              name: 'Synthetic Jenkins build',
-              result: 'fail',
-              command: 'fixture-build',
-              environment: 'feedback-fixture',
-              confidence: 'high',
-              summary: 'Intentional fixture failure for Recovery and Human Review surfaces.',
-            },
-          ],
+          url: 'https://jenkins.example.invalid/job/fixture-service/143',
         },
       },
-      'KRONOS-FB-3': {
-        summary: 'Unlinked backlog fixture for triage and planning panels',
+      'JIRA-789': {
+        summary: 'Completed unlinked Jira work item',
         type: 'Task',
         priority: 'Medium',
-        jira_status: 'Open',
+        jira_status: 'Done',
+        jira_status_category: 'done',
+        jira_project_key: 'JIRA',
         source: 'jira',
         updated: now,
-        description: 'AC1: Unlinked ticket is easy to spot.',
-        labels: ['kronos-feedback', 'triage'],
-        jira_url: 'https://example.invalid/browse/KRONOS-FB-3',
-        projects: [],
+        description: 'Use this row to verify completed filtering and graceful unavailable-provider states.',
+        labels: ['terminal-first', 'unlinked', 'completed-fixture'],
+        jira_url: 'https://jira.example.invalid/browse/JIRA-789',
         mr: null,
         build: null,
-        next_action: 'implement',
-        last_action: null,
-        last_action_at: null,
       },
     },
-    adhoc_tasks: {
-      'feedback-task-1': {
-        title: 'Capture first unclear Kronos panel',
-        description: 'Use this synthetic task during the 20-30 minute feedback pass.',
-        status: 'todo',
-        projects: ['feedback-service'],
-        created_at: now,
+  };
+}
+
+function sessionFixtures(now, targetDir) {
+  const projectPath = path.join(targetDir, 'fixture-repo');
+  const createdAt = new Date(Date.parse(now) - 10_000).toISOString();
+  const ticketSession = {
+    schemaVersion: 1,
+    id: 'jira-jira-456',
+    kind: 'ticket',
+    ticketKey: 'JIRA-456',
+    title: 'Attention-state fixture with requested changes',
+    status: 'active',
+    createdAt,
+    updatedAt: now,
+    terminals: [],
+    providerBindings: [
+      {
+        id: 'gitlab-merge-request-78',
+        provider: 'gitlab',
+        resource: 'merge-request',
+        subjectId: '78',
+        projectId: 'group/fixture-service',
+        url: 'https://gitlab.example.invalid/group/fixture-service/-/merge_requests/78',
+        attachedAt: new Date(Date.parse(now) - 8_000).toISOString(),
       },
-    },
-    overnight: {
+      {
+        id: 'jenkins-build-142',
+        provider: 'jenkins',
+        resource: 'build',
+        subjectId: '142',
+        url: 'https://jenkins.example.invalid/job/fixture-service/142',
+        attachedAt: new Date(Date.parse(now) - 7_000).toISOString(),
+      },
+      {
+        id: 'jenkins-build-143',
+        provider: 'jenkins',
+        resource: 'build',
+        subjectId: '143',
+        url: 'https://jenkins.example.invalid/job/fixture-service/143',
+        attachedAt: new Date(Date.parse(now) - 6_000).toISOString(),
+      },
+      {
+        id: 'sonar-quality-gate-feature',
+        provider: 'sonar',
+        resource: 'quality-gate',
+        subjectId: 'fixture-service:feature/jira-456',
+        projectId: 'fixture-service',
+        url: 'https://sonar.example.invalid/dashboard?id=fixture-service&branch=feature%2Fjira-456',
+        attachedAt: new Date(Date.parse(now) - 5_000).toISOString(),
+      },
+      {
+        id: 'sonar-quality-gate-main',
+        provider: 'sonar',
+        resource: 'quality-gate',
+        subjectId: 'fixture-service:main',
+        projectId: 'fixture-service',
+        url: 'https://sonar.example.invalid/dashboard?id=fixture-service&branch=main',
+        attachedAt: new Date(Date.parse(now) - 4_000).toISOString(),
+      },
+    ],
+    artifacts: [],
+    monitoring: {
       enabled: false,
-      last_run: null,
+      lastAttemptAt: new Date(Date.parse(now) - 1_000).toISOString(),
+      lastState: 'partial',
+      lastSummary: 'Synthetic feedback evidence loaded; automatic provider polling is paused.',
+      lastFailureCount: 1,
+      lastSkippedCount: 0,
     },
-    discovered_projects: [
-      {
-        path: sandboxProject,
-        repo_name: 'feedback-service',
-        has_project_json: false,
-        git_remote: null,
-        pom_artifact_id: null,
-        suggested_jira_key: 'KRONOS',
-      },
-    ],
+    projectName: 'fixture-service',
+    projectPath,
   };
-
-  const queue = {
-    items: [
-      {
-        id: 'feedback-queue-1',
-        ticket: 'KRONOS-FB-2',
-        ticket_summary: state.tickets['KRONOS-FB-2'].summary,
-        projects: ['feedback-service'],
-        project_path: sandboxProject,
-        action: 'fix_build',
-        priority_score: 95,
-        reason: 'Intentional fixture failed build should be first.',
-      },
-      {
-        id: 'feedback-queue-2',
-        ticket: 'KRONOS-FB-1',
-        ticket_summary: state.tickets['KRONOS-FB-1'].summary,
-        projects: ['feedback-service'],
-        project_path: sandboxProject,
-        action: 'await_review',
-        priority_score: 70,
-        reason: 'Fixture review handoff should exercise evidence panels.',
-      },
-    ],
-    last_computed: now,
-    decisions: {},
+  const standaloneSession = {
+    schemaVersion: 1,
+    id: 'session-feedback-standalone',
+    kind: 'standalone',
+    title: 'Standalone feedback session',
+    status: 'active',
+    createdAt,
+    updatedAt: new Date(Date.parse(now) - 9_000).toISOString(),
+    terminals: [],
+    providerBindings: [],
+    artifacts: [],
+    monitoring: { enabled: false },
+    projectName: 'fixture-service',
+    projectPath,
   };
-
-  const run = {
-    id: runId,
-    project: 'feedback-service',
-    projectPath: sandboxProject,
-    skill: 'verify',
-    ticket: 'KRONOS-FB-1',
-    status: 'needs_human',
-    model: 'fixture',
-    promptHash: shortHash(promptText),
-    promptPreview: 'Fixture prompt for Kronos human feedback.',
-    startedAt: now,
-    endedAt: now,
-    exitCode: 1,
-    cwd: sandboxProject,
-    logPath,
-    promptPath,
-    failureReason: 'Synthetic run requires human review so Recovery Center has a safe item.',
-    failureKind: 'unknown',
-    events: [
-      { type: 'system', label: 'Fixture run created', detail: 'Safe synthetic run for feedback surfaces.', timestamp: now },
-      { type: 'error', label: 'Needs human review', detail: 'Synthetic attention item.', timestamp: now },
-    ],
-  };
-
-  const pausedRun = {
-    id: pausedRunId,
-    project: 'feedback-service',
-    projectPath: sandboxProject,
-    skill: 'implement',
-    ticket: 'KRONOS-FB-2',
-    status: 'paused',
-    model: 'fixture',
-    promptHash: shortHash(pausedPromptText),
-    promptPreview: 'Fixture prompt for a stale paused Kronos run.',
-    startedAt: pausedStartedAt,
-    pausedAt,
-    cwd: sandboxProject,
-    logPath: pausedLogPath,
-    promptPath: pausedPromptPath,
-    events: [
-      { type: 'system', label: 'Fixture paused run created', detail: 'Safe synthetic paused run for recovery review.', timestamp: pausedStartedAt },
-      { type: 'recovery', label: 'Run paused', detail: 'Synthetic pause older than the Recovery Center threshold.', timestamp: pausedAt },
-    ],
-  };
-
-  return {
-    sandboxProject,
-    state,
-    queue,
-    run,
-    pausedRun,
-    promptText,
-    pausedPromptText,
-    logText: 'Synthetic Kronos feedback run log.\nNo external systems were contacted.\n',
-    pausedLogText: 'Synthetic paused Kronos feedback run log.\nNo external systems were contacted.\n',
-  };
+  return [ticketSession, standaloneSession];
 }
 
-function main() {
-  const options = parseArgs(process.argv.slice(2));
-  const targetDir = ensureSafeTarget(options.targetDir);
-  const stateFile = path.join(targetDir, 'state.json');
-  const queueFile = path.join(targetDir, 'queue.json');
-  if (!options.force && (fs.existsSync(stateFile) || fs.existsSync(queueFile))) {
-    fail(`${targetDir} already contains state files; rerun with --force to replace fixture data`);
-  }
+function monitorFixtures(now) {
+  const at = offset => new Date(Date.parse(now) + offset).toISOString();
+  const sessionId = 'jira-jira-456';
+  return [
+    {
+      schemaVersion: 1,
+      id: 'feedback-session-created',
+      at: at(-9_000),
+      sessionId,
+      type: 'session.created',
+      source: 'operator',
+      summary: 'JIRA-456 synthetic feedback session recorded without opening a terminal.',
+      subject: { kind: 'work-session', id: sessionId, ticketKey: 'JIRA-456' },
+    },
+    {
+      schemaVersion: 1,
+      id: 'feedback-initial-mr-observed',
+      at: at(-4_000),
+      sessionId,
+      type: 'provider.transition',
+      source: 'gitlab',
+      summary: 'JIRA-456 MR !78 first observed (opened/mergeable).',
+      subject: { kind: 'merge-request', id: '78', ticketKey: 'JIRA-456' },
+      after: { state: 'opened/mergeable', fingerprint: 'feedback-mr-78-mergeable' },
+      metadata: { transitionKind: 'initial_mr_observed', mergeRequestIid: 78 },
+    },
+    {
+      schemaVersion: 1,
+      id: 'feedback-jenkins-failed',
+      at: at(-3_000),
+      sessionId,
+      type: 'provider.transition',
+      source: 'jenkins',
+      summary: 'JIRA-456 Jenkins build #143 failed in the synthetic feedback evidence.',
+      subject: { kind: 'build', id: '143', ticketKey: 'JIRA-456' },
+      after: { state: 'FAILURE', fingerprint: 'feedback-jenkins-143-failed' },
+      metadata: { transitionKind: 'initial_unhealthy', buildNumber: 143 },
+    },
+    {
+      schemaVersion: 1,
+      id: 'feedback-sonar-failed',
+      at: at(-2_000),
+      sessionId,
+      type: 'provider.transition',
+      source: 'sonar',
+      summary: 'JIRA-456 SonarQube quality gate failed for feature/jira-456.',
+      subject: { kind: 'quality-gate', id: 'fixture-service:feature/jira-456', ticketKey: 'JIRA-456' },
+      after: { state: 'ERROR', fingerprint: 'feedback-sonar-feature-jira-456-error' },
+      metadata: { transitionKind: 'sonar_gate_failed', projectKey: 'fixture-service', branch: 'feature/jira-456' },
+    },
+    {
+      schemaVersion: 1,
+      id: 'feedback-provider-failure-first',
+      at: at(-1_000),
+      sessionId,
+      type: 'provider.transition',
+      source: 'gitlab',
+      summary: 'JIRA-456 GitLab provider read failed (request timed out).',
+      subject: { kind: 'provider-read', id: 'gitlab', ticketKey: 'JIRA-456' },
+      after: { state: 'monitoring/failed', fingerprint: 'feedback-timeout-generation-1' },
+      metadata: {
+        transitionKind: 'provider_read_failed',
+        readState: 'failed',
+        readReason: 'timeout',
+        readComponents: 'none',
+        readGeneration: 1,
+      },
+    },
+    {
+      schemaVersion: 1,
+      id: 'feedback-provider-failure-repeat',
+      at: at(0),
+      sessionId,
+      type: 'provider.transition',
+      source: 'gitlab',
+      summary: 'JIRA-456 GitLab provider read failed (request timed out).',
+      subject: { kind: 'provider-read', id: 'gitlab', ticketKey: 'JIRA-456' },
+      after: { state: 'monitoring/failed', fingerprint: 'feedback-timeout-generation-2' },
+      metadata: {
+        transitionKind: 'provider_read_failed',
+        readState: 'failed',
+        readReason: 'timeout',
+        readComponents: 'none',
+        readGeneration: 2,
+      },
+    },
+  ];
+}
 
+const options = parseArgs(process.argv.slice(2));
+const targetDir = assertSafeTarget(options.targetDir);
+if (fs.existsSync(targetDir)) {
+  if (!options.force) { fail(`${targetDir} already exists; pass --force to replace this fixture only`); }
   fs.rmSync(targetDir, { recursive: true, force: true });
-  const now = new Date().toISOString();
-  const fixture = buildFixture(now, targetDir);
-  fs.mkdirSync(fixture.sandboxProject, { recursive: true });
-  writeText(path.join(fixture.sandboxProject, 'README.md'), [
-    '# Kronos Feedback Sandbox',
-    '',
-    'This directory is generated by scripts/create-feedback-state.js.',
-    'It exists only so Kronos panels have a safe local project path during feedback.',
-    '',
-  ].join('\n'));
-  writeJson(stateFile, fixture.state);
-  writeJson(queueFile, fixture.queue);
-  writeJson(path.join(targetDir, 'runs', `${fixture.run.id}.json`), fixture.run);
-  writeJson(path.join(targetDir, 'runs', `${fixture.pausedRun.id}.json`), fixture.pausedRun);
-  writeText(fixture.run.promptPath, fixture.promptText);
-  writeText(fixture.run.logPath, fixture.logText);
-  writeText(fixture.pausedRun.promptPath, fixture.pausedPromptText);
-  writeText(fixture.pausedRun.logPath, fixture.pausedLogText);
-
-  console.log('Kronos feedback state created.');
-  console.log(`- KRONOS_DIR: ${targetDir}`);
-  console.log('- Tickets: KRONOS-FB-1, KRONOS-FB-2, KRONOS-FB-3');
-  console.log('- Launch dev host with this environment variable before opening Kronos panels.');
 }
+fs.mkdirSync(targetDir, { recursive: true, mode: 0o700 });
+const now = new Date().toISOString();
+const state = fixture(now, targetDir);
+writePrivate(path.join(targetDir, 'work.json'), `${JSON.stringify(state, null, 2)}\n`);
+for (const session of sessionFixtures(now, targetDir)) {
+  writePrivate(path.join(targetDir, 'work-sessions', session.id, 'session.json'), `${JSON.stringify(session, null, 2)}\n`);
+}
+writePrivate(
+  path.join(targetDir, 'monitor-events.jsonl'),
+  `${monitorFixtures(now).map(event => JSON.stringify(event)).join('\n')}\n`,
+);
+writePrivate(path.join(targetDir, 'fixture-repo', 'README.md'), '# Kronos terminal-first feedback fixture\n\nNo provider or project command should run here.\n');
+writePrivate(path.join(targetDir, 'fixture-repo', '.git', 'HEAD'), 'ref: refs/heads/feature/kronos-feedback\n');
+writePrivate(path.join(targetDir, '.env.example'), [
+  '# Copy only to a private test location and provide non-production values.',
+  'JIRA_BASE_URL=https://jira.example.invalid',
+  'JIRA_EMAIL=',
+  'JIRA_API_TOKEN=',
+  'JIRA_JQL=project = JIRA ORDER BY updated DESC',
+  '',
+].join('\n'));
 
-main();
+console.log('Kronos terminal-first feedback state created.');
+console.log(`KRONOS_DIR=${targetDir}`);
+console.log(`Work catalog: ${path.join(targetDir, 'work.json')}`);
+console.log('Synthetic detached Sessions and Attention evidence are included with polling paused.');
