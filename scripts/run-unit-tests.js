@@ -443,6 +443,17 @@ test('bounded operation failures use one redacted actionable vocabulary', () => 
   assert.equal(redacted.display.includes(token), false);
   assert.match(redacted.display, /REDACTED/);
   assert.ok(redacted.summary.length <= 800);
+  for (const relativePath of [
+    'src/terminalFirstExtension.ts',
+    'src/services/managedProviderMonitor.ts',
+  ]) {
+    const source = fs.readFileSync(path.join(root, relativePath), 'utf8');
+    assert.doesNotMatch(
+      source,
+      /unknownErrorMessage\(/,
+      `${relativePath} must route operator-visible and polling-log failures through boundedOperationFailure`,
+    );
+  }
 });
 
 test('provider URLs retain only the SonarQube dashboard routing query', () => {

@@ -20,6 +20,7 @@ All notable changes to the Kronos preview are documented here.
 
 ### Changed
 
+- Routed all operator-visible workflow failures and managed-provider polling logs through the shared bounded, credential-redacted failure vocabulary, with a source guard against raw arbitrary error text returning to those boundaries.
 - Made registered-project identity canonical by real path and separate from an editable display label; renaming a Project now leaves ticket links, sessions, provider configuration, and Git state untouched, while duplicate persisted paths fail closed to one inventory row.
 - Unified project-provider configuration normalization at Setup and `work.json` ingress so ambiguous GitLab identities, credential-bearing or unsafe Jenkins URLs, malformed SonarQube keys, unsafe branch names, and unknown fields never reach polling consumers.
 - Added one Jira refresh lifecycle shared by the Work tree and board, with distinct current, empty, loading, partial, stale, error, and no-match states; in-flight, partial, and failed refreshes retain the last usable tickets and expose bounded Refresh/Doctor repair actions.

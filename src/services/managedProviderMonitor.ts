@@ -64,7 +64,7 @@ import {
   type WorkSessionRecord,
 } from './workSessionStore';
 import { optionalTrimmedStringFromUnknown } from './records';
-import { unknownErrorMessage } from './errorUtils';
+import { boundedOperationFailure } from './errorUtils';
 import {
   projectConfigurationForTicket,
   readProjectGitBranch,
@@ -220,7 +220,7 @@ export class ManagedProviderMonitor {
             summary,
           });
         } catch (error: unknown) {
-          this.log(`Could not persist monitoring readiness for ${session.ticketKey}.`, unknownErrorMessage(error, 'Monitoring state write failed.'));
+          this.log(`Could not persist monitoring readiness for ${session.ticketKey}.`, boundedOperationFailure(error, 'Monitoring state write failed.').display);
         }
         total = combine(total, sessionResult);
         if (sessionResult.leaseUnavailable) { break; }
@@ -275,7 +275,7 @@ export class ManagedProviderMonitor {
             return { ...emptyResult(), skipped: 1 };
           }
         } catch (error: unknown) {
-          this.log(`GitLab MR discovery failed for ${session.ticketKey}.`, unknownErrorMessage(error, 'GitLab MR discovery failed.'));
+          this.log(`GitLab MR discovery failed for ${session.ticketKey}.`, boundedOperationFailure(error, 'GitLab MR discovery failed.').display);
           return { ...emptyResult(), failures: 1 };
         }
       }
@@ -307,7 +307,7 @@ export class ManagedProviderMonitor {
     } catch (error: unknown) {
       this.log(
         `GitLab monitoring could not bind MR !${iid} to ${session.ticketKey}.`,
-        unknownErrorMessage(error, 'GitLab session binding write failed.'),
+        boundedOperationFailure(error, 'GitLab session binding write failed.').display,
       );
       return { ...emptyResult(), failures: 1 };
     }
@@ -319,7 +319,7 @@ export class ManagedProviderMonitor {
         { includeReview: true },
       );
     } catch (error: unknown) {
-      this.log(`GitLab monitoring failed for ${session.ticketKey}.`, unknownErrorMessage(error, 'GitLab monitoring failed.'));
+      this.log(`GitLab monitoring failed for ${session.ticketKey}.`, boundedOperationFailure(error, 'GitLab monitoring failed.').display);
       const failureResult = { ...emptyResult(), failures: 1 };
       if (!retainLease()) { return leaseLost(failureResult); }
       try {
@@ -341,7 +341,7 @@ export class ManagedProviderMonitor {
       } catch (statusError: unknown) {
         this.log(
           `Could not persist GitLab read failure state for ${session.ticketKey}.`,
-          unknownErrorMessage(statusError, 'GitLab read failure state write failed.'),
+          boundedOperationFailure(statusError, 'GitLab read failure state write failed.').display,
         );
       }
       return failureResult;
@@ -374,7 +374,7 @@ export class ManagedProviderMonitor {
       stateFailures += 1;
       this.log(
         `GitLab read-status monitoring failed for ${session.ticketKey}.`,
-        unknownErrorMessage(error, 'GitLab read-status monitoring failed.'),
+        boundedOperationFailure(error, 'GitLab read-status monitoring failed.').display,
       );
     }
     try {
@@ -447,7 +447,7 @@ export class ManagedProviderMonitor {
       stateFailures += 1;
       this.log(
         `GitLab merge-request monitoring state failed for ${session.ticketKey}.`,
-        unknownErrorMessage(error, 'GitLab merge-request monitoring state failed.'),
+        boundedOperationFailure(error, 'GitLab merge-request monitoring state failed.').display,
       );
     }
 
@@ -500,7 +500,7 @@ export class ManagedProviderMonitor {
       stateFailures += 1;
       this.log(
         `GitLab pipeline monitoring state failed for ${session.ticketKey}.`,
-        unknownErrorMessage(error, 'GitLab pipeline monitoring state failed.'),
+        boundedOperationFailure(error, 'GitLab pipeline monitoring state failed.').display,
       );
     }
 
@@ -543,7 +543,7 @@ export class ManagedProviderMonitor {
     } catch (error: unknown) {
       this.log(
         `CI monitoring could not persist provider bindings for ${session.ticketKey}.`,
-        unknownErrorMessage(error, 'CI session binding write failed.'),
+        boundedOperationFailure(error, 'CI session binding write failed.').display,
       );
       return { ...result, failures: 1 };
     }
@@ -611,7 +611,7 @@ export class ManagedProviderMonitor {
       } catch (error: unknown) {
         jenkinsReadFailure = providerReadFailureReason(error);
         result.failures += 1;
-        this.log(`Jenkins monitoring failed for ${session.ticketKey}.`, unknownErrorMessage(error, 'Jenkins monitoring failed.'));
+        this.log(`Jenkins monitoring failed for ${session.ticketKey}.`, boundedOperationFailure(error, 'Jenkins monitoring failed.').display);
       }
       if (!retainLease()) { return leaseLost(result); }
       try {
@@ -628,7 +628,7 @@ export class ManagedProviderMonitor {
         result.failures += 1;
         this.log(
           `Jenkins read-status monitoring failed for ${session.ticketKey}.`,
-          unknownErrorMessage(error, 'Jenkins read-status monitoring failed.'),
+          boundedOperationFailure(error, 'Jenkins read-status monitoring failed.').display,
         );
       }
     }
@@ -646,7 +646,7 @@ export class ManagedProviderMonitor {
       } catch (error: unknown) {
         sonarReadFailure = providerReadFailureReason(error);
         result.failures += 1;
-        this.log(`SonarQube monitoring failed for ${session.ticketKey}.`, unknownErrorMessage(error, 'SonarQube monitoring failed.'));
+        this.log(`SonarQube monitoring failed for ${session.ticketKey}.`, boundedOperationFailure(error, 'SonarQube monitoring failed.').display);
       }
       if (!retainLease()) {
         for (const item of notices) { this.options.notify?.(item); }
@@ -667,7 +667,7 @@ export class ManagedProviderMonitor {
         result.failures += 1;
         this.log(
           `SonarQube read-status monitoring failed for ${session.ticketKey}.`,
-          unknownErrorMessage(error, 'SonarQube read-status monitoring failed.'),
+          boundedOperationFailure(error, 'SonarQube read-status monitoring failed.').display,
         );
       }
     }
@@ -713,7 +713,7 @@ export class ManagedProviderMonitor {
       result.transitions += notices.length;
       return result;
     } catch (error: unknown) {
-      this.log(`CI monitoring state failed for ${session.ticketKey}.`, unknownErrorMessage(error, 'CI monitoring state failed.'));
+      this.log(`CI monitoring state failed for ${session.ticketKey}.`, boundedOperationFailure(error, 'CI monitoring state failed.').display);
       result.failures += 1;
       for (const item of notices) { this.options.notify?.(item); }
       result.transitions += notices.length;
@@ -819,7 +819,7 @@ function safeReadGitLabBaseline(
   try {
     return readGitLabPipelineMonitorSnapshot(session.id);
   } catch (error: unknown) {
-    log?.(`Ignored an invalid GitLab baseline for ${session.ticketKey}.`, unknownErrorMessage(error, 'Invalid baseline.'));
+    log?.(`Ignored an invalid GitLab baseline for ${session.ticketKey}.`, boundedOperationFailure(error, 'Invalid baseline.').display);
     return null;
   }
 }
@@ -833,7 +833,7 @@ function safeReadGitLabMergeRequestBaseline(
   } catch (error: unknown) {
     log?.(
       `Ignored an invalid GitLab merge-request baseline for ${session.ticketKey}.`,
-      unknownErrorMessage(error, 'Invalid merge-request baseline.'),
+      boundedOperationFailure(error, 'Invalid merge-request baseline.').display,
     );
     return null;
   }
@@ -848,7 +848,7 @@ function safeReadGitLabMergeRequestReadStatus(
   } catch (error: unknown) {
     log?.(
       `Ignored an invalid GitLab read-status baseline for ${session.ticketKey}.`,
-      unknownErrorMessage(error, 'Invalid GitLab read-status baseline.'),
+      boundedOperationFailure(error, 'Invalid GitLab read-status baseline.').display,
     );
     return null;
   }
@@ -861,7 +861,7 @@ function safeReadCiBaseline(
   try {
     return readCiMonitorSnapshot(session.id);
   } catch (error: unknown) {
-    log?.(`Ignored an invalid CI baseline for ${session.ticketKey}.`, unknownErrorMessage(error, 'Invalid baseline.'));
+    log?.(`Ignored an invalid CI baseline for ${session.ticketKey}.`, boundedOperationFailure(error, 'Invalid baseline.').display);
     return null;
   }
 }

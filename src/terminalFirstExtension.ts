@@ -12,7 +12,7 @@ import {
   loadProviderEnv,
   type ProviderEnvLoadResult,
 } from './services/providerEnv';
-import { boundedOperationFailure, unknownErrorMessage } from './services/errorUtils';
+import { boundedOperationFailure } from './services/errorUtils';
 import { buildFallbackJiraTicketContext, normalizeJiraTicketContext, type JiraTicketContext } from './services/jiraTicketContext';
 import { isJiraRestConfigured, jiraRestClient, type JiraAttachmentContentSnapshot } from './services/jiraRestClient';
 import { writeJiraContextArtifacts } from './services/jiraContextStore';
@@ -1093,7 +1093,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
     } catch (error: unknown) {
       this.log(
         `Could not project the locally monitored merge request for ${ticketKey}.`,
-        unknownErrorMessage(error, 'The local merge-request snapshot is invalid.'),
+        boundedOperationFailure(error, 'The local merge-request snapshot is invalid.').display,
       );
       return withEffectiveTicketMergeRequest(ticket, session, null);
     }
@@ -1311,7 +1311,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
             metadata: { explicitLaunch: true, commandSubmitted: false },
           });
         } catch (compensationError: unknown) {
-          this.log('Could not close the failed pre-submission work session.', unknownErrorMessage(compensationError, 'Session compensation failed.'));
+          this.log('Could not close the failed pre-submission work session.', boundedOperationFailure(compensationError, 'Session compensation failed.').display);
         }
       }
       const detail = boundedOperationFailure(error, commandSubmitted
@@ -1530,7 +1530,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
           );
           if (choice === 'Open Basket') { this.openContextBasket(); }
         } catch (error: unknown) {
-          const detail = unknownErrorMessage(error, 'Kronos could not add this source to the Context Basket.');
+          const detail = boundedOperationFailure(error, 'Kronos could not add this source to the Context Basket.').display;
           this.log('Context Basket add failed.', detail);
           void vscode.window.showErrorMessage(detail);
         }
@@ -1546,7 +1546,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
           message.focus,
         );
       } catch (error: unknown) {
-        const detail = unknownErrorMessage(error, 'Context insertion failed.');
+        const detail = boundedOperationFailure(error, 'Context insertion failed.').display;
         this.log('Context composer insertion failed.', detail);
         void vscode.window.showErrorMessage(detail);
         return;
@@ -1560,7 +1560,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
         await record.onInserted();
         panel.dispose();
       } catch (error: unknown) {
-        const detail = unknownErrorMessage(error, 'Context insertion failed.');
+        const detail = boundedOperationFailure(error, 'Context insertion failed.').display;
         this.log('Context was inserted but its local audit update failed.', detail);
         void vscode.window.showErrorMessage(
           `The context was inserted without submission, but Kronos could not finish its local audit update: ${detail}`,
@@ -1782,7 +1782,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
           `Placed ${bundle.id} in ${selected.terminal.name} without submitting it. Review the line, then press Enter yourself.`,
         );
       } catch (error: unknown) {
-        const detail = unknownErrorMessage(error, 'Context Basket audit update failed.');
+        const detail = boundedOperationFailure(error, 'Context Basket audit update failed.').display;
         this.log('Context Basket was placed but its local audit update failed.', detail);
         void vscode.window.showErrorMessage(
           `The Context Basket was placed without submission, but Kronos could not finish its local audit update: ${detail}`,
@@ -1796,7 +1796,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
   }
 
   private showContextBasketError(error: unknown, fallback: string): void {
-    const detail = unknownErrorMessage(error, fallback);
+    const detail = boundedOperationFailure(error, fallback).display;
     this.log(fallback, detail);
     void vscode.window.showErrorMessage(detail);
   }
@@ -1806,7 +1806,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
     try {
       events = listMonitorEvents({ limit: 500 });
     } catch (error: unknown) {
-      this.log('Local evidence search could not read the audit tail.', unknownErrorMessage(error, 'Audit search unavailable.'));
+      this.log('Local evidence search could not read the audit tail.', boundedOperationFailure(error, 'Audit search unavailable.').display);
       void vscode.window.showWarningMessage('Kronos could not include the local audit tail in this search. Sessions, tickets, projects, providers, and artifacts remain available.');
     }
     const entries = buildLocalEvidenceSearchIndex({
@@ -1854,7 +1854,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
       try {
         await this.openLocalArtifact(action.promptPath);
       } catch (error: unknown) {
-        void vscode.window.showWarningMessage(unknownErrorMessage(error, 'The selected private context artifact is unavailable.'));
+        void vscode.window.showWarningMessage(boundedOperationFailure(error, 'The selected private context artifact is unavailable.').display);
       }
       return;
     }
@@ -1872,7 +1872,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
     try {
       events = listMonitorEvents({ sessionId: session.id, limit: 500 });
     } catch (error: unknown) {
-      this.log('Local handoff could not read the audit tail.', unknownErrorMessage(error, 'Audit references unavailable.'));
+      this.log('Local handoff could not read the audit tail.', boundedOperationFailure(error, 'Audit references unavailable.').display);
       void vscode.window.showWarningMessage('Kronos could not include audit events in this handoff. Saved context references remain selectable.');
     }
     const candidates = buildHandoffCandidates(session, events);
@@ -1940,7 +1940,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
         `Created ${bundle.id} with ${bundle.selectionCount} private local reference${bundle.selectionCount === 1 ? '' : 's'}. Nothing was posted to a provider.`,
       );
     } catch (error: unknown) {
-      const detail = unknownErrorMessage(error, 'Kronos could not create the local handoff bundle.');
+      const detail = boundedOperationFailure(error, 'Kronos could not create the local handoff bundle.').display;
       this.log('Local handoff creation failed.', detail);
       void vscode.window.showErrorMessage(detail);
     }
@@ -2364,7 +2364,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
       if (notice.event.subject) { notificationEvent.subject = notice.event.subject; }
       appendMonitorEvent(notificationEvent);
     } catch (error: unknown) {
-      this.log('Could not record provider notification display.', unknownErrorMessage(error, 'Notification audit failed.'));
+      this.log('Could not record provider notification display.', boundedOperationFailure(error, 'Notification audit failed.').display);
     }
     const actions = [
       ...(notice.providerUrl ? ['Open Provider'] : []),
@@ -2383,7 +2383,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
         acknowledgeMonitorEvent(notice.event.id, notice.session.id);
         this.attentionTree.refresh();
       }
-    }, error => this.log('Provider notification action failed.', unknownErrorMessage(error, 'Notification action failed.')));
+    }, error => this.log('Provider notification action failed.', boundedOperationFailure(error, 'Notification action failed.').display));
   }
 
   private async openWorkSessionAudit(argument: unknown): Promise<void> {
@@ -2520,7 +2520,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
     } catch (error: unknown) {
       // The requested removal already succeeded. Do not report it as failed
       // merely because the retained append-only audit ledger was unavailable.
-      this.log('Session was removed, but its final audit note could not be recorded.', unknownErrorMessage(error, 'Audit write failed.'));
+      this.log('Session was removed, but its final audit note could not be recorded.', boundedOperationFailure(error, 'Audit write failed.').display);
     }
     this.refreshTerminalFirstViews();
     void vscode.window.showInformationMessage(`Removed ${context.label} from Sessions. Any terminal remains open and operator-owned.`);
@@ -2690,7 +2690,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
       url.searchParams.set('merge_request[target_branch]', config.default_branch || config.base_branch || 'main');
       await this.openHttpUrl(url.toString());
     } catch (error: unknown) {
-      void vscode.window.showWarningMessage(unknownErrorMessage(error, 'Kronos could not open the GitLab new-MR page.'));
+      void vscode.window.showWarningMessage(boundedOperationFailure(error, 'Kronos could not open the GitLab new-MR page.').display);
     }
   }
 
@@ -2846,7 +2846,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
       void this.pollProviders(false);
       void vscode.window.showInformationMessage(`${projectName} will now monitor SonarQube branch ${branch}.`);
     } catch (error: unknown) {
-      this.log('Could not save the selected SonarQube branch.', unknownErrorMessage(error, 'Invalid SonarQube branch target.'));
+      this.log('Could not save the selected SonarQube branch.', boundedOperationFailure(error, 'Invalid SonarQube branch target.').display);
     }
   }
 
@@ -3125,7 +3125,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
       return {
         name: 'Claude launch settings',
         status: 'fail',
-        detail: unknownErrorMessage(error, 'Claude launch settings are invalid.'),
+        detail: boundedOperationFailure(error, 'Claude launch settings are invalid.').display,
       };
     }
   }
@@ -3191,7 +3191,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
         const session = readWorkSession(direct);
         if (session) { return session; }
       } catch (error: unknown) {
-        this.log('Could not read selected work session.', unknownErrorMessage(error, 'Invalid work session.'));
+        this.log('Could not read selected work session.', boundedOperationFailure(error, 'Invalid work session.').display);
       }
     }
     const ticketKey = normalizeTicketKey(stringProperty(argument, 'ticketKey'));
@@ -3322,7 +3322,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
       markWorkSessionTerminalClosed(binding.sessionId, binding.bindingId, 'Terminal closed by the operator.');
       this.appendTerminalDetachedEvent(binding, 'closed-by-operator');
     } catch (error: unknown) {
-      this.log('Could not persist a closed terminal attachment.', unknownErrorMessage(error, 'Terminal detach failed.'));
+      this.log('Could not persist a closed terminal attachment.', boundedOperationFailure(error, 'Terminal detach failed.').display);
     }
     this.refreshTerminalFirstViews();
   }
@@ -3363,7 +3363,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
       url.password = '';
       await vscode.env.openExternal(vscode.Uri.parse(url.toString()));
     } catch (error: unknown) {
-      void vscode.window.showWarningMessage(unknownErrorMessage(error, 'Kronos refused an invalid provider URL.'));
+      void vscode.window.showWarningMessage(boundedOperationFailure(error, 'Kronos refused an invalid provider URL.').display);
     }
   }
 
