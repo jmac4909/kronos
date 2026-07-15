@@ -23,6 +23,13 @@ export interface AttentionEventPresentation {
   description: string;
 }
 
+export interface AttentionProjectGroupIdentity {
+  key: string;
+  id: string;
+  label: string;
+  projectName: string | undefined;
+}
+
 export type AttentionActionContext =
   | 'attention_provider'
   | 'attention_repair'
@@ -32,6 +39,27 @@ export type AttentionActionContext =
   | 'attention_repair_ticket_gitlab'
   | 'attention_provider_ticket_ci'
   | 'attention_repair_ticket_ci';
+
+/** Jira context never participates in top-level Attention identity; only an explicit local project does. */
+export function attentionProjectGroupIdentity(projectName: unknown): AttentionProjectGroupIdentity {
+  const normalized = typeof projectName === 'string'
+    ? projectName.replace(/[\u0000-\u001f\u007f\u2028\u2029]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 240)
+    : '';
+  if (!normalized) {
+    return {
+      key: 'unassigned-project',
+      id: 'attention-group:unassigned-project',
+      label: 'Unassigned project',
+      projectName: undefined,
+    };
+  }
+  return {
+    key: `project:${normalized}`,
+    id: `attention-group:project:${normalized}`,
+    label: normalized,
+    projectName: normalized,
+  };
+}
 
 /** Keeps ticket actions tied to a Jira context that is actually stored on the session. */
 export function attentionTicketKey(

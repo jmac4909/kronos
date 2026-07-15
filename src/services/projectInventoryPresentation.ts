@@ -6,6 +6,49 @@ export interface ProjectProviderCredentialReadiness {
   sonar: boolean;
 }
 
+export interface RegisteredProjectActionPresentation {
+  label: string;
+  icon: string;
+  command: string;
+  description?: string;
+}
+
+const REGISTERED_PROJECT_ACTIONS: readonly RegisteredProjectActionPresentation[] = Object.freeze([
+  Object.freeze({
+    label: 'Start Claude in project',
+    icon: 'terminal',
+    command: 'kronos.newClaudeSession',
+    description: 'no Jira ticket',
+  }),
+  Object.freeze({
+    label: 'View Git status and diff',
+    icon: 'diff',
+    command: 'kronos.openProjectGitStatus',
+    description: 'read-only',
+  }),
+  Object.freeze({
+    label: 'Insert working diff in context',
+    icon: 'symbol-keyword',
+    command: 'kronos.insertProjectGitContext',
+    description: 'non-submitting',
+  }),
+  Object.freeze({ label: 'Open merge request page', icon: 'git-merge', command: 'kronos.openProjectMergeRequest' }),
+  Object.freeze({ label: 'Insert MR evidence', icon: 'git-merge', command: 'kronos.insertProjectGitLabContext' }),
+  Object.freeze({ label: 'Insert Jenkins / Sonar evidence', icon: 'beaker', command: 'kronos.insertProjectCiContext' }),
+  Object.freeze({ label: 'Configure provider polling', icon: 'settings-gear', command: 'kronos.configureProjectIntegrations' }),
+  Object.freeze({
+    label: 'Rename display label',
+    icon: 'edit',
+    command: 'kronos.renameLocalProject',
+    description: 'identity and links stay unchanged',
+  }),
+]);
+
+/** One ordered action inventory keeps project launch, evidence, and setup controls intentional. */
+export function registeredProjectActionInventory(): readonly RegisteredProjectActionPresentation[] {
+  return REGISTERED_PROJECT_ACTIONS;
+}
+
 /**
  * Presents only readiness states. Provider identifiers and credential values
  * are deliberately absent from this view model.

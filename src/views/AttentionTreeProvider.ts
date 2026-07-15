@@ -16,6 +16,7 @@ import { providerBindingsForEvent } from '../services/providerBindingReconciliat
 import {
   attentionActionContext,
   attentionEventPresentation,
+  attentionProjectGroupIdentity,
   attentionProviderIconId,
   attentionProviderChoicesForEvent,
   attentionSeverity,
@@ -82,14 +83,12 @@ export class AttentionTreeProvider implements vscode.TreeDataProvider<AttentionT
 
     const grouped = new Map<string, AttentionEntry[]>();
     for (const entry of entries) {
-      const groupKey = entry.session?.projectName
-        ? `project:${entry.session.projectName}`
-        : 'unassigned-project';
-      const existing = grouped.get(groupKey);
+      const group = attentionProjectGroupIdentity(entry.session?.projectName);
+      const existing = grouped.get(group.key);
       if (existing) {
         existing.push(entry);
       } else {
-        grouped.set(groupKey, [entry]);
+        grouped.set(group.key, [entry]);
       }
     }
 
@@ -157,16 +156,15 @@ export class AttentionGroupTreeItem extends vscode.TreeItem {
     const projectNames = [...new Set(entries
       .map(entry => entry.session?.projectName)
       .filter((value): value is string => Boolean(value)))];
-    const projectName = projectNames.length === 1 ? projectNames[0] : undefined;
-    const label = projectName || 'Unassigned project';
+    const group = attentionProjectGroupIdentity(projectNames.length === 1 ? projectNames[0] : undefined);
+    const projectName = group.projectName;
+    const label = group.label;
     const sessionIds = [...new Set(entries.map(entry => entry.event.sessionId))];
     super(label, vscode.TreeItemCollapsibleState.Expanded);
     this.newestAt = newest.event.at;
     this.labelText = label;
     this.projectName = projectName;
-    this.id = projectName
-      ? `attention-group:project:${projectName}`
-      : 'attention-group:unassigned-project';
+    this.id = group.id;
     this.contextValue = 'attention_group';
     this.description = `${entries.length} current item${entries.length === 1 ? '' : 's'} • newest ${displayTimestamp(this.newestAt)}`;
     this.tooltip = [

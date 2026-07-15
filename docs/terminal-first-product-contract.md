@@ -240,6 +240,8 @@ No command outside this inventory is part of the terminal-first product contract
 
 Visible view-title actions follow one checked hierarchy. Work shows Refresh Jira, Jira Board, and Filter. Sessions shows New Claude and Manage Focused Terminal. Projects shows Refresh Projects and Manage Local Projects. Attention shows Poll Now. Clear-filter, Context Basket, local search, handoff, and secondary polling remain in the relevant view overflow menus. Setup is available from Work overflow and the command palette; Doctor and advanced settings are reached from Setup or the command palette rather than repeated in every view header.
 
+The automated product-surface contract must exercise this hierarchy together with canonical Setup/project ownership, ticket-free Project launch, project-only Attention grouping, provider glyph/state-color semantics, rich Jira search/filter namespaces, ticket-workspace action ownership, and healthy Doctor behavior. These cross-view contracts run inside the same `npm test` gate as the lower-level state, provider, terminal, security, DOM, scale, and release-surface suites. Synthetic tests do not replace the explicit real-VS-Code, operator-terminal, Windows, multi-window, or live-provider gates.
+
 ## Canonical Operator Journey
 
 Ticket-linked journey:

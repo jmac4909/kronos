@@ -4,7 +4,10 @@ import { boundedOperationFailure } from '../services/errorUtils';
 import { listLocalProjects } from '../services/projectCatalog';
 import { projectGitStatusPresentation } from '../services/projectGitPresentation';
 import { providerReadiness } from '../services/providerReadiness';
-import { projectIntegrationStatusLines } from '../services/projectInventoryPresentation';
+import {
+  projectIntegrationStatusLines,
+  registeredProjectActionInventory,
+} from '../services/projectInventoryPresentation';
 import {
   readProjectGitEvidence,
   type ProjectGitEvidence,
@@ -155,16 +158,13 @@ class ProjectMessageTreeItem extends vscode.TreeItem {
 }
 
 function projectActions(target: RegisteredProjectCommandTarget): ProjectActionTreeItem[] {
-  return [
-    new ProjectActionTreeItem('Start Claude in project', 'terminal', 'kronos.newClaudeSession', target, 'no Jira ticket'),
-    new ProjectActionTreeItem('View Git status and diff', 'diff', 'kronos.openProjectGitStatus', target, 'read-only'),
-    new ProjectActionTreeItem('Insert working diff in context', 'symbol-keyword', 'kronos.insertProjectGitContext', target, 'non-submitting'),
-    new ProjectActionTreeItem('Open merge request page', 'git-merge', 'kronos.openProjectMergeRequest', target),
-    new ProjectActionTreeItem('Insert MR evidence', 'git-merge', 'kronos.insertProjectGitLabContext', target),
-    new ProjectActionTreeItem('Insert Jenkins / Sonar evidence', 'beaker', 'kronos.insertProjectCiContext', target),
-    new ProjectActionTreeItem('Configure provider polling', 'settings-gear', 'kronos.configureProjectIntegrations', target),
-    new ProjectActionTreeItem('Rename display label', 'edit', 'kronos.renameLocalProject', target, 'identity and links stay unchanged'),
-  ];
+  return registeredProjectActionInventory().map(action => new ProjectActionTreeItem(
+    action.label,
+    action.icon,
+    action.command,
+    target,
+    action.description,
+  ));
 }
 
 function projectIcon(evidence: ProjectGitEvidence): vscode.ThemeIcon {

@@ -106,6 +106,7 @@ function checkAutomatedEvidence(groupId, evidence) {
 function checkReadmeMetrics(packageJson, readmeSource) {
   const testFiles = [
     'scripts/run-command-routing-tests.js',
+    'scripts/run-product-surface-contract-tests.js',
     'scripts/run-unit-tests.js',
     'scripts/run-webview-dom-tests.js',
     'scripts/run-jira-work-board-tests.js',

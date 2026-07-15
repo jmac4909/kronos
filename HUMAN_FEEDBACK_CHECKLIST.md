@@ -21,7 +21,7 @@ Stop the review immediately if any boundary is crossed.
 
 ## Setup
 
-1. Run `npm run compile` and `npm run package` from the Kronos repository.
+1. Run `npm test` and `npm run package` from the Kronos repository. Confirm the focused product-surface contracts pass alongside the state, provider, terminal, security, DOM, scale, and exact-package gates.
 2. Install with `code --install-extension kronos-0.1.0.vsix --force`.
 3. Reload VS Code.
 4. Open the Kronos activity icon.

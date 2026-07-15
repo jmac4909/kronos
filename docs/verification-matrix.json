@@ -11,7 +11,9 @@
         { "file": "scripts/run-jira-work-board-tests.js", "test": "board composes every search, status, Jira, local-project, and label filter subset" },
         { "file": "scripts/run-jira-work-board-tests.js", "test": "board keyboard activation opens a focused card with Enter or Space exactly once" },
         { "file": "scripts/run-jira-work-board-tests.js", "test": "board terminology and dense-card rendering keep Jira namespaces separate from local repositories" },
-        { "file": "scripts/run-jira-work-board-tests.js", "test": "board action and focus contract covers every declared action exactly once" }
+        { "file": "scripts/run-jira-work-board-tests.js", "test": "board action and focus contract covers every declared action exactly once" },
+        { "file": "scripts/run-product-surface-contract-tests.js", "test": "rich Jira filtering searches every useful field and composes independent namespaces" },
+        { "file": "scripts/run-product-surface-contract-tests.js", "test": "Jira board keeps filtering and launch controls while ticket workspace owns detailed context controls" }
       ],
       "humanGates": ["operator-terminal"]
     },
@@ -31,7 +33,9 @@
         { "file": "scripts/run-local-evidence-search-tests.js", "test": "local evidence search covers sessions, tickets, projects, branches, providers, artifacts, and events without terminal content" },
         { "file": "scripts/run-unit-tests.js", "test": "Claude terminal launch is explicit, focused, validated, and operator-triggered" },
         { "file": "scripts/run-unit-tests.js", "test": "work-session lifecycle never requires a terminal process owner" },
-        { "file": "scripts/run-unit-tests.js", "test": "extension activation registers the bounded surface and explicit launch commands create the right session kinds" }
+        { "file": "scripts/run-unit-tests.js", "test": "extension activation registers the bounded surface and explicit launch commands create the right session kinds" },
+        { "file": "scripts/run-product-surface-contract-tests.js", "test": "registered project actions start ticket-free Claude before read-only and provider actions" },
+        { "file": "scripts/run-product-surface-contract-tests.js", "test": "non-Jira ticket workspaces omit Jira insertion without weakening terminal ownership" }
       ],
       "humanGates": ["operator-terminal", "real-vscode"]
     },
@@ -76,7 +80,9 @@
         { "file": "scripts/run-provider-binding-reconciliation-tests.js", "test": "catalog MR binding candidates enrich only the same identity and never overwrite a newer binding" },
         { "file": "scripts/run-provider-binding-reconciliation-tests.js", "test": "Jenkins job, build history, and SonarQube branch identities remain distinct under one resolver" },
         { "file": "scripts/run-provider-binding-reconciliation-tests.js", "test": "reconciled provider URLs are credential-free and rejected outside the configured origin" },
-        { "file": "scripts/run-provider-binding-reconciliation-tests.js", "test": "multi-project reconciliation stays inside the explicitly linked project session set" }
+        { "file": "scripts/run-provider-binding-reconciliation-tests.js", "test": "multi-project reconciliation stays inside the explicitly linked project session set" },
+        { "file": "scripts/run-product-surface-contract-tests.js", "test": "Attention group identity is local-project-only and collision-safe for unassigned work" },
+        { "file": "scripts/run-product-surface-contract-tests.js", "test": "provider glyphs stay distinct while all Attention severities share green yellow red state colors" }
       ],
       "humanGates": ["live-providers"]
     },
@@ -115,7 +121,9 @@
         { "file": "scripts/run-project-catalog-tests.js", "test": "project Git presentation distinguishes unavailable, clean, staged, untracked, conflicted, and bounded states" },
         { "file": "scripts/run-project-catalog-tests.js", "test": "project integration presentation exposes readiness without provider identifiers or credentials" },
         { "file": "scripts/run-unit-tests.js", "test": "extension activation registers the bounded surface and explicit launch commands create the right session kinds" },
-        { "file": "scripts/run-jira-work-board-tests.js", "test": "board lists registered local project paths and current Git branches" }
+        { "file": "scripts/run-jira-work-board-tests.js", "test": "board lists registered local project paths and current Git branches" },
+        { "file": "scripts/run-product-surface-contract-tests.js", "test": "registered project actions start ticket-free Claude before read-only and provider actions" },
+        { "file": "scripts/run-product-surface-contract-tests.js", "test": "discovery, setup, and project management each retain one canonical UI home" }
       ],
       "humanGates": ["real-vscode"]
     },
@@ -137,7 +145,9 @@
         { "file": "scripts/run-provider-readiness-tests.js", "test": "one readiness snapshot feeds Setup and Doctor and gives every non-ready row an action" },
         { "file": "scripts/run-provider-readiness-tests.js", "test": "guided readiness distinguishes first-run, partial, fully ready, and live permission states" },
         { "file": "scripts/run-project-catalog-tests.js", "test": "project integration values round-trip, clear, and default to the observed Git branch" },
-        { "file": "scripts/run-webview-dom-tests.js", "test": "Setup and Doctor actions post only their allowlisted operation command field" }
+        { "file": "scripts/run-webview-dom-tests.js", "test": "Setup and Doctor actions post only their allowlisted operation command field" },
+        { "file": "scripts/run-product-surface-contract-tests.js", "test": "Setup and Doctor preserve guided navigation and hide repair controls from healthy checks" },
+        { "file": "scripts/run-product-surface-contract-tests.js", "test": "discovery, setup, and project management each retain one canonical UI home" }
       ],
       "humanGates": ["live-providers"]
     },
@@ -172,7 +182,9 @@
         { "file": "scripts/run-provider-reconciliation-tests.js", "test": "provider transition recorder suppresses unchanged read health but records a real change" },
         { "file": "scripts/run-provider-reconciliation-tests.js", "test": "provider read failures normalize to stable operator-safe categories" },
         { "file": "scripts/run-provider-reconciliation-tests.js", "test": "provider read components and fingerprints are canonical and bounded" },
-        { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "Attention projection rebuilds after restart without stale-row resurrection" }
+        { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "Attention projection rebuilds after restart without stale-row resurrection" },
+        { "file": "scripts/run-product-surface-contract-tests.js", "test": "primary button hierarchy keeps Work, Sessions, Projects, and Attention focused" },
+        { "file": "scripts/run-product-surface-contract-tests.js", "test": "verification matrix keeps every shipped feature group under named automated evidence" }
       ],
       "humanGates": []
     },

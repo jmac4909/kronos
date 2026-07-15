@@ -6,6 +6,7 @@ All notable changes to the Kronos preview are documented here.
 
 ### Added
 
+- Added a focused cross-view product-contract suite covering the four-view button hierarchy, canonical Setup/project ownership, ticket-free project launch, project-only Attention grouping, provider icon/severity language, rich Jira filtering, ticket-workspace action boundaries, and healthy Doctor behavior.
 - Made Attention grouping strictly project-level: registered projects own their provider rows, and work without an explicit project appears under **Unassigned project** instead of a Jira-ticket/session group.
 - Added an inline and expanded Project action that starts a ticket-free Claude session in the exact registered project directory and shows its observed branch in the new terminal title.
 - Gave GitLab MR, Jenkins, and SonarQube Attention rows distinct theme-aware icons plus one shared state palette: green for healthy/recovered, yellow for warning/partial, and red for failed/blocked. Written provider and severity labels remain visible for accessible status recognition.
