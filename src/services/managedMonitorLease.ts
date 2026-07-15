@@ -1,7 +1,12 @@
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
-import { privateFileNoFollowFlag } from './privateFilePrimitives';
+import {
+  privateFileNoFollowFlag,
+  privateFileOpenFlags,
+  securePrivateDescriptorMode,
+  syncPrivateDirectory,
+} from './privateFilePrimitives';
 import { KRONOS_DIR } from './stateStore';
 
 export interface ManagedMonitorLeaseOptions {
@@ -217,7 +222,7 @@ function tryCreateLeaseFile(filePath: string, lease: ManagedMonitorLeaseRecord):
     }
     fs.closeSync(descriptor);
     descriptor = undefined;
-    syncDirectory(path.dirname(filePath));
+    syncPrivateDirectory(path.dirname(filePath));
     return { kind: 'acquired', identity };
   } catch (error: unknown) {
     if (descriptor !== undefined) {
@@ -480,7 +485,7 @@ function renewMatchingLease(
 
   if (!renewed || !pinRemoved) { return undefined; }
   try {
-    syncDirectory(path.dirname(filePath));
+    syncPrivateDirectory(path.dirname(filePath));
     return renewed;
   } catch {
     return undefined;
@@ -521,7 +526,7 @@ function unlinkExpiredCrashPinnedLease(
       return false;
     }
     fs.unlinkSync(resolvedPinPath);
-    syncDirectory(leaseDirectory);
+    syncPrivateDirectory(leaseDirectory);
     return true;
   } catch {
     return false;
@@ -579,7 +584,7 @@ function unlinkPinnedIdentity(
   }
 
   try {
-    syncDirectory(path.dirname(filePath));
+    syncPrivateDirectory(path.dirname(filePath));
     return removed;
   } catch {
     return false;
@@ -685,7 +690,7 @@ function ensurePrivateDirectoryTree(targetPath: string, privateRootPath: string)
       if (!stat.isDirectory() || stat.isSymbolicLink()) {
         throw new Error(`Managed monitor lease directory is unsafe: ${next}`);
       }
-      syncDirectory(current);
+      syncPrivateDirectory(current);
     }
     if (stat.isSymbolicLink() || !stat.isDirectory()) {
       throw new Error(`Managed monitor lease path component is unsafe: ${next}`);
@@ -734,22 +739,15 @@ function isContainedPath(basePath: string, candidatePath: string): boolean {
 }
 
 function exclusiveCreateFlags(): number {
-  return fs.constants.O_WRONLY
-    | fs.constants.O_CREAT
-    | fs.constants.O_EXCL
-    | noFollowFlag();
+  return privateFileOpenFlags('exclusive-write');
 }
 
 function safeReadFlags(): number {
-  return fs.constants.O_RDONLY | nonBlockingFlag() | noFollowFlag();
+  return privateFileOpenFlags('read-nonblocking');
 }
 
 function safeWriteFlags(): number {
-  return fs.constants.O_RDWR | nonBlockingFlag() | noFollowFlag();
-}
-
-function noFollowFlag(): number {
-  return managedMonitorNoFollowFlag(process.platform, Reflect.get(fs.constants, 'O_NOFOLLOW'));
+  return privateFileOpenFlags('read-write-nonblocking');
 }
 
 /**
@@ -762,17 +760,8 @@ export function managedMonitorNoFollowFlag(platform: NodeJS.Platform, flagValue:
   return privateFileNoFollowFlag(platform, flagValue);
 }
 
-function nonBlockingFlag(): number {
-  if (process.platform === 'win32') { return 0; }
-  return typeof fs.constants.O_NONBLOCK === 'number' ? fs.constants.O_NONBLOCK : 0;
-}
-
-function directoryFlag(): number {
-  return typeof fs.constants.O_DIRECTORY === 'number' ? fs.constants.O_DIRECTORY : 0;
-}
-
 function setPrivateDescriptorMode(descriptor: number, mode: number): void {
-  if (process.platform !== 'win32') { fs.fchmodSync(descriptor, mode); }
+  securePrivateDescriptorMode(descriptor, mode);
 }
 
 function readDescriptorFully(descriptor: number, size: number): Buffer {
@@ -820,7 +809,7 @@ function setPrivateDirectoryMode(
   try {
     descriptor = fs.openSync(
       directoryPath,
-      fs.constants.O_RDONLY | directoryFlag() | noFollowFlag(),
+      privateFileOpenFlags('directory-read'),
     );
     const openedStat = fs.fstatSync(descriptor);
     if (!openedStat.isDirectory()
@@ -835,17 +824,6 @@ function setPrivateDirectoryMode(
       || (finalStat.mode & 0o777) !== DIRECTORY_MODE) {
       throw new Error('Managed monitor lease directory could not be made private.');
     }
-  } finally {
-    if (descriptor !== undefined) { fs.closeSync(descriptor); }
-  }
-}
-
-function syncDirectory(directoryPath: string): void {
-  if (process.platform === 'win32' || !directoryPath) { return; }
-  let descriptor: number | undefined;
-  try {
-    descriptor = fs.openSync(directoryPath, fs.constants.O_RDONLY | directoryFlag() | noFollowFlag());
-    fs.fsyncSync(descriptor);
   } finally {
     if (descriptor !== undefined) { fs.closeSync(descriptor); }
   }

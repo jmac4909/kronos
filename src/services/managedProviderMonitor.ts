@@ -54,7 +54,10 @@ import {
   type MonitorEventSource,
   type MonitorEventSubject,
 } from './monitorEventStore';
-import { tryAcquireManagedMonitorLease } from './managedMonitorLease';
+import {
+  tryAcquireManagedMonitorLease,
+  type ManagedMonitorLeaseHandle,
+} from './managedMonitorLease';
 import {
   listWorkSessions,
   addWorkSessionProviderBinding,
@@ -131,10 +134,13 @@ type TicketWorkSessionRecord = MonitoredWorkSessionRecord;
 
 export class ManagedProviderMonitor {
   private inFlight: Promise<ManagedProviderPollResult> | undefined;
+  private activeLease: ManagedMonitorLeaseHandle | undefined;
+  private disposed = false;
 
   constructor(private readonly options: ManagedProviderMonitorOptions) {}
 
   poll(): Promise<ManagedProviderPollResult> {
+    if (this.disposed) { return Promise.resolve(emptyResult()); }
     if (this.inFlight) { return this.inFlight; }
     const current = this.pollOnce().finally(() => {
       if (this.inFlight === current) { this.inFlight = undefined; }
@@ -143,15 +149,28 @@ export class ManagedProviderMonitor {
     return current;
   }
 
+  /** Stops future polls and immediately releases any cross-window lease still owned by this runtime. */
+  dispose(): void {
+    this.disposed = true;
+    const lease = this.activeLease;
+    this.activeLease = undefined;
+    lease?.release();
+  }
+
   private async pollOnce(): Promise<ManagedProviderPollResult> {
     const lease = tryAcquireManagedMonitorLease();
     if (!lease.acquired) {
       return { ...emptyResult(), leaseUnavailable: true, leaseReason: lease.reason || 'contended' };
     }
+    if (this.disposed) {
+      lease.release();
+      return emptyResult();
+    }
+    this.activeLease = lease;
 
     let leaseHealthy = true;
     const renew = (): boolean => {
-      if (leaseHealthy && !lease.renew()) {
+      if (leaseHealthy && (this.disposed || this.activeLease !== lease || !lease.renew())) {
         leaseHealthy = false;
         this.log('Managed-provider polling stopped because its cross-window lease could not be renewed.');
       }
@@ -222,7 +241,10 @@ export class ManagedProviderMonitor {
       return total;
     } finally {
       clearInterval(heartbeat);
-      if (!lease.release()) { this.log('Managed-provider polling lease was no longer owned at release.'); }
+      if (this.activeLease === lease) {
+        this.activeLease = undefined;
+        if (!lease.release()) { this.log('Managed-provider polling lease was no longer owned at release.'); }
+      }
     }
   }
 

@@ -14,6 +14,7 @@ const { createOperatorTerminalRegistry } = require('../out/services/operatorTerm
 const terminalContextInsertion = require('../out/services/terminalContextInsertion.js');
 const workSessionLifecycle = require('../out/services/workSessionLifecycle.js');
 const workSessions = require('../out/services/workSessionStore.js');
+const monitorEvents = require('../out/services/monitorEventStore.js');
 
 test('duplicate terminal names remain exact object identities across sessions and ambiguous bindings', () => {
   const registry = createOperatorTerminalRegistry();
@@ -98,6 +99,14 @@ test('session removal deletes only colocated state and registry detachment never
   const retainedArtifact = path.join(options.kronosDir, 'contexts', 'retained.md');
   fs.mkdirSync(path.dirname(retainedArtifact), { recursive: true });
   fs.writeFileSync(retainedArtifact, 'retained\n');
+  monitorEvents.appendMonitorEvent({
+    id: 'retained-shared-audit',
+    at: '2026-07-15T12:00:00.000Z',
+    sessionId: session.id,
+    type: 'decision.recorded',
+    source: 'operator',
+    summary: 'Shared audit must outlive the removed session record.',
+  }, options);
 
   const controlCalls = [];
   const terminal = {
@@ -113,6 +122,7 @@ test('session removal deletes only colocated state and registry detachment never
   assert.equal(removed.id, session.id);
   assert.equal(fs.existsSync(sessionDirectory), false);
   assert.equal(fs.readFileSync(retainedArtifact, 'utf8'), 'retained\n');
+  assert.equal(monitorEvents.listMonitorEvents({ sessionId: session.id }, options)[0].id, 'retained-shared-audit');
   assert.equal(workSessions.readWorkSession(session.id, options), null);
   assert.deepEqual(controlCalls, []);
   assert.equal(terminal.name, 'Still operator owned');

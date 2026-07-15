@@ -57,6 +57,26 @@ flowchart LR
 | Setup and Doctor readiness | `operationsReadiness.ts` from `providerReadiness.ts` and local state issues | Computed secret-free snapshot; no persistence | Missing, present-needs-test, invalid, unavailable, and ready remain distinct; both views receive the same snapshot | Setup and Doctor |
 | Webview message | `webviewMessages.ts` plus the owning runtime handler | Allowlisted command and bounded identity/focus fields only | Unknown fields and commands are dropped; ticket/project/session identity is resolved again against current canonical state before action | Ticket workspace, Jira board, Setup, Doctor, composers |
 
+## Private persistence lifecycle matrix
+
+All private runtime paths are rooted below `KRONOS_DIR`. “Atomic” means a bounded same-directory exclusive temporary file is flushed and renamed only after path/descriptor identity checks. “Immutable” means an exclusive no-replace publication whose existing content must match. Windows omits unsupported POSIX flags in `privateFilePrimitives.ts` and compensates with complete lstat/fstat identity checks; POSIX requires `O_NOFOLLOW`.
+
+| File family | Owner and schema | Size bound | Publication behavior | Cleanup lifecycle |
+| --- | --- | --- | --- | --- |
+| Provider environment | `providerEnv.ts`; allowlisted line format, no copied credential schema | 256 KiB | Bounded private read; Kronos may create one exclusive comment-only template but never rewrites operator values | Shared configuration; never removed with a session |
+| Work catalog (`work.json`) | `stateStore.ts`; schema v2 | 32 MiB | Bounded atomic replacement; malformed, partial, oversized, symbolic, or future-schema input returns an empty canonical projection plus a visible issue | Shared catalog; retained until the operator removes the Kronos state root |
+| Work-session record (`work-sessions/*/session.json`) | `workSessionStore.ts`; schema v1 | 4 MiB per record | Bounded atomic replacement; invalid records are omitted and reported | Explicit Remove Session deletes only that session directory and its colocated snapshots |
+| Managed-monitor lease (`leases/managed-monitor-poll.lease`) | `managedMonitorLease.ts`; strict schema v1 | 4 KiB | Exclusive creation, identity-pinned renewal/release, bounded complete reads, active-owner refusal, and expired-owner reclamation | Released after every poll and immediately on runtime disposal; an expired safe owner may be reclaimed |
+| MR, pipeline, read-health, and CI snapshots | Matching `*MonitorStore.ts`; normalized schema v1 digests/status | 256 KiB per snapshot | Bounded atomic replacement through the shared private-file primitive; corrupt or unsupported input is refused and cannot erase a prior complete in-memory facet | Colocated with one work session and removed only with that session record |
+| Monitor/audit ledger (`monitor-events.jsonl`) | `monitorEventStore.ts`; schema v1 per event | 16 KiB per event; 5 MiB default and 50 MiB maximum bounded tail read | One flushed append record after path/descriptor identity checks; incomplete tail lines and invalid events are skipped | Shared append-only evidence; retained after session removal |
+| Jira, GitLab, and CI context pairs | Matching `*ContextStore.ts`; schema v1 JSON plus Markdown | 12 MiB JSON and 13 MiB prompt per pair | Immutable content-addressed pair; incomplete pre-existing pairs fail closed | Shared evidence; session removal deletes only its reference, not the artifact |
+| Raw Jira attachments | `jiraContextStore.ts`; byte-for-byte provider payload plus hashed metadata | 100 MiB per stored attachment, with separate count/total fetch caps | Immutable private bytes; never parsed, previewed, or executed | Shared evidence; retained after session removal |
+| Local Git context | `projectGitContextStore.ts`; bounded Markdown evidence | 768 KiB | Immutable content-addressed publication | Shared evidence; retained after session removal |
+| Context Basket | `contextBasketStore.ts`; schema v1 | 256 KiB state; referenced artifacts retain their own caps | Bounded atomic reference-only state plus immutable bundle publication | Remove/Clear deletes selections only and never source artifacts |
+| Local handoff pair | `handoffBundleStore.ts`; schema v1 Markdown/JSON | 2 MiB per file | Immutable private pair; incomplete or external selections fail closed | Operator-owned local evidence; no provider/session cleanup deletes it |
+
+Ephemeral local search has no persisted index. Terminal objects, terminal text, provider response bodies, and credentials are never persistence inputs.
+
 ## Canonical Attention transition key
 
 Every provider state belongs to one canonical Attention stream identified by **scope + provider + resource + logical subject + facet**. Scope is the stable registered-project identity when available and otherwise the work-session identity. MR IIDs and SonarQube project/branch pairs remain independent logical subjects; pipeline IDs and Jenkins build numbers are occurrences, so a newer occurrence replaces the stale row for its MR pipeline or configured job. Provider-read health remains a separate facet from the resource's state/review facet.

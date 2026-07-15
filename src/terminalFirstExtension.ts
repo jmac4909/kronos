@@ -361,6 +361,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
   dispose(): void {
     if (this.refreshTimer) { clearInterval(this.refreshTimer); }
     if (this.providerTimer) { clearInterval(this.providerTimer); }
+    this.monitor.dispose();
     this.workRefresh.dispose();
     for (const panel of this.ticketPanels.values()) { panel.panel.dispose(); }
     this.ticketPanels.clear();

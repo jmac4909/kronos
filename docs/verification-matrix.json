@@ -74,7 +74,13 @@
         { "file": "scripts/run-unit-tests.js", "test": "managed monitoring lease omits unsupported open flags on Windows and fails closed on POSIX" },
         { "file": "scripts/run-unit-tests.js", "test": "managed monitoring lease acquires, blocks duplicate owners, renews, and releases" },
         { "file": "scripts/run-unit-tests.js", "test": "legacy ~/.claude/kronos state migrates once without helper scripts" },
-        { "file": "scripts/run-project-catalog-tests.js", "test": "project configuration is canonical at setup and Work catalog ingress" }
+        { "file": "scripts/run-project-catalog-tests.js", "test": "project configuration is canonical at setup and Work catalog ingress" },
+        { "file": "scripts/run-persistence-recovery-tests.js", "test": "one private open-flag layer omits unsupported Windows flags and fails closed on POSIX" },
+        { "file": "scripts/run-persistence-recovery-tests.js", "test": "expired monitor lease is reclaimed while a current owner remains exclusive" },
+        { "file": "scripts/run-persistence-recovery-tests.js", "test": "lease renewal and release refuse an identity replacement without deleting its owner" },
+        { "file": "scripts/run-persistence-recovery-tests.js", "test": "malformed, partial, oversized, future, and symbolic lease state fails closed" },
+        { "file": "scripts/run-persistence-recovery-tests.js", "test": "catalog, session, and monitor readers reject incomplete or unsupported private JSON" },
+        { "file": "scripts/run-persistence-recovery-tests.js", "test": "disposing the monitor releases its lease and prevents late provider state writes" }
       ],
       "humanGates": ["windows-native", "multi-window"]
     },
@@ -211,7 +217,8 @@
     { "id": "human-gates-required", "file": "scripts/check-roadmap-evidence.js", "marker": "gate.status !== 'required'" },
     { "id": "audited-context-placement-boundary", "file": "scripts/check-context-governance.js", "marker": "Exactly one audited non-submitting context insertion call is allowed." },
     { "id": "canonical-attention-transition-key", "file": "docs/state-ownership.md", "marker": "scope + provider + resource + logical subject + facet" },
-    { "id": "provider-binding-reconciliation-owner", "file": "docs/state-ownership.md", "marker": "| Provider binding reconciliation |" }
+    { "id": "provider-binding-reconciliation-owner", "file": "docs/state-ownership.md", "marker": "| Provider binding reconciliation |" },
+    { "id": "private-persistence-lifecycle", "file": "docs/state-ownership.md", "marker": "## Private persistence lifecycle matrix" }
   ],
   "requirementEvidence": [
     {
@@ -658,6 +665,86 @@
         { "file": "scripts/run-unit-tests.js", "test": "GitLab discovery falls back to ticket key and refuses ambiguous matches" },
         { "file": "scripts/run-unit-tests.js", "test": "managed provider polling automatically discovers and locally binds a project MR" }
       ]
+    },
+    {
+      "requirements": ["G06-goal:0c4e41b1"],
+      "automated": [
+        { "file": "scripts/run-persistence-recovery-tests.js", "test": "one private open-flag layer omits unsupported Windows flags and fails closed on POSIX" },
+        { "file": "scripts/run-persistence-recovery-tests.js", "test": "catalog, session, and monitor readers reject incomplete or unsupported private JSON" },
+        { "file": "scripts/run-persistence-recovery-tests.js", "test": "disposing the monitor releases its lease and prevents late provider state writes" }
+      ],
+      "checks": ["private-persistence-lifecycle"],
+      "humanGates": ["windows-native", "multi-window"]
+    },
+    {
+      "requirements": ["G06-case-01:1072ee91"],
+      "automated": [
+        { "file": "scripts/run-persistence-recovery-tests.js", "test": "one private open-flag layer omits unsupported Windows flags and fails closed on POSIX" },
+        { "file": "scripts/run-unit-tests.js", "test": "managed monitoring lease omits unsupported open flags on Windows and fails closed on POSIX" }
+      ],
+      "humanGates": ["windows-native"]
+    },
+    {
+      "requirements": ["G06-case-02:9c97d297"],
+      "automated": [
+        { "file": "scripts/run-persistence-recovery-tests.js", "test": "lease renewal and release refuse an identity replacement without deleting its owner" },
+        { "file": "scripts/run-persistence-recovery-tests.js", "test": "malformed, partial, oversized, future, and symbolic lease state fails closed" },
+        { "file": "scripts/run-unit-tests.js", "test": "private file primitives atomically replace bounded state and reject symbolic paths" },
+        { "file": "scripts/run-unit-tests.js", "test": "private directory creation rejects symbolic ancestors without writing through them" }
+      ]
+    },
+    {
+      "requirements": ["G06-case-03:0a4194d5"],
+      "automated": [
+        { "file": "scripts/run-persistence-recovery-tests.js", "test": "expired monitor lease is reclaimed while a current owner remains exclusive" },
+        { "file": "scripts/run-persistence-recovery-tests.js", "test": "lease renewal and release refuse an identity replacement without deleting its owner" },
+        { "file": "scripts/run-persistence-recovery-tests.js", "test": "disposing the monitor releases its lease and prevents late provider state writes" }
+      ]
+    },
+    {
+      "requirements": ["G06-case-04:fac1e574"],
+      "automated": [
+        { "file": "scripts/run-persistence-recovery-tests.js", "test": "malformed, partial, oversized, future, and symbolic lease state fails closed" },
+        { "file": "scripts/run-persistence-recovery-tests.js", "test": "catalog, session, and monitor readers reject incomplete or unsupported private JSON" }
+      ]
+    },
+    {
+      "requirements": ["G06-case-05:8b1bb19e"],
+      "automated": [
+        { "file": "scripts/run-unit-tests.js", "test": "managed monitoring lease acquires, blocks duplicate owners, renews, and releases" }
+      ],
+      "humanGates": ["multi-window"]
+    },
+    {
+      "requirements": ["G06-case-06:267642cc"],
+      "automated": [
+        { "file": "scripts/run-unit-tests.js", "test": "legacy ~/.claude/kronos state migrates once without helper scripts" }
+      ]
+    },
+    {
+      "requirements": ["G06-case-07:73dcf66b"],
+      "automated": [
+        { "file": "scripts/run-terminal-lifecycle-tests.js", "test": "session removal deletes only colocated state and registry detachment never controls the terminal" },
+        { "file": "scripts/run-unit-tests.js", "test": "removing a work session deletes its record and colocated snapshots without touching external artifacts" }
+      ]
+    },
+    {
+      "requirements": ["G06-evidence-01:de737bed"],
+      "automated": [
+        { "file": "scripts/run-persistence-recovery-tests.js", "test": "one private open-flag layer omits unsupported Windows flags and fails closed on POSIX" }
+      ],
+      "checks": ["private-persistence-lifecycle"]
+    },
+    {
+      "requirements": ["G06-evidence-02:864e300f"],
+      "automated": [
+        { "file": "scripts/run-persistence-recovery-tests.js", "test": "catalog, session, and monitor readers reject incomplete or unsupported private JSON" }
+      ],
+      "checks": ["private-persistence-lifecycle"]
+    },
+    {
+      "requirements": ["G06-evidence-03:0f8109d0"],
+      "humanGates": ["windows-native", "multi-window"]
     },
     {
       "requirements": ["G16-goal:b55b5b6c"],

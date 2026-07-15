@@ -103,6 +103,56 @@ export function privateFileNoFollowFlag(platform: NodeJS.Platform, flagValue: un
   return flagValue;
 }
 
+export type PrivateFileOpenIntent =
+  | 'read'
+  | 'exclusive-write'
+  | 'append-write'
+  | 'read-nonblocking'
+  | 'read-write-nonblocking'
+  | 'directory-read';
+
+export interface PrivateFileOpenFlagValues {
+  noFollow?: unknown;
+  nonBlocking?: unknown;
+  directory?: unknown;
+}
+
+/** Owns the only platform-specific open-flag policy used by private state and the monitor lease. */
+export function privateFileOpenFlags(
+  intent: PrivateFileOpenIntent,
+  platform: NodeJS.Platform = process.platform,
+  flagValues: PrivateFileOpenFlagValues = {
+    noFollow: Reflect.get(fs.constants, 'O_NOFOLLOW'),
+    nonBlocking: Reflect.get(fs.constants, 'O_NONBLOCK'),
+    directory: Reflect.get(fs.constants, 'O_DIRECTORY'),
+  },
+): number {
+  const noFollow = privateFileNoFollowFlag(platform, flagValues.noFollow);
+  const nonBlocking = platform === 'win32'
+    ? 0
+    : typeof flagValues.nonBlocking === 'number' ? flagValues.nonBlocking : 0;
+  const directory = typeof flagValues.directory === 'number' ? flagValues.directory : 0;
+  if (intent === 'read') { return fs.constants.O_RDONLY | noFollow; }
+  if (intent === 'exclusive-write') {
+    return fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | noFollow;
+  }
+  if (intent === 'append-write') {
+    return fs.constants.O_WRONLY | fs.constants.O_APPEND | fs.constants.O_CREAT | noFollow;
+  }
+  if (intent === 'read-nonblocking') { return fs.constants.O_RDONLY | nonBlocking | noFollow; }
+  if (intent === 'read-write-nonblocking') { return fs.constants.O_RDWR | nonBlocking | noFollow; }
+  return fs.constants.O_RDONLY | directory | noFollow;
+}
+
+/** Applies private POSIX modes while remaining a no-op on Windows. */
+export function securePrivateDescriptorMode(
+  descriptor: number,
+  mode: number,
+  platform: NodeJS.Platform = process.platform,
+): void {
+  if (platform !== 'win32') { fs.fchmodSync(descriptor, mode); }
+}
+
 /** Reads one bounded regular file after path, descriptor, and identity checks. */
 export function readPrivateBufferFileIfPresent(
   filePath: string,
@@ -113,10 +163,7 @@ export function readPrivateBufferFileIfPresent(
   assertRegularFile(filePath, before, options);
   let descriptor: number | undefined;
   try {
-    descriptor = fs.openSync(
-      filePath,
-      fs.constants.O_RDONLY | privateFileNoFollowFlag(process.platform, Reflect.get(fs.constants, 'O_NOFOLLOW')),
-    );
+    descriptor = fs.openSync(filePath, privateFileOpenFlags('read'));
     const opened = fs.fstatSync(descriptor);
     assertRegularFile(filePath, opened, options);
     if (!sameIdentity(fileIdentity(before), fileIdentity(opened))) {
@@ -169,20 +216,13 @@ export function writePrivateTextFileAtomically(
     if (inspectSafePathComponents(temporaryPath, options.label)) {
       throw new Error(`${options.label} temporary path already exists.`);
     }
-    descriptor = fs.openSync(
-      temporaryPath,
-      fs.constants.O_WRONLY
-        | fs.constants.O_CREAT
-        | fs.constants.O_EXCL
-        | privateFileNoFollowFlag(process.platform, Reflect.get(fs.constants, 'O_NOFOLLOW')),
-      fileMode,
-    );
+    descriptor = fs.openSync(temporaryPath, privateFileOpenFlags('exclusive-write'), fileMode);
     const opened = fs.fstatSync(descriptor);
     if (!opened.isFile() || opened.isSymbolicLink()) {
       throw new Error(`${options.label} temporary path is not a safe regular file.`);
     }
     temporaryIdentity = fileIdentity(opened);
-    if (process.platform !== 'win32') { fs.fchmodSync(descriptor, fileMode); }
+    securePrivateDescriptorMode(descriptor, fileMode);
     writeDescriptorFully(descriptor, data, options);
     fs.fsyncSync(descriptor);
     const completed = fs.fstatSync(descriptor);
@@ -211,7 +251,7 @@ export function writePrivateTextFileAtomically(
     if (!sameIdentity(temporaryIdentity, fileIdentity(committed)) || committed.size !== data.length) {
       throw new Error(`${options.label} changed during atomic commit.`);
     }
-    syncDirectory(directoryPath);
+    syncPrivateDirectory(directoryPath);
     temporaryIdentity = undefined;
     return filePath;
   } catch (error: unknown) {
@@ -250,20 +290,13 @@ export function ensureImmutablePrivateFile(
     if (inspectSafePathComponents(temporaryPath, options.label)) {
       throw new Error(`${options.label} temporary path already exists.`);
     }
-    descriptor = fs.openSync(
-      temporaryPath,
-      fs.constants.O_WRONLY
-        | fs.constants.O_CREAT
-        | fs.constants.O_EXCL
-        | privateFileNoFollowFlag(process.platform, Reflect.get(fs.constants, 'O_NOFOLLOW')),
-      fileMode,
-    );
+    descriptor = fs.openSync(temporaryPath, privateFileOpenFlags('exclusive-write'), fileMode);
     const opened = fs.fstatSync(descriptor);
     if (!opened.isFile() || opened.isSymbolicLink()) {
       throw new Error(`${options.label} temporary path is not a safe regular file.`);
     }
     temporaryIdentity = fileIdentity(opened);
-    if (process.platform !== 'win32') { fs.fchmodSync(descriptor, fileMode); }
+    securePrivateDescriptorMode(descriptor, fileMode);
     writeDescriptorFully(descriptor, data, options);
     fs.fsyncSync(descriptor);
     const completed = fs.fstatSync(descriptor);
@@ -303,7 +336,7 @@ export function ensureImmutablePrivateFile(
     }
     fs.unlinkSync(temporaryPath);
     temporaryIdentity = undefined;
-    syncDirectory(directoryPath);
+    syncPrivateDirectory(directoryPath);
     return { path: filePath, created: true };
   } finally {
     if (descriptor !== undefined) {
@@ -385,14 +418,7 @@ export function appendPrivateTextRecord(
   const fileMode = options.fileMode ?? 0o600;
   let descriptor: number | undefined;
   try {
-    descriptor = fs.openSync(
-      filePath,
-      fs.constants.O_WRONLY
-        | fs.constants.O_APPEND
-        | fs.constants.O_CREAT
-        | privateFileNoFollowFlag(process.platform, Reflect.get(fs.constants, 'O_NOFOLLOW')),
-      fileMode,
-    );
+    descriptor = fs.openSync(filePath, privateFileOpenFlags('append-write'), fileMode);
     const opened = fs.fstatSync(descriptor);
     assertReplaceableRegularFile(filePath, opened, options.label);
     if (existing && !sameIdentity(fileIdentity(existing), fileIdentity(opened))) {
@@ -407,7 +433,7 @@ export function appendPrivateTextRecord(
     if (!sameIdentity(fileIdentity(directoryBefore), fileIdentity(directoryAtOpen))) {
       throw new Error(`${options.label} directory changed while it was being opened for append.`);
     }
-    if (process.platform !== 'win32') { fs.fchmodSync(descriptor, fileMode); }
+    securePrivateDescriptorMode(descriptor, fileMode);
     const bytesWritten = fs.writeSync(descriptor, data, 0, data.length, null);
     if (bytesWritten !== data.length) {
       throw new Error(`${options.label} record could not be appended atomically.`);
@@ -442,10 +468,7 @@ export function readPrivateTextTailLinesIfPresent(
   assertReplaceableRegularFile(filePath, before, options.label);
   let descriptor: number | undefined;
   try {
-    descriptor = fs.openSync(
-      filePath,
-      fs.constants.O_RDONLY | privateFileNoFollowFlag(process.platform, Reflect.get(fs.constants, 'O_NOFOLLOW')),
-    );
+    descriptor = fs.openSync(filePath, privateFileOpenFlags('read'));
     const opened = fs.fstatSync(descriptor);
     assertReplaceableRegularFile(filePath, opened, options.label);
     if (!sameIdentity(fileIdentity(before), fileIdentity(opened))) {
@@ -645,15 +668,13 @@ function enforceDirectoryMode(
   label: string,
   mode: number,
 ): void {
-  const noFollow = privateFileNoFollowFlag(process.platform, Reflect.get(fs.constants, 'O_NOFOLLOW'));
-  const directoryFlag = typeof fs.constants.O_DIRECTORY === 'number' ? fs.constants.O_DIRECTORY : 0;
-  const descriptor = fs.openSync(directoryPath, fs.constants.O_RDONLY | directoryFlag | noFollow);
+  const descriptor = fs.openSync(directoryPath, privateFileOpenFlags('directory-read'));
   try {
     const opened = fs.fstatSync(descriptor);
     if (!opened.isDirectory() || !sameIdentity(fileIdentity(before), fileIdentity(opened))) {
       throw new Error(`${label} directory changed while it was opened.`);
     }
-    fs.fchmodSync(descriptor, mode);
+    securePrivateDescriptorMode(descriptor, mode);
     const completed = fs.fstatSync(descriptor);
     const pathAfter = fs.lstatSync(directoryPath);
     if (!completed.isDirectory()
@@ -675,16 +696,13 @@ function enforceRegularFileMode(
   label: string,
   mode: number,
 ): void {
-  const descriptor = fs.openSync(
-    filePath,
-    fs.constants.O_RDONLY | privateFileNoFollowFlag(process.platform, Reflect.get(fs.constants, 'O_NOFOLLOW')),
-  );
+  const descriptor = fs.openSync(filePath, privateFileOpenFlags('read'));
   try {
     const opened = fs.fstatSync(descriptor);
     if (!opened.isFile() || !sameIdentity(fileIdentity(before), fileIdentity(opened))) {
       throw new Error(`${label} changed while its permissions were opened.`);
     }
-    fs.fchmodSync(descriptor, mode);
+    securePrivateDescriptorMode(descriptor, mode);
     const completed = fs.fstatSync(descriptor);
     const pathAfter = fs.lstatSync(filePath);
     if (!completed.isFile()
@@ -721,11 +739,9 @@ function removeMatchingFile(filePath: string, identity: FileIdentity | undefined
   }
 }
 
-function syncDirectory(directoryPath: string): void {
+export function syncPrivateDirectory(directoryPath: string): void {
   if (process.platform === 'win32') { return; }
-  const noFollow = privateFileNoFollowFlag(process.platform, Reflect.get(fs.constants, 'O_NOFOLLOW'));
-  const directoryFlag = typeof fs.constants.O_DIRECTORY === 'number' ? fs.constants.O_DIRECTORY : 0;
-  const descriptor = fs.openSync(directoryPath, fs.constants.O_RDONLY | directoryFlag | noFollow);
+  const descriptor = fs.openSync(directoryPath, privateFileOpenFlags('directory-read'));
   try {
     if (!fs.fstatSync(descriptor).isDirectory()) { throw new Error('Private file parent is not a directory.'); }
     fs.fsyncSync(descriptor);
