@@ -3373,7 +3373,9 @@ test('extension activation registers the bounded surface and explicit launch com
     const panelsBeforeUnmanagedProjectContext = createdWebviewPanels.length;
     await commandHandlers.get('kronos.insertProjectGitContext')({ projectName: 'fixture', projectPath: tempRoot });
     assert.match(lastWarningMessage, /start a Claude session.*before inserting the working diff/i);
-    await commandHandlers.get('kronos.insertProjectGitLabContext')({ projectName: 'fixture', projectPath: tempRoot });
+    await commandHandlers.get('kronos.insertProjectGitLabContext')({
+      target: { projectName: 'fixture', projectPath: path.join(tempRoot, 'stale-tree-path') },
+    });
     assert.match(lastWarningMessage, /add a Jira context.*before inserting MR evidence/i);
     await commandHandlers.get('kronos.insertProjectCiContext')({ projectName: 'fixture', projectPath: tempRoot });
     assert.match(lastWarningMessage, /add a Jira context.*before inserting CI evidence/i);
@@ -3638,7 +3640,9 @@ test('extension activation registers the bounded surface and explicit launch com
       metadata: { transitionKind: 'initial_observation' },
     });
     inputBoxResult = 'Fixture API';
-    await commandHandlers.get('kronos.renameLocalProject')({ projectName: 'fixture', projectPath: tempRoot });
+    await commandHandlers.get('kronos.renameLocalProject')({
+      target: { projectName: 'fixture', projectPath: path.join(tempRoot, 'stale-tree-path') },
+    });
     assert.match(lastInputBoxOptions.prompt, /Optional display name only/);
     assert.equal(stateStore.readStateFileWithIssues().state.projects.fixture.display_name, 'Fixture API');
     const attentionGroup = attentionProvider.getChildren().find(item => item.label === 'Fixture API');

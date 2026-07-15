@@ -153,13 +153,13 @@ class ProjectActionTreeItem extends vscode.TreeItem {
 
 class ProjectMessageTreeItem extends vscode.TreeItem {
   constructor() {
-    super('Manage local projects', vscode.TreeItemCollapsibleState.None);
+    super('Register local projects', vscode.TreeItemCollapsibleState.None);
     this.contextValue = 'registered_project_empty';
-    this.description = 'discover, register, or remove';
+    this.description = 'choose repositories from discovery folders';
     this.iconPath = new vscode.ThemeIcon('folder-opened');
     this.command = {
       command: 'kronos.registerWorkspaceProject',
-      title: 'Manage Local Projects',
+      title: 'Manage Registered Projects',
     };
   }
 }

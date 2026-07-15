@@ -1247,7 +1247,8 @@ class TerminalFirstRuntime implements vscode.Disposable {
 
   private async newClaudeSession(argument?: unknown): Promise<void> {
     if (!this.canLaunchClaude()) { return; }
-    const requestedProject = stringProperty(argument, 'projectName') || stringProperty(argument, 'projectPath');
+    const requestedProject = projectTargetStringProperty(argument, 'projectName')
+      || projectTargetStringProperty(argument, 'projectPath');
     const project = requestedProject ? this.resolveRegisteredProject(argument) : undefined;
     if (requestedProject && !project) { return; }
     const workspaceName = vscode.workspace.name?.trim();
@@ -2998,13 +2999,20 @@ class TerminalFirstRuntime implements vscode.Disposable {
   }
 
   private resolveRegisteredProject(argument: unknown): RegisteredProjectCommandTarget | undefined {
-    const projectName = stringProperty(argument, 'projectName');
-    const projectPath = stringProperty(argument, 'projectPath');
-    const registered = listLocalProjects(this.state.state).find(project =>
-      project.name === projectName && project.path === projectPath
-    );
+    const projectName = projectTargetStringProperty(argument, 'projectName');
+    const projectPath = projectTargetStringProperty(argument, 'projectPath');
+    const projects = listLocalProjects(this.state.state);
+    // The catalog name is the stable foreign key. Always re-read the current
+    // canonical path instead of requiring a possibly stale tree-item path to
+    // match byte-for-byte (notably after Windows casing or alias cleanup).
+    const registered = (projectName ? projects.find(project => project.name === projectName) : undefined)
+      || (projectPath ? projects.find(project =>
+        localProjectPathKey(project.path) === localProjectPathKey(projectPath)
+      ) : undefined);
     if (!registered) {
-      void vscode.window.showWarningMessage('Select a currently registered project for this action.');
+      void vscode.window.showWarningMessage(
+        'That Project row is stale or no longer registered. Refresh Projects or use Manage Registered Projects to register it.',
+      );
       return undefined;
     }
     return { projectName: registered.name, projectPath: registered.path, displayName: registered.displayName };
@@ -3734,6 +3742,12 @@ function stringProperty(value: unknown, key: string): string | undefined {
   if (!isRecord(value)) { return undefined; }
   const candidate = value[key];
   return typeof candidate === 'string' && candidate.trim() ? candidate.trim() : undefined;
+}
+
+function projectTargetStringProperty(value: unknown, key: 'projectName' | 'projectPath'): string | undefined {
+  const direct = stringProperty(value, key);
+  if (direct || !isRecord(value)) { return direct; }
+  return stringProperty(value['target'], key);
 }
 
 function providerOpenChoices(value: unknown): Array<{ label: string; description?: string; url: string }> {

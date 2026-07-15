@@ -117,7 +117,7 @@
       },
       {
         "command": "kronos.registerWorkspaceProject",
-        "title": "Kronos: Manage Local Projects",
+        "title": "Kronos: Manage Registered Projects",
         "icon": "$(folder-library)"
       },
       {
@@ -564,7 +564,7 @@
           },
           "default": [],
           "scope": "machine",
-          "description": "Parent folders Kronos may inspect for local Git projects when Manage Local Projects is explicitly opened. Choose folders from Kronos Setup or use this advanced setting. Open workspace folders are always offered. Use ~ for the current home folder."
+          "description": "Parent folders Kronos may inspect for local Git projects when Manage Registered Projects is explicitly opened. Choose folders from Kronos Setup or use this advanced setting. Open workspace folders are always offered. Use ~ for the current home folder."
         },
         "kronos.projectDiscoveryDepth": {
           "type": "integer",

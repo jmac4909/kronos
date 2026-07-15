@@ -185,7 +185,7 @@ ${webviewRuntimeScriptTag(input.nonce, webviewRuntimeScriptUri(input.scriptUri))
     <div class="jira-projects-header"><h2>Local Projects</h2><span class="kronos-subtitle">Branch is read locally from Git HEAD</span></div>
     ${localProjects.length > 0
     ? `<div class="jira-projects-grid">${localProjects.map(project => `<div class="jira-project"><div class="jira-project-heading"><span class="jira-project-name">${escapeHtml(project.displayName || project.name)}</span><span class="jira-project-branch">${escapeHtml(project.branch || (project.available ? 'branch unavailable' : 'folder unavailable'))}</span></div><div class="jira-project-path">${escapeHtml(project.path)}</div></div>`).join('')}</div>`
-    : '<div class="kronos-empty">No local projects registered. Open the Projects view and choose Manage Local Projects; Kronos will offer discovery-folder setup when needed.</div>'}
+    : '<div class="kronos-empty">No local projects registered. Open the Projects view and choose Manage Registered Projects; Kronos will offer discovery-folder setup when needed.</div>'}
   </section>
 
   <section class="jira-board-filters" aria-label="Jira board filters">
