@@ -61,6 +61,7 @@
       "goals": ["G09"],
       "automated": [
         { "file": "scripts/run-unit-tests.js", "test": "project discovery honors configured roots, depth, limits, and workspace folders" },
+        { "file": "scripts/run-unit-tests.js", "test": "project registration identity stays canonical by path while its display name remains editable" },
         { "file": "scripts/run-unit-tests.js", "test": "project Git evidence reads only the bounded VS Code Git model" },
         { "file": "scripts/run-jira-work-board-tests.js", "test": "board lists registered local project paths and current Git branches" }
       ],

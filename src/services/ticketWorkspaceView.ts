@@ -107,7 +107,7 @@ ${ticketWorkspaceActionScript(input.nonce, input.actionScriptUri)}
 
   <div class="workspace-grid kronos-section">
     <div class="kronos-stack">
-      ${buildTicketSummary(ticket)}
+      ${buildTicketSummary(ticket, input.localProject)}
       ${buildJiraSummary(ticket)}
       ${buildMergeRequestSummary(ticket, workSession)}
       ${buildBuildSummary(ticket)}
@@ -136,7 +136,7 @@ function buildTerminalWorkspaceFacts(
     ${fact('Monitoring', `<span class="status-pill ${escapeClass(monitoring.tone)}">${escapeHtml(monitoring.label)}</span>`, true)}
     ${fact('Saved context', `${artifactCount} artifact${artifactCount === 1 ? '' : 's'}`)}
     ${fact('Session', workSession ? sessionStatusLabel(workSession.status) : 'Ready to connect')}
-    ${fact('Launch project', localProject?.name || 'workspace fallback')}
+    ${fact('Launch project', localProject?.displayName || localProject?.name || 'workspace fallback')}
     ${fact('Git branch', localProject?.branch || (localProject ? 'unavailable' : 'not linked'))}
     ${fact('Launch directory', localProject?.path || 'current workspace')}
   </div>`;
@@ -150,7 +150,7 @@ function buildProviderLinks(ticket: Ticket, workSession: WorkSessionRecord | und
   return links.length > 0 ? `<nav class="provider-links" aria-label="Provider links">${links.join('')}</nav>` : '';
 }
 
-function buildTicketSummary(ticket: Ticket): string {
+function buildTicketSummary(ticket: Ticket, localProject?: LocalProjectSummary): string {
   const labels = (ticket.labels || []).map(label => singleLine(label, 100)).filter(Boolean);
   const description = singleLinePreservingBreaks(ticket.description, 20_000);
   return `<section class="kronos-card">
@@ -159,7 +159,7 @@ function buildTicketSummary(ticket: Ticket): string {
       ${fact('Type', singleLine(ticket.type, 120) || 'unknown')}
       ${fact('Priority', singleLine(ticket.priority, 120) || 'unknown')}
       ${fact('Jira project', singleLine(ticket.jira_project_key, 200) || 'unknown')}
-      ${fact('Local project', singleLine(ticket.linked_local_project, 200) || 'not linked')}
+      ${fact('Local project', singleLine(localProject?.displayName || ticket.linked_local_project, 200) || 'not linked')}
       ${fact('Labels', labels.join(', ') || 'none')}
     </div>
     ${description ? `<div class="kronos-section"><h3>Description</h3><div class="description">${escapeHtml(description)}</div></div>` : ''}

@@ -45,7 +45,7 @@ export function buildLocalEvidenceSearchIndex(input: LocalEvidenceSearchInput): 
     entries.push(entry({
       id: `project:${project.name}`,
       kind: 'project',
-      label: project.name,
+      label: project.displayName || project.name,
       description: project.branch
         ? `${project.detached ? 'detached' : 'branch'} ${project.branch}`
         : 'branch unavailable',

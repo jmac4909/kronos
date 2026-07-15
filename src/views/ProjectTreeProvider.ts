@@ -16,6 +16,7 @@ import {
 export interface RegisteredProjectCommandTarget {
   projectName: string;
   projectPath: string;
+  displayName?: string;
 }
 
 type StateLoader = () => KronosState | null;
@@ -56,7 +57,7 @@ export class ProjectTreeProvider implements vscode.TreeDataProvider<ProjectTreeE
           && session.monitoring.enabled
       );
       return new RegisteredProjectTreeItem(
-        { projectName: project.name, projectPath: project.path },
+        { projectName: project.name, projectPath: project.path, displayName: project.displayName },
         evidence,
         config,
         linkedSessions.length,
@@ -93,7 +94,7 @@ class RegisteredProjectTreeItem extends vscode.TreeItem {
     linkedSessionCount: number,
     monitoringHealth: ProviderMonitoringHealth,
   ) {
-    super(target.projectName, vscode.TreeItemCollapsibleState.Collapsed);
+    super(target.displayName || target.projectName, vscode.TreeItemCollapsibleState.Collapsed);
     this.id = `registered-project:${target.projectName}`;
     this.contextValue = 'registered_project';
     this.iconPath = projectIcon(evidence);
@@ -105,7 +106,8 @@ class RegisteredProjectTreeItem extends vscode.TreeItem {
       providerStatus('SonarQube', Boolean(config.sonar_project_key), readiness.sonar.configured, linkedSessionCount),
     ];
     this.tooltip = [
-      `Project: ${target.projectName}`,
+      `Project: ${target.displayName || target.projectName}`,
+      `Stable identity: ${target.projectName}`,
       `Path: ${target.projectPath}`,
       `Git branch: ${evidence.branch || 'unavailable'}`,
       `Git status: ${projectStatusTooltip(evidence)}`,
@@ -156,6 +158,7 @@ function projectActions(target: RegisteredProjectCommandTarget): ProjectActionTr
     new ProjectActionTreeItem('Insert MR evidence', 'git-merge', 'kronos.insertProjectGitLabContext', target),
     new ProjectActionTreeItem('Insert Jenkins / Sonar evidence', 'beaker', 'kronos.insertProjectCiContext', target),
     new ProjectActionTreeItem('Configure provider polling', 'settings-gear', 'kronos.configureProjectIntegrations', target),
+    new ProjectActionTreeItem('Rename display label', 'edit', 'kronos.renameLocalProject', target, 'identity and links stay unchanged'),
   ];
 }
 

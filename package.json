@@ -216,6 +216,11 @@
         "icon": "$(refresh)"
       },
       {
+        "command": "kronos.renameLocalProject",
+        "title": "Kronos: Rename Project Display Label",
+        "icon": "$(edit)"
+      },
+      {
         "command": "kronos.openProjectGitStatus",
         "title": "Kronos: View Project Git Status and Diff",
         "icon": "$(open-preview)"
@@ -484,6 +489,11 @@
           "command": "kronos.configureProjectIntegrations",
           "when": "viewItem == registered_project",
           "group": "management@1"
+        },
+        {
+          "command": "kronos.renameLocalProject",
+          "when": "viewItem == registered_project",
+          "group": "management@2"
         },
         {
           "command": "kronos.acknowledgeAttention",

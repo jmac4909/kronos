@@ -7,6 +7,7 @@ import { jiraRestClient, resolveJiraRestConfig } from '../services/jiraRestClien
 import { catalogFromJiraWorkList } from '../services/jiraWorkCatalog';
 import {
   projectTicketProviderState,
+  renameLocalProjectDisplayName,
   registerLocalProject,
   replaceRegisteredLocalProjects,
   setLocalProjectIntegrations,
@@ -163,6 +164,14 @@ export class TerminalFirstState implements vscode.Disposable {
 
   replaceRegisteredLocalProjects(projects: readonly { name: string; path: string }[]): void {
     const next = replaceRegisteredLocalProjects(this.snapshot || emptyWorkCatalog(), projects);
+    writeStateFile(next);
+    this.reloadAndNotify();
+  }
+
+  renameLocalProjectDisplayName(projectName: string, displayName: string): void {
+    const current = this.snapshot || emptyWorkCatalog();
+    const next = renameLocalProjectDisplayName(current, projectName, displayName);
+    if (next === current) { return; }
     writeStateFile(next);
     this.reloadAndNotify();
   }

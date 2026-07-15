@@ -1347,6 +1347,7 @@ test('explicit local project links preserve unrelated provider records and repor
   });
   assert.deepEqual(projectCatalog.ticketLocalProject(linked, linked.tickets['JIRA-123']), {
     name: 'Application',
+    displayName: 'Application',
     path: projectRoot,
     branch: 'feature/ticket-context',
     detached: false,
@@ -1357,6 +1358,46 @@ test('explicit local project links preserve unrelated provider records and repor
   assert.equal(switched.tickets['JIRA-123'].linked_local_project, 'Alternate');
   const unlinked = projectCatalog.setTicketLocalProject(switched, 'JIRA-123');
   assert.equal(unlinked.tickets['JIRA-123'].linked_local_project, undefined);
+});
+
+test('project registration identity stays canonical by path while its display name remains editable', () => {
+  const projectRoot = path.join(tempRoot, 'canonical-project-identity');
+  fs.mkdirSync(projectRoot, { recursive: true });
+  const aliasPath = path.join(projectRoot, '..', path.basename(projectRoot));
+  const initial = stateStore.emptyWorkCatalog();
+  initial.tickets['JIRA-123'] = fixtureTicket();
+
+  const registered = projectCatalog.registerLocalProject(initial, 'Application', aliasPath);
+  const linked = projectCatalog.setTicketLocalProject(registered, 'JIRA-123', 'Application');
+  const duplicateAttempt = projectCatalog.registerLocalProject(linked, 'Duplicate label', projectRoot);
+  assert.deepEqual(Object.keys(duplicateAttempt.projects), ['Application']);
+  assert.equal(duplicateAttempt.projects.Application.path, fs.realpathSync.native(projectRoot));
+
+  const renamed = projectCatalog.renameLocalProjectDisplayName(duplicateAttempt, 'Application', 'Customer API');
+  assert.equal(renamed.projects.Application.display_name, 'Customer API');
+  assert.equal(renamed.tickets['JIRA-123'].linked_local_project, 'Application', 'display rename never rewrites ticket identity');
+  assert.deepEqual(projectCatalog.listLocalProjects(renamed).map(project => ({
+    name: project.name,
+    displayName: project.displayName,
+    path: project.path,
+  })), [{
+    name: 'Application',
+    displayName: 'Customer API',
+    path: fs.realpathSync.native(projectRoot),
+  }]);
+  assert.equal(renamed.projects.Application.config.repo_name, 'Application');
+
+  const persisted = stateStore.normalizeWorkCatalog({
+    schemaVersion: 2,
+    projects: {
+      Application: renamed.projects.Application,
+      Duplicate: { path: aliasPath, display_name: 'Must be omitted', config: {} },
+    },
+    tickets: renamed.tickets,
+  }, '/fixture/duplicate-project-path.json');
+  assert.deepEqual(Object.keys(persisted.state.projects), ['Application']);
+  assert.equal(persisted.state.projects.Application.display_name, 'Customer API');
+  assert.equal(persisted.issues.some(issue => /duplicate local project path/i.test(issue.detail)), true);
 });
 
 test('provider observations update the durable Work catalog without losing Jira metadata', () => {
@@ -3599,6 +3640,7 @@ test('extension activation registers the bounded surface and explicit launch com
       'Insert MR evidence',
       'Insert Jenkins / Sonar evidence',
       'Configure provider polling',
+      'Rename display label',
     ]);
     await commandHandlers.get('kronos.refreshProjects')();
 

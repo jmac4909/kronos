@@ -172,7 +172,7 @@ export class WorkTicketTreeItem extends vscode.TreeItem {
     super(`${key} — ${summary}`, vscode.TreeItemCollapsibleState.None);
 
     const jiraProject = safeSingleLine(ticket.jira_project_key, 120);
-    const localProjectName = safeSingleLine(localProject?.name || ticket.linked_local_project, 120);
+    const localProjectName = safeSingleLine(localProject?.displayName || localProject?.name || ticket.linked_local_project, 120);
     const facts = [
       safeSingleLine(ticket.jira_status, 120),
       safeSingleLine(ticket.priority, 80),
@@ -218,7 +218,7 @@ function buildWorkTicketTooltip(
     `Jira project: ${safeSingleLine(ticket.jira_project_key, 120) || 'unknown'}`,
     `Type: ${safeSingleLine(ticket.type, 120) || 'unknown'}`,
     `Priority: ${safeSingleLine(ticket.priority, 120) || 'unknown'}`,
-    `Local project: ${safeSingleLine(localProject?.name || ticket.linked_local_project, 200) || 'not linked'}`,
+    `Local project: ${safeSingleLine(localProject?.displayName || localProject?.name || ticket.linked_local_project, 200) || 'not linked'}`,
   ];
   if (localProject) {
     lines.push(`Launch directory: ${localProject.path}`);

@@ -50,6 +50,7 @@ interface BoardTicket {
   jiraProject: string;
   jiraProjectToken: string;
   localProject: string;
+  localProjectDisplayName: string;
   localProjectToken: string;
   labels: string[];
   labelTokens: string[];
@@ -68,8 +69,10 @@ export function buildJiraWorkBoardHtml(input: JiraWorkBoardInput): string {
   const customDoneStatuses = new Set(
     (input.doneStatusNames || []).map(filterToken).filter(Boolean),
   );
+  const localProjects = listLocalProjects(input.state);
+  const localProjectDisplayNames = new Map(localProjects.map(project => [project.name, project.displayName]));
   const tickets = Object.entries(input.state?.tickets || {})
-    .map(([key, ticket]) => normalizeBoardTicket(key, ticket, customDoneStatuses))
+    .map(([key, ticket]) => normalizeBoardTicket(key, ticket, customDoneStatuses, localProjectDisplayNames))
     .filter((ticket): ticket is BoardTicket => ticket !== null)
     .sort(compareBoardTickets);
   const columns = boardColumns(tickets);
@@ -81,7 +84,6 @@ export function buildJiraWorkBoardHtml(input: JiraWorkBoardInput): string {
   const hideCompletedByDefault = input.hideCompletedByDefault !== false;
   const initiallyVisibleCount = hideCompletedByDefault ? tickets.length - completedCount : tickets.length;
   const refreshedAt = safeSingleLine(input.state?.refreshedAt, 100);
-  const localProjects = listLocalProjects(input.state);
   const dataPresentation = workDataPresentation({
     ticketCount: tickets.length,
     refreshedAt,
@@ -186,7 +188,7 @@ ${webviewRuntimeScriptTag(input.nonce, webviewRuntimeScriptUri(input.scriptUri))
   <section class="jira-projects" aria-label="Registered local projects">
     <div class="jira-projects-header"><h2>Local Projects</h2><span class="kronos-subtitle">Branch is read locally from Git HEAD</span></div>
     ${localProjects.length > 0
-    ? `<div class="jira-projects-grid">${localProjects.map(project => `<div class="jira-project"><div class="jira-project-heading"><span class="jira-project-name">${escapeHtml(project.name)}</span><span class="jira-project-branch">${escapeHtml(project.branch || (project.available ? 'branch unavailable' : 'folder unavailable'))}</span></div><div class="jira-project-path">${escapeHtml(project.path)}</div></div>`).join('')}</div>`
+    ? `<div class="jira-projects-grid">${localProjects.map(project => `<div class="jira-project"><div class="jira-project-heading"><span class="jira-project-name">${escapeHtml(project.displayName || project.name)}</span><span class="jira-project-branch">${escapeHtml(project.branch || (project.available ? 'branch unavailable' : 'folder unavailable'))}</span></div><div class="jira-project-path">${escapeHtml(project.path)}</div></div>`).join('')}</div>`
     : '<div class="kronos-empty">No local projects registered. Open a project folder or configure discovery roots, then use Discover and Manage Local Projects from the Work toolbar.</div>'}
   </section>
 
@@ -197,7 +199,7 @@ ${webviewRuntimeScriptTag(input.nonce, webviewRuntimeScriptUri(input.scriptUri))
     </div>
     ${selectFilter('jira-board-status', 'Status', statuses)}
     ${selectFilter('jira-board-jira-project', 'Jira project', jiraProjects)}
-    ${selectFilter('jira-board-local-project', 'Local project', linkedProjectFilters)}
+    ${selectFilter('jira-board-local-project', 'Local project', linkedProjectFilters, value => localProjectDisplayNames.get(value) || value)}
     ${selectFilter('jira-board-label', 'Label', labels)}
     <label class="jira-board-toggle" for="jira-board-hide-done">
       <input id="jira-board-hide-done" type="checkbox" data-default-checked="${hideCompletedByDefault ? 'true' : 'false'}"${hideCompletedByDefault ? ' checked' : ''}>
@@ -237,12 +239,14 @@ function normalizeBoardTicket(
   keyValue: string,
   ticket: Ticket,
   customDoneStatuses: ReadonlySet<string>,
+  localProjectDisplayNames: ReadonlyMap<string, string>,
 ): BoardTicket | null {
   const key = normalizeTicketKey(keyValue);
   if (!key) { return null; }
   const status = safeSingleLine(ticket.jira_status, 160) || 'Unknown';
   const jiraProject = safeSingleLine(ticket.jira_project_key, 200);
   const localProject = safeSingleLine(ticket.linked_local_project, 200);
+  const localProjectDisplayName = safeSingleLine(localProjectDisplayNames.get(localProject), 200) || localProject;
   const labels = uniqueFacet(ticket.labels || []);
   return {
     key,
@@ -253,6 +257,7 @@ function normalizeBoardTicket(
     jiraProject,
     jiraProjectToken: filterToken(jiraProject),
     localProject,
+    localProjectDisplayName,
     localProjectToken: filterToken(localProject),
     labels,
     labelTokens: labels.map(filterToken),
@@ -266,6 +271,7 @@ function normalizeBoardTicket(
       safeSingleLine(ticket.jira_status_category, 100),
       jiraProject,
       localProject,
+      localProjectDisplayName,
       ...labels,
       safeSingleLine(ticket.mr?.title, 1_000),
       safeSingleLine(ticket.mr?.state, 100),
@@ -334,7 +340,7 @@ function buildTicketCardHtml(ticket: BoardTicket): string {
   const type = safeSingleLine(value.type, 120) || 'Issue';
   const typeKind = /bug|defect/i.test(type) ? 'bug' : 'issue';
   const jiraProject = ticket.jiraProject;
-  const launchProject = ticket.localProject;
+  const launchProject = ticket.localProjectDisplayName;
   const projectChips = [
     jiraProject ? chip(`Jira: ${jiraProject}`, 'project') : '',
     launchProject ? chip(`Project: ${launchProject}`, 'project') : '',
@@ -376,8 +382,22 @@ function chip(label: string, className: string): string {
   return `<span class="jira-ticket-chip${className ? ` ${className}` : ''}">${escapeHtml(label)}</span>`;
 }
 
-function selectFilter(id: string, label: string, values: readonly string[]): string {
-  const options = values.map(value => `<option value="${escapeAttr(filterToken(value))}">${escapeHtml(value)}</option>`).join('');
+function selectFilter(
+  id: string,
+  label: string,
+  values: readonly string[],
+  displayValue: (value: string) => string = value => value,
+): string {
+  const displayCounts = new Map<string, number>();
+  for (const value of values) {
+    const display = displayValue(value);
+    displayCounts.set(display, (displayCounts.get(display) || 0) + 1);
+  }
+  const options = values.map(value => {
+    const display = displayValue(value);
+    const optionLabel = (displayCounts.get(display) || 0) > 1 ? `${display} (${value})` : display;
+    return `<option value="${escapeAttr(filterToken(value))}">${escapeHtml(optionLabel)}</option>`;
+  }).join('');
   const allLabel = label === 'Status' ? 'All statuses' : `All ${label.toLowerCase()}s`;
   return `<div class="jira-board-filter"><label for="${id}">${label}</label><select id="${id}"><option value="">${escapeHtml(allLabel)}</option>${options}</select></div>`;
 }

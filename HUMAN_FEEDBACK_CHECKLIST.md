@@ -75,12 +75,13 @@ Use a real ticket only when its provider data is approved for local context capt
 10. Choose **Manage Focused Terminal** on an existing terminal and confirm linking does not change that terminal's directory or send `cd`.
 11. Poll the linked ticket and confirm only its explicitly selected local project's GitLab/Jenkins/SonarQube identifiers are used. Then unlink the local project and confirm future launches use workspace/home fallback and no registered repository is inferred from the Jira key.
 12. Open the separate **Projects** view. Confirm every registered project shows its current branch and clean/dirty status, including staged or conflicted detail when present. Use its refresh action after switching branches, then open status/diff and verify the repository is unchanged.
-13. Insert the project's `[GIT-project]` context into its explicitly attached session. Confirm the composer previews changed paths, potential credential material is redacted from the private artifact, and the terminal line is not submitted.
-14. Use **Open merge request page**. Confirm an existing MR opens when known; otherwise a prefilled GitLab new-MR browser page opens and no MR is created until you act in GitLab.
-15. In **Project Integration Setup**, add two explicit branch-profile lines using `branch | Jenkins URL | SonarQube key | SonarQube branch`, choose one optional active fallback, save, and reopen the form. Confirm both profiles and the active choice round-trip exactly.
-16. Link a ticket whose known MR source branch exactly matches the second profile, poll once, and confirm Jenkins uses that profile's job/branch while SonarQube uses its project key/provider branch. Use a ticket without a matching MR profile and confirm only the explicit active fallback is used.
-17. Enter a duplicate branch, unsafe branch, credential-bearing URL, or active name not present in the profile list. Confirm save is refused with a bounded repair message and the prior valid setup remains unchanged.
-18. Confirm saving or selecting a profile never switches the repository branch, changes a worktree, invents a ticket-project link, or sends a provider write.
+13. Use **Rename display label** on a registered Project. Confirm the new label appears in Projects, Work, the Jira board, project setup, and local search while its canonical path, linked tickets/sessions, provider configuration, and Git state remain unchanged.
+14. Insert the project's `[GIT-project]` context into its explicitly attached session. Confirm the composer previews changed paths, potential credential material is redacted from the private artifact, and the terminal line is not submitted.
+15. Use **Open merge request page**. Confirm an existing MR opens when known; otherwise a prefilled GitLab new-MR browser page opens and no MR is created until you act in GitLab.
+16. In **Project Integration Setup**, add two explicit branch-profile lines using `branch | Jenkins URL | SonarQube key | SonarQube branch`, choose one optional active fallback, save, and reopen the form. Confirm both profiles and the active choice round-trip exactly.
+17. Link a ticket whose known MR source branch exactly matches the second profile, poll once, and confirm Jenkins uses that profile's job/branch while SonarQube uses its project key/provider branch. Use a ticket without a matching MR profile and confirm only the explicit active fallback is used.
+18. Enter a duplicate branch, unsafe branch, credential-bearing URL, or active name not present in the profile list. Confirm save is refused with a bounded repair message and the prior valid setup remains unchanged.
+19. Confirm saving or selecting a profile never switches the repository branch, changes a worktree, invents a ticket-project link, or sends a provider write.
 
 ## Start Claude for a Ticket
 

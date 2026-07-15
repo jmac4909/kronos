@@ -5,6 +5,7 @@ export const PROJECT_INTEGRATION_SCRIPT = 'kronos-project-integration.js';
 
 export interface ProjectIntegrationFormProject {
   name: string;
+  displayName?: string;
   path: string;
   branch?: string;
   gitlabProject?: string;
@@ -29,7 +30,7 @@ export function buildProjectIntegrationPanelHtml(input: ProjectIntegrationPanelI
   </div>`).join('');
   const projectCards = input.projects.slice(0, 200).map(project => `<section class="integration-card" data-project-card data-project-name="${escapeAttr(project.name)}">
     <header>
-      <div><h2>${escapeHtml(project.name)}</h2><div class="project-path">${escapeHtml(project.path)}</div></div>
+      <div><h2>${escapeHtml(project.displayName || project.name)}</h2><div class="project-path">${escapeHtml(project.path)}</div></div>
       <span class="kronos-pill info">${escapeHtml(project.branch || 'branch unavailable')}</span>
     </header>
     <div class="field-grid">

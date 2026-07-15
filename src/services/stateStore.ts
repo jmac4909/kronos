@@ -1,3 +1,4 @@
+import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import type {
@@ -100,10 +101,18 @@ export function normalizeWorkCatalog(raw: unknown, filePath = STATE_FILE): State
   state.refreshedAt = safeString(raw['refreshedAt']) || safeString(raw['last_updated']) || null;
 
   const rawProjects = isRecord(raw['projects']) ? raw['projects'] : {};
+  const seenProjectPaths = new Set<string>();
   for (const [name, value] of Object.entries(rawProjects)) {
     const project = normalizeProject(value);
-    if (project) { state.projects[safeKey(name)] = project; }
-    else { issues.push({ filePath, detail: `Ignored invalid project ${safeKey(name)}.` }); }
+    const projectPathKey = project?.path ? persistedProjectPathKey(project.path) : undefined;
+    if (project && (!projectPathKey || !seenProjectPaths.has(projectPathKey))) {
+      state.projects[safeKey(name)] = project;
+      if (projectPathKey) { seenProjectPaths.add(projectPathKey); }
+    } else if (project && projectPathKey) {
+      issues.push({ filePath, detail: `Ignored duplicate local project path for ${safeKey(name)}.` });
+    } else {
+      issues.push({ filePath, detail: `Ignored invalid project ${safeKey(name)}.` });
+    }
   }
 
   const rawTickets = isRecord(raw['tickets']) ? raw['tickets'] : {};
@@ -137,9 +146,27 @@ export function readBoundedPrivateUtf8File(filePath: string, maxBytes: number, l
 function normalizeProject(value: unknown): Project | undefined {
   if (!isRecord(value)) { return undefined; }
   const project: Project = { config: normalizeProjectConfig(value['config']) };
-  const projectPath = safeString(value['path']);
+  const projectPath = normalizePersistedProjectPath(value['path']);
+  const displayName = safeString(value['display_name'])?.slice(0, 200);
   if (projectPath) { project.path = projectPath; }
+  if (displayName) { project.display_name = displayName; }
   return project;
+}
+
+function normalizePersistedProjectPath(value: unknown): string | undefined {
+  const candidate = safeString(value);
+  if (!candidate || !path.isAbsolute(candidate)) { return undefined; }
+  const normalized = path.normalize(candidate);
+  try {
+    return fs.realpathSync.native(normalized);
+  } catch {
+    return normalized;
+  }
+}
+
+function persistedProjectPathKey(value: string): string {
+  const normalized = path.normalize(value);
+  return process.platform === 'win32' ? normalized.toLocaleLowerCase() : normalized;
 }
 
 function normalizeProjectConfig(value: unknown): ProjectConfig {

@@ -142,6 +142,7 @@ test('board lists registered local project paths and current Git branches', () =
     fs.writeFileSync(path.join(projectRoot, '.git', 'HEAD'), 'ref: refs/heads/feature/board-projects\n');
     const fixtureState = state({ 'KRONOS-1': ticket('In Progress', { linked_local_project: 'Kronos' }) });
     fixtureState.projects.Kronos.path = projectRoot;
+    fixtureState.projects.Kronos.display_name = 'Kronos Extension';
     const html = buildJiraWorkBoardHtml({
       state: fixtureState,
       nonce: 'abcdef1234567890',
@@ -152,8 +153,9 @@ test('board lists registered local project paths and current Git branches', () =
     assert.match(html, new RegExp(projectRoot.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
     assert.match(html, /data-action="chooseTicketProject"/);
     assert.match(html, /Jira: KRONOS/);
-    assert.match(html, /Project: Kronos/);
-    assert.match(html, /Change \/ Unlink Project: Kronos/);
+    assert.match(html, /Project: Kronos Extension/);
+    assert.match(html, /Change \/ Unlink Project: Kronos Extension/);
+    assert.match(html, /<option value="kronos">Kronos Extension<\/option>/);
     assert.match(html, /data-ticket-card[^>]+tabindex="0"[^>]+aria-label="Open KRONOS-1/);
   } finally {
     fs.rmSync(projectRoot, { recursive: true, force: true });

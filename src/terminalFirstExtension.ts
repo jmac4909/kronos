@@ -412,6 +412,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
     this.command('kronos.closeWorkSession', async argument => this.stopManagingSession(argument));
     this.command('kronos.removeWorkSession', async argument => this.removeManagedSession(argument));
     this.command('kronos.refreshProjects', () => this.projectTree.refresh());
+    this.command('kronos.renameLocalProject', async argument => this.renameLocalProject(argument));
     this.command('kronos.openProjectGitStatus', async argument => this.openProjectGitStatus(argument));
     this.command('kronos.insertProjectGitContext', async argument => this.insertProjectGitContext(argument));
     this.command('kronos.openProjectMergeRequest', async argument => this.openProjectMergeRequest(argument));
@@ -605,13 +606,13 @@ class TerminalFirstRuntime implements vscode.Disposable {
     const registeredChoices = registeredProjects.map(registered => {
       const discovered = discoveredByPath.get(localProjectPathKey(registered.path));
       const project: DiscoveredProject = discovered || {
-        name: registered.name,
+        name: registered.displayName,
         path: registered.path,
         source: 'configured-root',
         ...(registered.branch ? { branch: registered.branch } : {}),
       };
       return {
-        label: registered.name,
+        label: registered.displayName,
         description: `registered · ${registered.branch || (registered.available ? 'branch unavailable' : 'folder unavailable')}`,
         detail: registered.path,
         picked: true,
@@ -648,7 +649,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
       .map(([ticketKey]) => ticketKey);
     if (linkedTicketKeys.length > 0) {
       const action = await vscode.window.showWarningMessage(
-        `Unregistering ${removedProjects.map(project => project.name).join(', ')} will unlink ${linkedTicketKeys.length} ticket${linkedTicketKeys.length === 1 ? '' : 's'} (${linkedTicketKeys.slice(0, 5).join(', ')}${linkedTicketKeys.length > 5 ? ', …' : ''}).`,
+        `Unregistering ${removedProjects.map(project => project.displayName).join(', ')} will unlink ${linkedTicketKeys.length} ticket${linkedTicketKeys.length === 1 ? '' : 's'} (${linkedTicketKeys.slice(0, 5).join(', ')}${linkedTicketKeys.length > 5 ? ', …' : ''}).`,
         { modal: true },
         'Unregister and Unlink',
       );
@@ -713,7 +714,9 @@ class TerminalFirstRuntime implements vscode.Disposable {
     const existing = this.state.state?.projects || {};
     const names = new Map(Object.entries(existing).map(([name, project]) => [name.toLocaleLowerCase(), project.path || '']));
     return projects.map(project => {
-      const existingName = Object.entries(existing).find(([, value]) => value.path === project.path)?.[0];
+      const existingName = Object.entries(existing).find(([, value]) =>
+        Boolean(value.path && localProjectPathKey(value.path) === localProjectPathKey(project.path))
+      )?.[0];
       if (existingName) { return { name: existingName, path: project.path }; }
       const base = safeProjectName(project.name) || 'Project';
       let name = base;
@@ -796,6 +799,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
       const suggestedSonarKey = config.sonar_project_key || sonarProjectKeySuggestion(config.repo_name, project.name);
       return {
         name: project.name,
+        displayName: project.displayName,
         path: project.path,
         ...(project.branch ? { branch: project.branch } : {}),
         ...((config.gitlab_project_id || config.gitlab_project_path)
@@ -856,9 +860,9 @@ class TerminalFirstRuntime implements vscode.Disposable {
     const current = ticketLocalProject(this.state.state, ticket);
     const projectChoices: Array<vscode.QuickPickItem & { project?: LocalProjectSummary; unlink?: true }> = projects
       .sort((left, right) => Number(current?.name === right.name) - Number(current?.name === left.name)
-        || left.name.localeCompare(right.name))
+        || left.displayName.localeCompare(right.displayName))
       .map(project => ({
-      label: `${project.name}${current?.name === project.name ? ' $(check)' : ''}`,
+      label: `${project.displayName}${current?.name === project.name ? ' $(check)' : ''}`,
       description: project.branch || (project.available ? 'Git branch unavailable' : 'folder unavailable'),
       detail: project.path,
       project,
@@ -2624,6 +2628,27 @@ class TerminalFirstRuntime implements vscode.Disposable {
     if (project) { this.openProjectIntegrationSetup([project.projectName]); }
   }
 
+  private async renameLocalProject(argument: unknown): Promise<void> {
+    const project = this.resolveRegisteredProject(argument);
+    if (!project) { return; }
+    const value = await vscode.window.showInputBox({
+      title: `Rename ${project.displayName || project.projectName}`,
+      prompt: 'Change only the display label. Ticket links, sessions, provider configuration, and the canonical path stay unchanged.',
+      value: project.displayName || project.projectName,
+      validateInput: input => input.trim() ? undefined : 'Enter a project display name.',
+    });
+    if (value === undefined) { return; }
+    try {
+      this.state.renameLocalProjectDisplayName(project.projectName, value);
+      this.refreshTerminalFirstViews();
+      void vscode.window.showInformationMessage(`Project display label changed to ${value.trim()}. Existing links were not changed.`);
+    } catch (error: unknown) {
+      const detail = boundedOperationFailure(error, 'Kronos could not rename the project display label.').display;
+      this.log('Could not rename project display label.', detail);
+      void vscode.window.showErrorMessage(detail);
+    }
+  }
+
   private async openProjectMergeRequest(argument: unknown): Promise<void> {
     const project = this.resolveRegisteredProject(argument);
     if (!project) { return; }
@@ -2679,7 +2704,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
       void vscode.window.showWarningMessage('Select a currently registered project for this action.');
       return undefined;
     }
-    return { projectName: registered.name, projectPath: registered.path };
+    return { projectName: registered.name, projectPath: registered.path, displayName: registered.displayName };
   }
 
   private async chooseProjectTicketSession(
@@ -3041,7 +3066,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
         unavailable: unavailableProjects.length,
         detail: projects.length === 0
           ? 'No local project is registered yet.'
-          : `${projects.length} registered; ${unavailableProjects.length} unavailable. ${projects.map(project => `${project.name}: ${project.branch || (project.available ? 'Git branch unavailable' : 'folder unavailable')}`).join('; ')}.`,
+          : `${projects.length} registered; ${unavailableProjects.length} unavailable. ${projects.map(project => `${project.displayName}: ${project.branch || (project.available ? 'Git branch unavailable' : 'folder unavailable')}`).join('; ')}.`,
         configuredIntegrations: integrationCounts.projects,
         gitlabTargets: integrationCounts.gitlab,
         jenkinsTargets: integrationCounts.jenkins,

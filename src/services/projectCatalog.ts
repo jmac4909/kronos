@@ -21,7 +21,10 @@ const MAX_GIT_POINTER_BYTES = 4 * 1024;
 const MAX_LOCAL_PROJECTS = 200;
 
 export interface LocalProjectSummary {
+  /** Stable catalog identity used by tickets, sessions, and provider configuration. */
   name: string;
+  /** Editable presentation label; never used as a foreign key. */
+  displayName: string;
   path: string;
   branch?: string;
   detached: boolean;
@@ -107,15 +110,41 @@ export function registerLocalProject(
 ): KronosState {
   const projectName = requiredSingleLine(projectNameValue, 'project name', 200);
   const projectPath = requiredProjectDirectory(projectPathValue);
-  const existing = state.projects[projectName];
+  const existingEntry = Object.entries(state.projects).find(([, project]) =>
+    Boolean(project.path && pathKey(project.path) === pathKey(projectPath))
+  );
+  const stableName = existingEntry?.[0] || projectName;
+  const existing = existingEntry?.[1] || state.projects[stableName];
   const project: Project = {
     path: projectPath,
     config: { ...(existing?.config || {}) },
   };
+  if (existing?.display_name) { project.display_name = existing.display_name; }
+  else { project.display_name = projectName; }
   if (!project.config.repo_name) { project.config.repo_name = projectName; }
   return {
     ...state,
-    projects: { ...state.projects, [projectName]: project },
+    projects: { ...state.projects, [stableName]: project },
+  };
+}
+
+/** Changes only presentation; all project foreign keys remain stable. */
+export function renameLocalProjectDisplayName(
+  state: KronosState,
+  projectNameValue: string,
+  displayNameValue: string,
+): KronosState {
+  const projectName = requiredSingleLine(projectNameValue, 'project name', 200);
+  const displayName = requiredSingleLine(displayNameValue, 'project display name', 200);
+  const project = state.projects[projectName];
+  if (!project?.path) { throw new Error(`Local project is not registered: ${projectName}`); }
+  if ((project.display_name || projectName) === displayName) { return state; }
+  return {
+    ...state,
+    projects: {
+      ...state.projects,
+      [projectName]: { ...project, display_name: displayName, config: { ...project.config } },
+    },
   };
 }
 
@@ -144,7 +173,10 @@ export function replaceRegisteredLocalProjects(
     }
     removedNames.add(name);
     if (shouldRetainProviderProject(name, project)) {
-      projects[name] = { config: { ...project.config } };
+      projects[name] = {
+        config: { ...project.config },
+        ...(project.display_name ? { display_name: project.display_name } : {}),
+      };
     }
   }
 
@@ -343,8 +375,8 @@ export function listLocalProjects(state: KronosState | null | undefined): LocalP
   return Object.entries(state.projects)
     .filter(([, project]) => Boolean(project.path))
     .slice(0, MAX_LOCAL_PROJECTS)
-    .map(([name, project]) => localProjectSummary(name, project.path || ''))
-    .sort((left, right) => left.name.localeCompare(right.name));
+    .map(([name, project]) => localProjectSummary(name, project.path || '', project.display_name))
+    .sort((left, right) => left.displayName.localeCompare(right.displayName) || left.name.localeCompare(right.name));
 }
 
 export function ticketLocalProject(
@@ -355,7 +387,7 @@ export function ticketLocalProject(
   const name = ticket.linked_local_project;
   const projectPath = name ? state.projects[name]?.path : undefined;
   if (!name || !projectPath) { return undefined; }
-  const summary = localProjectSummary(name, projectPath);
+  const summary = localProjectSummary(name, projectPath, state.projects[name]?.display_name);
   return summary.available ? summary : undefined;
 }
 
@@ -397,11 +429,12 @@ export function readProjectGitBranch(projectPathValue: string): { branch: string
   }
 }
 
-function localProjectSummary(name: string, projectPath: string): LocalProjectSummary {
+function localProjectSummary(name: string, projectPath: string, displayNameValue?: string): LocalProjectSummary {
   const available = isProjectDirectory(projectPath);
   const git = available ? readProjectGitBranch(projectPath) : undefined;
   const summary: LocalProjectSummary = {
     name: safeSingleLine(name, 200) || 'Project',
+    displayName: safeSingleLine(displayNameValue, 200) || safeSingleLine(name, 200) || 'Project',
     path: path.isAbsolute(projectPath) ? path.normalize(projectPath) : projectPath,
     detached: git?.detached === true,
     available,
@@ -417,7 +450,7 @@ function requiredProjectDirectory(value: string): string {
   const normalized = path.normalize(value);
   const stat = fs.statSync(normalized);
   if (!stat.isDirectory()) { throw new Error(`Project path is not a directory: ${normalized}`); }
-  return normalized;
+  return fs.realpathSync.native(normalized);
 }
 
 function isProjectDirectory(value: string): boolean {
@@ -435,7 +468,9 @@ function shouldRetainProviderProject(name: string, project: Project): boolean {
 }
 
 function pathKey(value: string): string {
-  const normalized = path.normalize(value);
+  let normalized = path.normalize(value);
+  try { normalized = fs.realpathSync.native(normalized); }
+  catch { /* Missing registered paths retain their last canonical spelling. */ }
   return process.platform === 'win32' ? normalized.toLocaleLowerCase() : normalized;
 }
 
