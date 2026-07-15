@@ -12,6 +12,8 @@
   'use strict';
 
   var ALLOWED_ACTIONS = Object.freeze({
+    refreshTickets: true,
+    openDoctor: true,
     openTicketWorkspace: true,
     startClaudeForTicket: true,
     manageActiveTerminal: true,
@@ -20,6 +22,7 @@
     insertGitLabContext: true,
     insertCiContext: true,
   });
+  var GENERAL_ACTIONS = Object.freeze({ refreshTickets: true, openDoctor: true });
 
   function normalizeTicketKey(value) {
     var key = typeof value === 'string' ? value.trim().toUpperCase() : '';
@@ -145,10 +148,11 @@
   function postTicketAction(vscodeApi, command, ticketValue) {
     var ticket = normalizeTicketKey(ticketValue);
     if (!Object.prototype.hasOwnProperty.call(ALLOWED_ACTIONS, command)
-      || !ticket || !vscodeApi || typeof vscodeApi.postMessage !== 'function') {
+      || (!ticket && !Object.prototype.hasOwnProperty.call(GENERAL_ACTIONS, command))
+      || !vscodeApi || typeof vscodeApi.postMessage !== 'function') {
       return false;
     }
-    vscodeApi.postMessage({ command: command, ticket: ticket });
+    vscodeApi.postMessage(ticket ? { command: command, ticket: ticket } : { command: command });
     return true;
   }
 
@@ -174,6 +178,16 @@
     restoreFilters(document, vscodeApi);
     document.__kronosJiraWorkBoardAttached = true;
     document.documentElement.setAttribute('data-kronos-jira-work-board-attached', 'true');
+
+    var dataStatus = document.getElementById('jira-board-data-status');
+    if (dataStatus) {
+      dataStatus.addEventListener('click', function(event) {
+        var action = closest(event && event.target, '[data-action]');
+        if (!action) { return; }
+        if (event && typeof event.preventDefault === 'function') { event.preventDefault(); }
+        postTicketAction(vscodeApi, action.getAttribute('data-action') || '', '');
+      });
+    }
 
     board.addEventListener('click', function(event) {
       var action = closest(event && event.target, '[data-action]');

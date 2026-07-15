@@ -27,6 +27,7 @@ const jiraContext = require('../out/services/jiraTicketContext.js');
 const jiraValuePruning = require('../out/services/jiraValuePruning.js');
 const jiraWorkCatalog = require('../out/services/jiraWorkCatalog.js');
 const workTicketFilters = require('../out/services/workTicketFilters.js');
+const workRefreshStatus = require('../out/services/workRefreshStatus.js');
 const jiraContextStore = require('../out/services/jiraContextStore.js');
 const gitlabMergeRequestContext = require('../out/services/gitlabMergeRequestContext.js');
 const gitlabContextStore = require('../out/services/gitlabContextStore.js');
@@ -2061,6 +2062,44 @@ test('Work filtering hides completed Jira work by default and exposes explicit c
     labels: ['terminal-first'],
     jiraStatuses: ['In Progress', 'Shipped'],
   });
+});
+
+test('Work data status distinguishes empty, loading, partial, stale, error, and current results', () => {
+  const refreshedAt = '2026-07-14T12:00:00.000Z';
+  const nowMs = Date.parse('2026-07-14T12:05:00.000Z');
+  const present = overrides => workRefreshStatus.workDataPresentation({
+    ticketCount: 3,
+    refreshedAt,
+    staleAfterMs: 10 * 60_000,
+    nowMs,
+    ...overrides,
+  });
+
+  assert.equal(present({}).mode, 'ready');
+  assert.equal(present({ ticketCount: 0, refreshedAt: null }).mode, 'empty');
+  assert.match(present({ refreshStatus: {
+    phase: 'loading',
+    retainedFromPrevious: 0,
+    warningCount: 0,
+  } }).detail, /3 last-known tickets/);
+  const partial = present({ refreshStatus: {
+    phase: 'partial',
+    retainedFromPrevious: 2,
+    warningCount: 1,
+  } });
+  assert.equal(partial.mode, 'partial');
+  assert.match(partial.detail, /2 prior tickets were retained/);
+  assert.equal(present({ nowMs: Date.parse('2026-07-14T12:20:01.000Z') }).mode, 'stale');
+  const failed = present({ refreshStatus: {
+    phase: 'error',
+    detail: 'Jira request timed out.',
+    retainedFromPrevious: 0,
+    warningCount: 0,
+  } });
+  assert.equal(failed.mode, 'error');
+  assert.match(failed.detail, /Showing 3 last-known tickets/);
+  assert.equal(present({ loadIssueCount: 1 }).mode, 'partial');
+  assert.equal(present({ ticketCount: 0, stateAvailable: false }).mode, 'error');
 });
 
 test('Jira Work search retains completed pages and reports a later read failure', async () => {
@@ -4144,6 +4183,41 @@ test('extension activation registers the bounded surface and explicit launch com
     process.env.JIRA_API_TOKEN = 'fixture-test-token';
     try {
       await commandHandlers.get('kronos.refreshTickets')();
+      assert.equal(stateStore.readStateFileWithIssues().state.refreshedAt, '2026-07-14T13:00:00.000Z');
+
+      let resolvePartialRefresh;
+      jiraRestModule.jiraRestClient.searchWorkList = () => new Promise(resolve => {
+        resolvePartialRefresh = resolve;
+      });
+      const partialRefresh = commandHandlers.get('kronos.refreshTickets')();
+      await new Promise(resolve => setImmediate(resolve));
+      assert.equal(workProvider.getChildren()[0].label, 'Refreshing Jira work…');
+      assert.match(jiraBoardPanel.webview.html, /data-work-data-state="loading"/);
+      resolvePartialRefresh({
+        issues: [jiraIssue('JIRA-123', 'Partially refreshed fixture 123')],
+        fetchedAt: '2026-07-14T13:05:00.000Z',
+        jql: 'project = JIRA ORDER BY updated DESC',
+        jqlSource: 'configured',
+        complete: false,
+        pageCount: 1,
+        responseBytes: 512,
+        warnings: ['Jira page 2 could not be fetched.'],
+      });
+      await partialRefresh;
+      const partialWorkItems = workProvider.getChildren();
+      assert.equal(partialWorkItems[0].label, 'Partial Jira result');
+      assert.match(partialWorkItems[0].description, /4 prior tickets were retained/);
+      assert.equal(partialWorkItems.filter(item => item.ticketKey).length, 5);
+      assert.match(jiraBoardPanel.webview.html, /data-work-data-state="partial"/);
+
+      jiraRestModule.jiraRestClient.searchWorkList = async () => {
+        throw new Error('Synthetic Jira timeout.');
+      };
+      await commandHandlers.get('kronos.refreshTickets')();
+      const failedWorkItems = workProvider.getChildren();
+      assert.equal(failedWorkItems[0].label, 'Jira refresh failed');
+      assert.equal(failedWorkItems.filter(item => item.ticketKey).length, 5, 'a failed refresh retains the last usable tickets');
+      assert.match(jiraBoardPanel.webview.html, /data-work-data-state="error"/);
     } finally {
       if (previousJiraEnv.baseUrl === undefined) { delete process.env.JIRA_BASE_URL; }
       else { process.env.JIRA_BASE_URL = previousJiraEnv.baseUrl; }
@@ -4153,7 +4227,7 @@ test('extension activation registers the bounded surface and explicit launch com
       else { process.env.JIRA_API_TOKEN = previousJiraEnv.token; }
     }
     const refreshedState = stateStore.readStateFileWithIssues().state;
-    assert.equal(refreshedState.refreshedAt, '2026-07-14T13:00:00.000Z');
+    assert.equal(refreshedState.refreshedAt, '2026-07-14T13:05:00.000Z');
     assert.equal(Object.keys(refreshedState.tickets).length, 5);
   } finally {
     jiraRestModule.jiraRestClient.searchWorkList = originalProviderMethods.jiraSearchWorkList;

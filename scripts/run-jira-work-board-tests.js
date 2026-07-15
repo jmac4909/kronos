@@ -35,7 +35,7 @@ function state(tickets) {
   };
 }
 
-test('board builder exposes useful Jira filters and only ticket-scoped terminal-first actions', () => {
+test('board builder exposes useful Jira filters and only bounded terminal-first actions', () => {
   const html = buildJiraWorkBoardHtml({
     state: state({
       'KRONOS-1': ticket('In Progress', {
@@ -101,6 +101,40 @@ test('board settings map custom completed statuses and the initial visibility de
   assert.doesNotMatch(html, /completed hidden/);
 });
 
+test('board renders distinct current, empty, loading, partial, stale, and error data states', () => {
+  const build = overrides => buildJiraWorkBoardHtml({
+    state: state({ 'KRONOS-1': ticket('In Progress') }),
+    nonce: 'abcdef1234567890',
+    scriptUri: 'vscode-resource://kronos/media/kronos-jira-work-board.js',
+    staleAfterMs: 10 * 60_000,
+    nowMs: Date.parse('2026-07-14T02:05:00.000Z'),
+    ...overrides,
+  });
+
+  assert.match(build({}), /data-work-data-state="ready"/);
+  assert.match(build({ state: state({}) }), /data-work-data-state="empty"[^]*No Jira tickets returned/);
+  assert.match(build({ refreshStatus: {
+    phase: 'loading',
+    retainedFromPrevious: 0,
+    warningCount: 0,
+  } }), /data-work-data-state="loading"[^]*Showing 1 last-known ticket/);
+  assert.match(build({ refreshStatus: {
+    phase: 'partial',
+    retainedFromPrevious: 2,
+    warningCount: 1,
+  } }), /data-work-data-state="partial"[^]*2 prior tickets were retained/);
+  assert.match(build({ nowMs: Date.parse('2026-07-14T02:20:01.000Z') }), /data-work-data-state="stale"/);
+  const errorHtml = build({ refreshStatus: {
+    phase: 'error',
+    detail: 'Jira request failed safely.',
+    retainedFromPrevious: 0,
+    warningCount: 0,
+  } });
+  assert.match(errorHtml, /data-work-data-state="error"[^]*Jira request failed safely/);
+  assert.match(errorHtml, /data-action="refreshTickets"/);
+  assert.match(errorHtml, /data-action="openDoctor"/);
+});
+
 test('board lists registered local project paths and current Git branches', () => {
   const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'kronos-board-project-'));
   try {
@@ -131,7 +165,11 @@ test('board runtime posts only normalized command and Jira ticket key', () => {
   assert.deepEqual(messages, [{ command: 'insertJiraContext', ticket: 'KRONOS-42' }]);
   assert.equal(boardRuntime.postTicketAction(vscodeApi, 'removeFromQueue', 'KRONOS-42'), false);
   assert.equal(boardRuntime.postTicketAction(vscodeApi, 'openTicketWorkspace', 'not-a-ticket'), false);
-  assert.equal(messages.length, 1);
+  assert.equal(boardRuntime.postTicketAction(vscodeApi, 'refreshTickets', ''), true);
+  assert.deepEqual(messages.at(-1), { command: 'refreshTickets' });
+  assert.equal(boardRuntime.postTicketAction(vscodeApi, 'openDoctor', ''), true);
+  assert.deepEqual(messages.at(-1), { command: 'openDoctor' });
+  assert.equal(messages.length, 3);
   assert.deepEqual(boardRuntime.allowedActions, JIRA_WORK_BOARD_ACTIONS);
 });
 
@@ -169,6 +207,12 @@ test('board runtime filters cards and reveals a specifically selected completed 
     preventDefault() {},
   });
   assert.deepEqual(messages.at(-1), { command: 'openTicketWorkspace', ticket: 'KRONOS-2' });
+
+  harness.dataStatus.dispatch('click', {
+    target: actionTarget('refreshTickets', ''),
+    preventDefault() {},
+  });
+  assert.deepEqual(messages.at(-1), { command: 'refreshTickets' });
 });
 
 test('board filters survive a webview HTML rerender through VS Code webview state', () => {
@@ -278,11 +322,13 @@ function createDomHarness(readyState) {
   const hideDone = control('');
   hideDone.checked = true;
   const reset = element();
+  const dataStatus = element();
   const summary = element();
   const noMatches = element();
   noMatches.hidden = true;
   const ids = new Map([
     ['jira-work-board', board],
+    ['jira-board-data-status', dataStatus],
     ['jira-board-search', search],
     ['jira-board-status', status],
     ['jira-board-jira-project', jiraProject],
@@ -307,6 +353,7 @@ function createDomHarness(readyState) {
   });
   return {
     board,
+    dataStatus,
     document,
     doneCard,
     doneColumn,

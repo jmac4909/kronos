@@ -244,6 +244,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
   private readonly workTree = new WorkTreeProvider(this.state, {
     hideCompletedByDefault: () => this.hideCompletedJiraWork(),
     doneStatusNames: () => this.completedJiraStatuses(),
+    staleAfterMs: () => this.jiraWorkStaleAfterMs(),
   }, (ticketKey, ticket) => this.effectiveTicket(ticketKey, ticket));
   private readonly sessionTree = new ManagedSessionTreeProvider(
     this.operatorTerminals,
@@ -426,6 +427,10 @@ class TerminalFirstRuntime implements vscode.Disposable {
   private completedJiraStatuses(): string[] {
     return this.configurationStringArray('completedJiraStatuses', 100, 200)
       .map(item => item.toLocaleLowerCase());
+  }
+
+  private jiraWorkStaleAfterMs(): number {
+    return Math.max(5 * 60_000, this.configurationIntervalMs('refreshIntervalSec', 300) * 2);
   }
 
   private configurationStringArray(key: string, limit: number, maxLength: number): string[] {
@@ -896,6 +901,15 @@ class TerminalFirstRuntime implements vscode.Disposable {
     panel.webview.onDidReceiveMessage(async raw => {
       if (isRecord(raw) && raw['command'] === WEBVIEW_READY_COMMAND) { return; }
       const message = normalizeActionPanelMessage(raw, JIRA_BOARD_ACTIONS);
+      if (message?.command === 'refreshTickets') {
+        await this.refreshTickets(true);
+        this.renderJiraBoardPanel();
+        return;
+      }
+      if (message?.command === 'openDoctor') {
+        await this.openDoctor();
+        return;
+      }
       const ticketKey = normalizeTicketKey(message?.ticket);
       const tickets = this.state.state?.tickets;
       if (!message || !ticketKey || !tickets || !Object.prototype.hasOwnProperty.call(tickets, ticketKey)) {
@@ -916,6 +930,9 @@ class TerminalFirstRuntime implements vscode.Disposable {
     record.panel.webview.html = withWebviewCsp(
       buildJiraWorkBoardHtml({
         state: this.effectiveState(),
+        refreshStatus: this.state.jiraRefreshStatus,
+        loadIssueCount: this.state.loadIssues.length,
+        staleAfterMs: this.jiraWorkStaleAfterMs(),
         nonce: record.nonce,
         scriptUri,
         doneStatusNames: this.completedJiraStatuses(),

@@ -10,12 +10,19 @@ import {
   type WorkTicketCompletionPreferences,
 } from '../services/workTicketFilters';
 import { ticketLocalProject, type LocalProjectSummary } from '../services/projectCatalog';
+import {
+  workDataPresentation,
+  type JiraWorkRefreshStatus,
+  type WorkDataPresentation,
+} from '../services/workRefreshStatus';
 
 export type { WorkCompletionFilter, WorkTicketFilter, WorkTicketFilterOptions } from '../services/workTicketFilters';
 export { isCompletedWorkTicket, normalizeWorkTicketFilter, workTicketMatchesFilter } from '../services/workTicketFilters';
 
 export interface WorkTreeStateSource {
   readonly state: KronosStateSnapshot | null;
+  readonly loadIssues?: readonly unknown[];
+  readonly jiraRefreshStatus?: JiraWorkRefreshStatus;
   readonly onDidChange: vscode.Event<void>;
 }
 
@@ -24,6 +31,7 @@ type WorkTreeItem = WorkTicketTreeItem | WorkTreeMessageItem;
 export interface WorkTreePreferencesSource {
   hideCompletedByDefault(): boolean;
   doneStatusNames(): readonly string[];
+  staleAfterMs(): number;
 }
 
 export type WorkTicketProjector = (ticketKey: string, ticket: Ticket) => Ticket;
@@ -31,6 +39,7 @@ export type WorkTicketProjector = (ticketKey: string, ticket: Ticket) => Ticket;
 const DEFAULT_PREFERENCES: WorkTreePreferencesSource = {
   hideCompletedByDefault: () => true,
   doneStatusNames: () => [],
+  staleAfterMs: () => Number.POSITIVE_INFINITY,
 };
 
 export class WorkTreeProvider implements vscode.TreeDataProvider<WorkTreeItem>, vscode.Disposable {
@@ -53,19 +62,18 @@ export class WorkTreeProvider implements vscode.TreeDataProvider<WorkTreeItem>, 
 
   getChildren(): WorkTreeItem[] {
     const state = this.stateSource.state;
+    const presentation = this.dataPresentation(state);
     if (!state) {
-      return [new WorkTreeMessageItem('Getting your work ready…', 'loading~spin')];
+      return [workDataStatusItem(presentation)];
     }
 
     const allTickets = Object.entries(state.tickets)
       .map(([ticketKey, ticket]): [string, Ticket] => [ticketKey, this.projectTicket(ticketKey, ticket)]);
     if (allTickets.length === 0) {
-      return [new WorkTreeMessageItem(
-        'No tickets yet — select here to refresh Jira.',
-        'issues',
-        'kronos.refreshTickets',
-      )];
+      return [workDataStatusItem(presentation)];
     }
+
+    const statusItems = presentation.mode === 'ready' ? [] : [workDataStatusItem(presentation)];
 
     const completionPreferences = this.completionPreferences();
     const visibleTickets = allTickets
@@ -78,20 +86,20 @@ export class WorkTreeProvider implements vscode.TreeDataProvider<WorkTreeItem>, 
         && (normalized.completion === 'active'
           || (normalized.completion === undefined && completionPreferences.hideCompletedByDefault !== false))
         && allTickets.every(([, ticket]) => isCompletedWorkTicket(ticket, completionPreferences.additionalDoneStatuses))) {
-        return [new WorkTreeMessageItem(
+        return [...statusItems, new WorkTreeMessageItem(
           'No active tickets — change filters to show completed work.',
           'filter',
           'kronos.filterWork',
         )];
       }
-      return [new WorkTreeMessageItem('No tickets match your search.', 'search')];
+      return [...statusItems, new WorkTreeMessageItem('No tickets match your search.', 'search')];
     }
-    return visibleTickets.map(([ticketKey, ticket]) => new WorkTicketTreeItem(
+    return [...statusItems, ...visibleTickets.map(([ticketKey, ticket]) => new WorkTicketTreeItem(
       ticketKey,
       ticket,
       ticketLocalProject(state, ticket),
       isCompletedWorkTicket(ticket, completionPreferences.additionalDoneStatuses),
-    ));
+    ))];
   }
 
   setSearchQuery(query: string): void {
@@ -136,6 +144,17 @@ export class WorkTreeProvider implements vscode.TreeDataProvider<WorkTreeItem>, 
       hideCompletedByDefault: this.preferences.hideCompletedByDefault(),
       additionalDoneStatuses: new Set(this.preferences.doneStatusNames().map(comparableStatus).filter(Boolean)),
     };
+  }
+
+  private dataPresentation(state: KronosStateSnapshot | null): WorkDataPresentation {
+    return workDataPresentation({
+      ticketCount: Object.keys(state?.tickets || {}).length,
+      loadIssueCount: this.stateSource.loadIssues?.length || 0,
+      stateAvailable: state !== null,
+      staleAfterMs: this.preferences.staleAfterMs(),
+      ...(state?.refreshedAt !== undefined ? { refreshedAt: state.refreshedAt } : {}),
+      ...(this.stateSource.jiraRefreshStatus ? { refreshStatus: this.stateSource.jiraRefreshStatus } : {}),
+    });
   }
 }
 
@@ -233,9 +252,30 @@ function comparableStatus(value: string): string {
 }
 
 class WorkTreeMessageItem extends vscode.TreeItem {
-  constructor(label: string, icon: string, command?: string) {
+  constructor(label: string, icon: string, command?: string, description?: string, tooltip?: string) {
     super(label, vscode.TreeItemCollapsibleState.None);
     this.iconPath = new vscode.ThemeIcon(icon);
-    if (command) { this.command = { command, title: 'Refresh Jira Tickets' }; }
+    this.contextValue = 'work_message';
+    if (description) { this.description = description; }
+    if (tooltip) { this.tooltip = tooltip; }
+    if (command) { this.command = { command, title: command === 'kronos.doctor' ? 'Open Kronos Doctor' : 'Refresh Jira Tickets' }; }
   }
+}
+
+function workDataStatusItem(presentation: WorkDataPresentation): WorkTreeMessageItem {
+  const icon = presentation.mode === 'loading' ? 'loading~spin'
+    : presentation.mode === 'error' ? 'error'
+      : presentation.mode === 'partial' || presentation.mode === 'stale' ? 'warning'
+        : presentation.mode === 'empty' ? 'issues' : 'check';
+  const command = presentation.mode === 'loading' || presentation.mode === 'ready'
+    ? undefined
+    : presentation.mode === 'error' ? 'kronos.doctor' : 'kronos.refreshTickets';
+  const refreshed = presentation.refreshedAt ? `\nLast Jira result: ${presentation.refreshedAt}` : '';
+  return new WorkTreeMessageItem(
+    presentation.title,
+    icon,
+    command,
+    presentation.detail,
+    `${presentation.detail}${refreshed}`,
+  );
 }

@@ -15,6 +15,7 @@ All notable changes to the Kronos preview are documented here.
 
 ### Changed
 
+- Added one Jira refresh lifecycle shared by the Work tree and board, with distinct current, empty, loading, partial, stale, error, and no-match states; in-flight, partial, and failed refreshes retain the last usable tickets and expose bounded Refresh/Doctor repair actions.
 - Attention items without a validated provider URL now route directly to the registered project integration repair UI, or Doctor when no project is available, instead of presenting a dead dashboard action.
 - Hardened one-time legacy-state migration by rejecting symbolic-link ancestors, recognizing broken target links, and recursively applying private directory/file modes after same-filesystem renames.
 - Added shared bounded immutable-artifact and two-file pair primitives with content verification, incomplete-pair refusal, and no-replace publication; local Git, Jira, GitLab, and CI context evidence—including arbitrary binary Jira attachments—now use them for consistent Windows/POSIX path safety.

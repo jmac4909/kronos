@@ -7,10 +7,17 @@ import {
 import { escapeAttr, escapeHtml, kronosWebviewBaseCss } from './webviewHtml';
 import { isCompletedWorkTicket } from './workTicketFilters';
 import { listLocalProjects } from './projectCatalog';
+import {
+  workDataPresentation,
+  type JiraWorkRefreshStatus,
+  type WorkDataPresentation,
+} from './workRefreshStatus';
 
 export const JIRA_WORK_BOARD_SCRIPT = 'kronos-jira-work-board.js';
 
 export const JIRA_WORK_BOARD_ACTIONS = [
+  'refreshTickets',
+  'openDoctor',
   'openTicketWorkspace',
   'startClaudeForTicket',
   'manageActiveTerminal',
@@ -28,6 +35,10 @@ export interface JiraWorkBoardInput {
   scriptUri: string;
   doneStatusNames?: readonly string[];
   hideCompletedByDefault?: boolean;
+  refreshStatus?: JiraWorkRefreshStatus;
+  loadIssueCount?: number;
+  staleAfterMs?: number;
+  nowMs?: number;
 }
 
 interface BoardTicket {
@@ -71,6 +82,15 @@ export function buildJiraWorkBoardHtml(input: JiraWorkBoardInput): string {
   const initiallyVisibleCount = hideCompletedByDefault ? tickets.length - completedCount : tickets.length;
   const refreshedAt = safeSingleLine(input.state?.refreshedAt, 100);
   const localProjects = listLocalProjects(input.state);
+  const dataPresentation = workDataPresentation({
+    ticketCount: tickets.length,
+    refreshedAt,
+    stateAvailable: input.state !== null,
+    ...(input.refreshStatus ? { refreshStatus: input.refreshStatus } : {}),
+    ...(input.loadIssueCount !== undefined ? { loadIssueCount: input.loadIssueCount } : {}),
+    ...(input.staleAfterMs !== undefined ? { staleAfterMs: input.staleAfterMs } : {}),
+    ...(input.nowMs !== undefined ? { nowMs: input.nowMs } : {}),
+  });
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -92,6 +112,15 @@ export function buildJiraWorkBoardHtml(input: JiraWorkBoardInput): string {
   .jira-board-toggle input { margin: 0; }
   .jira-board-reset { min-height: 30px; }
   .jira-board-summary { min-height: 20px; margin: 8px 2px 12px; color: var(--k-muted); font-size: 11px; }
+  .jira-data-status { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; padding: 10px 12px; border: 1px solid var(--k-border); border-left: 3px solid var(--k-ok); border-radius: var(--k-radius); background: var(--k-surface); }
+  .jira-data-status[data-work-data-state="loading"] { border-left-color: var(--k-info); }
+  .jira-data-status[data-work-data-state="partial"], .jira-data-status[data-work-data-state="stale"] { border-left-color: var(--k-warn); background: var(--k-warn-bg); }
+  .jira-data-status[data-work-data-state="error"] { border-left-color: var(--k-danger); background: var(--k-danger-bg); }
+  .jira-data-status[data-work-data-state="empty"] { border-left-color: var(--k-muted); }
+  .jira-data-status-copy { min-width: 0; }
+  .jira-data-status-title { font-size: 12px; font-weight: 700; }
+  .jira-data-status-detail { margin-top: 2px; color: var(--k-muted); font-size: 10px; line-height: 1.4; }
+  .jira-data-status-actions { display: flex; flex: 0 0 auto; flex-wrap: wrap; gap: 6px; }
   .jira-projects { display: grid; gap: 8px; margin-bottom: 12px; padding: 11px 12px; border: 1px solid var(--k-border); border-radius: var(--k-radius); background: var(--k-surface); }
   .jira-projects-header { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
   .jira-projects-header h2 { margin: 0; color: var(--k-fg); font-size: 12px; text-transform: none; }
@@ -137,6 +166,7 @@ export function buildJiraWorkBoardHtml(input: JiraWorkBoardInput): string {
     .jira-board-filters { grid-template-columns: 1fr; }
     .jira-board-filter.search { grid-column: auto; }
     .jira-board-column { min-width: 250px; flex-basis: 250px; }
+    .jira-data-status { align-items: stretch; flex-direction: column; }
   }
 </style>
 ${webviewRuntimeScriptTag(input.nonce, webviewRuntimeScriptUri(input.scriptUri))}
@@ -150,6 +180,8 @@ ${webviewRuntimeScriptTag(input.nonce, webviewRuntimeScriptUri(input.scriptUri))
       <div class="kronos-subtitle">${tickets.length} ticket${tickets.length === 1 ? '' : 's'}${refreshedAt ? ` · refreshed ${escapeHtml(refreshedAt)}` : ''}. Open a workspace or start Claude for the ticket you choose.</div>
     </div>
   </header>
+
+  ${buildDataStatusHtml(dataPresentation)}
 
   <section class="jira-projects" aria-label="Registered local projects">
     <div class="jira-projects-header"><h2>Local Projects</h2><span class="kronos-subtitle">Branch is read locally from Git HEAD</span></div>
@@ -177,12 +209,22 @@ ${webviewRuntimeScriptTag(input.nonce, webviewRuntimeScriptUri(input.scriptUri))
 
   <section id="jira-work-board" class="jira-board" aria-label="Jira tickets by status">
     ${columns.map(column => buildColumnHtml(column, hideCompletedByDefault)).join('')}
-    ${tickets.length === 0 ? '<div class="kronos-empty jira-board-empty">No Jira tickets are loaded. Refresh Work after configuring Jira in Kronos Doctor.</div>' : ''}
   </section>
   <div id="jira-board-no-matches" class="kronos-empty jira-board-empty" hidden>No tickets match these filters.</div>
 </main>
 </body>
 </html>`;
+}
+
+function buildDataStatusHtml(presentation: WorkDataPresentation): string {
+  const isError = presentation.mode === 'error';
+  const actions = presentation.mode === 'loading'
+    ? actionButton('openDoctor', 'Doctor', '')
+    : `${actionButton('refreshTickets', 'Refresh Jira', '', presentation.mode !== 'ready')}${actionButton('openDoctor', 'Doctor', '')}`;
+  return `<section id="jira-board-data-status" class="jira-data-status" data-work-data-state="${escapeAttr(presentation.mode)}" role="${isError ? 'alert' : 'status'}" aria-live="${isError ? 'assertive' : 'polite'}">
+    <div class="jira-data-status-copy"><div class="jira-data-status-title">${escapeHtml(presentation.title)}</div><div class="jira-data-status-detail">${escapeHtml(presentation.detail)}${presentation.refreshedAt ? ` Last Jira result: ${escapeHtml(presentation.refreshedAt)}.` : ''}</div></div>
+    <div class="jira-data-status-actions" aria-label="Jira data actions">${actions}</div>
+  </section>`;
 }
 
 export function isCompletedJiraStatus(status: unknown, additionalDoneStatuses: ReadonlySet<string> = new Set()): boolean {
@@ -326,7 +368,8 @@ function buildTicketCardHtml(ticket: BoardTicket): string {
 }
 
 function actionButton(action: JiraWorkBoardAction, label: string, ticket: string, primary = false): string {
-  return `<button type="button" class="kronos-button${primary ? ' primary' : ''}" data-action="${action}" data-ticket="${escapeAttr(ticket)}">${escapeHtml(label)}</button>`;
+  const ticketAttribute = ticket ? ` data-ticket="${escapeAttr(ticket)}"` : '';
+  return `<button type="button" class="kronos-button${primary ? ' primary' : ''}" data-action="${action}"${ticketAttribute}>${escapeHtml(label)}</button>`;
 }
 
 function chip(label: string, className: string): string {

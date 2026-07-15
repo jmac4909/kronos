@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as vscode from 'vscode';
 import type { KronosState as KronosStateSnapshot } from './types';
 import { STATE_FILE, emptyWorkCatalog, readStateFileWithIssues, writeStateFile } from '../services/stateStore';
-import { unknownErrorMessage } from '../services/errorUtils';
+import { boundedOperationFailure, unknownErrorMessage } from '../services/errorUtils';
 import { jiraRestClient, resolveJiraRestConfig } from '../services/jiraRestClient';
 import { catalogFromJiraWorkList } from '../services/jiraWorkCatalog';
 import {
@@ -15,6 +15,10 @@ import {
   type LocalProjectIntegrationInput,
   type TicketProviderStateInput,
 } from '../services/projectCatalog';
+import {
+  idleJiraWorkRefreshStatus,
+  type JiraWorkRefreshStatus,
+} from '../services/workRefreshStatus';
 
 export interface TerminalFirstStateIssue {
   filePath: string;
@@ -37,6 +41,7 @@ export interface TerminalFirstRefreshResult {
 export class TerminalFirstState implements vscode.Disposable {
   private snapshot: KronosStateSnapshot | null = null;
   private issues: TerminalFirstStateIssue[] = [];
+  private refreshSnapshot: JiraWorkRefreshStatus = idleJiraWorkRefreshStatus();
   private watcher: fs.FSWatcher | undefined;
   private watchTimer: NodeJS.Timeout | undefined;
   private readonly changeEmitter = new vscode.EventEmitter<void>();
@@ -54,6 +59,10 @@ export class TerminalFirstState implements vscode.Disposable {
 
   get loadIssues(): TerminalFirstStateIssue[] {
     return this.issues.map(issue => ({ ...issue }));
+  }
+
+  get jiraRefreshStatus(): JiraWorkRefreshStatus {
+    return { ...this.refreshSnapshot };
   }
 
   load(): void {
@@ -80,19 +89,50 @@ export class TerminalFirstState implements vscode.Disposable {
   }
 
   async refreshTickets(): Promise<TerminalFirstRefreshResult> {
-    const snapshot = await jiraRestClient.searchWorkList();
-    const current = this.snapshot || emptyWorkCatalog();
-    const next = catalogFromJiraWorkList(snapshot, current, resolveJiraRestConfig().baseUrl);
-    writeStateFile(next.state);
-    this.reloadAndNotify();
-    return {
-      ticketCount: Object.keys(next.state.tickets).length,
-      complete: snapshot.complete,
-      retainedFromPrevious: next.retainedFromPrevious,
-      pageCount: snapshot.pageCount,
-      responseBytes: snapshot.responseBytes,
-      warnings: [...snapshot.warnings],
+    const startedAt = new Date().toISOString();
+    this.refreshSnapshot = {
+      phase: 'loading',
+      startedAt,
+      retainedFromPrevious: 0,
+      warningCount: 0,
     };
+    this.changeEmitter.fire();
+    try {
+      const snapshot = await jiraRestClient.searchWorkList();
+      const current = this.snapshot || emptyWorkCatalog();
+      const next = catalogFromJiraWorkList(snapshot, current, resolveJiraRestConfig().baseUrl);
+      writeStateFile(next.state);
+      this.load();
+      this.restartWatcher();
+      const complete = snapshot.complete && snapshot.warnings.length === 0;
+      this.refreshSnapshot = {
+        phase: complete ? 'complete' : 'partial',
+        startedAt,
+        completedAt: new Date().toISOString(),
+        retainedFromPrevious: next.retainedFromPrevious,
+        warningCount: snapshot.warnings.length,
+      };
+      this.changeEmitter.fire();
+      return {
+        ticketCount: Object.keys(next.state.tickets).length,
+        complete: snapshot.complete,
+        retainedFromPrevious: next.retainedFromPrevious,
+        pageCount: snapshot.pageCount,
+        responseBytes: snapshot.responseBytes,
+        warnings: [...snapshot.warnings],
+      };
+    } catch (error: unknown) {
+      this.refreshSnapshot = {
+        phase: 'error',
+        startedAt,
+        completedAt: new Date().toISOString(),
+        detail: boundedOperationFailure(error, 'Jira ticket refresh failed.').display,
+        retainedFromPrevious: 0,
+        warningCount: 0,
+      };
+      this.changeEmitter.fire();
+      throw error;
+    }
   }
 
   registerLocalProject(projectName: string, projectPath: string): void {
@@ -162,6 +202,7 @@ export class TerminalFirstState implements vscode.Disposable {
         this.watchTimer = setTimeout(() => {
           this.watchTimer = undefined;
           this.load();
+          this.refreshSnapshot = idleJiraWorkRefreshStatus();
           this.restartWatcher();
           this.changeEmitter.fire();
         }, 150);

@@ -12,7 +12,7 @@
   <img alt="TypeScript strict" src="https://img.shields.io/badge/TypeScript-strict-3178C6">
   <img alt="VS Code 1.85 or newer" src="https://img.shields.io/badge/VS%20Code-%5E1.85-23A8F2">
   <img alt="Zero third-party runtime dependencies" src="https://img.shields.io/badge/runtime%20dependencies-0-22C55E">
-  <img alt="87 automated local tests" src="https://img.shields.io/badge/test%20suite-87%20local-22C55E">
+  <img alt="89 automated local tests" src="https://img.shields.io/badge/test%20suite-89%20local-22C55E">
   <img alt="Preview status" src="https://img.shields.io/badge/status-preview-F59E0B">
 </p>
 
@@ -26,7 +26,7 @@ Kronos solves a narrow enterprise-development problem: the evidence needed for a
 
 | Surface | Outcome |
 | --- | --- |
-| **Work** | Search and filter Jira work, explicitly link the right local project and branch, then open a focused ticket workspace. Shared Jira keys never infer a repository. |
+| **Work** | Search and filter Jira work, see current/empty/loading/partial/stale/error refresh state without losing the last good result, explicitly link the right local project and branch, then open a focused ticket workspace. Shared Jira keys never infer a repository. |
 | **Sessions** | Organize operator-owned Claude terminals by local project, attach multiple Jira contexts when useful, and never read terminal contents. |
 | **Projects** | Track each registered repository's current branch and clean/dirty status, then open bounded diff, MR, CI, and provider actions. |
 | **Attention** | Show the newest meaningful provider state by project, resurface still-open MRs after the next poll, and retain full history in the private audit. |
@@ -99,9 +99,9 @@ The installed extension uses the VS Code API and Node built-ins only. It has **z
 | Audited terminal-write paths | 2 |
 | Manifest-covered commands | 36 |
 | Manifest-covered settings | 10 |
-| Reachable runtime modules checked for cycles/dead exports | 66 |
+| Reachable runtime modules checked for cycles/dead exports | 67 |
 | Third-party runtime dependencies | 0 |
-| Automated Node/DOM/board tests | 87 |
+| Automated Node/DOM/board tests | 89 |
 
 Automated gates also cover the runtime graph, security boundary, context governance, activation surface, provider transitions, private state, credential redaction, and packaged extension contents.
 
