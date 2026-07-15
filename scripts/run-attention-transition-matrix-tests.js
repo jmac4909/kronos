@@ -7,7 +7,10 @@ const root = path.resolve(__dirname, '..');
 const mergeRequests = require('../out/services/gitlabMergeRequestTransitions.js');
 const pipelines = require('../out/services/pipelineTransitions.js');
 const ci = require('../out/services/ciTransitions.js');
-const { currentAttentionTransitions } = require('../out/services/attentionProjection.js');
+const {
+  attentionProjectSessionForEvent,
+  currentAttentionTransitions,
+} = require('../out/services/attentionProjection.js');
 const attention = require('../out/services/attentionPresentation.js');
 
 test('GitLab merge-request transition matrix covers every declared structural transition', () => {
@@ -144,6 +147,96 @@ test('Attention projection rebuilds after restart without stale-row resurrection
     currentAttentionTransitions([...reloadedAudit, laterFailure], [session]).map(event => event.id),
     ['failure-later', 'sonar-current'],
     'a later real change becomes current even after the prior state was acknowledged',
+  );
+});
+
+test('Attention gives one registered project ownership of the same MR across legacy ticket sessions', () => {
+  const attachedAt = '2026-07-15T12:00:00.000Z';
+  const legacyTicketSession = {
+    ...workSession(),
+    id: 'session-legacy-ticket',
+    projectName: 'MATRIX',
+    providerBindings: [binding(
+      'binding-legacy-mr',
+      'gitlab',
+      'merge-request',
+      '77',
+      attachedAt,
+      'https://gitlab.example/group/application/-/merge_requests/77',
+      'group/application',
+    )],
+  };
+  const projectSession = {
+    ...workSession(),
+    id: 'session-project-owner',
+    kind: 'standalone',
+    projectName: 'Application',
+    projectPath: '/workspace/application',
+    providerBindings: [binding(
+      'binding-project-mr',
+      'gitlab',
+      'merge-request',
+      '77',
+      attachedAt,
+      'https://gitlab.example/group/application/-/merge_requests/77',
+      'group/application',
+    )],
+  };
+  delete projectSession.ticketKey;
+  const projectEvent = resourceTransition(
+    'project-owned-mr',
+    '2026-07-15T17:00:00.000Z',
+    'gitlab',
+    'merge-request',
+    '77',
+    'initial_mr_observed',
+    { mergeRequestIid: 77 },
+  );
+  projectEvent.sessionId = projectSession.id;
+  delete projectEvent.subject.project;
+  const newerLegacyEvent = resourceTransition(
+    'legacy-ticket-mr-newer',
+    '2026-07-15T17:01:00.000Z',
+    'gitlab',
+    'merge-request',
+    '77',
+    'review_activity_added',
+    { mergeRequestIid: 77, reviewActivityCount: 3 },
+  );
+  newerLegacyEvent.sessionId = legacyTicketSession.id;
+  delete newerLegacyEvent.subject.project;
+  const sessions = [legacyTicketSession, projectSession];
+  const projects = [{ name: 'Application', path: '/workspace/application' }];
+
+  assert.deepEqual(
+    currentAttentionTransitions([projectEvent, newerLegacyEvent], sessions, projects).map(event => event.id),
+    ['legacy-ticket-mr-newer'],
+    'the latest state wins while the legacy ticket copy and project copy become one stream',
+  );
+  const projectedSession = attentionProjectSessionForEvent(
+    newerLegacyEvent,
+    legacyTicketSession,
+    sessions,
+    projects,
+  );
+  assert.equal(projectedSession.projectName, 'Application');
+  assert.equal(projectedSession.projectPath, '/workspace/application');
+  assert.deepEqual(projectedSession.ticketKeys, ['MATRIX-1'], 'optional Jira context remains attached to the row');
+
+  const acknowledgement = {
+    schemaVersion: 1,
+    id: 'ack-legacy-ticket-mr-newer',
+    at: '2026-07-15T17:02:00.000Z',
+    sessionId: legacyTicketSession.id,
+    type: 'notification.acknowledged',
+    source: 'operator',
+    summary: 'Cleared the canonical project MR row.',
+    metadata: { acknowledgedEventId: newerLegacyEvent.id },
+  };
+  assert.deepEqual(
+    currentAttentionTransitions([projectEvent, newerLegacyEvent, acknowledgement], sessions, projects),
+    [],
+    'clearing the canonical row must not resurrect the older project or ticket copy',
   );
 });
 

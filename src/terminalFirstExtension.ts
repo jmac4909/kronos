@@ -318,6 +318,8 @@ class TerminalFirstRuntime implements vscode.Disposable {
     () => this.configurationIntervalMs('managedProviderPollIntervalSec', 300),
   );
   private readonly attentionTree = new AttentionTreeProvider({
+    loadRegisteredProjects: () => listLocalProjects(this.state.state)
+      .map(project => ({ name: project.name, path: project.path })),
     loadProjectDisplayName: projectName => this.state.state?.projects[projectName]?.display_name,
   });
   private readonly workRefresh = new WorkRefreshCoordinator<TerminalFirstRefreshResult>(signal => vscode.window.withProgress(

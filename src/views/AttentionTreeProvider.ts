@@ -10,7 +10,11 @@ import {
   WorkSessionRecord,
   listWorkSessions,
 } from '../services/workSessionStore';
-import { currentAttentionTransitions } from '../services/attentionProjection';
+import {
+  attentionProjectSessionForEvent,
+  currentAttentionTransitions,
+  type AttentionRegisteredProject,
+} from '../services/attentionProjection';
 import { normalizeProviderPublicUrl } from '../services/providerUrls';
 import { providerBindingsForEvent } from '../services/providerBindingReconciliation';
 import {
@@ -42,6 +46,7 @@ export interface AttentionCommandTarget {
 export interface AttentionTreeProviderOptions {
   loadMonitorEvents?: () => MonitorEvent[];
   loadWorkSessions?: () => WorkSessionRecord[];
+  loadRegisteredProjects?: () => readonly AttentionRegisteredProject[];
   loadProjectDisplayName?: (projectName: string) => string | undefined;
 }
 
@@ -58,6 +63,7 @@ export class AttentionTreeProvider implements vscode.TreeDataProvider<AttentionT
   private readonly changeEmitter = new vscode.EventEmitter<AttentionTreeItem | undefined>();
   private readonly loadMonitorEvents: () => MonitorEvent[];
   private readonly loadWorkSessions: () => WorkSessionRecord[];
+  private readonly loadRegisteredProjects: () => readonly AttentionRegisteredProject[];
   private readonly loadProjectDisplayName: (projectName: string) => string | undefined;
   readonly onDidChangeTreeData = this.changeEmitter.event;
 
@@ -68,6 +74,7 @@ export class AttentionTreeProvider implements vscode.TreeDataProvider<AttentionT
         limit: 2000,
       }));
     this.loadWorkSessions = options.loadWorkSessions ?? (() => listWorkSessions());
+    this.loadRegisteredProjects = options.loadRegisteredProjects ?? (() => []);
     this.loadProjectDisplayName = options.loadProjectDisplayName ?? (() => undefined);
   }
 
@@ -114,10 +121,16 @@ export class AttentionTreeProvider implements vscode.TreeDataProvider<AttentionT
     }
 
     const sessions = this.safeLoadWorkSessions();
+    const registeredProjects = this.safeLoadRegisteredProjects();
     const sessionsById = new Map(sessions.map(session => [session.id, session]));
-    return currentAttentionTransitions(events, sessions)
+    return currentAttentionTransitions(events, sessions, registeredProjects)
       .map(event => {
-        const session = sessionsById.get(event.sessionId);
+        const session = attentionProjectSessionForEvent(
+          event,
+          sessionsById.get(event.sessionId),
+          sessions,
+          registeredProjects,
+        );
         const providerChoices = attentionProviderChoicesForEvent(event, session);
         return {
           event,
@@ -136,6 +149,15 @@ export class AttentionTreeProvider implements vscode.TreeDataProvider<AttentionT
       return this.loadWorkSessions();
     } catch (error: unknown) {
       console.warn(`Kronos attention session correlation failed: ${boundedOperationFailure(error, 'Attention session state could not be read.').display}`);
+      return [];
+    }
+  }
+
+  private safeLoadRegisteredProjects(): readonly AttentionRegisteredProject[] {
+    try {
+      return this.loadRegisteredProjects();
+    } catch (error: unknown) {
+      console.warn(`Kronos attention project correlation failed: ${boundedOperationFailure(error, 'Registered projects could not be read.').display}`);
       return [];
     }
   }

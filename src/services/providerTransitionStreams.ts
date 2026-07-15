@@ -32,6 +32,33 @@ export function providerTransitionStreamKey(
   return `provider-stream-${digest.slice(0, 48)}`;
 }
 
+/**
+ * Strong provider-resource identity used only to correlate the same monitored
+ * resource across legacy ticket sessions and current project sessions. It is
+ * intentionally unavailable when the provider project cannot be proven: an
+ * MR IID alone is not unique across GitLab projects.
+ */
+export function providerTransitionProjectResourceKey(
+  event: ProviderTransitionEventLike,
+  session: WorkSessionRecord | undefined,
+): string | undefined {
+  const transitionKind = metadataString(event, 'transitionKind');
+  const providerRead = transitionKind.startsWith('provider_read_')
+    || event.subject?.kind === 'provider-read';
+  const resource = providerRead ? 'provider-read' : event.subject?.kind || 'provider-event';
+  const project = providerProjectIdentity(event, session);
+  if (!project) { return undefined; }
+  const identity = [
+    project,
+    event.source,
+    resource,
+    logicalSubject(event, resource),
+    attentionFacet(resource),
+  ];
+  const digest = crypto.createHash('sha256').update(JSON.stringify(identity)).digest('hex');
+  return `provider-resource-${digest.slice(0, 48)}`;
+}
+
 function providerTransitionStreamIdentity(
   event: ProviderTransitionEventLike,
   session: WorkSessionRecord | undefined,
@@ -82,6 +109,52 @@ function attentionFacet(resource: string): string {
   return resource;
 }
 
+function providerProjectIdentity(
+  event: ProviderTransitionEventLike,
+  session: WorkSessionRecord | undefined,
+): string | undefined {
+  if (!session) { return undefined; }
+  if (event.source === 'gitlab') {
+    const mergeRequestIid = metadataValue(event, 'mergeRequestIid')
+      || (event.subject?.kind === 'merge-request' ? event.subject.id : undefined);
+    if (!mergeRequestIid) { return undefined; }
+    const binding = newestBindingProjectId(session, 'gitlab', 'merge-request', mergeRequestIid);
+    return binding ? `gitlab:${binding}` : undefined;
+  }
+  if (event.source === 'jenkins') {
+    const binding = newestBindingProjectId(session, 'jenkins', undefined, undefined);
+    return binding ? `jenkins:${binding}` : undefined;
+  }
+  if (event.source === 'sonar') {
+    const projectKey = metadataValue(event, 'projectKey');
+    if (projectKey) { return `sonar:${projectKey}`; }
+    const binding = newestBindingProjectId(session, 'sonar', undefined, undefined);
+    return binding ? `sonar:${binding}` : undefined;
+  }
+  return undefined;
+}
+
+function newestBindingProjectId(
+  session: WorkSessionRecord,
+  provider: 'gitlab' | 'jenkins' | 'sonar',
+  resource: 'merge-request' | undefined,
+  subjectId: string | undefined,
+): string | undefined {
+  let newest: { projectId: string; attachedAt: string } | undefined;
+  for (const binding of session.providerBindings) {
+    if (binding.provider !== provider
+      || (resource && binding.resource !== resource)
+      || (subjectId && binding.subjectId !== subjectId)
+      || !binding.projectId) {
+      continue;
+    }
+    if (!newest || binding.attachedAt > newest.attachedAt) {
+      newest = { projectId: binding.projectId, attachedAt: binding.attachedAt };
+    }
+  }
+  return newest?.projectId;
+}
+
 function metadataIdentity(
   event: ProviderTransitionEventLike,
   key: string,
@@ -96,4 +169,11 @@ function metadataIdentity(
 function metadataString(event: ProviderTransitionEventLike, key: string): string {
   const value = event.metadata?.[key];
   return typeof value === 'string' ? value : '';
+}
+
+function metadataValue(event: ProviderTransitionEventLike, key: string): string | undefined {
+  const value = event.metadata?.[key];
+  return (typeof value === 'string' || typeof value === 'number') && String(value)
+    ? String(value)
+    : undefined;
 }

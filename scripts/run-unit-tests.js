@@ -3521,6 +3521,74 @@ test('extension activation registers the bounded surface and explicit launch com
     );
     workSessions.removeWorkSession(replacementSession.id);
 
+    const legacyMrSession = workSessions.createOrGetWorkSessionByTicket({
+      ticketKey: 'JIRA-777',
+      title: 'Legacy ticket-owned MR fixture',
+      projectName: 'JIRA',
+    });
+    workSessions.addWorkSessionProviderBinding(legacyMrSession.id, {
+      provider: 'gitlab',
+      resource: 'merge-request',
+      subjectId: '77',
+      projectId: 'group/fixture',
+      url: 'https://gitlab.example/group/fixture/-/merge_requests/77',
+    });
+    const projectMrSession = workSessions.createStandaloneWorkSession({
+      title: 'Registered project-owned MR fixture',
+      projectName: 'fixture',
+      projectPath: tempRoot,
+    });
+    workSessions.addWorkSessionProviderBinding(projectMrSession.id, {
+      provider: 'gitlab',
+      resource: 'merge-request',
+      subjectId: '77',
+      projectId: 'group/fixture',
+      url: 'https://gitlab.example/group/fixture/-/merge_requests/77',
+    });
+    monitorEventStore.appendMonitorEvent({
+      id: 'attention-project-mr-copy',
+      at: '2026-07-14T11:10:00.000Z',
+      sessionId: projectMrSession.id,
+      type: 'provider.transition',
+      source: 'gitlab',
+      summary: 'MR !77 first observed from the registered project session.',
+      subject: { kind: 'merge-request', id: '77', ticketKey: 'JIRA-777' },
+      after: { state: 'opened/mergeable', fingerprint: 'project-mr-copy' },
+      metadata: { transitionKind: 'initial_mr_observed', mergeRequestIid: 77 },
+    });
+    monitorEventStore.appendMonitorEvent({
+      id: 'attention-legacy-ticket-mr-copy',
+      at: '2026-07-14T11:11:00.000Z',
+      sessionId: legacyMrSession.id,
+      type: 'provider.transition',
+      source: 'gitlab',
+      summary: 'MR !77 review changed from the legacy ticket session.',
+      subject: { kind: 'merge-request', id: '77', ticketKey: 'JIRA-777' },
+      after: { state: 'opened/mergeable', fingerprint: 'legacy-ticket-mr-copy' },
+      metadata: {
+        transitionKind: 'review_activity_added',
+        mergeRequestIid: 77,
+        reviewActivityCount: 2,
+      },
+    });
+    const registeredProjectAttention = attentionProvider.getChildren()
+      .find(item => item.label === 'fixture');
+    assert.ok(registeredProjectAttention, 'the registered project owns its correlated MR stream');
+    assert.deepEqual(
+      attentionProvider.getChildren(registeredProjectAttention)
+        .filter(item => item.source === 'gitlab' && item.entry.event.metadata?.mergeRequestIid === 77)
+        .map(item => item.eventId),
+      ['attention-legacy-ticket-mr-copy'],
+      'the newest MR state renders once under the project even when it came from a legacy ticket session',
+    );
+    assert.equal(
+      attentionProvider.getChildren().some(item => item.label === 'JIRA'),
+      false,
+      'an unregistered legacy ticket owner does not create a second Attention group for the same MR',
+    );
+    workSessions.removeWorkSession(legacyMrSession.id);
+    workSessions.removeWorkSession(projectMrSession.id);
+
     const attentionSession = workSessions.createOrGetWorkSessionByTicket({
       ticketKey: 'JIRA-321',
       title: 'Attention branch picker fixture',
