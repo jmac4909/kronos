@@ -66,6 +66,15 @@ export function buildProjectGitContextReference(contextIdValue: string, promptPa
   return reference;
 }
 
+export function buildContextBasketTerminalReference(basketIdValue: string, promptPath: string): string {
+  const basketId = normalizeBasketContextId(basketIdValue);
+  const absolutePromptPath = path.resolve(promptPath);
+  assertShellInertPromptPath(absolutePromptPath);
+  const reference = `[${basketId}] Read private context basket file ${JSON.stringify(absolutePromptPath)}${REFERENCE_SUFFIX}`;
+  assertSafeTerminalContextReference(reference);
+  return reference;
+}
+
 export function insertTerminalContextReference(
   terminal: TerminalContextInsertionTarget,
   reference: string,
@@ -163,7 +172,8 @@ function parseTerminalContextReference(reference: string):
   | { kind: 'jira'; key: string; promptPath: string }
   | { kind: 'gitlab'; iid: number; promptPath: string }
   | { kind: 'ci'; key: string; promptPath: string }
-  | { kind: 'git'; contextId: string; promptPath: string } {
+  | { kind: 'git'; contextId: string; promptPath: string }
+  | { kind: 'basket'; basketId: string; promptPath: string } {
   if (!reference || reference.length > MAX_REFERENCE_LENGTH || reference !== reference.trim()) {
     throw new Error('Terminal context reference is missing or invalid.');
   }
@@ -203,6 +213,18 @@ function parseTerminalContextReference(reference: string):
       throw new Error('Git terminal context reference does not point to the expected prompt artifact.');
     }
     return { kind: 'git', contextId, promptPath };
+  }
+
+  const basketPrefix = /^\[(BASKET-[A-F0-9]{24})\] Read private context basket file /.exec(reference);
+  if (basketPrefix && reference.endsWith(REFERENCE_SUFFIX)) {
+    const basketIdValue = basketPrefix[1];
+    if (!basketIdValue) { throw new Error('Context basket terminal reference has no basket id.'); }
+    const basketId = normalizeBasketContextId(basketIdValue);
+    const promptPath = parsePromptPathLiteral(reference, basketPrefix[0].length);
+    if (path.basename(path.dirname(promptPath)) !== 'basket-context') {
+      throw new Error('Context basket terminal reference does not point to the expected prompt artifact.');
+    }
+    return { kind: 'basket', basketId, promptPath };
   }
 
   const prefixMatch = /^\[([A-Z][A-Z0-9_]{0,127}-[1-9][0-9]*)\] Read Jira context file /.exec(reference);
@@ -249,6 +271,14 @@ function normalizeGitContextId(value: string): string {
   const normalized = value.trim();
   if (!/^GIT-[A-Za-z0-9_.-]{1,100}$/.test(normalized)) {
     throw new Error('Git context id is missing or invalid.');
+  }
+  return normalized;
+}
+
+function normalizeBasketContextId(value: string): string {
+  const normalized = value.trim().toUpperCase();
+  if (!/^BASKET-[A-F0-9]{24}$/.test(normalized)) {
+    throw new Error('Context basket id is missing or invalid.');
   }
   return normalized;
 }

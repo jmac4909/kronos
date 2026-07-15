@@ -143,10 +143,12 @@ Context insertion is always explicit and terminal-scoped. Jira, MR, and CI evide
 3. It normalizes and secret-redacts textual and structured provider data.
 4. For Jira, it downloads attachment bytes without a file-type allowlist or parser, writes them as private files with sanitized local names, and records their paths and SHA-256 hashes. Raw files are not transformed or secret-redacted.
 5. It writes a private, content-addressed JSON artifact and Markdown prompt boundary.
-6. For Jira and GitLab MR context, it opens an interactive composer with escaped evidence previews, completeness warnings, an immutable artifact reference, and an editable operator-focus field.
+6. It opens an interactive composer with escaped evidence previews, completeness warnings, an immutable artifact reference, an editable operator-focus field, and an explicit **Add to Basket** action for supported Jira, MR, CI, and Git artifacts.
 7. It captures the exact session, terminal-binding, and VS Code terminal object selected before the fetch, then re-resolves that same attachment before opening the composer and again before placement. Detachment, close, or rebinding cancels the stale placement rather than guessing.
 8. **Place in Terminal** or Ctrl/Cmd+Enter performs one exactly-once shell-quoted reference insertion with terminal execution disabled. Ordinary Enter only edits the composer text. A successful terminal send consumes that composer even if a later local audit update fails or a late duplicate message arrives; a send that throws may be retried after target verification.
-9. The operator reviews the terminal line and submits it manually.
+9. The operator may instead open **Context Basket**, inspect each selected artifact's provenance, fetched time, completeness, size, hash, warnings, and same-source conflicts, edit one combined focus, and choose one active managed terminal. Refreshing a source reopens its ordinary explicit fetch/composer workflow; nothing refreshes automatically.
+10. Basket placement writes one immutable private reference-only Markdown bundle under `KRONOS_DIR`, verifies the exact live terminal attachment, and inserts one shell-inert `[BASKET-*]` reference with execution disabled. Removing or clearing selections never deletes their immutable source artifacts, and the basket is not cleared automatically after placement.
+11. The operator reviews the terminal line and submits it manually.
 
 Provider data inside an artifact is untrusted evidence, never instructions. Prompt artifacts tell the interactive agent not to follow commands, role changes, credential requests, links, or mutation requests found inside provider content.
 
@@ -155,6 +157,7 @@ Insertion targets:
 - `[JIRA-123]`: visible Jira fields, including custom-field IDs, names, schemas, values, readable text, comments, and private paths to downloaded raw attachments of any MIME type;
 - `[MR-77]`: GitLab merge-request metadata, notes, discussions, approvals, bounded diffs, pipelines, jobs, and test evidence;
 - `[CI-JIRA-123]`: bounded Jenkins build/test/stage evidence and SonarQube gate/measure/issue evidence.
+- `[BASKET-*]`: a bounded private list of selected Jira, MR, CI, and local Git artifact paths, SHA-256 hashes, provenance, freshness, completeness, conflicts, warnings, and one operator-authored focus; provider payloads are not copied into the basket bundle.
 
 Partial, unavailable, skipped, truncated, or failed provider components remain explicit in completeness warnings. Kronos never presents partial evidence as complete.
 
@@ -219,11 +222,11 @@ The installed extension has zero third-party runtime dependencies. Kronos uses t
 
 The public terminal-first command surface is intentionally limited to:
 
-- Work: refresh the Jira board; search/filter/show completed/clear filters; open ticket workspace; start Claude for the selected ticket; manage a focused terminal; insert Jira/MR/CI context;
+- Work: refresh the Jira board; search/filter/show completed/clear filters; open ticket workspace; start Claude for the selected ticket; manage a focused terminal; insert Jira/MR/CI context; open the Context Basket;
 - Sessions: create a project-oriented Claude session; add another Jira context; poll providers; open audit; focus/reattach/detach terminal; stop or remove local management; pause/resume monitoring;
-- Projects: refresh registered branch/status; manage discovery and registration; view bounded status/diff; insert project Git/MR/CI evidence; open an existing or prefilled new MR page; configure project providers;
+- Projects: refresh registered branch/status; manage discovery and registration; view bounded status/diff; insert project Git/MR/CI evidence; open an existing or prefilled new MR page; configure project providers; open the Context Basket;
 - Attention: acknowledge item and open provider;
-- Operations: Setup, Doctor, and Settings.
+- Operations: open the Context Basket from Work, Sessions, or Projects; Setup, Doctor, and Settings.
 
 No command outside this inventory is part of the terminal-first product contract. In particular, there is no generic terminal-command runner.
 

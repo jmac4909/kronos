@@ -161,6 +161,11 @@
         "icon": "$(beaker)"
       },
       {
+        "command": "kronos.openContextBasket",
+        "title": "Kronos: Open Context Basket",
+        "icon": "$(archive)"
+      },
+      {
         "command": "kronos.pollManagedWorkSessions",
         "title": "Kronos: Poll Managed Providers",
         "icon": "$(sync)"
@@ -327,6 +332,11 @@
           "command": "kronos.pollManagedWorkSessions",
           "when": "view == kronosSessions || view == kronosProjects || view == kronosAttention",
           "group": "navigation@4"
+        },
+        {
+          "command": "kronos.openContextBasket",
+          "when": "view == kronosWork || view == kronosSessions || view == kronosProjects",
+          "group": "navigation@7"
         },
         {
           "command": "kronos.setup",
@@ -569,7 +579,7 @@
     "compile": "node scripts/clean-output.js && node node_modules/typescript/bin/tsc -p ./",
     "watch": "node scripts/clean-output.js && node node_modules/typescript/bin/tsc -watch -p ./",
     "package": "npx --yes @vscode/vsce@3.9.2 package --no-dependencies --allow-missing-repository --githubBranch main",
-    "test": "npm run public:check && node scripts/check-manifest.js && node scripts/check-runtime-graph.js && node scripts/check-security.js && node scripts/check-context-governance.js && node scripts/check-quality-evidence.js && npm run compile && node scripts/run-unit-tests.js && npm run work:orchestration && npm run provider:reconciliation && npm run provider:health && npm run provider:fixtures && npm run scale:a11y && npm run webview:dom && npm run webview:jira-board",
+    "test": "npm run public:check && node scripts/check-manifest.js && node scripts/check-runtime-graph.js && node scripts/check-security.js && node scripts/check-context-governance.js && node scripts/check-quality-evidence.js && npm run compile && node scripts/run-unit-tests.js && npm run work:orchestration && npm run provider:reconciliation && npm run provider:health && npm run provider:fixtures && npm run context:basket && npm run scale:a11y && npm run webview:dom && npm run webview:jira-board",
     "public:check": "node scripts/check-public-surface.js",
     "webview:dom": "node scripts/run-webview-dom-tests.js",
     "webview:jira-board": "node scripts/run-jira-work-board-tests.js",
@@ -578,6 +588,7 @@
     "work:orchestration": "node scripts/run-work-orchestration-tests.js",
     "provider:reconciliation": "node scripts/run-provider-reconciliation-tests.js",
     "provider:health": "node scripts/run-provider-health-visibility-tests.js",
+    "context:basket": "node scripts/run-context-basket-tests.js",
     "feedback:state": "node scripts/create-feedback-state.js",
     "feedback:state:force": "node scripts/create-feedback-state.js --force",
     "feedback:smoke": "node scripts/run-feedback-smoke.js",

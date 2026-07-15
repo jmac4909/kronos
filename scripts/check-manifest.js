@@ -17,6 +17,7 @@ const EXPECTED_COMMANDS = [
   'kronos.insertOtherTicket',
   'kronos.insertGitLabContext',
   'kronos.insertCiContext',
+  'kronos.openContextBasket',
   'kronos.pollManagedWorkSessions',
   'kronos.openWorkSessionAudit',
   'kronos.focusWorkSessionTerminal',
@@ -67,6 +68,7 @@ const EXPECTED_MENU_LOCATIONS = [
 
 const ALLOWED_CODICONS = new Set([
   'add',
+  'archive',
   'beaker',
   'check',
   'clear-all',

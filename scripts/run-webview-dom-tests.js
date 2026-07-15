@@ -5,6 +5,7 @@ const test = require('node:test');
 const vm = require('node:vm');
 
 const actionPanelSource = fs.readFileSync(path.join(__dirname, '..', 'media', 'kronos-action-panel.js'), 'utf8');
+const contextBasketSource = fs.readFileSync(path.join(__dirname, '..', 'media', 'kronos-context-basket.js'), 'utf8');
 const contextComposerSource = fs.readFileSync(path.join(__dirname, '..', 'media', 'kronos-context-composer.js'), 'utf8');
 const projectIntegrationSource = fs.readFileSync(path.join(__dirname, '..', 'media', 'kronos-project-integration.js'), 'utf8');
 
@@ -115,6 +116,33 @@ test('context composer posts edited focus only after Insert or Ctrl+Enter', () =
   focusListeners.get('keydown')({ key: 'Enter', ctrlKey: true, metaKey: false, preventDefault() { prevented = true; } });
   assert.equal(prevented, true);
   assert.deepEqual(harness.messages.at(-1), { command: 'insertDraft', focus: 'Focus on unresolved discussion' });
+  harness.click('addToBasket');
+  assert.deepEqual(harness.messages.at(-1), { command: 'addToBasket' });
+});
+
+test('context basket preserves focus across explicit refresh and non-submitting insert actions', () => {
+  const focusListeners = new Map();
+  const focus = {
+    value: 'Compare Jira and MR evidence',
+    addEventListener(name, listener) { focusListeners.set(name, listener); },
+    focus() {},
+  };
+  const harness = createFormHarness({
+    scriptId: 'kronos-context-basket-script',
+    elements: new Map([['basket-focus', focus]]),
+  });
+  vm.runInContext(contextBasketSource, harness.context, { filename: 'kronos-context-basket.js' });
+  harness.click('refresh', { 'data-entry-id': 'basket-abc123' });
+  assert.deepEqual(harness.messages.at(-1), {
+    command: 'refresh',
+    entryId: 'basket-abc123',
+    focus: 'Compare Jira and MR evidence',
+  });
+  focus.value = 'Place the combined evidence';
+  let prevented = false;
+  focusListeners.get('keydown')({ key: 'Enter', ctrlKey: true, metaKey: false, preventDefault() { prevented = true; } });
+  assert.equal(prevented, true);
+  assert.deepEqual(harness.messages.at(-1), { command: 'insert', focus: 'Place the combined evidence' });
 });
 
 test('project integration form collects only bounded project setup fields', () => {
@@ -185,9 +213,9 @@ function createFormHarness(options) {
   return {
     context,
     messages,
-    click(action) {
+    click(action, extraAttributes = {}) {
       const target = {
-        getAttribute(name) { return name === 'data-action' ? action : null; },
+        getAttribute(name) { return name === 'data-action' ? action : extraAttributes[name] || null; },
       };
       const event = {
         target: { closest: selector => selector === '[data-action]' ? target : null },

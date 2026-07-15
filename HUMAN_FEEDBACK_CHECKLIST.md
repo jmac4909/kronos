@@ -100,6 +100,16 @@ If GitLab and CI providers are safely configured:
 12. Insert the linked `[MR-N]` context and confirm the composer includes recent notes/discussions plus explicit review, pipeline, job, and test completeness.
 13. Insert `[CI-TICKET-KEY]` and confirm Jenkins and SonarQube evidence clearly says which provider portions were fetched, partial, or unavailable.
 
+## Context Basket
+
+1. From Jira, MR, CI, and local Git composers, choose **Add to Basket** for at least two sources. Confirm adding does not write to or submit terminal input.
+2. Open **Context Basket** from Work, Sessions, or Projects. Confirm each row shows its source, provenance, fetched time, completeness, size, short hash, warnings, and any same-source/different-content conflict.
+3. Choose **Refresh Source…**. Confirm Kronos opens the normal explicit source fetch/composer and does not replace the selection until you choose **Add to Basket** on the refreshed artifact.
+4. Remove one selection and confirm its referenced private artifact still exists. Clear the basket and confirm the modal explains that source artifacts are retained.
+5. Re-add multiple sources, edit the combined focus with ordinary Enter/newlines, choose **Place Basket in Terminal**, and select an active managed session. Confirm exactly one `[BASKET-*]` line appears in the intended terminal and Enter is not pressed.
+6. Inspect the basket Markdown. Confirm it contains references, hashes, provenance, completeness, conflicts, warnings, and the operator focus, but does not copy Jira descriptions, comments, diffs, job output, or other provider payloads.
+7. Confirm placement leaves the basket selected for reuse and the audit records the bundle without terminal input, output, or scrollback.
+
 ## Sessions View
 
 1. Choose **New Claude** and confirm exactly one new terminal is created and focused without asking for a Jira ticket.

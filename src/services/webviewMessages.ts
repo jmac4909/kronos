@@ -11,7 +11,13 @@ export interface OperationsActionMessage {
 
 export type ContextComposerMessage =
   | { command: 'insertDraft'; focus: string }
-  | { command: 'openArtifact' | 'cancel' };
+  | { command: 'openArtifact' | 'addToBasket' | 'cancel' };
+
+export type ContextBasketMessage =
+  | { command: 'insert'; focus: string }
+  | { command: 'remove' | 'refresh'; entryId: string; focus: string }
+  | { command: 'clear'; focus: string }
+  | { command: 'close' };
 
 export type ProjectIntegrationMessage =
   | { command: 'cancel' }
@@ -53,11 +59,33 @@ export function normalizeOperationsActionMessage(
 export function normalizeContextComposerMessage(raw: unknown): ContextComposerMessage | null {
   const message = recordFromUnknown(raw);
   const command = message['command'];
-  if (command === 'openArtifact' || command === 'cancel') { return { command }; }
+  if (command === 'openArtifact' || command === 'addToBasket' || command === 'cancel') { return { command }; }
   if (command !== 'insertDraft' || typeof message['focus'] !== 'string' || message['focus'].length > 4_000) {
     return null;
   }
   return { command, focus: message['focus'] };
+}
+
+export function normalizeContextBasketMessage(raw: unknown): ContextBasketMessage | null {
+  const message = recordFromUnknown(raw);
+  const command = message['command'];
+  if (command === 'close') { return { command }; }
+  if (command === 'clear') {
+    return typeof message['focus'] === 'string' && message['focus'].length <= 4_000
+      ? { command, focus: message['focus'] }
+      : null;
+  }
+  if (command === 'insert') {
+    return typeof message['focus'] === 'string' && message['focus'].length <= 4_000
+      ? { command, focus: message['focus'] }
+      : null;
+  }
+  if (command !== 'remove' && command !== 'refresh') { return null; }
+  const entryId = recordString(message, 'entryId');
+  return /^[A-Za-z0-9][A-Za-z0-9_.-]{0,179}$/.test(entryId)
+    && typeof message['focus'] === 'string' && message['focus'].length <= 4_000
+    ? { command, entryId, focus: message['focus'] }
+    : null;
 }
 
 export function normalizeProjectIntegrationMessage(raw: unknown): ProjectIntegrationMessage | null {

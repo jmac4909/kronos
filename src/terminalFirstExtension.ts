@@ -106,10 +106,23 @@ import {
 } from './services/webviewSecurity';
 import {
   normalizeActionPanelMessage,
+  normalizeContextBasketMessage,
   normalizeContextComposerMessage,
   normalizeOperationsActionMessage,
   normalizeProjectIntegrationMessage,
 } from './services/webviewMessages';
+import {
+  addContextBasketItem,
+  buildContextBasketReference,
+  clearContextBasket,
+  contextBasketConflictIds,
+  listContextBasketItems,
+  removeContextBasketItem,
+  writeContextBasketBundle,
+  type AddContextBasketItemInput,
+  type ContextBasketItem,
+} from './services/contextBasketStore';
+import { CONTEXT_BASKET_SCRIPT, buildContextBasketHtml } from './services/contextBasketView';
 import { isRecord } from './services/records';
 import {
   listLocalProjects,
@@ -212,6 +225,13 @@ interface ContextComposerRequest {
   warnings: string[];
   selection: TerminalSelection;
   onInserted: () => void | Promise<void>;
+  basketItem?: AddContextBasketItemInput;
+}
+
+interface ContextBasketPanelRecord {
+  panel: vscode.WebviewPanel;
+  nonce: string;
+  focus: string;
 }
 
 interface ProjectIntegrationPanelRecord {
@@ -268,6 +288,8 @@ class TerminalFirstRuntime implements vscode.Disposable {
   private readonly ticketPanelActionsInFlight = new Set<string>();
   private readonly operationsPanelActionsInFlight = new Set<string>();
   private readonly contextComposerPanels = new Map<string, ContextComposerPanelRecord>();
+  private contextBasketPanel: ContextBasketPanelRecord | undefined;
+  private contextBasketInsertionInFlight = false;
   private readonly claudeLaunchesInFlight = new Set<string>();
   private readonly claudeLaunchCooldownUntil = new Map<string, number>();
   private jiraBoardPanel: JiraBoardPanelRecord | undefined;
@@ -340,6 +362,8 @@ class TerminalFirstRuntime implements vscode.Disposable {
     this.doctorPanel = undefined;
     for (const record of this.contextComposerPanels.values()) { record.panel.dispose(); }
     this.contextComposerPanels.clear();
+    this.contextBasketPanel?.panel.dispose();
+    this.contextBasketPanel = undefined;
     this.projectIntegrationPanel?.panel.dispose();
     this.projectIntegrationPanel = undefined;
     for (const disposable of this.disposables.splice(0)) { disposable.dispose(); }
@@ -368,6 +392,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
     this.command('kronos.insertOtherTicket', async argument => this.insertOtherTicket(argument));
     this.command('kronos.insertGitLabContext', async argument => this.insertGitLabContext(argument));
     this.command('kronos.insertCiContext', async argument => this.insertCiContext(argument));
+    this.command('kronos.openContextBasket', async () => this.openContextBasket());
     this.command('kronos.pollManagedWorkSessions', async () => this.pollProviders(true));
     this.command('kronos.openWorkSessionAudit', async argument => this.openWorkSessionAudit(argument));
     this.command('kronos.focusWorkSessionTerminal', async argument => this.focusWorkSessionTerminal(argument));
@@ -1474,6 +1499,26 @@ class TerminalFirstRuntime implements vscode.Disposable {
         await this.openLocalArtifact(record.promptPath);
         return;
       }
+      if (message.command === 'addToBasket') {
+        if (!request.basketItem) {
+          void vscode.window.showWarningMessage('This context source cannot be added to the basket.');
+          return;
+        }
+        try {
+          const item = addContextBasketItem(request.basketItem);
+          this.renderContextBasketPanel();
+          const choice = await vscode.window.showInformationMessage(
+            `${item.label} added to the Context Basket. The source artifact remains private and unchanged.`,
+            'Open Basket',
+          );
+          if (choice === 'Open Basket') { this.openContextBasket(); }
+        } catch (error: unknown) {
+          const detail = unknownErrorMessage(error, 'Kronos could not add this source to the Context Basket.');
+          this.log('Context Basket add failed.', detail);
+          void vscode.window.showErrorMessage(detail);
+        }
+        return;
+      }
       if (message.command !== 'insertDraft') { return; }
       let result;
       try {
@@ -1518,9 +1563,225 @@ class TerminalFirstRuntime implements vscode.Disposable {
       suggestedFocus: request.suggestedFocus,
       evidence: request.evidence,
       warnings: request.warnings,
+      canAddToBasket: Boolean(request.basketItem),
       nonce: record.nonce,
       scriptUri,
     }), webviewScriptCspOptions(panel.webview.cspSource, record.nonce));
+  }
+
+  private openContextBasket(): void {
+    if (this.contextBasketPanel) {
+      this.contextBasketPanel.panel.reveal(vscode.ViewColumn.One, false);
+      this.renderContextBasketPanel();
+      return;
+    }
+    const panel = vscode.window.createWebviewPanel(
+      'kronosContextBasket',
+      'Kronos — Context Basket',
+      vscode.ViewColumn.One,
+      {
+        enableScripts: true,
+        enableCommandUris: false,
+        localResourceRoots: [vscode.Uri.joinPath(this.context.extensionUri, 'media')],
+      },
+    );
+    panel.iconPath = vscode.Uri.joinPath(this.context.extensionUri, 'media', 'kronos-icon.svg');
+    const record: ContextBasketPanelRecord = { panel, nonce: createWebviewNonce(), focus: '' };
+    this.contextBasketPanel = record;
+    panel.onDidDispose(() => {
+      if (this.contextBasketPanel?.panel === panel) { this.contextBasketPanel = undefined; }
+    });
+    panel.webview.onDidReceiveMessage(async raw => {
+      if (isRecord(raw) && raw['command'] === WEBVIEW_READY_COMMAND) { return; }
+      const message = normalizeContextBasketMessage(raw);
+      if (!message) {
+        void vscode.window.showWarningMessage('Kronos ignored an invalid Context Basket request.');
+        return;
+      }
+      if (message.command === 'close') {
+        panel.dispose();
+        return;
+      }
+      if (message.command === 'insert') {
+        record.focus = message.focus;
+        await this.insertContextBasket(message.focus);
+        return;
+      }
+      if (message.command === 'clear') {
+        record.focus = message.focus;
+        const choice = await vscode.window.showWarningMessage(
+          'Clear every selected Context Basket item? The private source artifacts will be retained.',
+          { modal: true },
+          'Clear Basket',
+        );
+        if (choice === 'Clear Basket') {
+          try {
+            const count = clearContextBasket();
+            this.renderContextBasketPanel();
+            void vscode.window.showInformationMessage(`Cleared ${count} Context Basket item${count === 1 ? '' : 's'}. Source artifacts were retained.`);
+          } catch (error: unknown) {
+            this.showContextBasketError(error, 'Kronos could not clear the Context Basket.');
+          }
+        }
+        return;
+      }
+      record.focus = message.focus;
+      let items: ContextBasketItem[];
+      try {
+        items = listContextBasketItems();
+      } catch (error: unknown) {
+        this.showContextBasketError(error, 'Kronos could not read the Context Basket.');
+        return;
+      }
+      const item = items.find(candidate => candidate.id === message.entryId);
+      if (!item) {
+        void vscode.window.showWarningMessage('That Context Basket item is no longer selected.');
+        this.renderContextBasketPanel();
+        return;
+      }
+      if (message.command === 'refresh') {
+        await this.refreshContextBasketItem(item);
+        return;
+      }
+      try {
+        removeContextBasketItem(item.id);
+        this.renderContextBasketPanel();
+        void vscode.window.showInformationMessage(`Removed ${item.label} from the basket. Its private source artifact was retained.`);
+      } catch (error: unknown) {
+        this.showContextBasketError(error, 'Kronos could not remove the Context Basket item.');
+      }
+    });
+    this.renderContextBasketPanel();
+  }
+
+  private renderContextBasketPanel(): void {
+    const record = this.contextBasketPanel;
+    if (!record) { return; }
+    let items: ContextBasketItem[];
+    try {
+      items = listContextBasketItems();
+    } catch (error: unknown) {
+      this.showContextBasketError(error, 'Kronos could not read the private Context Basket.');
+      return;
+    }
+    const scriptUri = record.panel.webview.asWebviewUri(
+      vscode.Uri.joinPath(this.context.extensionUri, 'media', CONTEXT_BASKET_SCRIPT),
+    ).toString();
+    record.panel.webview.html = withWebviewCsp(buildContextBasketHtml({
+      items,
+      conflictIds: contextBasketConflictIds(items),
+      nonce: record.nonce,
+      scriptUri,
+      focus: record.focus,
+    }), webviewScriptCspOptions(record.panel.webview.cspSource, record.nonce));
+  }
+
+  private async refreshContextBasketItem(item: ContextBasketItem): Promise<void> {
+    if (item.refresh.kind === 'jira' && item.refresh.ticketKey) {
+      await this.insertJiraContext({ ticketKey: item.refresh.ticketKey });
+      return;
+    }
+    if (item.refresh.kind === 'gitlab' && item.refresh.ticketKey) {
+      await this.insertGitLabContext({ ticketKey: item.refresh.ticketKey });
+      return;
+    }
+    if (item.refresh.kind === 'ci' && item.refresh.ticketKey) {
+      await this.insertCiContext({ ticketKey: item.refresh.ticketKey });
+      return;
+    }
+    if (item.refresh.kind === 'git' && item.refresh.projectName) {
+      const project = listLocalProjects(this.state.state).find(candidate => candidate.name === item.refresh.projectName);
+      if (project) {
+        await this.insertProjectGitContext({ projectName: project.name, projectPath: project.path });
+        return;
+      }
+    }
+    void vscode.window.showWarningMessage(`${item.label} no longer has a registered source target. Reopen it from Work or Projects.`);
+  }
+
+  private async insertContextBasket(focus: string): Promise<void> {
+    if (this.contextBasketInsertionInFlight) {
+      void vscode.window.showInformationMessage('Kronos is already preparing this Context Basket placement.');
+      return;
+    }
+    this.contextBasketInsertionInFlight = true;
+    try {
+      const items = listContextBasketItems();
+      if (items.length === 0) {
+        void vscode.window.showWarningMessage('The Context Basket is empty. Add Jira, MR, CI, or local Git evidence first.');
+        return;
+      }
+      const session = await this.resolveWorkSession(undefined, true);
+      if (!session) { return; }
+      if (session.status !== 'active') {
+        void vscode.window.showWarningMessage('Choose an active managed session for Context Basket placement.');
+        return;
+      }
+      const selected = await this.chooseLiveTerminal(session.id);
+      if (!selected) {
+        void vscode.window.showWarningMessage(`Focus or reconnect the operator-owned terminal for ${workSessionEventContext(session).label} first.`);
+        return;
+      }
+      selected.terminal.show(false);
+      const placement = captureTerminalContextPlacement({
+        terminal: selected.terminal,
+        sessionId: selected.binding.sessionId,
+        bindingId: selected.binding.bindingId,
+      });
+      const bundle = writeContextBasketBundle(items, focus);
+      const reference = buildContextBasketReference(bundle);
+      const result = placeEditableTerminalContextReference(
+        placement,
+        this.currentTerminalContextAttachment(placement),
+        reference,
+        '',
+      );
+      if (result.kind === 'target-changed') {
+        void vscode.window.showWarningMessage('The managed terminal attachment changed while the basket was being prepared. Choose the intended session again.');
+        return;
+      }
+      if (result.kind !== 'placed') { return; }
+      try {
+        recordWorkSessionContextArtifact(session.id, {
+          id: `basket-${bundle.contentSha256.slice(0, 24)}`,
+          kind: 'context-basket',
+          label: `[${bundle.id}] ${bundle.itemCount} selected context${bundle.itemCount === 1 ? '' : 's'}`,
+          promptPath: bundle.promptPath,
+          complete: bundle.complete,
+          warnings: bundle.warnings,
+          contentSha256: bundle.contentSha256,
+        });
+        appendMonitorEvent({
+          sessionId: session.id,
+          type: 'context.inserted',
+          source: 'kronos',
+          summary: `${workSessionEventContext(session).label} Context Basket reference inserted without submission.`,
+          subject: { kind: 'context-basket', id: bundle.id, ...workSessionTicketMetadata(session) },
+          artifactPath: bundle.promptPath,
+          metadata: { submitted: false, artifactSha256: bundle.contentSha256, itemCount: bundle.itemCount },
+        });
+        this.refreshTerminalFirstViews();
+        void vscode.window.showInformationMessage(
+          `Placed ${bundle.id} in ${selected.terminal.name} without submitting it. Review the line, then press Enter yourself.`,
+        );
+      } catch (error: unknown) {
+        const detail = unknownErrorMessage(error, 'Context Basket audit update failed.');
+        this.log('Context Basket was placed but its local audit update failed.', detail);
+        void vscode.window.showErrorMessage(
+          `The Context Basket was placed without submission, but Kronos could not finish its local audit update: ${detail}`,
+        );
+      }
+    } catch (error: unknown) {
+      this.showContextBasketError(error, 'Kronos could not place the Context Basket.');
+    } finally {
+      this.contextBasketInsertionInFlight = false;
+    }
+  }
+
+  private showContextBasketError(error: unknown, fallback: string): void {
+    const detail = unknownErrorMessage(error, fallback);
+    this.log(fallback, detail);
+    void vscode.window.showErrorMessage(detail);
   }
 
   private async insertJiraContext(argument: unknown): Promise<void> {
@@ -1569,6 +1830,18 @@ class TerminalFirstRuntime implements vscode.Disposable {
         evidence: jiraComposerEvidence(jiraContext),
         warnings: jiraContext.completeness.warnings,
         selection,
+        basketItem: {
+          kind: 'jira',
+          sourceKey: `jira:${ticketKey}`,
+          label: `[${ticketKey}] Jira context`,
+          provenance: `Jira ticket ${ticketKey}`,
+          promptPath: artifact.promptPath,
+          fetchedAt: jiraContext.fetchedAt,
+          complete: jiraContext.completeness.complete,
+          warnings: jiraContext.completeness.warnings,
+          refresh: { kind: 'jira', ticketKey },
+          contentSha256: artifact.contentSha256,
+        },
         onInserted: () => {
           if (selection.workSession) {
             recordWorkSessionContextArtifact(selection.workSession.id, {
@@ -1632,6 +1905,18 @@ class TerminalFirstRuntime implements vscode.Disposable {
         evidence: gitLabComposerEvidence(context),
         warnings: context.completeness.warnings,
         selection,
+        basketItem: {
+          kind: 'gitlab',
+          sourceKey: `gitlab:${ticketKey}:${iid}`,
+          label: `[MR-${iid}] GitLab MR and pipeline context`,
+          provenance: `GitLab merge request !${iid} for ${ticketKey}`,
+          promptPath: artifact.promptPath,
+          fetchedAt: context.fetchedAt,
+          complete: context.completeness.complete,
+          warnings: context.completeness.warnings,
+          refresh: { kind: 'gitlab', ticketKey },
+          contentSha256: artifact.contentSha256,
+        },
         onInserted: () => {
           if (selection.workSession) {
             const mergeRequestBinding: Parameters<typeof addWorkSessionProviderBinding>[1] = {
@@ -1752,6 +2037,18 @@ class TerminalFirstRuntime implements vscode.Disposable {
         evidence: ciComposerEvidence(jenkins, sonar),
         warnings: context.completeness.warnings,
         selection,
+        basketItem: {
+          kind: 'ci',
+          sourceKey: `ci:${ticketKey}`,
+          label: `[CI-${ticketKey}] Jenkins and SonarQube context`,
+          provenance: `Jenkins and SonarQube evidence for ${ticketKey}`,
+          promptPath: artifact.promptPath,
+          fetchedAt: context.fetchedAt,
+          complete: context.completeness.complete,
+          warnings: context.completeness.warnings,
+          refresh: { kind: 'ci', ticketKey },
+          contentSha256: artifact.contentSha256,
+        },
         onInserted: () => {
           if (selection.workSession) {
             let session = selection.workSession;
@@ -2118,6 +2415,18 @@ class TerminalFirstRuntime implements vscode.Disposable {
         ],
         warnings,
         selection,
+        basketItem: {
+          kind: 'git',
+          sourceKey: `git:${project.projectName}`,
+          label: `[${artifact.contextId}] local Git working tree`,
+          provenance: `Local Git ${project.projectName} @ ${evidence.branch || 'unavailable'}`,
+          promptPath: artifact.promptPath,
+          fetchedAt: new Date().toISOString(),
+          complete: evidence.available && !evidence.diffTruncated,
+          warnings,
+          refresh: { kind: 'git', projectName: project.projectName },
+          contentSha256: artifact.contentSha256,
+        },
         onInserted: () => {
           if (selection.workSession) {
             const complete = evidence.available && !evidence.diffTruncated;

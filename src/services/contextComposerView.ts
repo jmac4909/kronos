@@ -19,6 +19,7 @@ export interface ContextComposerInput {
   warnings: string[];
   nonce: string;
   scriptUri: string;
+  canAddToBasket?: boolean;
 }
 
 export function buildContextComposerHtml(input: ContextComposerInput): string {
@@ -76,6 +77,7 @@ ${kronosWebviewBaseCss()}
       <div class="kronos-action-row composer-actions">
         <button type="button" class="kronos-button primary" data-action="insertDraft">Place in Terminal</button>
         <button type="button" class="kronos-button" data-action="openArtifact">Open Full Context</button>
+        ${input.canAddToBasket ? '<button type="button" class="kronos-button" data-action="addToBasket">Add to Basket</button>' : ''}
         <button type="button" class="kronos-button" data-action="cancel">Cancel</button>
       </div>
       <div class="keyboard-hint">Ctrl+Enter (Cmd+Enter on macOS) inserts. Normal Enter edits the focus text. Submission still happens only when you press Enter in the terminal.</div>

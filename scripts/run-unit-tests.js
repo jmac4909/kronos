@@ -2335,6 +2335,16 @@ test('terminal context insertion is shell-inert and never submits', () => {
   assert.equal(insertion.isSafeTerminalContextReference(gitReference), true);
   assert.equal(gitArtifact.redacted, true);
   assert.equal(fs.readFileSync(gitArtifact.promptPath, 'utf8').includes(embeddedToken), false);
+
+  const basketReference = insertion.buildContextBasketTerminalReference(
+    `BASKET-${'A'.repeat(24)}`,
+    path.join(tempRoot, 'basket-context', `prompt-${'c'.repeat(24)}.md`),
+  );
+  assert.match(basketReference, /^\[BASKET-[A-F0-9]{24}\] Read private context basket file/);
+  assert.equal(insertion.isSafeTerminalContextReference(basketReference), true);
+  assert.equal(insertion.isSafeTerminalContextReference(
+    basketReference.replace(`${path.sep}basket-context${path.sep}`, `${path.sep}outside${path.sep}`),
+  ), false);
 });
 
 test('context placement verifies one exact attachment and remains exactly once after audit work', () => {

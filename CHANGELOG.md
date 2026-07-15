@@ -6,6 +6,7 @@ All notable changes to the Kronos preview are documented here.
 
 ### Added
 
+- Added a private bounded Context Basket for selecting Jira, GitLab MR, Jenkins/SonarQube, and local Git artifacts, reviewing provenance/freshness/completeness/size/hash/conflicts, explicitly refreshing sources, and placing one reference-only non-submitting bundle into an exact managed terminal.
 - Prioritized extension improvement roadmap covering identity, terminal lifecycle, provider reconciliation, Attention, cross-platform persistence, UX, maintainability, and release evidence.
 - Dedicated Projects view with current branch, clean/dirty status, read-only Git loading, and existing project evidence actions.
 - Recruiter-facing product overview, architecture, engineering metrics, and synthetic product renders.

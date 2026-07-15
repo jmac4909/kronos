@@ -10,6 +10,7 @@ const STATE_STORE_FILE = 'src/services/stateStore.ts';
 const PACKAGED_WEBVIEW_FILES = [
   'media/kronos-action-panel.js',
   'media/kronos-context-composer.js',
+  'media/kronos-context-basket.js',
   'media/kronos-jira-work-board.js',
   'media/kronos-project-integration.js',
   'media/kronos-webview-runtime.js',

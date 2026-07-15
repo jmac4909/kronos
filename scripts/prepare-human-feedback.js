@@ -40,7 +40,7 @@ const allowedDevDependencies = new Set(['@types/node', '@types/vscode', 'typescr
 for (const name of Object.keys(manifest.devDependencies || {})) {
   if (!allowedDevDependencies.has(name)) { fail(`unexpected development dependency: ${name}`); }
 }
-if (manifest.contributes.commands.length !== 36) { fail('expected exactly 36 terminal-first commands'); }
+if (manifest.contributes.commands.length !== 37) { fail('expected exactly 37 terminal-first commands'); }
 if (manifest.contributes.views.kronos.length !== 4) { fail('expected exactly Work, Sessions, Projects, and Attention'); }
 if (Object.keys(manifest.contributes.configuration.properties || {}).length !== 10) { fail('expected exactly ten mapped terminal-first settings'); }
 
@@ -82,9 +82,12 @@ for (const expected of [
   'out/services/projectCatalog.js',
   'out/services/projectDiscovery.js',
   'out/services/projectGitContextStore.js',
+  'out/services/contextBasketStore.js',
+  'out/services/contextBasketView.js',
   'out/services/vscodeGitReadService.js',
   'out/services/jiraWorkBoardView.js',
   'media/kronos-action-panel.js',
+  'media/kronos-context-basket.js',
   'media/kronos-jira-work-board.js',
   'media/kronos-webview-runtime.js',
   'docs/terminal-first-product-contract.md',
