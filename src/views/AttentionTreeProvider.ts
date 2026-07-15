@@ -13,6 +13,14 @@ import {
 import { currentAttentionTransitions } from '../services/attentionProjection';
 import { normalizeProviderPublicUrl } from '../services/providerUrls';
 import { providerBindingsForEvent } from '../services/providerBindingReconciliation';
+import {
+  attentionActionContext,
+  attentionEventPresentation,
+  attentionProviderChoicesForEvent,
+  attentionSeverity,
+  attentionTicketKey,
+  type AttentionProviderChoice,
+} from '../services/attentionPresentation';
 
 export interface AttentionCommandTarget {
   eventId: string;
@@ -24,12 +32,6 @@ export interface AttentionCommandTarget {
   providerChoices?: AttentionProviderChoice[];
   projectName?: string;
   projectPath?: string;
-}
-
-export interface AttentionProviderChoice {
-  label: string;
-  description?: string;
-  url: string;
 }
 
 export interface AttentionTreeProviderOptions {
@@ -117,11 +119,11 @@ export class AttentionTreeProvider implements vscode.TreeDataProvider<AttentionT
     return currentAttentionTransitions(events, sessions)
       .map(event => {
         const session = sessionsById.get(event.sessionId);
-        const providerChoices = providerChoicesForEvent(event, session);
+        const providerChoices = attentionProviderChoicesForEvent(event, session);
         return {
           event,
           session,
-          ticketKey: event.subject?.ticketKey || session?.ticketKey,
+          ticketKey: attentionTicketKey(event, session),
           providerUrl: providerUrlForEvent(event, session) || providerChoices[0]?.url,
           providerChoices,
         };
@@ -209,8 +211,8 @@ export class AttentionEventTreeItem extends vscode.TreeItem implements Attention
     };
 
     this.id = `attention-event:${entry.event.id}`;
-    this.contextValue = 'attention_item';
-    this.description = eventDescription(entry.event);
+    this.contextValue = attentionActionContext(this.source, this.ticketKey, this.providerUrl);
+    this.description = attentionEventPresentation(entry.event, entry.session).description;
     this.tooltip = eventTooltip(entry);
     this.iconPath = eventIcon(entry.event);
     this.command = this.providerUrl
@@ -232,69 +234,21 @@ export class AttentionEventTreeItem extends vscode.TreeItem implements Attention
   }
 }
 
-function providerChoicesForEvent(
-  event: MonitorEvent,
-  session: WorkSessionRecord | undefined,
-): AttentionProviderChoice[] {
-  if (!session || (event.source !== 'sonar' && event.source !== 'jenkins')) { return []; }
-  const source = event.source;
-  const candidates = providerBindingsForEvent(event, session)
-    .filter(binding => source !== 'jenkins' || binding.resource === 'build')
-    .map(binding => {
-      const url = normalizeProviderPublicUrl(binding.url, source);
-      return url ? { binding, url } : undefined;
-    })
-    .filter((candidate): candidate is { binding: WorkSessionProviderBinding; url: string } => Boolean(candidate));
-  const choices: AttentionProviderChoice[] = [];
-  const seen = new Set<string>();
-  for (const { binding, url } of candidates) {
-    if (seen.has(url)) { continue; }
-    seen.add(url);
-    if (source === 'sonar') {
-      const branch = sonarBindingBranch(binding, url);
-      choices.push({
-        label: branch || binding.subjectId,
-        description: `${binding.projectId ? `SonarQube ${binding.projectId}` : 'SonarQube branch'} • saved ${displayTimestamp(binding.attachedAt)}`,
-        url,
-      });
-    } else {
-      choices.push({
-        label: binding.subjectId === 'latest' ? 'Latest Jenkins build' : `Jenkins build ${binding.subjectId}`,
-        description: `${binding.projectId || 'Jenkins'} • saved ${displayTimestamp(binding.attachedAt)}`,
-        url,
-      });
-    }
-  }
-  return choices;
-}
-
-function sonarBindingBranch(binding: WorkSessionProviderBinding, url: string): string | undefined {
-  try {
-    const urlBranch = new URL(url).searchParams.get('branch')?.trim();
-    if (urlBranch) { return urlBranch; }
-  } catch {
-    return undefined;
-  }
-  const prefix = binding.projectId ? `${binding.projectId}:` : '';
-  return prefix && binding.subjectId.startsWith(prefix)
-    ? binding.subjectId.slice(prefix.length).trim() || undefined
-    : undefined;
-}
-
 export class AttentionMessageTreeItem extends vscode.TreeItem {
   constructor() {
-    super('No provider changes need attention', vscode.TreeItemCollapsibleState.None);
+    super('No provider or monitoring changes need attention', vscode.TreeItemCollapsibleState.None);
     this.contextValue = 'attention_empty';
     this.description = 'monitoring is clear';
-    this.tooltip = 'New GitLab, Jenkins, and SonarQube transitions stay here until you acknowledge them.';
+    this.tooltip = 'Current GitLab, Jenkins, SonarQube, provider-health, and local-monitoring transitions stay here until you clear them.';
     this.iconPath = new vscode.ThemeIcon('check', new vscode.ThemeColor('testing.iconPassed'));
   }
 }
 
 function providerUrlForEvent(event: MonitorEvent, session: WorkSessionRecord | undefined): string | undefined {
   if (!isProviderUrlSource(event.source)) { return undefined; }
+  const source = event.source;
   for (const binding of providerBindingsForEvent(event, session)) {
-    const normalized = normalizeProviderPublicUrl(binding.url, event.source);
+    const normalized = normalizeProviderPublicUrl(binding.url, source);
     if (normalized) { return normalized; }
   }
   return undefined;
@@ -304,27 +258,28 @@ function isProviderUrlSource(source: MonitorEventSource): source is WorkSessionP
   return source === 'jira' || source === 'gitlab' || source === 'jenkins' || source === 'sonar';
 }
 
-function eventDescription(event: MonitorEvent): string {
-  const state = event.after?.state || metadataString(event, 'transitionKind') || 'changed';
-  return `${providerLabel(event.source)} • ${state} • ${displayTimestamp(event.at)}`;
-}
-
 function eventTooltip(entry: AttentionEntry): string {
   const event = entry.event;
+  const presentation = attentionEventPresentation(event, entry.session);
   const before = event.before?.state || 'unknown';
   const after = event.after?.state || 'unknown';
   const lines = [
-    'Unacknowledged provider transition',
+    'Current Attention state (audit history is retained after clearing)',
     `Event: ${event.id}`,
+    `Project: ${presentation.project}`,
     `Ticket: ${entry.ticketKey || 'unknown'}`,
     `Work session: ${event.sessionId}`,
-    `Provider: ${providerLabel(event.source)}`,
-    `Subject: ${event.subject ? `${event.subject.kind} ${event.subject.id}` : 'unknown'}`,
+    `Provider: ${presentation.provider}`,
+    `Subject: ${presentation.subject}`,
+    `Severity: ${presentation.severity}`,
+    `Why attention: ${presentation.why}`,
     `State: ${before} -> ${after}`,
     `Transition: ${metadataString(event, 'transitionKind') || 'provider state changed'}`,
-    `Observed: ${event.at}`,
+    `Observed: ${presentation.observedAt}`,
+    `Last changed: ${presentation.changedAt}`,
     `Provider URL: ${entry.providerUrl || 'not recorded'}`,
     `Primary action: ${entry.providerUrl ? 'open the validated provider page' : entry.session?.projectName && entry.session.projectPath ? 'repair this project provider setup' : 'open Kronos Doctor'}`,
+    `Clear behavior: ${event.source === 'gitlab' && event.subject?.kind === 'merge-request' ? 'an open MR returns after the next successful poll; merged or closed MRs stay cleared' : 'the row stays cleared until a real state transition occurs'}`,
   ];
   for (const [key, label] of METADATA_TOOLTIP_FIELDS) {
     const value = event.metadata?.[key];
@@ -347,32 +302,19 @@ const METADATA_TOOLTIP_FIELDS: ReadonlyArray<readonly [string, string]> = [
 ];
 
 function eventIcon(event: MonitorEvent): vscode.ThemeIcon {
-  const transitionKind = metadataString(event, 'transitionKind').toLowerCase();
-  const state = event.after?.state?.toLowerCase() || '';
-  const signal = `${transitionKind} ${state}`;
-  if (['failed', 'failure', 'canceled', 'cancelled', 'unhealthy', 'error'].some(value => signal.includes(value))) {
-    return new vscode.ThemeIcon('error', new vscode.ThemeColor('testing.iconFailed'));
+  switch (attentionSeverity(event)) {
+    case 'failure': return new vscode.ThemeIcon('error', new vscode.ThemeColor('testing.iconFailed'));
+    case 'partial': return new vscode.ThemeIcon('warning', new vscode.ThemeColor('list.warningForeground'));
+    case 'blocked': return new vscode.ThemeIcon('debug-disconnect', new vscode.ThemeColor('list.errorForeground'));
+    case 'recovery': return new vscode.ThemeIcon('check', new vscode.ThemeColor('testing.iconPassed'));
+    case 'warning': return new vscode.ThemeIcon('warning', new vscode.ThemeColor('list.warningForeground'));
+    case 'information': return new vscode.ThemeIcon('bell-dot', new vscode.ThemeColor('charts.yellow'));
   }
-  if (signal.includes('partial')) {
-    return new vscode.ThemeIcon('warning', new vscode.ThemeColor('list.warningForeground'));
-  }
-  if (['healthy', 'recovered', 'mergeable', 'ok', 'passed', 'success'].some(value => signal.includes(value))) {
-    return new vscode.ThemeIcon('check', new vscode.ThemeColor('testing.iconPassed'));
-  }
-  return new vscode.ThemeIcon('bell-dot', new vscode.ThemeColor('charts.yellow'));
 }
 
 function metadataString(event: MonitorEvent, key: string): string {
   const value = event.metadata?.[key];
   return typeof value === 'string' ? value : '';
-}
-
-function providerLabel(source: MonitorEventSource): string {
-  if (source === 'gitlab') { return 'GitLab'; }
-  if (source === 'jenkins') { return 'Jenkins'; }
-  if (source === 'sonar') { return 'SonarQube'; }
-  if (source === 'jira') { return 'Jira'; }
-  return source;
 }
 
 function displayTimestamp(value: string): string {

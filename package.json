@@ -262,7 +262,7 @@
       },
       {
         "command": "kronos.acknowledgeAttention",
-        "title": "Kronos: Acknowledge Attention Item",
+        "title": "Kronos: Clear Attention Item (Audit Retained)",
         "icon": "$(check)"
       },
       {
@@ -497,28 +497,33 @@
         },
         {
           "command": "kronos.acknowledgeAttention",
-          "when": "viewItem == attention_item",
+          "when": "viewItem =~ /^attention_(provider|repair)/",
           "group": "inline@1"
         },
         {
           "command": "kronos.openProvider",
-          "when": "viewItem == attention_item",
+          "when": "viewItem =~ /^attention_provider/",
           "group": "inline@2"
         },
         {
           "command": "kronos.openTicketWorkspace",
-          "when": "viewItem == attention_item",
+          "when": "viewItem =~ /^attention_(provider|repair)_ticket/",
           "group": "ticket@1"
         },
         {
           "command": "kronos.insertGitLabContext",
-          "when": "viewItem == attention_item",
+          "when": "viewItem =~ /^attention_(provider|repair)_ticket_gitlab$/",
           "group": "context@1"
         },
         {
           "command": "kronos.insertCiContext",
-          "when": "viewItem == attention_item",
+          "when": "viewItem =~ /^attention_(provider|repair)_ticket_ci$/",
           "group": "context@2"
+        },
+        {
+          "command": "kronos.openWorkSessionAudit",
+          "when": "viewItem =~ /^attention_(provider|repair)/",
+          "group": "audit@1"
         }
       ]
     },

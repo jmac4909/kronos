@@ -2530,7 +2530,9 @@ class TerminalFirstRuntime implements vscode.Disposable {
     const actions = [
       ...(notice.providerUrl ? ['Open Provider'] : []),
       ...(notice.contextCommand ? ['Insert Fresh Context'] : []),
-      'Acknowledge',
+      notice.event.source === 'gitlab' && notice.event.subject?.kind === 'merge-request'
+        ? 'Clear Until Next Poll'
+        : 'Clear from Attention',
     ];
     const prompt = notice.severity === 'warning'
       ? vscode.window.showWarningMessage(notice.event.summary, ...actions)
@@ -2540,7 +2542,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
       if (action === 'Insert Fresh Context' && notice.contextCommand) {
         await vscode.commands.executeCommand(notice.contextCommand, { ticketKey: notice.session.ticketKey });
       }
-      if (action === 'Acknowledge') {
+      if (action === 'Clear Until Next Poll' || action === 'Clear from Attention') {
         acknowledgeMonitorEvent(notice.event.id, notice.session.id);
         this.attentionTree.refresh();
       }
@@ -2988,7 +2990,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
     const eventId = stringProperty(argument, 'eventId');
     const sessionId = stringProperty(argument, 'sessionId') || stringProperty(argument, 'workSessionId');
     if (!eventId || !sessionId) {
-      void vscode.window.showWarningMessage('Select an Attention item to acknowledge.');
+      void vscode.window.showWarningMessage('Select an Attention item to clear. Its audit history will be retained.');
       return;
     }
     acknowledgeMonitorEvent(eventId, sessionId);

@@ -53,6 +53,7 @@ const privateFilePrimitives = require('../out/services/privateFilePrimitives.js'
 const errorUtils = require('../out/services/errorUtils.js');
 const sensitiveText = require('../out/services/sensitiveText.js');
 const providerUrls = require('../out/services/providerUrls.js');
+const attentionPresentation = require('../out/services/attentionPresentation.js');
 
 function createSymlinkOrSkip(t, target, linkPath, type = 'file') {
   try {
@@ -952,6 +953,51 @@ test('managed provider polling automatically discovers and locally binds a proje
   } finally {
     gitLabRestModule.gitlabRestClient.discoverOpenMergeRequest = originalDiscover;
     gitLabRestModule.gitlabRestClient.mergeRequestMonitor = originalMonitor;
+    workSessions.removeWorkSession(session.id);
+  }
+});
+
+test('local monitoring blockers transition once, recover once, and retain audit history', async () => {
+  const session = workSessions.createOrGetWorkSessionByTicket({
+    ticketKey: 'JIRA-909',
+    title: 'Local monitoring blocker fixture',
+    projectName: 'Application',
+  });
+  const monitor = new managedProviderMonitor.ManagedProviderMonitor({ state: () => stateStore.emptyWorkCatalog() });
+  try {
+    const firstPoll = await monitor.poll();
+    assert.equal(firstPoll.unconfigured, 1);
+    assert.equal(firstPoll.transitions, 1);
+    const blocked = monitorEventStore.listMonitorEvents({
+      sessionId: session.id,
+      source: 'kronos',
+      types: ['provider.transition'],
+    })[0];
+    assert.ok(blocked);
+    assert.equal(blocked.source, 'kronos');
+    assert.equal(blocked.subject.kind, 'monitoring-blocker');
+    assert.equal(blocked.metadata.transitionKind, 'monitoring_blocked');
+    assert.equal(attentionPresentation.attentionSeverity(blocked), 'blocked');
+    const unchangedPoll = await monitor.poll();
+    assert.equal(unchangedPoll.unconfigured, 1);
+    assert.equal(unchangedPoll.transitions, 0);
+
+    const recovered = managedProviderMonitor.appendLocalMonitoringAttentionTransition(session, false);
+    assert.ok(recovered);
+    assert.equal(recovered.metadata.transitionKind, 'monitoring_recovered');
+    assert.equal(attentionPresentation.attentionSeverity(recovered), 'recovery');
+    assert.equal(managedProviderMonitor.appendLocalMonitoringAttentionTransition(session, false), null);
+
+    const blockedAgain = managedProviderMonitor.appendLocalMonitoringAttentionTransition(session, true);
+    assert.ok(blockedAgain);
+    assert.notEqual(blockedAgain.id, blocked.id);
+    assert.equal(
+      monitorEventStore.listMonitorEvents({ sessionId: session.id, types: ['provider.transition'] }).length,
+      3,
+      'current-state replacement never deletes historical transitions',
+    );
+  } finally {
+    monitor.dispose();
     workSessions.removeWorkSession(session.id);
   }
 });
@@ -3460,10 +3506,13 @@ test('extension activation registers the bounded surface and explicit launch com
     const groupedProjectItems = attentionProvider.getChildren(attentionGroup);
     assert.equal(groupedProjectItems.length, 2, 'provider transitions from separate sessions share one project group');
     const attentionItem = groupedProjectItems.find(item => item.eventId === 'attention-branch-picker-event');
-    assert.deepEqual(attentionItem.providerChoices.map(choice => choice.label), ['feature/one', 'feature/two']);
+    assert.deepEqual(attentionItem.providerChoices.map(choice => choice.label), ['feature/two', 'feature/one']);
+    assert.equal(attentionItem.contextValue, 'attention_provider_ticket_ci');
+    assert.match(attentionItem.description, /fixture • SonarQube • Quality gate feature\/one • failure • observed .* • changed /);
+    assert.match(attentionItem.tooltip, /Why attention: JIRA-321 Sonar branch fixture\./);
     singlePickHandler = items => items.find(item => item.label === 'feature/two');
     await commandHandlers.get('kronos.openProvider')(attentionItem);
-    assert.deepEqual(lastSinglePickItems.map(item => item.label), ['feature/one', 'feature/two']);
+    assert.deepEqual(lastSinglePickItems.map(item => item.label), ['feature/two', 'feature/one']);
     assert.equal(openedExternalUrls.at(-1), 'https://sonar.example/dashboard?id=fixture&branch=feature%2Ftwo');
     const selectedSonarProject = stateStore.readStateFileWithIssues().state.projects.fixture;
     assert.equal(selectedSonarProject.config.sonar_project_key, 'fixture');
@@ -3471,6 +3520,7 @@ test('extension activation registers the bounded surface and explicit launch com
     assert.equal(selectedSonarProject.config.default_branch, 'main', 'Sonar branch selection does not change the GitLab target branch');
     const missingUrlItem = groupedProjectItems.find(item => item.eventId === 'attention-same-project-event');
     assert.equal(missingUrlItem.providerUrl, undefined);
+    assert.equal(missingUrlItem.contextValue, 'attention_repair_ticket_gitlab');
     assert.equal(missingUrlItem.command.command, 'kronos.configureProjectIntegrations');
     assert.equal(missingUrlItem.command.arguments[0].projectName, 'fixture');
     await commandHandlers.get(missingUrlItem.command.command)(missingUrlItem.command.arguments[0]);

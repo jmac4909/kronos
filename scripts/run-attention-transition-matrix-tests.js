@@ -8,6 +8,7 @@ const mergeRequests = require('../out/services/gitlabMergeRequestTransitions.js'
 const pipelines = require('../out/services/pipelineTransitions.js');
 const ci = require('../out/services/ciTransitions.js');
 const { currentAttentionTransitions } = require('../out/services/attentionProjection.js');
+const attention = require('../out/services/attentionPresentation.js');
 
 test('GitLab merge-request transition matrix covers every declared structural transition', () => {
   const thread = (id, noteId = id) => ({
@@ -255,6 +256,106 @@ test('Attention collapses newer pipeline, build, test, gate, and issue occurrenc
   assert.equal(reloadedAudit.length, 9, 'the append-only audit retains every stale occurrence and current row');
 });
 
+test('Attention presentation covers information, warning, failure, recovery, partial, and blocked severities', () => {
+  const cases = [
+    ['information', 'initial_mr_observed', 'opened/mergeable'],
+    ['warning', 'changes_requested', 'opened/requested_changes'],
+    ['failure', 'pipeline_failed', 'failed'],
+    ['recovery', 'pipeline_recovered', 'success'],
+    ['partial', 'provider_read_partial', 'monitoring/partial'],
+    ['blocked', 'monitoring_blocked', 'monitoring/blocked'],
+  ];
+  for (const [expected, transitionKind, state] of cases) {
+    assert.equal(
+      attention.attentionSeverity(transitionEvent(`severity-${expected}`, '2026-07-15T16:00:00.000Z', transitionKind, state)),
+      expected,
+    );
+  }
+});
+
+test('Attention rows expose project, provider, subject, observed time, changed time, and why', () => {
+  const session = {
+    ...workSession(),
+    monitoring: { enabled: true, lastAttemptAt: '2026-07-15T16:02:00.000Z' },
+  };
+  const event = resourceTransition(
+    'visible-row',
+    '2026-07-15T16:01:00.000Z',
+    'gitlab',
+    'merge-request',
+    '77',
+    'changes_requested',
+    { mergeRequestIid: 77 },
+  );
+  const presented = attention.attentionEventPresentation(event, session);
+  assert.equal(presented.project, 'Application');
+  assert.equal(presented.provider, 'GitLab');
+  assert.equal(presented.subject, 'MR !77');
+  assert.equal(presented.observedAt, session.monitoring.lastAttemptAt);
+  assert.equal(presented.changedAt, event.at);
+  assert.equal(presented.why, event.summary);
+  for (const visible of ['Application', 'GitLab', 'MR !77', 'warning', 'observed', 'changed']) {
+    assert.match(presented.description, new RegExp(visible.replace(/[!]/g, '\\$&'), 'i'));
+  }
+});
+
+test('Attention action contexts expose only validated URLs and explicit ticket-source actions', () => {
+  const session = workSession();
+  const gitlab = resourceTransition('gitlab-action', '2026-07-15T16:03:00.000Z', 'gitlab', 'merge-request', '77', 'initial_mr_observed');
+  const ticketKey = attention.attentionTicketKey(gitlab, session);
+  assert.equal(ticketKey, 'MATRIX-1');
+  assert.equal(
+    attention.attentionActionContext('gitlab', ticketKey, 'https://gitlab.example/group/app/-/merge_requests/77'),
+    'attention_provider_ticket_gitlab',
+  );
+  assert.equal(attention.attentionActionContext('gitlab', ticketKey, undefined), 'attention_repair_ticket_gitlab');
+  assert.equal(attention.attentionActionContext('jenkins', ticketKey, 'https://jenkins.example/job/app/2/'), 'attention_provider_ticket_ci');
+  assert.equal(attention.attentionActionContext('kronos', ticketKey, undefined), 'attention_repair_ticket');
+
+  const unlinkedStandalone = { ...session, kind: 'standalone', ticketKeys: [] };
+  delete unlinkedStandalone.ticketKey;
+  assert.equal(attention.attentionTicketKey(gitlab, unlinkedStandalone), undefined);
+  assert.equal(attention.attentionTicketKey({ ...gitlab, subject: { ...gitlab.subject, ticketKey: 'OTHER-2' } }, session), undefined);
+  assert.equal(attention.attentionActionContext('gitlab', undefined, undefined), 'attention_repair');
+});
+
+test('Attention Jenkins builds and SonarQube branches are validated and latest-first', () => {
+  const session = {
+    ...workSession(),
+    providerBindings: [
+      binding('sonar-one', 'sonar', 'quality-gate', 'app:feature/one', '2026-07-15T16:04:00.000Z', 'https://sonar.example/dashboard?id=app&branch=feature%2Fone', 'app'),
+      binding('sonar-two', 'sonar', 'quality-gate', 'app:feature/two', '2026-07-15T16:04:00.000Z', 'https://sonar.example/dashboard?id=app&branch=feature%2Ftwo', 'app'),
+      binding('sonar-invalid', 'sonar', 'quality-gate', 'app:invalid', '2026-07-15T16:05:00.000Z', 'file:///tmp/sonar', 'app'),
+    ],
+  };
+  const sonar = resourceTransition('sonar-choices', '2026-07-15T16:06:00.000Z', 'sonar', 'quality-gate', 'app:feature/one', 'sonar_gate_failed', { projectKey: 'app', branch: 'feature/one' });
+  assert.deepEqual(
+    attention.attentionProviderChoicesForEvent(sonar, session).map(choice => choice.label),
+    ['feature/two', 'feature/one'],
+  );
+  session.providerBindings = [
+    binding('build-31', 'jenkins', 'build', '31', '2026-07-15T16:07:00.000Z', 'https://jenkins.example/job/app/31/'),
+    binding('build-32', 'jenkins', 'build', '32', '2026-07-15T16:08:00.000Z', 'https://jenkins.example/job/app/32/'),
+  ];
+  const jenkins = resourceTransition('jenkins-choices', '2026-07-15T16:09:00.000Z', 'jenkins', 'build', '31', 'jenkins_failed', { buildNumber: 31 });
+  assert.deepEqual(
+    attention.attentionProviderChoicesForEvent(jenkins, session).map(choice => choice.label),
+    ['Jenkins build 32', 'Jenkins build 31'],
+  );
+});
+
+test('Attention action language is read-only or local and explains clear versus audit history', () => {
+  const manifest = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+  const commands = new Map(manifest.contributes.commands.map(command => [command.command, command.title]));
+  assert.equal(commands.get('kronos.acknowledgeAttention'), 'Kronos: Clear Attention Item (Audit Retained)');
+  const menus = manifest.contributes.menus['view/item/context'].filter(menu => String(menu.when).includes('attention_'));
+  assert.ok(menus.some(menu => menu.command === 'kronos.openWorkSessionAudit'));
+  assert.ok(menus.some(menu => menu.command === 'kronos.openProvider' && menu.when === 'viewItem =~ /^attention_provider/'));
+  assert.ok(menus.some(menu => menu.command === 'kronos.insertGitLabContext' && menu.when.endsWith('_ticket_gitlab$/')));
+  assert.ok(menus.some(menu => menu.command === 'kronos.insertCiContext' && menu.when.endsWith('_ticket_ci$/')));
+  assert.equal(menus.some(menu => /connect provider|approve|retry build|run build|create merge request/i.test(commands.get(menu.command) || '')), false);
+});
+
 function mrDigest(overrides = {}) {
   const snapshot = {
     mr: {
@@ -389,4 +490,8 @@ function workSession() {
     artifacts: [],
     monitoring: { enabled: true },
   };
+}
+
+function binding(id, provider, resource, subjectId, attachedAt, url, projectId) {
+  return { id, provider, resource, subjectId, attachedAt, url, ...(projectId ? { projectId } : {}) };
 }

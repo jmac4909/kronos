@@ -63,6 +63,7 @@ import {
   addWorkSessionProviderBinding,
   newestWorkSessionProviderBinding,
   recordWorkSessionMonitoringResult,
+  workSessionRecordPath,
   type AddWorkSessionProviderBindingInput,
   type WorkSessionRecord,
 } from './workSessionStore';
@@ -237,6 +238,18 @@ export class ManagedProviderMonitor {
             binding.provider === 'gitlab' || binding.provider === 'jenkins' || binding.provider === 'sonar'
           );
         if (!hasProviderTarget) { sessionResult.unconfigured += 1; }
+        try {
+          const localMonitoringEvent = appendLocalMonitoringAttentionTransition(
+            session,
+            sessionResult.unconfigured > 0,
+          );
+          if (localMonitoringEvent) { sessionResult.transitions += 1; }
+        } catch (error: unknown) {
+          this.log(
+            `Could not persist local monitoring readiness for ${session.ticketKey}.`,
+            boundedOperationFailure(error, 'Monitoring readiness write failed.').display,
+          );
+        }
         const summary = hasProviderTarget
           ? `Polled ${sessionResult.polled} provider context${sessionResult.polled === 1 ? '' : 's'}; ${sessionResult.failures} failed; ${sessionResult.skipped} skipped; ${sessionResult.unconfigured} missing configuration.`
           : 'No GitLab, Jenkins, or SonarQube provider is bound to this work session.';
@@ -919,6 +932,59 @@ function appendBaselineOnce(
         subject,
         metadata,
       }, session),
+    },
+  });
+}
+
+/**
+ * Gives missing local provider setup one current Attention stream. Repeated
+ * polls stay quiet; recovery replaces the blocker; a later regression is a
+ * new transition while every earlier state remains in the audit ledger.
+ */
+export function appendLocalMonitoringAttentionTransition(
+  session: TicketWorkSessionRecord,
+  blocked: boolean,
+): MonitorEvent | null {
+  const subject: MonitorEventSubject = {
+    kind: 'monitoring-blocker',
+    id: 'provider-configuration',
+    ticketKey: session.ticketKey,
+  };
+  const previous = listMonitorEvents({
+    sessionId: session.id,
+    source: 'kronos',
+    types: ['provider.transition'],
+    limit: 2000,
+  }).find(event => event.subject?.kind === subject.kind && event.subject.id === subject.id);
+  const state = blocked ? 'blocked' : 'ready';
+  const previousState = typeof previous?.metadata?.['monitoringState'] === 'string'
+    ? previous.metadata['monitoringState']
+    : undefined;
+  if ((!previous && !blocked) || previousState === state) { return null; }
+  const previousGeneration = previous?.metadata?.['monitoringGeneration'];
+  const generation = typeof previousGeneration === 'number' && Number.isSafeInteger(previousGeneration)
+    ? Math.min(Number.MAX_SAFE_INTEGER, previousGeneration + 1)
+    : 1;
+  const transitionKind = blocked ? 'monitoring_blocked' : 'monitoring_recovered';
+  return appendTransitionOnce({
+    session,
+    source: 'kronos',
+    summary: blocked
+      ? `${session.ticketKey} monitoring is blocked until GitLab, Jenkins, or SonarQube is configured for this project.`
+      : `${session.ticketKey} local provider monitoring setup recovered and is ready.`,
+    subject,
+    state: `monitoring/${state}`,
+    fingerprint: `${state}-${generation}`,
+    ...(previous?.after?.state && previous.after.fingerprint
+      ? { beforeState: previous.after.state, beforeFingerprint: previous.after.fingerprint }
+      : {}),
+    artifactPath: workSessionRecordPath(session.id),
+    transitionKey: `local-monitoring:${generation}:${transitionKind}`,
+    metadata: {
+      transitionKind,
+      monitoringState: state,
+      monitoringReason: blocked ? 'provider_configuration_missing' : 'provider_configuration_ready',
+      monitoringGeneration: generation,
     },
   });
 }

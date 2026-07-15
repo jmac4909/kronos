@@ -64,6 +64,12 @@
         { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "Attention projection rebuilds after restart without stale-row resurrection" },
         { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "Attention read-health state replaces failure, recovery, partial, and later failure in one stream" },
         { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "Attention collapses newer pipeline, build, test, gate, and issue occurrences without deleting audit history" },
+        { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "Attention presentation covers information, warning, failure, recovery, partial, and blocked severities" },
+        { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "Attention rows expose project, provider, subject, observed time, changed time, and why" },
+        { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "Attention action contexts expose only validated URLs and explicit ticket-source actions" },
+        { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "Attention Jenkins builds and SonarQube branches are validated and latest-first" },
+        { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "Attention action language is read-only or local and explains clear versus audit history" },
+        { "file": "scripts/run-unit-tests.js", "test": "local monitoring blockers transition once, recover once, and retain audit history" },
         { "file": "scripts/run-provider-reconciliation-tests.js", "test": "provider transition recorder remains deterministic across module reload and lease recovery" },
         { "file": "scripts/run-provider-binding-reconciliation-tests.js", "test": "one provider binding reconciliation owner feeds Work, Sessions, Projects, Attention, polling, and context insertion" },
         { "file": "scripts/run-provider-binding-reconciliation-tests.js", "test": "bound MR identity wins stale catalog and only a matching monitor digest enriches it after reload" },
@@ -1078,6 +1084,89 @@
       "automated": [
         { "file": "scripts/run-local-evidence-search-tests.js", "test": "local evidence search covers sessions, tickets, projects, branches, providers, artifacts, and events without terminal content" }
       ]
+    },
+    {
+      "requirements": ["G11-goal:e9735b07"],
+      "automated": [
+        { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "Attention rows expose project, provider, subject, observed time, changed time, and why" },
+        { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "Attention action contexts expose only validated URLs and explicit ticket-source actions" },
+        { "file": "scripts/run-unit-tests.js", "test": "local monitoring blockers transition once, recover once, and retain audit history" }
+      ],
+      "humanGates": ["real-vscode", "live-providers"]
+    },
+    {
+      "requirements": ["G11-case-01:d4c1c6c6"],
+      "automated": [
+        { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "Attention collapses newer pipeline, build, test, gate, and issue occurrences without deleting audit history" },
+        { "file": "scripts/run-unit-tests.js", "test": "managed provider polling automatically discovers and locally binds a project MR" },
+        { "file": "scripts/run-unit-tests.js", "test": "local monitoring blockers transition once, recover once, and retain audit history" }
+      ]
+    },
+    {
+      "requirements": ["G11-case-02:4cf86387"],
+      "automated": [
+        { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "Attention presentation covers information, warning, failure, recovery, partial, and blocked severities" }
+      ]
+    },
+    {
+      "requirements": ["G11-case-03:30392c59"],
+      "automated": [
+        { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "Attention action contexts expose only validated URLs and explicit ticket-source actions" },
+        { "file": "scripts/run-provider-binding-reconciliation-tests.js", "test": "reconciled provider URLs are credential-free and rejected outside the configured origin" },
+        { "file": "scripts/run-unit-tests.js", "test": "extension activation registers the bounded surface and explicit launch commands create the right session kinds" }
+      ]
+    },
+    {
+      "requirements": ["G11-case-04:95128242"],
+      "automated": [
+        { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "Attention Jenkins builds and SonarQube branches are validated and latest-first" },
+        { "file": "scripts/run-unit-tests.js", "test": "extension activation registers the bounded surface and explicit launch commands create the right session kinds" }
+      ]
+    },
+    {
+      "requirements": ["G11-case-05:0afcdc63"],
+      "automated": [
+        { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "Attention action contexts expose only validated URLs and explicit ticket-source actions" }
+      ]
+    },
+    {
+      "requirements": ["G11-case-06:843dcb8b"],
+      "automated": [
+        { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "Attention action language is read-only or local and explains clear versus audit history" },
+        { "file": "scripts/run-webview-dom-tests.js", "test": "context composer posts edited focus only after Insert or Ctrl+Enter" },
+        { "file": "scripts/run-unit-tests.js", "test": "extension activation registers the bounded surface and explicit launch commands create the right session kinds" }
+      ]
+    },
+    {
+      "requirements": ["G11-case-07:71433006"],
+      "automated": [
+        { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "Attention action language is read-only or local and explains clear versus audit history" },
+        { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "Attention projection rebuilds after restart without stale-row resurrection" },
+        { "file": "scripts/run-unit-tests.js", "test": "managed provider polling automatically discovers and locally binds a project MR" }
+      ]
+    },
+    {
+      "requirements": ["G11-evidence-01:efb4e319"],
+      "automated": [
+        { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "Attention rows expose project, provider, subject, observed time, changed time, and why" },
+        { "file": "scripts/run-unit-tests.js", "test": "extension activation registers the bounded surface and explicit launch commands create the right session kinds" }
+      ],
+      "humanGates": ["real-vscode"]
+    },
+    {
+      "requirements": ["G11-evidence-02:98990bfd"],
+      "automated": [
+        { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "Attention action language is read-only or local and explains clear versus audit history" }
+      ]
+    },
+    {
+      "requirements": ["G11-evidence-03:3555f8ef"],
+      "automated": [
+        { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "GitLab merge-request transition matrix covers every declared structural transition" },
+        { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "Attention read-health state replaces failure, recovery, partial, and later failure in one stream" },
+        { "file": "scripts/run-unit-tests.js", "test": "managed provider polling automatically discovers and locally binds a project MR" }
+      ],
+      "humanGates": ["live-providers"]
     },
     {
       "requirements": ["G16-goal:b55b5b6c"],
