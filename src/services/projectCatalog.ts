@@ -46,6 +46,11 @@ export interface TicketProviderStateInput {
   build?: BuildStatus;
 }
 
+export interface LocalProjectRegistrationCandidate {
+  name: string;
+  path: string;
+}
+
 export function setLocalProjectSonarTarget(
   state: KronosState,
   projectNameValue: string,
@@ -126,6 +131,52 @@ export function registerLocalProject(
     ...state,
     projects: { ...state.projects, [stableName]: project },
   };
+}
+
+/**
+ * Gives discovered directories stable, unique catalog identities without
+ * changing the identity of an already registered real path.
+ */
+export function planLocalProjectRegistrations(
+  state: KronosState,
+  candidates: readonly LocalProjectRegistrationCandidate[],
+): LocalProjectRegistrationCandidate[] {
+  const existingByPath = new Map(Object.entries(state.projects)
+    .filter((entry): entry is [string, Project & { path: string }] => Boolean(entry[1].path))
+    .map(([name, project]) => [pathKey(project.path), { name, path: project.path }]));
+  const names = new Map(Object.entries(state.projects)
+    .map(([name, project]) => [name.toLocaleLowerCase(), project.path ? pathKey(project.path) : '']));
+  const planned: LocalProjectRegistrationCandidate[] = [];
+  const plannedPaths = new Set<string>();
+  for (const candidate of candidates.slice(0, MAX_LOCAL_PROJECTS)) {
+    const existing = existingByPath.get(pathKey(candidate.path));
+    if (existing) {
+      const existingKey = pathKey(existing.path);
+      if (plannedPaths.has(existingKey)) { continue; }
+      plannedPaths.add(existingKey);
+      // A registered folder can be temporarily unavailable. Keep its stable
+      // identity while checked so only an authoritative uncheck removes it.
+      planned.push({ name: existing.name, path: existing.path });
+      continue;
+    }
+    let canonicalPath: string;
+    try { canonicalPath = requiredProjectDirectory(candidate.path); }
+    catch { continue; }
+    const canonicalKey = pathKey(canonicalPath);
+    if (plannedPaths.has(canonicalKey)) { continue; }
+    plannedPaths.add(canonicalKey);
+    const base = safeSingleLine(candidate.name, 200) || 'Project';
+    let name = base;
+    let suffix = 2;
+    while (names.has(name.toLocaleLowerCase()) && names.get(name.toLocaleLowerCase()) !== canonicalKey) {
+      const suffixText = ` (${suffix})`;
+      name = `${base.slice(0, Math.max(1, 200 - suffixText.length))}${suffixText}`;
+      suffix += 1;
+    }
+    names.set(name.toLocaleLowerCase(), canonicalKey);
+    planned.push({ name, path: canonicalPath });
+  }
+  return planned;
 }
 
 /** Changes only presentation; all project foreign keys remain stable. */

@@ -3272,6 +3272,18 @@ test('extension activation registers the bounded surface and explicit launch com
       'Configure provider polling',
       'Rename display label',
     ]);
+    const panelsBeforeUnmanagedProjectContext = createdWebviewPanels.length;
+    await commandHandlers.get('kronos.insertProjectGitContext')({ projectName: 'fixture', projectPath: tempRoot });
+    assert.match(lastWarningMessage, /start a Claude session.*before inserting the working diff/i);
+    await commandHandlers.get('kronos.insertProjectGitLabContext')({ projectName: 'fixture', projectPath: tempRoot });
+    assert.match(lastWarningMessage, /add a Jira context.*before inserting MR evidence/i);
+    await commandHandlers.get('kronos.insertProjectCiContext')({ projectName: 'fixture', projectPath: tempRoot });
+    assert.match(lastWarningMessage, /add a Jira context.*before inserting CI evidence/i);
+    assert.equal(
+      createdWebviewPanels.length,
+      panelsBeforeUnmanagedProjectContext,
+      'project context actions must not open a composer until an explicit managed session owns the target',
+    );
     await commandHandlers.get('kronos.refreshProjects')();
 
     await commandHandlers.get('kronos.openJiraBoard')();

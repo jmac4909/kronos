@@ -12,6 +12,7 @@ const stateStore = require('../out/services/stateStore.js');
 const projectCatalog = require('../out/services/projectCatalog.js');
 const projectDiscovery = require('../out/services/projectDiscovery.js');
 const projectGitPresentation = require('../out/services/projectGitPresentation.js');
+const projectInventoryPresentation = require('../out/services/projectInventoryPresentation.js');
 const jiraWorkCatalog = require('../out/services/jiraWorkCatalog.js');
 const providerBindingReconciliation = require('../out/services/providerBindingReconciliation.js');
 const workSessions = require('../out/services/workSessionStore.js');
@@ -93,6 +94,63 @@ test('project registration identity stays canonical by path while its display na
   assert.deepEqual(Object.keys(persisted.state.projects), ['Application']);
   assert.equal(persisted.state.projects.Application.display_name, 'Customer API');
   assert.equal(persisted.issues.some(issue => /duplicate local project path/i.test(issue.detail)), true);
+});
+
+test('duplicate discovered names receive stable unique identities and duplicate real paths collapse', () => {
+  const firstRoot = path.join(tempRoot, 'same-name-one', 'service');
+  const secondRoot = path.join(tempRoot, 'same-name-two', 'service');
+  fs.mkdirSync(firstRoot, { recursive: true });
+  fs.mkdirSync(secondRoot, { recursive: true });
+  const firstAlias = path.join(firstRoot, '..', 'service');
+  const initial = stateStore.emptyWorkCatalog();
+
+  const planned = projectCatalog.planLocalProjectRegistrations(initial, [
+    { name: 'service', path: firstAlias },
+    { name: 'service', path: secondRoot },
+    { name: 'duplicate alias', path: firstRoot },
+  ]);
+  assert.deepEqual(planned, [
+    { name: 'service', path: fs.realpathSync.native(firstRoot) },
+    { name: 'service (2)', path: fs.realpathSync.native(secondRoot) },
+  ]);
+
+  const registered = projectCatalog.replaceRegisteredLocalProjects(initial, planned);
+  const replanned = projectCatalog.planLocalProjectRegistrations(registered, [
+    { name: 'renamed discovery label', path: firstRoot },
+    { name: 'service', path: secondRoot },
+  ]);
+  assert.deepEqual(replanned.map(project => project.name), ['service', 'service (2)']);
+});
+
+test('missing registered folders remain visible until an authoritative uncheck removes them', () => {
+  const missingPath = path.join(tempRoot, 'temporarily-missing-project');
+  const initial = stateStore.emptyWorkCatalog();
+  initial.projects.Application = {
+    path: missingPath,
+    display_name: 'Application API',
+    config: { repo_name: 'Application' },
+  };
+  initial.tickets['JIRA-123'] = fixtureTicket({ linked_local_project: 'Application' });
+
+  assert.deepEqual(projectCatalog.listLocalProjects(initial), [{
+    name: 'Application',
+    displayName: 'Application API',
+    path: missingPath,
+    detached: false,
+    available: false,
+  }]);
+  const retainedPlan = projectCatalog.planLocalProjectRegistrations(initial, [{
+    name: 'Application API',
+    path: missingPath,
+  }]);
+  assert.deepEqual(retainedPlan, [{ name: 'Application', path: missingPath }]);
+  const retained = projectCatalog.replaceRegisteredLocalProjects(initial, retainedPlan);
+  assert.equal(retained.projects.Application.path, missingPath);
+  assert.equal(retained.tickets['JIRA-123'].linked_local_project, 'Application');
+
+  const removed = projectCatalog.replaceRegisteredLocalProjects(retained, []);
+  assert.equal(Object.hasOwn(removed.projects, 'Application'), false);
+  assert.equal(removed.tickets['JIRA-123'].linked_local_project, undefined);
 });
 
 test('Jira project keys never auto-link a repository; only an explicit ticket link does', () => {
@@ -351,6 +409,62 @@ test('project discovery honors configured roots, depth, limits, and workspace fo
   const limited = projectDiscovery.discoverLocalProjects({ roots: [discoveryRoot], depth: 2, limit: 1 });
   assert.equal(limited.projects.length, 1);
   assert.equal(limited.truncated, true);
+});
+
+test('project discovery canonicalizes root aliases and skips symbolic child repositories', t => {
+  const discoveryRoot = path.join(tempRoot, 'canonical-discovery-root');
+  const repository = path.join(discoveryRoot, 'service');
+  const externalRepository = path.join(tempRoot, 'external-repository');
+  fs.mkdirSync(path.join(repository, '.git'), { recursive: true });
+  fs.mkdirSync(path.join(externalRepository, '.git'), { recursive: true });
+  fs.writeFileSync(path.join(repository, '.git', 'HEAD'), 'ref: refs/heads/feature/canonical\n');
+  fs.writeFileSync(path.join(externalRepository, '.git', 'HEAD'), 'ref: refs/heads/main\n');
+  const rootAlias = path.join(tempRoot, 'canonical-discovery-alias');
+  if (!createSymlinkOrSkip(t, discoveryRoot, rootAlias, 'dir')) { return; }
+  if (!createSymlinkOrSkip(t, externalRepository, path.join(discoveryRoot, 'linked-external'), 'dir')) { return; }
+
+  const discovered = projectDiscovery.discoverLocalProjects({
+    workspaceFolders: [{ name: 'Workspace Alias', path: path.join(rootAlias, 'service') }],
+    roots: [discoveryRoot, rootAlias],
+    depth: 2,
+    limit: 100,
+  });
+  assert.deepEqual(discovered.projects, [{
+    name: 'Workspace Alias',
+    path: fs.realpathSync.native(repository),
+    source: 'workspace',
+    branch: 'feature/canonical',
+  }]);
+});
+
+test('project integration presentation exposes readiness without provider identifiers or credentials', () => {
+  const config = {
+    gitlab_project_path: 'group/private-application',
+    jenkins_url: 'https://jenkins.example/job/private-application',
+    sonar_project_key: 'private:application',
+  };
+  const needsCredentials = projectInventoryPresentation.projectIntegrationStatusLines(config, {
+    gitlab: false,
+    jenkins: false,
+    sonar: false,
+  }, 0);
+  assert.deepEqual(needsCredentials, [
+    'GitLab: target saved, credentials need Doctor',
+    'Jenkins: target saved, credentials need Doctor',
+    'SonarQube: target saved, credentials need Doctor',
+  ]);
+  const active = projectInventoryPresentation.projectIntegrationStatusLines(config, {
+    gitlab: true,
+    jenkins: true,
+    sonar: true,
+  }, 2);
+  assert.deepEqual(active, [
+    'GitLab: automatic polling active for 2 ticket sessions',
+    'Jenkins: automatic polling active for 2 ticket sessions',
+    'SonarQube: automatic polling active for 2 ticket sessions',
+  ]);
+  const rendered = [...needsCredentials, ...active].join('\n');
+  assert.doesNotMatch(rendered, /private-application|private:application|jenkins\.example/);
 });
 
 test('project configuration is canonical at setup and Work catalog ingress', () => {

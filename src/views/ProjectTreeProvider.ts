@@ -4,6 +4,7 @@ import { boundedOperationFailure } from '../services/errorUtils';
 import { listLocalProjects } from '../services/projectCatalog';
 import { projectGitStatusPresentation } from '../services/projectGitPresentation';
 import { providerReadiness } from '../services/providerReadiness';
+import { projectIntegrationStatusLines } from '../services/projectInventoryPresentation';
 import {
   readProjectGitEvidence,
   type ProjectGitEvidence,
@@ -103,11 +104,11 @@ class RegisteredProjectTreeItem extends vscode.TreeItem {
     this.iconPath = projectIcon(evidence);
     this.description = `${evidence.branch || 'branch unavailable'} • ${gitStatus.label} • ${providerMonitoringHealthSummary(monitoringHealth)}`;
     const readiness = providerReadiness();
-    const providers = [
-      providerStatus('GitLab', Boolean(config.gitlab_project_id || config.gitlab_project_path), readiness.gitlab.configured, linkedSessionCount),
-      providerStatus('Jenkins', Boolean(config.jenkins_url), readiness.jenkins.configured, linkedSessionCount),
-      providerStatus('SonarQube', Boolean(config.sonar_project_key), readiness.sonar.configured, linkedSessionCount),
-    ];
+    const providers = projectIntegrationStatusLines(config, {
+      gitlab: readiness.gitlab.configured,
+      jenkins: readiness.jenkins.configured,
+      sonar: readiness.sonar.configured,
+    }, linkedSessionCount);
     this.tooltip = [
       `Project: ${target.displayName || target.projectName}`,
       `Stable identity: ${target.projectName}`,
@@ -173,12 +174,4 @@ function projectIcon(evidence: ProjectGitEvidence): vscode.ThemeIcon {
   return state === 'clean'
     ? new vscode.ThemeIcon('repo', new vscode.ThemeColor('testing.iconPassed'))
     : new vscode.ThemeIcon('repo', new vscode.ThemeColor('gitDecoration.modifiedResourceForeground'));
-}
-
-function providerStatus(name: string, targetConfigured: boolean, credentialsReady: boolean, activeSessions: number): string {
-  if (!targetConfigured) { return `${name}: project setup needed`; }
-  if (!credentialsReady) { return `${name}: target saved, credentials need Doctor`; }
-  return activeSessions > 0
-    ? `${name}: automatic polling active for ${activeSessions} ticket session${activeSessions === 1 ? '' : 's'}`
-    : `${name}: ready; automatic polling starts with a ticket session`;
 }

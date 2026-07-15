@@ -140,6 +140,7 @@ import { isRecord } from './services/records';
 import {
   formatProjectBranchProfiles,
   listLocalProjects,
+  planLocalProjectRegistrations,
   projectConfigurationForTicket,
   readProjectGitBranch,
   ticketLocalProject,
@@ -723,24 +724,10 @@ class TerminalFirstRuntime implements vscode.Disposable {
   }
 
   private projectRegistrations(projects: readonly Pick<DiscoveredProject, 'name' | 'path'>[]): Array<{ name: string; path: string }> {
-    const existing = this.state.state?.projects || {};
-    const names = new Map(Object.entries(existing).map(([name, project]) => [name.toLocaleLowerCase(), project.path || '']));
-    return projects.map(project => {
-      const existingName = Object.entries(existing).find(([, value]) =>
-        Boolean(value.path && localProjectPathKey(value.path) === localProjectPathKey(project.path))
-      )?.[0];
-      if (existingName) { return { name: existingName, path: project.path }; }
-      const base = safeProjectName(project.name) || 'Project';
-      let name = base;
-      let suffix = 2;
-      while (names.has(name.toLocaleLowerCase()) && names.get(name.toLocaleLowerCase()) !== project.path) {
-        const suffixText = ` (${suffix})`;
-        name = `${base.slice(0, Math.max(1, 200 - suffixText.length))}${suffixText}`;
-        suffix += 1;
-      }
-      names.set(name.toLocaleLowerCase(), project.path);
-      return { name, path: project.path };
-    });
+    return planLocalProjectRegistrations(
+      this.state.state || { schemaVersion: 2, refreshedAt: null, projects: {}, tickets: {} },
+      projects,
+    );
   }
 
   private openProjectIntegrationSetup(projectNames?: readonly string[]): void {

@@ -136,7 +136,11 @@ function normalizeDirectory(value: string): string | undefined {
   if (typeof value !== 'string' || !path.isAbsolute(value)) { return undefined; }
   try {
     const normalized = path.normalize(value);
-    return fs.statSync(normalized).isDirectory() ? normalized : undefined;
+    if (!fs.statSync(normalized).isDirectory()) { return undefined; }
+    // Discovery identity is the real directory, not the spelling supplied by a
+    // workspace or setting. This collapses duplicate roots and workspace
+    // aliases before they can become two registration choices.
+    return fs.realpathSync.native(normalized);
   } catch {
     return undefined;
   }
