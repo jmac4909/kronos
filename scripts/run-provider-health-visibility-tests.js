@@ -13,6 +13,7 @@ const {
   sessionProviderMonitoringHealth,
 } = require('../out/services/providerMonitoringHealth.js');
 const { currentProviderReadDiagnostics } = require('../out/services/providerReadDiagnostics.js');
+const { listMonitorEvents } = require('../out/services/monitorEventStore.js');
 const {
   createOrGetWorkSessionByTicket,
   readWorkSession,
@@ -87,6 +88,33 @@ test('monitoring results persist success, meaningful change, and quiet suppressi
   assert.equal(stored.monitoring.lastMeaningfulChangeAt, '2026-07-14T12:00:00.000Z');
   assert.equal(stored.monitoring.suppressedUnchangedCount, 1);
   assert.equal(stored.monitoring.currentError, undefined);
+});
+
+test('health-only updates stay out of Attention history and use observation-only language', () => {
+  const created = createOrGetWorkSessionByTicket({ ticketKey: 'HEALTH-3', title: 'Quiet health fixture' });
+  assert.deepEqual(listMonitorEvents({
+    sessionId: created.id,
+    types: ['provider.transition'],
+    limit: 20,
+  }), []);
+
+  recordWorkSessionMonitoringResult(created.id, {
+    polled: 3,
+    transitions: 0,
+    failures: 0,
+    skipped: 0,
+    attemptedAt: '2026-07-14T12:15:00.000Z',
+  });
+
+  const stored = readWorkSession(created.id);
+  const health = sessionProviderMonitoringHealth(stored, 300_000);
+  assert.equal(providerMonitoringHealthSummary(health), 'poll healthy • quiet 1');
+  assert.doesNotMatch(providerMonitoringHealthSummary(health), /repair|remediat|fixed automatically/i);
+  assert.deepEqual(listMonitorEvents({
+    sessionId: created.id,
+    types: ['provider.transition'],
+    limit: 20,
+  }), [], 'persisting poll health must not manufacture an Attention transition');
 });
 
 test('current normalized provider error clears only after a non-failing result', () => {

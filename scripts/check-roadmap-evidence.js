@@ -35,17 +35,22 @@ if (failures.length > 0) {
 } else {
   const totals = summarize(requirements, coverage);
   console.log(
-    `Kronos roadmap evidence OK (${requirements.size} fingerprinted requirements: ${totals.automated} automated, ${totals.human} human-gated, ${totals.open} open).`,
+    `Kronos roadmap evidence OK (${requirements.size} fingerprinted requirements: ${formatSummary(totals)}).`,
   );
   for (const goal of goalIds()) {
     const goalRequirements = [...requirements.values()].filter(requirement => requirement.goal === goal);
     const summary = summarize(new Map(goalRequirements.map(requirement => [requirement.ref, requirement])), coverage);
-    console.log(`- ${goal}: ${summary.automated} automated, ${summary.human} human-gated, ${summary.open} open.`);
+    console.log(`- ${goal}: ${formatSummary(summary)}.`);
   }
   if (process.env.KRONOS_ROADMAP_EVIDENCE_DETAILS === '1') {
     for (const requirement of requirements.values()) {
-      if (!coverage.has(requirement.ref)) {
+      const evidence = coverage.get(requirement.ref);
+      if (!evidence) {
         console.log(`  OPEN ${requirement.ref} ${requirement.text}`);
+      } else if (evidence.humanGates.length > 0
+        && evidence.automated.length === 0
+        && evidence.checks.length === 0) {
+        console.log(`  HUMAN-ONLY ${requirement.ref} [${evidence.humanGates.join(', ')}] ${requirement.text}`);
       }
     }
   }
@@ -186,14 +191,22 @@ function checkRequiredReleaseGates(packageJson, roadmapSource) {
 }
 
 function summarize(requirements, coverage) {
-  const totals = { automated: 0, human: 0, open: 0 };
+  const totals = { automatedOnly: 0, automatedAndHuman: 0, humanOnly: 0, open: 0 };
   for (const ref of requirements.keys()) {
     const evidence = coverage.get(ref);
     if (!evidence) { totals.open += 1; }
-    else if (evidence.humanGates.length > 0) { totals.human += 1; }
-    else { totals.automated += 1; }
+    else {
+      const hasAutomatedEvidence = evidence.automated.length > 0 || evidence.checks.length > 0;
+      if (hasAutomatedEvidence && evidence.humanGates.length > 0) { totals.automatedAndHuman += 1; }
+      else if (hasAutomatedEvidence) { totals.automatedOnly += 1; }
+      else { totals.humanOnly += 1; }
+    }
   }
   return totals;
+}
+
+function formatSummary(summary) {
+  return `${summary.automatedOnly} automated-only, ${summary.automatedAndHuman} automated + human, ${summary.humanOnly} human-only, ${summary.open} open`;
 }
 
 function goalIds() {

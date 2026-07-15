@@ -26,6 +26,7 @@ All notable changes to the Kronos preview are documented here.
 
 ### Changed
 
+- Roadmap evidence now distinguishes automated-only, automated-plus-human, human-only, and open requirements instead of merging all operator signoff into one count. Added direct negative regressions proving health-only persistence creates no Attention event and private handoff creation performs no provider, Git, or terminal action.
 - Added five cross-feature journey tests covering stable project identity across Work/Projects/Sessions/Attention, project sessions gaining explicit Jira context without changing kind, manifest-to-runtime Claude mode consistency, safe project unregistration, and rich Work/Jira-board search parity.
 - Expanded Jira free-text filtering consistently across Work and the board to include update timestamps, attachment names and MIME types, MR IID/author/source and target branches, and build numbers in addition to the existing ticket, project, label, MR state, and build-status fields.
 - Clarified that discovery folders are only bounded search roots while registration is the explicit active-repository set. Project actions now re-resolve stable registered identity and the current canonical path, including nested or stale tree targets, instead of incorrectly asking the operator to select a registered project.

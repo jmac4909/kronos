@@ -1,6 +1,9 @@
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
+const childProcess = require('node:child_process');
 const fs = require('node:fs');
+const http = require('node:http');
+const https = require('node:https');
 const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
@@ -53,6 +56,47 @@ test('local handoff writes a private immutable Markdown and JSON reference pair 
   assert.equal(JSON.parse(json).selections.length, 2);
   assert.equal(fs.statSync(bundle.markdownPath).mode & 0o777, 0o600);
   assert.equal(fs.statSync(bundle.jsonPath).mode & 0o777, 0o600);
+});
+
+test('local handoff has no provider, Git, or terminal side effects', t => {
+  const projectRoot = path.join(kronosDir, 'side-effect-project');
+  const gitDirectory = path.join(projectRoot, '.git');
+  fs.mkdirSync(gitDirectory, { recursive: true, mode: 0o700 });
+  const headPath = path.join(gitDirectory, 'HEAD');
+  fs.writeFileSync(headPath, 'ref: refs/heads/feature/handoff-safety\n', { mode: 0o600 });
+  const terminal = {
+    show() { throw new Error('Local handoff attempted to focus a terminal.'); },
+    sendText() { throw new Error('Local handoff attempted to write to a terminal.'); },
+    dispose() { throw new Error('Local handoff attempted to close a terminal.'); },
+  };
+  const source = sourceArtifact('side-effect-source', 'reference-only source');
+  const fixture = session({
+    projectPath: projectRoot,
+    terminals: [terminal],
+    artifacts: [artifact('side-effect-context', { promptPath: source })],
+  });
+  const selections = buildHandoffCandidates(fixture, [event('side-effect-event')])
+    .map(candidate => candidate.selection);
+
+  forbidCall(t, globalThis, 'fetch', 'network fetch');
+  for (const [owner, methods] of [
+    [http, ['get', 'request']],
+    [https, ['get', 'request']],
+    [childProcess, ['exec', 'execFile', 'execFileSync', 'spawn', 'spawnSync']],
+  ]) {
+    for (const method of methods) { forbidCall(t, owner, method, method); }
+  }
+
+  const bundle = writeLocalHandoffBundle({
+    session: fixture,
+    selections,
+    title: 'Side-effect-free handoff',
+  }, { now: new Date('2026-07-15T15:30:00.000Z') });
+  const handoffRoot = `${path.join(kronosDir, 'handoffs')}${path.sep}`;
+  assert.equal(bundle.markdownPath.startsWith(handoffRoot), true);
+  assert.equal(bundle.jsonPath.startsWith(handoffRoot), true);
+  assert.equal(fs.readFileSync(headPath, 'utf8'), 'ref: refs/heads/feature/handoff-safety\n');
+  assert.deepEqual(fs.readdirSync(projectRoot).sort(), ['.git']);
 });
 
 test('local handoff refuses external artifact paths and oversized selections', () => {
@@ -226,4 +270,11 @@ function session(overrides = {}) {
     projectPath: path.join(kronosDir, 'project'),
     ...overrides,
   };
+}
+
+function forbidCall(t, owner, key, label) {
+  if (!owner || typeof owner[key] !== 'function') { return; }
+  const original = owner[key];
+  owner[key] = () => { throw new Error(`Local handoff attempted ${label}.`); };
+  t.after(() => { owner[key] = original; });
 }

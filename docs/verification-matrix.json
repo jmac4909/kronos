@@ -217,6 +217,7 @@
         { "file": "scripts/run-provider-health-visibility-tests.js", "test": "session provider health derives the next poll and legacy successful-poll fallback" },
         { "file": "scripts/run-provider-health-visibility-tests.js", "test": "project provider health aggregates latest evidence and earliest scheduled poll" },
         { "file": "scripts/run-provider-health-visibility-tests.js", "test": "monitoring results persist success, meaningful change, and quiet suppression separately" },
+        { "file": "scripts/run-provider-health-visibility-tests.js", "test": "health-only updates stay out of Attention history and use observation-only language" },
         { "file": "scripts/run-provider-health-visibility-tests.js", "test": "current normalized provider error clears only after a non-failing result" },
         { "file": "scripts/run-provider-health-visibility-tests.js", "test": "provider diagnostics retain current live failures and partial reads until their own recovery" }
       ],
@@ -251,6 +252,7 @@
       "automated": [
         { "file": "scripts/run-handoff-branch-profile-tests.js", "test": "handoff candidates cap context and audit metadata without accepting terminal content" },
         { "file": "scripts/run-handoff-branch-profile-tests.js", "test": "local handoff writes a private immutable Markdown and JSON reference pair without copying source payloads" },
+        { "file": "scripts/run-handoff-branch-profile-tests.js", "test": "local handoff has no provider, Git, or terminal side effects" },
         { "file": "scripts/run-handoff-branch-profile-tests.js", "test": "local handoff refuses external artifact paths and oversized selections" },
         { "file": "scripts/run-handoff-branch-profile-tests.js", "test": "project integration parses, formats, and stores explicit Jenkins and SonarQube branch profiles" },
         { "file": "scripts/run-handoff-branch-profile-tests.js", "test": "branch profile validation refuses duplicates, unsafe branches, credentials, and unknown active profiles" },
@@ -1762,7 +1764,9 @@
     },
     {
       "requirements": ["G20-case-04:7f43a4b6"],
-      "humanGates": ["real-vscode", "live-providers"]
+      "automated": [
+        { "file": "scripts/run-provider-health-visibility-tests.js", "test": "health-only updates stay out of Attention history and use observation-only language" }
+      ]
     },
     {
       "requirements": ["G20-evidence-01:afbec531"],
@@ -1846,7 +1850,9 @@
     },
     {
       "requirements": ["G22-case-03:62f61057"],
-      "humanGates": ["operator-terminal", "live-providers"]
+      "automated": [
+        { "file": "scripts/run-handoff-branch-profile-tests.js", "test": "local handoff has no provider, Git, or terminal side effects" }
+      ]
     },
     {
       "requirements": ["G22-case-04:79ea1dfb"],
