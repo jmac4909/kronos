@@ -886,9 +886,17 @@ test('managed provider polling automatically discovers and locally binds a proje
       providerTransitionStreams.providerTransitionStreamKey(discoveryEvent, updated),
       'persisted transition evidence uses the same canonical stream key as Attention projection',
     );
+    const baselineEvent = monitorEventStore.listMonitorEvents({
+      sessionId: session.id,
+      source: 'gitlab',
+      types: ['provider.baseline'],
+    }).find(event => event.subject?.kind === 'merge-request');
+    assert.ok(baselineEvent);
+    assert.equal(baselineEvent.metadata.transitionStreamKey, discoveryEvent.metadata.transitionStreamKey);
     const duplicate = await monitor.poll();
     assert.equal(duplicate.transitions, 0);
-    monitorEventStore.acknowledgeMonitorEvent(discoveryEvent.id, session.id);
+    const acknowledgementEvent = monitorEventStore.acknowledgeMonitorEvent(discoveryEvent.id, session.id);
+    assert.equal(acknowledgementEvent.metadata.transitionStreamKey, discoveryEvent.metadata.transitionStreamKey);
     const afterClear = await monitor.poll();
     assert.equal(afterClear.transitions, 1, 'a still-open MR returns on the next poll after its Attention item is cleared');
     const reminderEvent = monitorEventStore.listMonitorEvents({
@@ -900,6 +908,7 @@ test('managed provider polling automatically discovers and locally binds a proje
     assert.equal(reminderEvent.subject.kind, 'merge-request');
     assert.equal(reminderEvent.subject.id, '90');
     assert.equal(reminderEvent.metadata.reminderAfterAcknowledgementId.startsWith('event-'), true);
+    assert.equal(reminderEvent.metadata.transitionStreamKey, discoveryEvent.metadata.transitionStreamKey);
     assert.equal(
       monitorEventStore.listMonitorEvents({ sessionId: session.id, types: ['provider.transition'] })
         .some(event => event.id === discoveryEvent.id),

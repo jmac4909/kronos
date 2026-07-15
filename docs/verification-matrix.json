@@ -54,7 +54,10 @@
         { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "GitLab merge-request transition matrix covers every declared structural transition" },
         { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "GitLab pipeline transition matrix covers every declared pipeline, job, and test transition" },
         { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "Jenkins and SonarQube transition matrices cover every declared CI transition" },
-        { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "Attention projection rebuilds after restart without stale-row resurrection" }
+        { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "Attention projection rebuilds after restart without stale-row resurrection" },
+        { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "Attention read-health state replaces failure, recovery, partial, and later failure in one stream" },
+        { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "Attention collapses newer pipeline, build, test, gate, and issue occurrences without deleting audit history" },
+        { "file": "scripts/run-provider-reconciliation-tests.js", "test": "provider transition recorder remains deterministic across module reload and lease recovery" }
       ],
       "humanGates": ["live-providers"]
     },
@@ -200,7 +203,8 @@
     { "id": "derived-doc-metrics", "file": "scripts/check-quality-evidence.js", "marker": "checkReadmeMetrics" },
     { "id": "required-release-gates", "file": "scripts/check-roadmap-evidence.js", "marker": "checkRequiredReleaseGates" },
     { "id": "human-gates-required", "file": "scripts/check-roadmap-evidence.js", "marker": "gate.status !== 'required'" },
-    { "id": "audited-context-placement-boundary", "file": "scripts/check-context-governance.js", "marker": "Exactly one audited non-submitting context insertion call is allowed." }
+    { "id": "audited-context-placement-boundary", "file": "scripts/check-context-governance.js", "marker": "Exactly one audited non-submitting context insertion call is allowed." },
+    { "id": "canonical-attention-transition-key", "file": "docs/state-ownership.md", "marker": "scope + provider + resource + logical subject + facet" }
   ],
   "requirementEvidence": [
     {
@@ -472,6 +476,102 @@
         { "file": "scripts/run-unit-tests.js", "test": "extension activation registers the bounded surface and explicit launch commands create the right session kinds" }
       ],
       "humanGates": ["operator-terminal", "real-vscode", "windows-native"]
+    },
+    {
+      "requirements": ["G04-goal:4c56ebca"],
+      "automated": [
+        { "file": "scripts/run-provider-reconciliation-tests.js", "test": "provider transition recorder suppresses unchanged read health but records a real change" },
+        { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "Attention read-health state replaces failure, recovery, partial, and later failure in one stream" },
+        { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "Attention projection rebuilds after restart without stale-row resurrection" }
+      ],
+      "checks": ["canonical-attention-transition-key"],
+      "humanGates": ["live-providers", "multi-window"]
+    },
+    {
+      "requirements": ["G04-case-01:9b140116"],
+      "automated": [
+        { "file": "scripts/run-unit-tests.js", "test": "managed provider polling automatically discovers and locally binds a project MR" }
+      ]
+    },
+    {
+      "requirements": ["G04-case-02:deda03be"],
+      "automated": [
+        { "file": "scripts/run-unit-tests.js", "test": "managed provider polling suppresses unchanged legacy provider-read failures" },
+        { "file": "scripts/run-provider-reconciliation-tests.js", "test": "provider transition recorder suppresses unchanged read health but records a real change" }
+      ]
+    },
+    {
+      "requirements": ["G04-case-03:9c9213e3"],
+      "automated": [
+        { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "Attention read-health state replaces failure, recovery, partial, and later failure in one stream" }
+      ]
+    },
+    {
+      "requirements": ["G04-case-04:3efd1e69"],
+      "automated": [
+        { "file": "scripts/run-unit-tests.js", "test": "GitLab MR review monitoring retains complete facets across partial reads and dedupes read health" },
+        { "file": "scripts/run-provider-health-visibility-tests.js", "test": "provider diagnostics retain current live failures and partial reads until their own recovery" }
+      ]
+    },
+    {
+      "requirements": ["G04-case-05:eb91a357", "G04-case-06:f35202b2", "G04-case-07:fa64e642"],
+      "automated": [
+        { "file": "scripts/run-unit-tests.js", "test": "managed provider polling automatically discovers and locally binds a project MR" }
+      ]
+    },
+    {
+      "requirements": ["G04-case-08:a8bad7bf"],
+      "automated": [
+        { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "GitLab pipeline transition matrix covers every declared pipeline, job, and test transition" },
+        { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "Jenkins and SonarQube transition matrices cover every declared CI transition" },
+        { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "Attention collapses newer pipeline, build, test, gate, and issue occurrences without deleting audit history" }
+      ]
+    },
+    {
+      "requirements": ["G04-case-09:8ea7049e"],
+      "automated": [
+        { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "Attention projection rebuilds after restart without stale-row resurrection" },
+        { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "Attention read-health state replaces failure, recovery, partial, and later failure in one stream" }
+      ]
+    },
+    {
+      "requirements": ["G04-case-10:1371a133"],
+      "automated": [
+        { "file": "scripts/run-provider-reconciliation-tests.js", "test": "provider transition recorder remains deterministic across module reload and lease recovery" },
+        { "file": "scripts/run-unit-tests.js", "test": "one monitor coalesces overlapping polls instead of reporting a false cross-window lease owner" }
+      ],
+      "humanGates": ["multi-window"]
+    },
+    {
+      "requirements": ["G04-evidence-01:459964c3"],
+      "automated": [
+        { "file": "scripts/run-unit-tests.js", "test": "Attention stream identity is stable by project, provider, resource, logical subject, and facet" }
+      ],
+      "checks": ["canonical-attention-transition-key"]
+    },
+    {
+      "requirements": ["G04-evidence-02:1272abb5"],
+      "automated": [
+        { "file": "scripts/run-unit-tests.js", "test": "managed provider polling automatically discovers and locally binds a project MR" },
+        { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "Attention projection rebuilds after restart without stale-row resurrection" }
+      ],
+      "checks": ["canonical-attention-transition-key"]
+    },
+    {
+      "requirements": ["G04-evidence-03:8a2973ce"],
+      "automated": [
+        { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "GitLab merge-request transition matrix covers every declared structural transition" },
+        { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "GitLab pipeline transition matrix covers every declared pipeline, job, and test transition" },
+        { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "Jenkins and SonarQube transition matrices cover every declared CI transition" },
+        { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "Attention projection rebuilds after restart without stale-row resurrection" }
+      ]
+    },
+    {
+      "requirements": ["G04-evidence-04:679e30e2"],
+      "automated": [
+        { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "Attention read-health state replaces failure, recovery, partial, and later failure in one stream" },
+        { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "Attention collapses newer pipeline, build, test, gate, and issue occurrences without deleting audit history" }
+      ]
     },
     {
       "requirements": ["G16-goal:b55b5b6c"],

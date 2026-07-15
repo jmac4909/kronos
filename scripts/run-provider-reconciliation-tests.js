@@ -16,6 +16,7 @@ const {
   sonarIncompleteReadComponents,
 } = require('../out/services/providerReadHealth.js');
 const { listMonitorEvents } = require('../out/services/monitorEventStore.js');
+const { tryAcquireManagedMonitorLease } = require('../out/services/managedMonitorLease.js');
 
 test.after(() => fs.rmSync(kronosDir, { recursive: true, force: true }));
 
@@ -36,6 +37,41 @@ test('provider transition recorder gives one deterministic event to one transiti
     input.subject.id,
     input.fingerprint,
   ));
+});
+
+test('provider transition recorder remains deterministic across module reload and lease recovery', () => {
+  const input = transitionInput({
+    session: {
+      ...transitionInput().session,
+      id: 'session-check-restart',
+      ticketKey: 'CHECK-2',
+      ticketKeys: ['CHECK-2'],
+    },
+    source: 'sonar',
+    subject: { kind: 'quality-gate', id: 'app:main', ticketKey: 'CHECK-2' },
+    transitionKey: 'sonar-gate-restart-fixture',
+    fingerprint: 'sonar-gate-restart-fingerprint',
+    metadata: { transitionKind: 'sonar_gate_failed', projectKey: 'app', branch: 'main' },
+  });
+  const firstLease = tryAcquireManagedMonitorLease();
+  assert.equal(firstLease.acquired, true);
+  try {
+    assert.ok(appendTransitionOnce(input));
+  } finally {
+    assert.equal(firstLease.release(), true);
+  }
+
+  const recorderPath = require.resolve('../out/services/providerTransitionRecorder.js');
+  delete require.cache[recorderPath];
+  const reloadedRecorder = require(recorderPath);
+  const recoveredLease = tryAcquireManagedMonitorLease();
+  assert.equal(recoveredLease.acquired, true);
+  try {
+    assert.equal(reloadedRecorder.appendTransitionOnce(input), null);
+  } finally {
+    assert.equal(recoveredLease.release(), true);
+  }
+  assert.equal(listMonitorEvents({ sessionId: input.session.id, source: 'sonar', limit: 20 }).length, 1);
 });
 
 test('provider transition recorder suppresses unchanged read health but records a real change', () => {

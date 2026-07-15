@@ -146,6 +146,115 @@ test('Attention projection rebuilds after restart without stale-row resurrection
   );
 });
 
+test('Attention read-health state replaces failure, recovery, partial, and later failure in one stream', () => {
+  const session = workSession();
+  const states = [
+    transitionEvent('health-failed-first', '2026-07-15T14:00:00.000Z', 'provider_read_failed', 'failed', {
+      metadata: {
+        transitionKind: 'provider_read_failed',
+        mergeRequestIid: 77,
+        readState: 'failed',
+        readReason: 'timeout',
+        readComponents: 'merge-request',
+      },
+    }),
+    transitionEvent('health-recovered', '2026-07-15T14:01:00.000Z', 'provider_read_recovered', 'complete', {
+      metadata: {
+        transitionKind: 'provider_read_recovered',
+        mergeRequestIid: 77,
+        readState: 'complete',
+        readReason: 'complete',
+        readComponents: 'none',
+      },
+    }),
+    transitionEvent('health-partial', '2026-07-15T14:02:00.000Z', 'provider_read_partial', 'partial', {
+      metadata: {
+        transitionKind: 'provider_read_partial',
+        mergeRequestIid: 77,
+        readState: 'partial',
+        readReason: 'bounded_read_incomplete',
+        readComponents: 'discussions,notes',
+      },
+    }),
+    transitionEvent('health-failed-later', '2026-07-15T14:03:00.000Z', 'provider_read_failed', 'failed', {
+      metadata: {
+        transitionKind: 'provider_read_failed',
+        mergeRequestIid: 77,
+        readState: 'failed',
+        readReason: 'authentication',
+        readComponents: 'merge-request',
+      },
+    }),
+  ];
+
+  for (let index = 0; index < states.length; index += 1) {
+    assert.deepEqual(
+      currentAttentionTransitions(states.slice(0, index + 1), [session]).map(event => event.id),
+      [states[index].id],
+      'each meaningful read-health change replaces the prior current row',
+    );
+  }
+
+  const acknowledgement = {
+    schemaVersion: 1,
+    id: 'ack-health-failed-later',
+    at: '2026-07-15T14:04:00.000Z',
+    sessionId: session.id,
+    type: 'notification.acknowledged',
+    source: 'operator',
+    summary: 'Acknowledged the newest provider-read state.',
+    metadata: { acknowledgedEventId: states.at(-1).id },
+  };
+  const audit = [...states, acknowledgement];
+  assert.deepEqual(currentAttentionTransitions(audit, [session]), []);
+  assert.equal(audit.filter(event => event.type === 'provider.transition').length, 4);
+});
+
+test('Attention collapses newer pipeline, build, test, gate, and issue occurrences without deleting audit history', () => {
+  const session = workSession();
+  const events = [
+    resourceTransition('pipeline-failed', '2026-07-15T15:00:00.000Z', 'gitlab', 'pipeline', '100', 'pipeline_failed', {
+      mergeRequestIid: 77,
+      pipelineId: 100,
+    }),
+    resourceTransition('pipeline-jobs', '2026-07-15T15:01:00.000Z', 'gitlab', 'pipeline', '100', 'blocking_jobs_failed', {
+      mergeRequestIid: 77,
+      pipelineId: 100,
+    }),
+    resourceTransition('pipeline-tests-new', '2026-07-15T15:02:00.000Z', 'gitlab', 'pipeline', '101', 'tests_failed', {
+      mergeRequestIid: 77,
+      pipelineId: 101,
+    }),
+    resourceTransition('jenkins-failed', '2026-07-15T15:03:00.000Z', 'jenkins', 'build', '31', 'jenkins_failed', {
+      buildNumber: 31,
+    }),
+    resourceTransition('jenkins-stages', '2026-07-15T15:04:00.000Z', 'jenkins', 'build', '31', 'jenkins_stages_failed', {
+      buildNumber: 31,
+    }),
+    resourceTransition('jenkins-tests-new', '2026-07-15T15:05:00.000Z', 'jenkins', 'build', '32', 'jenkins_tests_failed', {
+      buildNumber: 32,
+    }),
+    resourceTransition('sonar-gate', '2026-07-15T15:06:00.000Z', 'sonar', 'quality-gate', 'app:main', 'sonar_gate_failed', {
+      projectKey: 'app',
+      branch: 'main',
+    }),
+    resourceTransition('sonar-issues', '2026-07-15T15:07:00.000Z', 'sonar', 'quality-gate', 'app:main', 'sonar_issues_increased', {
+      projectKey: 'app',
+      branch: 'main',
+    }),
+    resourceTransition('sonar-feature', '2026-07-15T15:08:00.000Z', 'sonar', 'quality-gate', 'app:feature', 'sonar_gate_failed', {
+      projectKey: 'app',
+      branch: 'feature',
+    }),
+  ];
+  const reloadedAudit = JSON.parse(JSON.stringify(events));
+  assert.deepEqual(
+    currentAttentionTransitions(reloadedAudit, [JSON.parse(JSON.stringify(session))]).map(event => event.id),
+    ['sonar-feature', 'sonar-issues', 'jenkins-tests-new', 'pipeline-tests-new'],
+  );
+  assert.equal(reloadedAudit.length, 9, 'the append-only audit retains every stale occurrence and current row');
+});
+
 function mrDigest(overrides = {}) {
   const snapshot = {
     mr: {
@@ -253,6 +362,14 @@ function transitionEvent(id, at, transitionKind, state, overrides = {}) {
     metadata: { transitionKind, readState: state, readReason: state },
     ...overrides,
   };
+}
+
+function resourceTransition(id, at, source, kind, subjectId, transitionKind, metadata = {}) {
+  return transitionEvent(id, at, transitionKind, transitionKind, {
+    source,
+    subject: { kind, id: subjectId, project: 'Application', ticketKey: 'MATRIX-1' },
+    metadata: { transitionKind, ...metadata },
+  });
 }
 
 function workSession() {

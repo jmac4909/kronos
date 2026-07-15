@@ -197,12 +197,17 @@ export function acknowledgeMonitorEvent(
   if (existing) { return existing; }
   const target = recent.find(event => event.id === safeEventId);
   if (!target) { throw new Error(`Monitor event not found for work session: ${safeEventId}`); }
+  const metadata: Record<string, MonitorEventMetadataValue> = { acknowledgedEventId: safeEventId };
+  const transitionStreamKey = target.metadata?.['transitionStreamKey'];
+  if (typeof transitionStreamKey === 'string' && transitionStreamKey) {
+    metadata['transitionStreamKey'] = transitionStreamKey;
+  }
   const input: AppendMonitorEventInput = {
     sessionId: safeSessionId,
     type: 'notification.acknowledged',
     source: 'operator',
     summary: `Acknowledged ${target.type} event ${safeEventId}.`,
-    metadata: { acknowledgedEventId: safeEventId },
+    metadata,
   };
   if (target.subject) { input.subject = target.subject; }
   return appendMonitorEvent(input, options);

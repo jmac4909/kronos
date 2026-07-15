@@ -51,6 +51,12 @@ flowchart LR
 | Setup and Doctor readiness | `operationsReadiness.ts` from `providerReadiness.ts` and local state issues | Computed secret-free snapshot; no persistence | Missing, present-needs-test, invalid, unavailable, and ready remain distinct; both views receive the same snapshot | Setup and Doctor |
 | Webview message | `webviewMessages.ts` plus the owning runtime handler | Allowlisted command and bounded identity/focus fields only | Unknown fields and commands are dropped; ticket/project/session identity is resolved again against current canonical state before action | Ticket workspace, Jira board, Setup, Doctor, composers |
 
+## Canonical Attention transition key
+
+Every provider state belongs to one canonical Attention stream identified by **scope + provider + resource + logical subject + facet**. Scope is the stable registered-project identity when available and otherwise the work-session identity. MR IIDs and SonarQube project/branch pairs remain independent logical subjects; pipeline IDs and Jenkins build numbers are occurrences, so a newer occurrence replaces the stale row for its MR pipeline or configured job. Provider-read health remains a separate facet from the resource's state/review facet.
+
+Baseline records, meaningful transitions, acknowledgements, open-MR reminders, and the current Attention projection all retain or recompute this same key. The append-only audit keeps every record, while projection first selects the newest transition per stream and only then applies acknowledgement. This ordering makes reload and restart deterministic and prevents an older state from resurfacing after the newest state is cleared.
+
 ## Canonical value rules
 
 - `undefined` means an optional value was not supplied or is not applicable. It does not mean a provider read succeeded with an empty result.
