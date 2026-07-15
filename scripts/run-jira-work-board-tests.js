@@ -262,6 +262,67 @@ test('board filters Jira namespaces independently from explicit local projects',
   assert.equal(boardRuntime.applyFilters(harness.document).visibleCount, 0);
 });
 
+test('board composes every search, status, Jira, local-project, and label filter subset', () => {
+  const filterCases = [
+    ['query', 'search', 'kronos-1'],
+    ['status', 'status', 'in progress'],
+    ['jiraProject', 'jiraProject', 'kronos'],
+    ['localProject', 'localProject', 'api'],
+    ['label', 'label', 'terminal-first'],
+  ];
+  for (let mask = 0; mask < 2 ** filterCases.length; mask += 1) {
+    const harness = createDomHarness('complete');
+    harness.hideDone.checked = false;
+    for (let index = 0; index < filterCases.length; index += 1) {
+      const [, harnessKey, matchingValue] = filterCases[index];
+      harness[harnessKey].value = mask & (1 << index) ? matchingValue : '';
+    }
+    const narrowsToOpenCard = Boolean(mask & 1) || Boolean(mask & 2) || Boolean(mask & 8);
+    const result = boardRuntime.applyFilters(harness.document);
+    assert.equal(
+      result.visibleCount,
+      narrowsToOpenCard ? 1 : 2,
+      `filter subset ${mask.toString(2).padStart(filterCases.length, '0')} must compose by intersection`,
+    );
+    assert.equal(harness.openCard.hidden, false);
+  }
+
+  for (const [, harnessKey] of filterCases) {
+    const harness = createDomHarness('complete');
+    harness.hideDone.checked = false;
+    harness[harnessKey].value = 'does-not-match';
+    assert.equal(boardRuntime.applyFilters(harness.document).visibleCount, 0, `${harnessKey} must reject a mismatch`);
+    assert.equal(harness.document.getElementById('jira-board-no-matches').hidden, false);
+  }
+});
+
+test('board keyboard activation opens a focused card with Enter or Space exactly once', () => {
+  const harness = createDomHarness('complete');
+  const messages = [];
+  harness.openCard.closest = selector => selector === '[data-ticket-card]' ? harness.openCard : null;
+  assert.equal(boardRuntime.initialize(harness.document, { postMessage(message) { messages.push(message); } }), true);
+
+  let prevented = 0;
+  for (const key of ['Enter', ' ']) {
+    harness.board.dispatch('keydown', {
+      key,
+      target: harness.openCard,
+      preventDefault() { prevented += 1; },
+    });
+  }
+  harness.board.dispatch('keydown', {
+    key: 'Escape',
+    target: harness.openCard,
+    preventDefault() { throw new Error('Escape must not activate a card.'); },
+  });
+
+  assert.equal(prevented, 2);
+  assert.deepEqual(messages, [
+    { command: 'openTicketWorkspace', ticket: 'KRONOS-1' },
+    { command: 'openTicketWorkspace', ticket: 'KRONOS-1' },
+  ]);
+});
+
 test('board reset returns to the configured completed-work default', () => {
   const harness = createDomHarness('complete');
   harness.hideDone.setAttribute('data-default-checked', 'false');

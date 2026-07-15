@@ -7,7 +7,9 @@
       "automated": [
         { "file": "scripts/run-project-catalog-tests.js", "test": "Jira project keys never auto-link a repository; only an explicit ticket link does" },
         { "file": "scripts/run-unit-tests.js", "test": "Work data status distinguishes empty, loading, partial, stale, error, and current results" },
-        { "file": "scripts/run-jira-work-board-tests.js", "test": "board runtime filters cards and reveals a specifically selected completed status" }
+        { "file": "scripts/run-jira-work-board-tests.js", "test": "board runtime filters cards and reveals a specifically selected completed status" },
+        { "file": "scripts/run-jira-work-board-tests.js", "test": "board composes every search, status, Jira, local-project, and label filter subset" },
+        { "file": "scripts/run-jira-work-board-tests.js", "test": "board keyboard activation opens a focused card with Enter or Space exactly once" }
       ],
       "humanGates": ["operator-terminal"]
     },
