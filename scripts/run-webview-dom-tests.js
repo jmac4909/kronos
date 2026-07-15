@@ -22,7 +22,10 @@ function createHarness(options = {}) {
   ]);
   const document = {
     currentScript: { getAttribute: name => scriptAttributes.get(name) || null },
-    documentElement: { setAttribute: (name, value) => attributes.set(name, value) },
+    documentElement: {
+      setAttribute: (name, value) => attributes.set(name, value),
+      getAttribute: name => attributes.get(name) || null,
+    },
     readyState: 'complete',
     addEventListener(name, listener) {
       const values = listeners.get(name) || [];
@@ -109,6 +112,15 @@ test('context composer posts edited focus only after Insert or Ctrl+Enter', () =
   });
   vm.runInContext(contextComposerSource, harness.context, { filename: 'kronos-context-composer.js' });
   assert.equal(harness.messages.length, 1, 'only the ready message is posted on load');
+  let ordinaryEnterPrevented = false;
+  focusListeners.get('keydown')({
+    key: 'Enter',
+    ctrlKey: false,
+    metaKey: false,
+    preventDefault() { ordinaryEnterPrevented = true; },
+  });
+  assert.equal(ordinaryEnterPrevented, false, 'ordinary Enter remains available for editing');
+  assert.equal(harness.messages.length, 1, 'ordinary Enter never requests context placement');
   harness.click('insertDraft');
   assert.deepEqual(harness.messages.at(-1), { command: 'insertDraft', focus: 'Review latest comments' });
   focus.value = 'Focus on unresolved discussion';
@@ -118,6 +130,29 @@ test('context composer posts edited focus only after Insert or Ctrl+Enter', () =
   assert.deepEqual(harness.messages.at(-1), { command: 'insertDraft', focus: 'Focus on unresolved discussion' });
   harness.click('addToBasket');
   assert.deepEqual(harness.messages.at(-1), { command: 'addToBasket' });
+});
+
+test('context composer initialization is idempotent and one Insert click posts once', () => {
+  const focusListeners = [];
+  const focus = {
+    value: 'Review the immutable evidence',
+    addEventListener(name, listener) {
+      if (name === 'keydown') { focusListeners.push(listener); }
+    },
+    focus() {},
+  };
+  const harness = createFormHarness({
+    scriptId: 'kronos-context-composer-script',
+    elements: new Map([['context-focus', focus]]),
+  });
+  vm.runInContext(contextComposerSource, harness.context, { filename: 'kronos-context-composer.js' });
+  vm.runInContext(contextComposerSource, harness.context, { filename: 'kronos-context-composer.js' });
+
+  assert.equal(harness.attributes.get('data-kronos-context-composer-handler-attached'), 'true');
+  assert.equal(harness.listeners.get('click').length, 1);
+  assert.equal(focusListeners.length, 1);
+  harness.click('insertDraft');
+  assert.equal(harness.messages.filter(message => message.command === 'insertDraft').length, 1);
 });
 
 test('context basket preserves focus across explicit refresh and non-submitting insert actions', () => {
@@ -182,7 +217,10 @@ function createFormHarness(options) {
   };
   const document = {
     currentScript: script,
-    documentElement: { setAttribute: (name, value) => attributes.set(name, value) },
+    documentElement: {
+      setAttribute: (name, value) => attributes.set(name, value),
+      getAttribute: name => attributes.get(name) || null,
+    },
     readyState: 'complete',
     addEventListener(name, listener) {
       const values = listeners.get(name) || [];
@@ -214,6 +252,8 @@ function createFormHarness(options) {
   context.window = context;
   return {
     context,
+    attributes,
+    listeners,
     messages,
     click(action, extraAttributes = {}) {
       const target = {

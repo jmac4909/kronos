@@ -293,6 +293,64 @@ test('GitLab and CI context pairs share immutable publication and reject incompl
   }
 });
 
+test('CI artifacts distinguish complete, partial, mixed-success, unavailable, and truncated provider evidence', () => {
+  const completeJenkins = {
+    completeness: { complete: true, warnings: [] },
+    build: { number: 87, status: 'SUCCESS' },
+  };
+  const completeSonar = {
+    completeness: { complete: true, warnings: [] },
+    qualityGate: { status: 'OK' },
+  };
+  const complete = ciContextStore.buildCiContext('JIRA-87', {
+    jenkins: completeJenkins,
+    sonar: completeSonar,
+  });
+  assert.deepEqual(complete.completeness, {
+    complete: true,
+    jenkinsIncluded: true,
+    sonarIncluded: true,
+    warnings: [],
+  });
+
+  const partial = ciContextStore.buildCiContext('JIRA-87', {
+    jenkins: {
+      ...completeJenkins,
+      completeness: { complete: false, warnings: ['Jenkins stage evidence is partial.'] },
+    },
+    sonar: completeSonar,
+  });
+  assert.equal(partial.completeness.complete, false);
+  assert.deepEqual(partial.completeness.warnings, ['Jenkins stage evidence is partial.']);
+
+  const mixed = ciContextStore.buildCiContext('JIRA-87', {
+    jenkins: completeJenkins,
+    warnings: ['SonarQube evidence is unavailable for this branch.'],
+  });
+  assert.equal(mixed.completeness.jenkinsIncluded, true);
+  assert.equal(mixed.completeness.sonarIncluded, false);
+  assert.equal(mixed.completeness.complete, false);
+  assert.match(mixed.completeness.warnings[0], /SonarQube evidence is unavailable/);
+
+  const unavailable = ciContextStore.buildCiContext('JIRA-87', {
+    warnings: ['Jenkins and SonarQube evidence are unavailable.'],
+  });
+  assert.equal(unavailable.completeness.jenkinsIncluded, false);
+  assert.equal(unavailable.completeness.sonarIncluded, false);
+  assert.equal(unavailable.completeness.complete, false);
+  assert.match(unavailable.completeness.warnings[0], /unavailable/);
+
+  const truncated = ciContextStore.buildCiContext('JIRA-87', {
+    jenkins: {
+      ...completeJenkins,
+      build: { number: 87, status: 'x'.repeat((32 * 1024) + 100) },
+    },
+  });
+  assert.equal(truncated.completeness.complete, false);
+  assert.match(truncated.completeness.warnings.at(-1), /truncated at Kronos safety limits/);
+  assert.equal(truncated.jenkins.build.status.length, 32 * 1024);
+});
+
 test('Attention stream identity is stable by project, provider, resource, logical subject, and facet', () => {
   const projectSession = { id: 'session-one', projectName: 'Application' };
   const siblingSession = { id: 'session-two', projectName: 'Application' };

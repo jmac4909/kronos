@@ -32,11 +32,17 @@
       "id": "context-placement",
       "goals": ["G03"],
       "automated": [
+        { "file": "scripts/run-unit-tests.js", "test": "immutable private artifacts verify content and own local Git context persistence" },
+        { "file": "scripts/run-unit-tests.js", "test": "GitLab and CI context pairs share immutable publication and reject incomplete evidence" },
+        { "file": "scripts/run-unit-tests.js", "test": "CI artifacts distinguish complete, partial, mixed-success, unavailable, and truncated provider evidence" },
         { "file": "scripts/run-unit-tests.js", "test": "context placement verifies one exact attachment and remains exactly once after audit work" },
         { "file": "scripts/run-webview-dom-tests.js", "test": "context composer posts edited focus only after Insert or Ctrl+Enter" },
+        { "file": "scripts/run-webview-dom-tests.js", "test": "context composer initialization is idempotent and one Insert click posts once" },
+        { "file": "scripts/run-terminal-lifecycle-tests.js", "test": "a closed or rebound terminal invalidates captured context placement without guessing" },
+        { "file": "scripts/run-unit-tests.js", "test": "terminal context insertion is shell-inert and never submits" },
         { "file": "scripts/run-unit-tests.js", "test": "Jira downloads arbitrary attachment types as private raw files for Claude to inspect" }
       ],
-      "humanGates": ["operator-terminal"]
+      "humanGates": ["operator-terminal", "real-vscode", "windows-native"]
     },
     {
       "id": "monitoring-and-attention",
@@ -193,7 +199,8 @@
     { "id": "feature-human-summary", "file": "scripts/check-quality-evidence.js", "marker": "Kronos quality evidence OK" },
     { "id": "derived-doc-metrics", "file": "scripts/check-quality-evidence.js", "marker": "checkReadmeMetrics" },
     { "id": "required-release-gates", "file": "scripts/check-roadmap-evidence.js", "marker": "checkRequiredReleaseGates" },
-    { "id": "human-gates-required", "file": "scripts/check-roadmap-evidence.js", "marker": "gate.status !== 'required'" }
+    { "id": "human-gates-required", "file": "scripts/check-roadmap-evidence.js", "marker": "gate.status !== 'required'" },
+    { "id": "audited-context-placement-boundary", "file": "scripts/check-context-governance.js", "marker": "Exactly one audited non-submitting context insertion call is allowed." }
   ],
   "requirementEvidence": [
     {
@@ -358,6 +365,112 @@
     },
     {
       "requirements": ["G02-evidence-03:502aebe6"],
+      "humanGates": ["operator-terminal", "real-vscode", "windows-native"]
+    },
+    {
+      "requirements": ["G03-goal:f194e41a"],
+      "automated": [
+        { "file": "scripts/run-unit-tests.js", "test": "immutable private artifacts verify content and own local Git context persistence" },
+        { "file": "scripts/run-unit-tests.js", "test": "GitLab and CI context pairs share immutable publication and reject incomplete evidence" },
+        { "file": "scripts/run-unit-tests.js", "test": "context placement verifies one exact attachment and remains exactly once after audit work" },
+        { "file": "scripts/run-unit-tests.js", "test": "extension activation registers the bounded surface and explicit launch commands create the right session kinds" }
+      ],
+      "checks": ["audited-context-placement-boundary"],
+      "humanGates": ["operator-terminal", "real-vscode", "windows-native"]
+    },
+    {
+      "requirements": ["G03-case-01:e295fec7"],
+      "automated": [
+        { "file": "scripts/run-unit-tests.js", "test": "Jira ticket context asks for newest comments first but renders retained comments chronologically" },
+        { "file": "scripts/run-unit-tests.js", "test": "Jira downloads arbitrary attachment types as private raw files for Claude to inspect" },
+        { "file": "scripts/run-unit-tests.js", "test": "Jira artifacts retain custom fields behind an untrusted-data boundary" },
+        { "file": "scripts/run-unit-tests.js", "test": "Jira artifacts recursively omit empty fields while retaining false, zero, and non-empty provider values" },
+        { "file": "scripts/run-provider-contract-tests.js", "test": "sanitized Jira fixture retains rich fields and prior rows after a partial page read" }
+      ]
+    },
+    {
+      "requirements": ["G03-case-02:de32d539"],
+      "automated": [
+        { "file": "scripts/run-provider-contract-tests.js", "test": "sanitized GitLab fixture normalizes enterprise MR review, pipeline, job, and test evidence" },
+        { "file": "scripts/run-unit-tests.js", "test": "GitLab MR review monitoring retains complete facets across partial reads and dedupes read health" },
+        { "file": "scripts/run-unit-tests.js", "test": "GitLab and CI context pairs share immutable publication and reject incomplete evidence" }
+      ]
+    },
+    {
+      "requirements": ["G03-case-03:1752a7f5"],
+      "automated": [
+        { "file": "scripts/run-unit-tests.js", "test": "CI artifacts distinguish complete, partial, mixed-success, unavailable, and truncated provider evidence" },
+        { "file": "scripts/run-provider-contract-tests.js", "test": "sanitized Jenkins fixture resolves a multibranch build and treats missing stages as optional" },
+        { "file": "scripts/run-provider-contract-tests.js", "test": "sanitized SonarQube fixture retains branch-qualified gate, measures, and issues" }
+      ]
+    },
+    {
+      "requirements": ["G03-case-04:0cdf768e"],
+      "automated": [
+        { "file": "scripts/run-unit-tests.js", "test": "terminal context insertion is shell-inert and never submits" },
+        { "file": "scripts/run-unit-tests.js", "test": "project Git evidence reads only the bounded VS Code Git model" }
+      ]
+    },
+    {
+      "requirements": ["G03-case-05:82e25979"],
+      "automated": [
+        { "file": "scripts/run-webview-dom-tests.js", "test": "context composer posts edited focus only after Insert or Ctrl+Enter" },
+        { "file": "scripts/run-unit-tests.js", "test": "context placement verifies one exact attachment and remains exactly once after audit work" }
+      ]
+    },
+    {
+      "requirements": ["G03-case-06:995ee3f2"],
+      "automated": [
+        { "file": "scripts/run-webview-dom-tests.js", "test": "context composer initialization is idempotent and one Insert click posts once" },
+        { "file": "scripts/run-unit-tests.js", "test": "context placement verifies one exact attachment and remains exactly once after audit work" }
+      ]
+    },
+    {
+      "requirements": ["G03-case-07:63e5e057"],
+      "automated": [
+        { "file": "scripts/run-terminal-lifecycle-tests.js", "test": "a closed or rebound terminal invalidates captured context placement without guessing" },
+        { "file": "scripts/run-unit-tests.js", "test": "extension activation registers the bounded surface and explicit launch commands create the right session kinds" }
+      ]
+    },
+    {
+      "requirements": ["G03-case-08:e85f50b7"],
+      "automated": [
+        { "file": "scripts/run-unit-tests.js", "test": "terminal context insertion is shell-inert and never submits" }
+      ],
+      "humanGates": ["operator-terminal", "windows-native"]
+    },
+    {
+      "requirements": ["G03-evidence-01:47641a99"],
+      "automated": [
+        { "file": "scripts/run-unit-tests.js", "test": "context placement verifies one exact attachment and remains exactly once after audit work" },
+        { "file": "scripts/run-unit-tests.js", "test": "extension activation registers the bounded surface and explicit launch commands create the right session kinds" }
+      ],
+      "checks": ["audited-context-placement-boundary"]
+    },
+    {
+      "requirements": ["G03-evidence-02:410ae65f"],
+      "automated": [
+        { "file": "scripts/run-unit-tests.js", "test": "CI artifacts distinguish complete, partial, mixed-success, unavailable, and truncated provider evidence" },
+        { "file": "scripts/run-unit-tests.js", "test": "Jira raw attachment downloads retain explicit count and byte safety limits" },
+        { "file": "scripts/run-provider-contract-tests.js", "test": "sanitized Jira fixture retains rich fields and prior rows after a partial page read" },
+        { "file": "scripts/run-unit-tests.js", "test": "project Git evidence reads only the bounded VS Code Git model" }
+      ]
+    },
+    {
+      "requirements": ["G03-evidence-03:09a54c32"],
+      "automated": [
+        { "file": "scripts/run-unit-tests.js", "test": "Jira downloads arbitrary attachment types as private raw files for Claude to inspect" }
+      ]
+    },
+    {
+      "requirements": ["G03-evidence-04:88fb9dfe"],
+      "automated": [
+        { "file": "scripts/run-webview-dom-tests.js", "test": "context composer posts edited focus only after Insert or Ctrl+Enter" },
+        { "file": "scripts/run-webview-dom-tests.js", "test": "context composer initialization is idempotent and one Insert click posts once" },
+        { "file": "scripts/run-unit-tests.js", "test": "all provider evidence paths share the complete credential redaction vocabulary" },
+        { "file": "scripts/run-unit-tests.js", "test": "terminal context insertion is shell-inert and never submits" },
+        { "file": "scripts/run-unit-tests.js", "test": "extension activation registers the bounded surface and explicit launch commands create the right session kinds" }
+      ],
       "humanGates": ["operator-terminal", "real-vscode", "windows-native"]
     },
     {

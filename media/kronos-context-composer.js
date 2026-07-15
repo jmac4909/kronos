@@ -21,6 +21,12 @@
     }
 
     function attach() {
+      var handlerMarker = 'data-kronos-context-composer-handler-attached';
+      if (document.documentElement.getAttribute(handlerMarker) === 'true') {
+        setTimeout(postReady, 0);
+        return;
+      }
+      document.documentElement.setAttribute(handlerMarker, 'true');
       document.documentElement.setAttribute('data-kronos-actions-ready', 'true');
       document.addEventListener('click', function(event) {
         var target = event.target && typeof event.target.closest === 'function'
