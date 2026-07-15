@@ -226,6 +226,8 @@ The installed extension has zero third-party runtime dependencies. Kronos uses t
 
 ## Command Surface
 
+`terminalFirstCommandRouter.ts` is the sole runtime inventory for these command IDs and groups every route by Work, terminal, context, Session, Project, Attention, or operations responsibility. Activation supplies behavior callbacks through one audited VS Code registrar. The manifest, pure route inventory, and activation harness must agree exactly before packaging.
+
 The public terminal-first command surface is intentionally limited to:
 
 - Work: refresh the Jira board; search/filter/show completed/clear filters; open ticket workspace; start Claude for the selected ticket; manage a focused terminal; insert Jira/MR/CI context; open the Context Basket;

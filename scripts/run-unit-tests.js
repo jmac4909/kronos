@@ -1,5 +1,4 @@
 const assert = require('node:assert/strict');
-const crypto = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -2940,17 +2939,6 @@ test('Setup and Doctor render bounded operation dashboards with allowlisted acti
       activeBranchProfile: 'main',
     }],
   });
-});
-
-test('runtime dependency surface is Node and VS Code only', () => {
-  const manifest = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
-  assert.deepEqual(manifest.dependencies || {}, {});
-  const lock = JSON.parse(fs.readFileSync(path.join(root, 'package-lock.json'), 'utf8'));
-  assert.deepEqual(lock.packages[''].dependencies || {}, {});
-  const source = fs.readFileSync(path.join(root, 'src', 'terminalFirstExtension.ts'), 'utf8');
-  assert.doesNotMatch(source, /child_process|createTerminal|terminal\.dispose\s*\(/);
-  assert.equal((source.match(/registerCommand\(/g) || []).length, 1, 'commands must register through one audited helper');
-  assert.equal(crypto.createHash('sha256').update(source).digest('hex').length, 64);
 });
 
 test('project Git evidence reads only the bounded VS Code Git model', async () => {

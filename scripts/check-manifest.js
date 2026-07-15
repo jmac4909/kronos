@@ -305,6 +305,9 @@ function checkRuntimeRegistrations() {
     for (const match of source.matchAll(/\bthis\.command\(\s*['"]([^'"]+)['"]/g)) {
       registrations.push({ id: match[1], file });
     }
+    for (const match of source.matchAll(/\broute\(\s*['"](kronos\.[^'"]+)['"]/g)) {
+      registrations.push({ id: match[1], file });
+    }
     for (const match of source.matchAll(/\bregisterTreeDataProvider\(\s*['"]([^'"]+)['"]/g)) {
       viewRegistrations.push({ id: match[1], file });
     }

@@ -157,6 +157,8 @@
       "id": "maintainability-and-orchestration",
       "goals": ["G14"],
       "automated": [
+        { "file": "scripts/run-command-routing-tests.js", "test": "command router exactly matches the manifest and dispatches each responsibility once" },
+        { "file": "scripts/run-command-routing-tests.js", "test": "command router fails closed when a responsibility handler is missing" },
         { "file": "scripts/run-work-orchestration-tests.js", "test": "scheduled Work refreshes coalesce behind one in-flight read" },
         { "file": "scripts/run-work-orchestration-tests.js", "test": "a newer explicit Work refresh supersedes a late stale result" },
         { "file": "scripts/run-work-orchestration-tests.js", "test": "a failed Work refresh releases ownership for the next request" },
@@ -233,7 +235,7 @@
       "id": "security-and-release",
       "goals": ["G16", "G18"],
       "automated": [
-        { "file": "scripts/run-unit-tests.js", "test": "runtime dependency surface is Node and VS Code only" },
+        { "file": "scripts/run-command-routing-tests.js", "test": "runtime dependency surface is Node and VS Code only" },
         { "file": "scripts/run-jira-work-board-tests.js", "test": "board runtime posts only normalized command and Jira ticket key" },
         { "file": "scripts/run-webview-dom-tests.js", "test": "ticket workspace action panel posts one normalized, ticket-scoped message" }
       ],
@@ -251,7 +253,8 @@
     { "id": "audited-context-placement-boundary", "file": "scripts/check-context-governance.js", "marker": "Exactly one audited non-submitting context insertion call is allowed." },
     { "id": "canonical-attention-transition-key", "file": "docs/state-ownership.md", "marker": "scope + provider + resource + logical subject + facet" },
     { "id": "provider-binding-reconciliation-owner", "file": "docs/state-ownership.md", "marker": "| Provider binding reconciliation |" },
-    { "id": "private-persistence-lifecycle", "file": "docs/state-ownership.md", "marker": "## Private persistence lifecycle matrix" }
+    { "id": "private-persistence-lifecycle", "file": "docs/state-ownership.md", "marker": "## Private persistence lifecycle matrix" },
+    { "id": "runtime-responsibility-graph", "file": "scripts/check-runtime-graph.js", "marker": "no cycles or dead runtime exports" }
   ],
   "requirementEvidence": [
     {
@@ -1011,7 +1014,7 @@
       "requirements": ["G09-evidence-02:ad12172f"],
       "automated": [
         { "file": "scripts/run-unit-tests.js", "test": "project Git evidence reads only the bounded VS Code Git model" },
-        { "file": "scripts/run-unit-tests.js", "test": "runtime dependency surface is Node and VS Code only" }
+        { "file": "scripts/run-command-routing-tests.js", "test": "runtime dependency surface is Node and VS Code only" }
       ]
     },
     {
@@ -1257,7 +1260,7 @@
         { "file": "scripts/run-provider-contract-tests.js", "test": "provider contract matrix covers requests, bounds, normalization, completeness, and errors for every provider" },
         { "file": "scripts/run-provider-contract-tests.js", "test": "GitLab enterprise paths retain paginated evidence and explain permission and rate-limit gaps" },
         { "file": "scripts/run-unit-tests.js", "test": "all provider evidence paths share the complete credential redaction vocabulary" },
-        { "file": "scripts/run-unit-tests.js", "test": "runtime dependency surface is Node and VS Code only" }
+        { "file": "scripts/run-command-routing-tests.js", "test": "runtime dependency surface is Node and VS Code only" }
       ],
       "humanGates": ["live-providers"]
     },
@@ -1324,12 +1327,56 @@
         { "file": "scripts/run-provider-contract-tests.js", "test": "sanitized GitLab fixture normalizes enterprise MR review, pipeline, job, and test evidence" },
         { "file": "scripts/run-provider-contract-tests.js", "test": "sanitized Jenkins fixture resolves a multibranch build and treats missing stages as optional" },
         { "file": "scripts/run-provider-contract-tests.js", "test": "sanitized SonarQube fixture retains branch-qualified gate, measures, and issues" },
-        { "file": "scripts/run-unit-tests.js", "test": "runtime dependency surface is Node and VS Code only" }
+        { "file": "scripts/run-command-routing-tests.js", "test": "runtime dependency surface is Node and VS Code only" }
       ]
     },
     {
       "requirements": ["G13-evidence-03:47f18393"],
       "humanGates": ["live-providers"]
+    },
+    {
+      "requirements": ["G14-goal:d7f307d3"],
+      "automated": [
+        { "file": "scripts/run-command-routing-tests.js", "test": "command router exactly matches the manifest and dispatches each responsibility once" },
+        { "file": "scripts/run-work-orchestration-tests.js", "test": "scheduled Work refreshes coalesce behind one in-flight read" },
+        { "file": "scripts/run-provider-binding-reconciliation-tests.js", "test": "one provider binding reconciliation owner feeds Work, Sessions, Projects, Attention, polling, and context insertion" },
+        { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "Attention projection rebuilds after restart without stale-row resurrection" },
+        { "file": "scripts/run-unit-tests.js", "test": "Setup and Doctor render bounded operation dashboards with allowlisted actions" }
+      ],
+      "checks": ["runtime-responsibility-graph"]
+    },
+    {
+      "requirements": ["G14-evidence-01:ff81fe1b"],
+      "automated": [
+        { "file": "scripts/run-command-routing-tests.js", "test": "command router exactly matches the manifest and dispatches each responsibility once" },
+        { "file": "scripts/run-terminal-lifecycle-tests.js", "test": "Sessions present project, branch, Jira contexts, attachment, monitoring, and latest result at a glance" },
+        { "file": "scripts/run-project-catalog-tests.js", "test": "project Git presentation distinguishes unavailable, clean, staged, untracked, conflicted, and bounded states" },
+        { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "Attention projection rebuilds after restart without stale-row resurrection" },
+        { "file": "scripts/run-provider-binding-reconciliation-tests.js", "test": "one provider binding reconciliation owner feeds Work, Sessions, Projects, Attention, polling, and context insertion" },
+        { "file": "scripts/run-failure-contract-tests.js", "test": "operator surfaces use staged outcomes and the shared bounded failure vocabulary" }
+      ]
+    },
+    {
+      "requirements": ["G14-evidence-02:0692cdeb"],
+      "automated": [
+        { "file": "scripts/run-command-routing-tests.js", "test": "command router fails closed when a responsibility handler is missing" }
+      ],
+      "checks": ["runtime-responsibility-graph"]
+    },
+    {
+      "requirements": ["G14-evidence-03:100ba5ee"],
+      "automated": [
+        { "file": "scripts/run-command-routing-tests.js", "test": "command router exactly matches the manifest and dispatches each responsibility once" },
+        { "file": "scripts/run-command-routing-tests.js", "test": "runtime dependency surface is Node and VS Code only" }
+      ]
+    },
+    {
+      "requirements": ["G14-evidence-04:0d071921"],
+      "automated": [
+        { "file": "scripts/run-command-routing-tests.js", "test": "command router exactly matches the manifest and dispatches each responsibility once" },
+        { "file": "scripts/run-unit-tests.js", "test": "extension activation registers the bounded surface and explicit launch commands create the right session kinds" }
+      ],
+      "checks": ["runtime-responsibility-graph"]
     },
     {
       "requirements": ["G16-goal:b55b5b6c"],

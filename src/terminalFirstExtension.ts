@@ -13,6 +13,7 @@ import {
   type ProviderEnvLoadResult,
 } from './services/providerEnv';
 import { boundedOperationFailure } from './services/errorUtils';
+import { registerTerminalFirstCommands } from './services/terminalFirstCommandRouter';
 import { KRONOS_DIR } from './services/stateStore';
 import {
   failedOperationStageOutcome,
@@ -402,50 +403,62 @@ class TerminalFirstRuntime implements vscode.Disposable {
   }
 
   private registerCommands(): void {
-    this.command('kronos.refreshTickets', async () => this.refreshTickets(true));
-    this.command('kronos.openJiraBoard', async () => this.openJiraBoard());
-    this.command('kronos.filterWork', async () => this.configureWorkFilter());
-    this.command('kronos.clearWorkFilter', () => this.workTree.clearFilter());
-    this.command('kronos.openTicketWorkspace', async argument => this.openTicketWorkspace(argument));
-    this.command('kronos.configureProjectDiscoveryFolders', async () => this.configureProjectDiscoveryFolders());
-    this.command('kronos.registerWorkspaceProject', async () => this.registerWorkspaceProject());
-    this.command('kronos.chooseTicketProject', async argument => this.chooseTicketProject(argument));
-    this.command('kronos.newClaudeSession', async () => this.newClaudeSession());
-    this.command('kronos.startClaudeForTicket', async argument => this.startClaudeForTicket(argument));
-    this.command('kronos.manageActiveTerminal', async argument => this.manageFocusedTerminal(argument));
-    this.command('kronos.insertJiraContext', async argument => this.insertJiraContext(argument));
-    this.command('kronos.insertOtherTicket', async argument => this.insertOtherTicket(argument));
-    this.command('kronos.insertGitLabContext', async argument => this.insertGitLabContext(argument));
-    this.command('kronos.insertCiContext', async argument => this.insertCiContext(argument));
-    this.command('kronos.openContextBasket', async () => this.openContextBasket());
-    this.command('kronos.searchLocalEvidence', async () => this.searchLocalEvidence());
-    this.command('kronos.createLocalHandoff', async argument => this.createLocalHandoff(argument));
-    this.command('kronos.pollManagedWorkSessions', async () => this.pollProviders(true));
-    this.command('kronos.openWorkSessionAudit', async argument => this.openWorkSessionAudit(argument));
-    this.command('kronos.focusWorkSessionTerminal', async argument => this.focusWorkSessionTerminal(argument));
-    this.command('kronos.reattachWorkSessionTerminal', async argument => this.reattachFocusedTerminal(argument));
-    this.command('kronos.detachWorkSessionTerminal', async argument => this.detachManagedTerminal(argument));
-    this.command('kronos.closeWorkSession', async argument => this.stopManagingSession(argument));
-    this.command('kronos.removeWorkSession', async argument => this.removeManagedSession(argument));
-    this.command('kronos.refreshProjects', () => this.projectTree.refresh());
-    this.command('kronos.renameLocalProject', async argument => this.renameLocalProject(argument));
-    this.command('kronos.openProjectGitStatus', async argument => this.openProjectGitStatus(argument));
-    this.command('kronos.insertProjectGitContext', async argument => this.insertProjectGitContext(argument));
-    this.command('kronos.openProjectMergeRequest', async argument => this.openProjectMergeRequest(argument));
-    this.command('kronos.insertProjectGitLabContext', async argument => this.insertProjectProviderContext(argument, 'gitlab'));
-    this.command('kronos.insertProjectCiContext', async argument => this.insertProjectProviderContext(argument, 'ci'));
-    this.command('kronos.configureProjectIntegrations', async argument => this.configureProjectIntegrations(argument));
-    this.command('kronos.pauseWorkSessionMonitoring', async argument => this.setMonitoring(argument, false));
-    this.command('kronos.resumeWorkSessionMonitoring', async argument => this.setMonitoring(argument, true));
-    this.command('kronos.acknowledgeAttention', async argument => this.acknowledgeAttention(argument));
-    this.command('kronos.openProvider', async argument => this.openProvider(argument));
-    this.command('kronos.setup', async () => this.openSetup());
-    this.command('kronos.doctor', async () => this.openDoctor());
-    this.command('kronos.settings', async () => this.openSetup());
-  }
-
-  private command(id: string, handler: (...args: unknown[]) => unknown): void {
-    this.disposables.push(vscode.commands.registerCommand(id, handler));
+    this.disposables.push(...registerTerminalFirstCommands({
+      work: {
+        refreshTickets: async () => this.refreshTickets(true),
+        openJiraBoard: async () => this.openJiraBoard(),
+        filterWork: async () => this.configureWorkFilter(),
+        clearWorkFilter: () => this.workTree.clearFilter(),
+        openTicketWorkspace: async argument => this.openTicketWorkspace(argument),
+        chooseTicketProject: async argument => this.chooseTicketProject(argument),
+      },
+      terminals: {
+        newClaudeSession: async () => this.newClaudeSession(),
+        startClaudeForTicket: async argument => this.startClaudeForTicket(argument),
+        manageActiveTerminal: async argument => this.manageFocusedTerminal(argument),
+      },
+      context: {
+        insertJiraContext: async argument => this.insertJiraContext(argument),
+        insertOtherTicket: async argument => this.insertOtherTicket(argument),
+        insertGitLabContext: async argument => this.insertGitLabContext(argument),
+        insertCiContext: async argument => this.insertCiContext(argument),
+        openContextBasket: async () => this.openContextBasket(),
+        searchLocalEvidence: async () => this.searchLocalEvidence(),
+        createLocalHandoff: async argument => this.createLocalHandoff(argument),
+      },
+      sessions: {
+        pollManagedWorkSessions: async () => this.pollProviders(true),
+        openWorkSessionAudit: async argument => this.openWorkSessionAudit(argument),
+        focusWorkSessionTerminal: async argument => this.focusWorkSessionTerminal(argument),
+        reattachWorkSessionTerminal: async argument => this.reattachFocusedTerminal(argument),
+        detachWorkSessionTerminal: async argument => this.detachManagedTerminal(argument),
+        closeWorkSession: async argument => this.stopManagingSession(argument),
+        removeWorkSession: async argument => this.removeManagedSession(argument),
+        pauseWorkSessionMonitoring: async argument => this.setMonitoring(argument, false),
+        resumeWorkSessionMonitoring: async argument => this.setMonitoring(argument, true),
+      },
+      projects: {
+        configureProjectDiscoveryFolders: async () => this.configureProjectDiscoveryFolders(),
+        registerWorkspaceProject: async () => this.registerWorkspaceProject(),
+        refreshProjects: () => this.projectTree.refresh(),
+        renameLocalProject: async argument => this.renameLocalProject(argument),
+        openProjectGitStatus: async argument => this.openProjectGitStatus(argument),
+        insertProjectGitContext: async argument => this.insertProjectGitContext(argument),
+        openProjectMergeRequest: async argument => this.openProjectMergeRequest(argument),
+        insertProjectGitLabContext: async argument => this.insertProjectProviderContext(argument, 'gitlab'),
+        insertProjectCiContext: async argument => this.insertProjectProviderContext(argument, 'ci'),
+        configureProjectIntegrations: async argument => this.configureProjectIntegrations(argument),
+      },
+      attention: {
+        acknowledgeAttention: async argument => this.acknowledgeAttention(argument),
+        openProvider: async argument => this.openProvider(argument),
+      },
+      operations: {
+        setup: async () => this.openSetup(),
+        doctor: async () => this.openDoctor(),
+        settings: async () => this.openSetup(),
+      },
+    }, (id, handler) => vscode.commands.registerCommand(id, handler)));
   }
 
   private loadProviderEnvironment(): void {

@@ -3,6 +3,7 @@ const path = require('path');
 
 const ENTRY_FILE = 'src/extension.ts';
 const TERMINAL_FIRST_RUNTIME_FILE = 'src/terminalFirstExtension.ts';
+const COMMAND_ROUTER_FILE = 'src/services/terminalFirstCommandRouter.ts';
 const TERMINAL_INSERTION_FILE = 'src/services/terminalContextInsertion.ts';
 const CLAUDE_LAUNCHER_FILE = 'src/services/claudeTerminalLauncher.ts';
 const STATE_TYPES_FILE = 'src/state/types.ts';
@@ -311,8 +312,9 @@ function checkClaudeLauncherContract() {
 
   const runtimeSource = runtimeFiles.get(TERMINAL_FIRST_RUNTIME_FILE) || '';
   const runtimeCode = maskComments(runtimeSource);
+  const commandRouterCode = maskComments(runtimeFiles.get(COMMAND_ROUTER_FILE) || '');
   for (const command of ['kronos.newClaudeSession', 'kronos.startClaudeForTicket']) {
-    if (!runtimeCode.includes(`this.command('${command}'`)) {
+    if (!commandRouterCode.includes(`route('${command}', 'terminals'`)) {
       addGlobalViolation('EXPLICIT_CLAUDE_LAUNCH', `${command} must be an explicit registered operator command.`);
     }
   }
