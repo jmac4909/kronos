@@ -191,6 +191,8 @@ Saving project integration data, explicitly linking a ticket project, attaching 
 
 By default, private terminal-first state lives under `~/.kronos`, or the explicitly configured `KRONOS_DIR`.
 
+**Search Local Sessions and Evidence** builds a fresh in-memory index each time it opens. The index is capped at 2,000 separately budgeted metadata entries across registered projects/branches, sessions, explicit ticket contexts, provider bindings, saved artifact labels, and the newest audit-event summaries. It is never written to disk, includes no artifact payload or provider response body, and cannot accept terminal bindings, input, output, or scrollback as a source. Selecting a result performs only its existing bounded action: focus/reconnect a managed terminal, open a ticket workspace, read project Git evidence, open a private artifact, open a validated provider URL, or open the local session audit.
+
 The canonical owner, ingress, compatibility, and consumer for every record are listed in [State Ownership and Data Flow](state-ownership.md). Provider request, bound, normalization, completeness, and error behavior are listed in the [Provider Read Contract Matrix](provider-contract-matrix.md).
 
 Collection ceilings, local render/read timing gates, superseding Jira refresh behavior, and the automated versus human accessibility boundary are listed in [Scale, Responsiveness, and Accessibility Budget](scale-accessibility-budget.md).
@@ -223,10 +225,10 @@ The installed extension has zero third-party runtime dependencies. Kronos uses t
 The public terminal-first command surface is intentionally limited to:
 
 - Work: refresh the Jira board; search/filter/show completed/clear filters; open ticket workspace; start Claude for the selected ticket; manage a focused terminal; insert Jira/MR/CI context; open the Context Basket;
-- Sessions: create a project-oriented Claude session; add another Jira context; poll providers; open audit; focus/reattach/detach terminal; stop or remove local management; pause/resume monitoring;
+- Sessions: create a project-oriented Claude session; add another Jira context; poll providers; search local session/evidence metadata; open audit; focus/reattach/detach terminal; stop or remove local management; pause/resume monitoring;
 - Projects: refresh registered branch/status; manage discovery and registration; view bounded status/diff; insert project Git/MR/CI evidence; open an existing or prefilled new MR page; configure project providers; open the Context Basket;
 - Attention: acknowledge item and open provider;
-- Operations: open the Context Basket from Work, Sessions, or Projects; Setup, Doctor, and Settings.
+- Operations: search local session/evidence metadata from every view; open the Context Basket from Work, Sessions, or Projects; Setup, Doctor, and Settings.
 
 No command outside this inventory is part of the terminal-first product contract. In particular, there is no generic terminal-command runner.
 

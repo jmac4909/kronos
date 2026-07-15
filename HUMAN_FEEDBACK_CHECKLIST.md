@@ -125,6 +125,13 @@ If GitLab and CI providers are safely configured:
 11. Stop managing one session and confirm its terminal remains open and usable. Remove an old session, confirm the terminal still remains open, and confirm the removed row no longer appears while retained context/audit files remain local.
 12. After two unchanged polls, inspect both the Session and its Project. Confirm they show the same last attempt, last successful poll, last meaningful change, next scheduled poll, normalized current error, and increasing quiet/suppressed count without adding Attention rows.
 
+## Local Evidence Search
+
+1. Choose **Search Local Sessions and Evidence** from each Kronos view toolbar and type portions of a session title, Jira key, registered project, current branch, provider subject, artifact label, and recent audit summary. Confirm each expected row is discoverable through label, description, or detail matching.
+2. Select one result of each kind. Confirm Session focuses/reconnects its terminal, Jira opens its workspace or retained session audit, Project opens bounded read-only Git evidence, Provider opens only a validated URL or audit, Artifact opens its private file, and Event opens its session audit.
+3. Include a terminal with distinctive visible text that appears nowhere in Kronos metadata. Confirm searching that text returns no result and Kronos does not read or index terminal input, output, or scrollback.
+4. Change a session title or create a new local event, reopen search, and confirm the rebuilt Quick Pick reflects current state without a separate indexing task or persistent search file.
+
 ## Launch Validation and Operations
 
 1. In Settings, temporarily change the Claude executable to a harmless but disallowed command such as `echo`.

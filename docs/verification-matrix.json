@@ -136,6 +136,17 @@
       "humanGates": ["operator-terminal", "real-vscode"]
     },
     {
+      "id": "local-evidence-search",
+      "goals": ["G21"],
+      "automated": [
+        { "file": "scripts/run-local-evidence-search-tests.js", "test": "local evidence search covers sessions, tickets, projects, branches, providers, artifacts, and events without terminal content" },
+        { "file": "scripts/run-local-evidence-search-tests.js", "test": "local evidence search enforces independent source budgets and a 2000-entry total ceiling" },
+        { "file": "scripts/run-local-evidence-search-tests.js", "test": "local evidence search strips controls and bounds every visible field" },
+        { "file": "scripts/run-local-evidence-search-tests.js", "test": "local evidence search actions retain only the bounded local target needed to open a result" }
+      ],
+      "humanGates": ["real-vscode"]
+    },
+    {
       "id": "security-and-release",
       "goals": ["G16", "G18"],
       "automated": [

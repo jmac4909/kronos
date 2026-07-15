@@ -123,6 +123,10 @@ import {
   type ContextBasketItem,
 } from './services/contextBasketStore';
 import { CONTEXT_BASKET_SCRIPT, buildContextBasketHtml } from './services/contextBasketView';
+import {
+  buildLocalEvidenceSearchIndex,
+  type LocalEvidenceSearchEntry,
+} from './services/localEvidenceSearch';
 import { isRecord } from './services/records';
 import {
   listLocalProjects,
@@ -393,6 +397,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
     this.command('kronos.insertGitLabContext', async argument => this.insertGitLabContext(argument));
     this.command('kronos.insertCiContext', async argument => this.insertCiContext(argument));
     this.command('kronos.openContextBasket', async () => this.openContextBasket());
+    this.command('kronos.searchLocalEvidence', async () => this.searchLocalEvidence());
     this.command('kronos.pollManagedWorkSessions', async () => this.pollProviders(true));
     this.command('kronos.openWorkSessionAudit', async argument => this.openWorkSessionAudit(argument));
     this.command('kronos.focusWorkSessionTerminal', async argument => this.focusWorkSessionTerminal(argument));
@@ -1782,6 +1787,70 @@ class TerminalFirstRuntime implements vscode.Disposable {
     const detail = unknownErrorMessage(error, fallback);
     this.log(fallback, detail);
     void vscode.window.showErrorMessage(detail);
+  }
+
+  private async searchLocalEvidence(): Promise<void> {
+    let events: ReturnType<typeof listMonitorEvents> = [];
+    try {
+      events = listMonitorEvents({ limit: 500 });
+    } catch (error: unknown) {
+      this.log('Local evidence search could not read the audit tail.', unknownErrorMessage(error, 'Audit search unavailable.'));
+      void vscode.window.showWarningMessage('Kronos could not include the local audit tail in this search. Sessions, tickets, projects, providers, and artifacts remain available.');
+    }
+    const entries = buildLocalEvidenceSearchIndex({
+      sessions: listWorkSessions({ limit: 200 }),
+      projects: listLocalProjects(this.state.state),
+      events,
+    });
+    if (entries.length === 0) {
+      void vscode.window.showInformationMessage('Kronos has no local session or evidence metadata to search yet.');
+      return;
+    }
+    const pick = await vscode.window.showQuickPick(entries.map(entry => ({
+      label: `$(${localEvidenceSearchIcon(entry.kind)}) ${entry.label}`,
+      description: entry.description,
+      detail: entry.detail,
+      entry,
+    })), {
+      title: 'Search Local Sessions and Evidence',
+      placeHolder: 'Search session titles, Jira keys, projects, branches, providers, events, and artifact labels',
+      matchOnDescription: true,
+      matchOnDetail: true,
+    });
+    if (pick) { await this.openLocalEvidenceSearchResult(pick.entry); }
+  }
+
+  private async openLocalEvidenceSearchResult(entry: LocalEvidenceSearchEntry): Promise<void> {
+    const action = entry.action;
+    if (action.kind === 'session') {
+      await this.focusWorkSessionTerminal({ sessionId: action.sessionId });
+      return;
+    }
+    if (action.kind === 'ticket') {
+      if (this.state.state?.tickets[action.ticketKey]) {
+        await this.openTicketWorkspace({ ticketKey: action.ticketKey });
+      } else {
+        await this.openWorkSessionAudit({ sessionId: action.sessionId });
+      }
+      return;
+    }
+    if (action.kind === 'project') {
+      await this.openProjectGitStatus({ projectName: action.projectName, projectPath: action.projectPath });
+      return;
+    }
+    if (action.kind === 'artifact') {
+      try {
+        await this.openLocalArtifact(action.promptPath);
+      } catch (error: unknown) {
+        void vscode.window.showWarningMessage(unknownErrorMessage(error, 'The selected private context artifact is unavailable.'));
+      }
+      return;
+    }
+    if (action.kind === 'provider' && action.url) {
+      await this.openHttpUrl(action.url);
+      return;
+    }
+    await this.openWorkSessionAudit({ sessionId: action.sessionId });
   }
 
   private async insertJiraContext(argument: unknown): Promise<void> {
@@ -3191,6 +3260,15 @@ class TerminalFirstRuntime implements vscode.Disposable {
 function normalizeTicketKey(value: string | undefined): string | undefined {
   const normalized = value?.trim().toUpperCase();
   return normalized && /^[A-Z][A-Z0-9_]{0,127}-[1-9][0-9]*$/.test(normalized) ? normalized : undefined;
+}
+
+function localEvidenceSearchIcon(kind: LocalEvidenceSearchEntry['kind']): string {
+  if (kind === 'session') { return 'terminal'; }
+  if (kind === 'ticket') { return 'issues'; }
+  if (kind === 'project') { return 'repo'; }
+  if (kind === 'provider') { return 'plug'; }
+  if (kind === 'artifact') { return 'file-text'; }
+  return 'history';
 }
 
 function stringProperty(value: unknown, key: string): string | undefined {

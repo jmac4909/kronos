@@ -98,6 +98,7 @@ function checkReadmeMetrics(packageJson, readmeSource) {
     'scripts/run-provider-reconciliation-tests.js',
     'scripts/run-provider-health-visibility-tests.js',
     'scripts/run-context-basket-tests.js',
+    'scripts/run-local-evidence-search-tests.js',
   ];
   const actual = new Map([
     ['Enterprise provider integrations', 4],
