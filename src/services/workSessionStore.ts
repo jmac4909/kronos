@@ -368,6 +368,91 @@ export function newestWorkSessionProviderBinding(
   }, undefined);
 }
 
+/**
+ * Shared pure binding update used by terminal Sessions and project-owned
+ * monitoring records. Provider identity must not drift merely because the
+ * poll owner is a registered project instead of an interactive terminal.
+ */
+export function nextWorkSessionProviderBindings(
+  bindings: readonly WorkSessionProviderBinding[],
+  input: AddWorkSessionProviderBindingInput,
+  attachedAt: string,
+): WorkSessionProviderBinding[] {
+  const provider = normalizeProvider(input.provider);
+  const resource = normalizeProviderResource(input.resource);
+  const subjectId = requiredSingleLine(input.subjectId, 'provider subject id', 500);
+  const projectId = optionalSingleLine(input.projectId, 'provider project id', 500);
+  const id = input.id
+    ? normalizeEntityId(input.id, 'provider binding id')
+    : providerBindingId(provider, resource, `${projectId || ''}-${subjectId}`);
+  const binding: WorkSessionProviderBinding = {
+    id,
+    provider,
+    resource,
+    subjectId,
+    attachedAt: normalizeTimestamp(attachedAt, 'provider binding attachedAt'),
+  };
+  const url = optionalProviderHttpUrl(input.url, 'provider URL', provider);
+  if (projectId) { binding.projectId = projectId; }
+  if (url) { binding.url = url; }
+  const sameSubject = (candidate: WorkSessionProviderBinding) => candidate.provider === provider
+    && candidate.resource === resource
+    && candidate.subjectId === subjectId;
+  const next = bindings.map(candidate => ({ ...candidate }));
+  const existingIndex = next.findIndex(candidate => candidate.id === id || sameSubject(candidate));
+  if (existingIndex >= 0) {
+    next[existingIndex] = binding;
+  } else {
+    next.push(binding);
+  }
+  return next
+    .filter((candidate, index) =>
+      !sameSubject(candidate) || index === existingIndex || (existingIndex < 0 && candidate.id === id))
+    .slice(-MAX_PROVIDER_BINDINGS);
+}
+
+/** One health projection keeps project-owned and Session-owned poll results identical. */
+export function nextWorkSessionMonitoring(
+  monitoring: WorkSessionRecord['monitoring'],
+  input: RecordWorkSessionMonitoringResultInput,
+  defaultAttemptedAt: string,
+): WorkSessionRecord['monitoring'] {
+  const next = { ...monitoring };
+  const polled = normalizeNonNegativeInteger(input.polled, 'monitoring polled count');
+  const failures = normalizeNonNegativeInteger(input.failures, 'monitoring failure count');
+  const skipped = normalizeNonNegativeInteger(input.skipped, 'monitoring skipped count');
+  const transitions = normalizeNonNegativeInteger(input.transitions || 0, 'monitoring transition count');
+  const attemptedAt = input.attemptedAt
+    ? normalizeTimestamp(input.attemptedAt, 'monitoring lastAttemptAt')
+    : normalizeTimestamp(defaultAttemptedAt, 'monitoring lastAttemptAt');
+  next.lastAttemptAt = attemptedAt;
+  if (polled > 0) { next.lastPolledAt = attemptedAt; }
+  if (polled > 0 && failures === 0) { next.lastSuccessfulAt = attemptedAt; }
+  if (transitions > 0) {
+    next.lastMeaningfulChangeAt = attemptedAt;
+    next.suppressedUnchangedCount = 0;
+  } else if (polled > 0) {
+    next.suppressedUnchangedCount = Math.min(
+      Number.MAX_SAFE_INTEGER,
+      (next.suppressedUnchangedCount || 0) + 1,
+    );
+  }
+  next.lastFailureCount = failures;
+  next.lastSkippedCount = skipped;
+  next.lastState = failures > 0
+    ? (polled > 0 ? 'partial' : 'blocked')
+    : skipped > 0
+      ? (polled > 0 ? 'partial' : 'blocked')
+      : polled > 0 ? 'healthy' : 'idle';
+  if (failures > 0) { next.currentError = 'provider_read_failed'; }
+  else if (skipped > 0) {
+    next.currentError = polled > 0 ? 'provider_evidence_partial' : 'provider_target_unavailable';
+  } else { delete next.currentError; }
+  const summary = optionalSingleLine(input.summary, 'monitoring result summary', 500);
+  next.lastSummary = summary || `Polled ${polled}; ${failures} failed; ${skipped} skipped.`;
+  return next;
+}
+
 export function listWorkSessionStoreIssues(options: WorkSessionStoreOptions = {}): WorkSessionStoreIssue[] {
   const directory = workSessionsDirectory(options);
   if (!assertSafeDirectoryIfPresent(directory, 'work sessions directory')) { return []; }
@@ -496,29 +581,7 @@ export function addWorkSessionProviderBinding(
 ): WorkSessionRecord {
   return mutateWorkSession(sessionId, options, (record, at) => {
     requireActiveSession(record);
-    const provider = normalizeProvider(input.provider);
-    const resource = normalizeProviderResource(input.resource);
-    const subjectId = requiredSingleLine(input.subjectId, 'provider subject id', 500);
-    const projectId = optionalSingleLine(input.projectId, 'provider project id', 500);
-    const id = input.id
-      ? normalizeEntityId(input.id, 'provider binding id')
-      : providerBindingId(provider, resource, `${projectId || ''}-${subjectId}`);
-    const binding: WorkSessionProviderBinding = { id, provider, resource, subjectId, attachedAt: at };
-    const url = optionalProviderHttpUrl(input.url, 'provider URL', provider);
-    if (projectId) { binding.projectId = projectId; }
-    if (url) { binding.url = url; }
-    const sameSubject = (candidate: WorkSessionProviderBinding) => candidate.provider === provider
-      && candidate.resource === resource
-      && candidate.subjectId === subjectId;
-    const existingIndex = record.providerBindings.findIndex(candidate => candidate.id === id || sameSubject(candidate));
-    if (existingIndex >= 0) {
-      record.providerBindings[existingIndex] = binding;
-    } else {
-      record.providerBindings.push(binding);
-    }
-    record.providerBindings = record.providerBindings.filter((candidate, index) =>
-      !sameSubject(candidate) || index === existingIndex || (existingIndex < 0 && candidate.id === id));
-    record.providerBindings = record.providerBindings.slice(-MAX_PROVIDER_BINDINGS);
+    record.providerBindings = nextWorkSessionProviderBindings(record.providerBindings, input, at);
   });
 }
 
@@ -576,38 +639,7 @@ export function recordWorkSessionMonitoringResult(
 ): WorkSessionRecord {
   return mutateWorkSession(sessionId, options, (record, at) => {
     requireActiveSession(record);
-    const polled = normalizeNonNegativeInteger(input.polled, 'monitoring polled count');
-    const failures = normalizeNonNegativeInteger(input.failures, 'monitoring failure count');
-    const skipped = normalizeNonNegativeInteger(input.skipped, 'monitoring skipped count');
-    const transitions = normalizeNonNegativeInteger(input.transitions || 0, 'monitoring transition count');
-    const attemptedAt = input.attemptedAt
-      ? normalizeTimestamp(input.attemptedAt, 'monitoring lastAttemptAt')
-      : at;
-    record.monitoring.lastAttemptAt = attemptedAt;
-    if (polled > 0) { record.monitoring.lastPolledAt = attemptedAt; }
-    if (polled > 0 && failures === 0) { record.monitoring.lastSuccessfulAt = attemptedAt; }
-    if (transitions > 0) {
-      record.monitoring.lastMeaningfulChangeAt = attemptedAt;
-      record.monitoring.suppressedUnchangedCount = 0;
-    } else if (polled > 0) {
-      record.monitoring.suppressedUnchangedCount = Math.min(
-        Number.MAX_SAFE_INTEGER,
-        (record.monitoring.suppressedUnchangedCount || 0) + 1,
-      );
-    }
-    record.monitoring.lastFailureCount = failures;
-    record.monitoring.lastSkippedCount = skipped;
-    record.monitoring.lastState = failures > 0
-      ? (polled > 0 ? 'partial' : 'blocked')
-      : skipped > 0
-        ? (polled > 0 ? 'partial' : 'blocked')
-        : polled > 0 ? 'healthy' : 'idle';
-    if (failures > 0) { record.monitoring.currentError = 'provider_read_failed'; }
-    else if (skipped > 0) {
-      record.monitoring.currentError = polled > 0 ? 'provider_evidence_partial' : 'provider_target_unavailable';
-    } else { delete record.monitoring.currentError; }
-    const summary = optionalSingleLine(input.summary, 'monitoring result summary', 500);
-    record.monitoring.lastSummary = summary || `Polled ${polled}; ${failures} failed; ${skipped} skipped.`;
+    record.monitoring = nextWorkSessionMonitoring(record.monitoring, input, at);
   });
 }
 

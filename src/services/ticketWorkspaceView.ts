@@ -99,7 +99,7 @@ ${ticketWorkspaceActionScript(input.nonce, input.actionScriptUri)}
     <div>
       <div class="kronos-subtitle">Terminal-first ticket workspace</div>
       <h1 class="kronos-title">${escapeHtml(ticketKey)} — ${escapeHtml(summary)}</h1>
-      <div class="kronos-subtitle">Start a new Claude terminal explicitly, or attach one you already own. Provider polling is automatic for configured ticket sessions; Insert actions only place reviewed evidence in the terminal and never press Enter.</div>
+      <div class="kronos-subtitle">Start a new Claude terminal explicitly, or attach one you already own. Provider polling belongs to the configured registered project and does not require this ticket or a Session; Insert actions only place reviewed evidence in the terminal and never press Enter.</div>
     </div>
   </header>
 

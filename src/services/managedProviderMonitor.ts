@@ -65,13 +65,22 @@ import {
   recordWorkSessionMonitoringResult,
   workSessionRecordPath,
   type AddWorkSessionProviderBindingInput,
+  type RecordWorkSessionMonitoringResultInput,
   type WorkSessionRecord,
 } from './workSessionStore';
 import { optionalTrimmedStringFromUnknown } from './records';
 import { boundedOperationFailure } from './errorUtils';
 import {
+  listLocalProjects,
   readProjectGitBranch,
 } from './projectCatalog';
+import {
+  addProjectMonitoringProviderBinding,
+  ensureProjectMonitoringRecord,
+  isProjectMonitoringRecord,
+  projectMonitoringRecordPath,
+  recordProjectMonitoringResult,
+} from './projectMonitoringStore';
 import {
   configuredCiPollingTargets,
   configuredGitLabPollingTarget,
@@ -121,7 +130,7 @@ export function managedProviderPollNotice(result: ManagedProviderPollResult): Ma
       warning: false,
     };
   }
-  const message = `Read ${result.polled} provider context${result.polled === 1 ? '' : 's'}; recorded ${result.transitions} new attention item${result.transitions === 1 ? '' : 's'}; ${result.failures} failed; ${result.skipped} skipped; ${result.unconfigured} work session${result.unconfigured === 1 ? '' : 's'} missing provider configuration.`;
+  const message = `Read ${result.polled} provider context${result.polled === 1 ? '' : 's'}; recorded ${result.transitions} new attention item${result.transitions === 1 ? '' : 's'}; ${result.failures} failed; ${result.skipped} skipped; ${result.unconfigured} project or legacy session target${result.unconfigured === 1 ? '' : 's'} missing provider configuration.`;
   if (result.unconfigured > 0) { return { kind: 'missing-configuration', message, warning: true }; }
   if (result.failures > 0 || result.leaseUnavailable) { return { kind: 'failed', message, warning: true }; }
   return { kind: 'complete', message, warning: false };
@@ -129,7 +138,7 @@ export function managedProviderPollNotice(result: ManagedProviderPollResult): Ma
 
 export interface ManagedProviderNotice {
   event: MonitorEvent;
-  session: MonitoredWorkSessionRecord;
+  session: WorkSessionRecord;
   severity: 'warning' | 'information';
   providerUrl?: string;
   contextCommand?: 'kronos.insertGitLabContext' | 'kronos.insertCiContext';
@@ -151,8 +160,7 @@ const LEASE_RENEWAL_MS = 60 * 1000;
 const FAILURE_PIPELINE_STATUSES = new Set(['failed', 'failure', 'error', 'canceled', 'cancelled']);
 const FAILURE_BUILD_STATUSES = new Set(['failed', 'failure', 'error', 'unstable', 'aborted']);
 const PASSING_SONAR_GATES = new Set(['ok', 'pass', 'passed', 'success']);
-type MonitoredWorkSessionRecord = WorkSessionRecord & { ticketKey: string };
-type TicketWorkSessionRecord = MonitoredWorkSessionRecord;
+type ProviderMonitoringOwner = WorkSessionRecord;
 
 export class ManagedProviderMonitor {
   private inFlight: Promise<ManagedProviderPollResult> | undefined;
@@ -202,14 +210,41 @@ export class ManagedProviderMonitor {
     heartbeat.unref();
     let total = emptyResult();
     try {
-      // Filter before the store's bounded slice so standalone history cannot
-      // crowd active monitored ticket sessions out of the polling set.
-      const monitoredProjects = new Set<string>();
-      for (const session of listWorkSessions({
+      // A configured registered project is the canonical poll owner. Legacy
+      // ticket/session monitoring remains only for work that has no registered
+      // project configuration, so one provider target is never read twice.
+      const state = this.options.state();
+      const sessions = listWorkSessions({
         status: 'active',
         monitoringEnabled: true,
-      }).map(monitorableWorkSession)
-        .filter((candidate): candidate is MonitoredWorkSessionRecord => Boolean(candidate))
+      });
+      const configuredProjects = listLocalProjects(state)
+        .filter(candidate => candidate.available && hasConfiguredProjectProvider(state, candidate.name));
+      const projectOwners: ProviderMonitoringOwner[] = [];
+      for (const project of configuredProjects) {
+        try {
+          projectOwners.push(ensureProjectMonitoringRecord({
+            name: project.name,
+            path: project.path,
+            displayName: project.displayName,
+            seedBindings: sessions
+              .filter(session => session.projectName === project.name)
+              .flatMap(session => session.providerBindings),
+          }));
+        } catch (error: unknown) {
+          total.failures += 1;
+          this.log(
+            `Could not prepare automatic provider polling for ${project.displayName}.`,
+            boundedOperationFailure(error, 'Project monitoring state is unavailable.').display,
+          );
+        }
+      }
+      const canonicalProjectKeys = new Set(configuredProjects.flatMap(project => [project.name, project.path]));
+      const monitoredProjects = new Set<string>();
+      const legacyOwners = sessions.map(monitorableWorkSession)
+        .filter((candidate): candidate is ProviderMonitoringOwner => Boolean(candidate))
+        .filter(candidate => ![candidate.projectName, candidate.projectPath]
+          .some(value => Boolean(value && canonicalProjectKeys.has(value))))
         .filter(candidate => {
           const projectKey = candidate.projectPath || candidate.projectName;
           if (!projectKey || !monitoredProjects.has(projectKey)) {
@@ -217,7 +252,8 @@ export class ManagedProviderMonitor {
             return true;
           }
           return false;
-        })) {
+        });
+      for (const session of [...projectOwners, ...legacyOwners]) {
         if (!renew()) {
           total.leaseUnavailable = true;
           total.leaseReason = 'renewal-failed';
@@ -246,15 +282,15 @@ export class ManagedProviderMonitor {
           if (localMonitoringEvent) { sessionResult.transitions += 1; }
         } catch (error: unknown) {
           this.log(
-            `Could not persist local monitoring readiness for ${session.ticketKey}.`,
+            `Could not persist local monitoring readiness for ${monitoringOwnerLabel(session)}.`,
             boundedOperationFailure(error, 'Monitoring readiness write failed.').display,
           );
         }
         const summary = hasProviderTarget
           ? `Polled ${sessionResult.polled} provider context${sessionResult.polled === 1 ? '' : 's'}; ${sessionResult.failures} failed; ${sessionResult.skipped} skipped; ${sessionResult.unconfigured} missing configuration.`
-          : 'No GitLab, Jenkins, or SonarQube provider is bound to this work session.';
+          : 'No GitLab, Jenkins, or SonarQube provider is configured for this monitoring owner.';
         try {
-          recordWorkSessionMonitoringResult(session.id, {
+          recordMonitoringResult(session, {
             polled: sessionResult.polled,
             transitions: sessionResult.transitions,
             failures: sessionResult.failures,
@@ -263,7 +299,7 @@ export class ManagedProviderMonitor {
             summary,
           });
         } catch (error: unknown) {
-          this.log(`Could not persist monitoring readiness for ${session.ticketKey}.`, boundedOperationFailure(error, 'Monitoring state write failed.').display);
+          this.log(`Could not persist monitoring readiness for ${monitoringOwnerLabel(session)}.`, boundedOperationFailure(error, 'Monitoring state write failed.').display);
         }
         total = combine(total, sessionResult);
         if (sessionResult.leaseUnavailable) { break; }
@@ -284,12 +320,12 @@ export class ManagedProviderMonitor {
   }
 
   private async pollGitLab(
-    session: MonitoredWorkSessionRecord,
+    session: ProviderMonitoringOwner,
     retainLease: () => boolean,
   ): Promise<ManagedProviderPollResult> {
     const binding = latestGitLabMergeRequestBinding(session);
     const state = this.options.state();
-    const ticket = state?.tickets[session.ticketKey];
+    const ticket = session.ticketKey ? state?.tickets[session.ticketKey] : undefined;
     let target = configuredGitLabPollingTarget(state, session);
     let discoveryDetail: string | undefined;
     if (!target) {
@@ -303,7 +339,7 @@ export class ManagedProviderMonitor {
         try {
           const discovery = await gitlabRestClient.discoverOpenMergeRequest({
             projectIdOrPath: configuredProject,
-            ticketKey: session.ticketKey,
+            ...(session.ticketKey ? { ticketKey: session.ticketKey } : {}),
             ...(sourceBranch ? { sourceBranch } : {}),
           });
           if (discovery.match) {
@@ -317,11 +353,11 @@ export class ManagedProviderMonitor {
             const detail = discovery.ambiguous
               ? `Found ${discovery.candidateCount} possible open merge requests; Kronos will not guess.`
               : 'No unique open merge request matched the current branch or ticket key yet.';
-            this.log(`GitLab monitoring is waiting for ${session.ticketKey}.`, detail);
+            this.log(`GitLab monitoring is waiting for ${monitoringOwnerLabel(session)}.`, detail);
             return { ...emptyResult(), skipped: 1 };
           }
         } catch (error: unknown) {
-          this.log(`GitLab MR discovery failed for ${session.ticketKey}.`, boundedOperationFailure(error, 'GitLab MR discovery failed.').display);
+          this.log(`GitLab MR discovery failed for ${monitoringOwnerLabel(session)}.`, boundedOperationFailure(error, 'GitLab MR discovery failed.').display);
           return { ...emptyResult(), failures: 1 };
         }
       }
@@ -332,7 +368,7 @@ export class ManagedProviderMonitor {
       const detail = Number.isSafeInteger(candidateIid) && candidateIid > 0
         ? 'No GitLab project ID or path is configured for the current merge request.'
         : 'The current merge request has no valid IID.';
-      this.log(`Skipped GitLab monitoring for ${session.ticketKey}.`, detail);
+      this.log(`Skipped GitLab monitoring for ${monitoringOwnerLabel(session)}.`, detail);
       return { ...emptyResult(), skipped: 1, unconfigured: 1 };
     }
     const { iid, projectIdOrPath, providerUrl } = target;
@@ -346,13 +382,13 @@ export class ManagedProviderMonitor {
       });
       if (discoveryDetail) {
         this.log(
-          `GitLab monitoring found MR !${iid} for ${session.ticketKey}.`,
+          `GitLab monitoring found MR !${iid} for ${monitoringOwnerLabel(session)}.`,
           `${discoveryDetail} The durable local session binding is ready.`,
         );
       }
     } catch (error: unknown) {
       this.log(
-        `GitLab monitoring could not bind MR !${iid} to ${session.ticketKey}.`,
+        `GitLab monitoring could not bind MR !${iid} to ${monitoringOwnerLabel(session)}.`,
         boundedOperationFailure(error, 'GitLab session binding write failed.').display,
       );
       return { ...emptyResult(), failures: 1 };
@@ -365,7 +401,7 @@ export class ManagedProviderMonitor {
         { includeReview: true },
       );
     } catch (error: unknown) {
-      this.log(`GitLab monitoring failed for ${session.ticketKey}.`, boundedOperationFailure(error, 'GitLab monitoring failed.').display);
+      this.log(`GitLab monitoring failed for ${monitoringOwnerLabel(session)}.`, boundedOperationFailure(error, 'GitLab monitoring failed.').display);
       const failureResult = { ...emptyResult(), failures: 1 };
       if (!retainLease()) { return leaseLost(failureResult); }
       try {
@@ -386,7 +422,7 @@ export class ManagedProviderMonitor {
         }
       } catch (statusError: unknown) {
         this.log(
-          `Could not persist GitLab read failure state for ${session.ticketKey}.`,
+          `Could not persist GitLab read failure state for ${monitoringOwnerLabel(session)}.`,
           boundedOperationFailure(statusError, 'GitLab read failure state write failed.').display,
         );
       }
@@ -396,7 +432,7 @@ export class ManagedProviderMonitor {
     const providerPartial = incompleteComponents.length > 0;
     if (providerPartial) {
       this.log(
-        `GitLab provider monitoring was partial for ${session.ticketKey}.`,
+        `GitLab provider monitoring was partial for ${monitoringOwnerLabel(session)}.`,
         snapshot.completeness.warnings.join(' ') || 'One or more bounded provider reads were incomplete.',
       );
     }
@@ -419,7 +455,7 @@ export class ManagedProviderMonitor {
     } catch (error: unknown) {
       stateFailures += 1;
       this.log(
-        `GitLab read-status monitoring failed for ${session.ticketKey}.`,
+        `GitLab read-status monitoring failed for ${monitoringOwnerLabel(session)}.`,
         boundedOperationFailure(error, 'GitLab read-status monitoring failed.').display,
       );
     }
@@ -481,18 +517,20 @@ export class ManagedProviderMonitor {
         if (!previousMr || previousMr.fingerprint !== mrDigest.fingerprint) {
           writeGitLabMergeRequestMonitorSnapshot(session.id, mrDigest);
         }
-        const currentTicket = this.options.state()?.tickets[session.ticketKey];
-        if (currentTicket) {
+        const projectionState = this.options.state();
+        for (const ticketKey of monitoringTicketKeys(projectionState, session)) {
+          const currentTicket = projectionState?.tickets[ticketKey];
+          if (!currentTicket) { continue; }
           const projected = effectiveTicketMergeRequest(currentTicket, session, mrDigest);
           if (projected) {
-            this.options.projectTicketProviderState?.(session.ticketKey, { mr: projected });
+            this.options.projectTicketProviderState?.(ticketKey, { mr: projected });
           }
         }
       }
     } catch (error: unknown) {
       stateFailures += 1;
       this.log(
-        `GitLab merge-request monitoring state failed for ${session.ticketKey}.`,
+        `GitLab merge-request monitoring state failed for ${monitoringOwnerLabel(session)}.`,
         boundedOperationFailure(error, 'GitLab merge-request monitoring state failed.').display,
       );
     }
@@ -545,7 +583,7 @@ export class ManagedProviderMonitor {
     } catch (error: unknown) {
       stateFailures += 1;
       this.log(
-        `GitLab pipeline monitoring state failed for ${session.ticketKey}.`,
+        `GitLab pipeline monitoring state failed for ${monitoringOwnerLabel(session)}.`,
         boundedOperationFailure(error, 'GitLab pipeline monitoring state failed.').display,
       );
     }
@@ -555,7 +593,7 @@ export class ManagedProviderMonitor {
   }
 
   private async pollCi(
-    session: MonitoredWorkSessionRecord,
+    session: ProviderMonitoringOwner,
     retainLease: () => boolean,
   ): Promise<ManagedProviderPollResult> {
     const state = this.options.state();
@@ -588,7 +626,7 @@ export class ManagedProviderMonitor {
       }
     } catch (error: unknown) {
       this.log(
-        `CI monitoring could not persist provider bindings for ${session.ticketKey}.`,
+        `CI monitoring could not persist provider bindings for ${monitoringOwnerLabel(session)}.`,
         boundedOperationFailure(error, 'CI session binding write failed.').display,
       );
       return { ...result, failures: 1 };
@@ -602,7 +640,7 @@ export class ManagedProviderMonitor {
       try {
         const jenkinsBranch = targets.jenkinsBranch
           || sonarTarget?.branch
-          || configuredSonarBranchName(state, session.ticketKey)
+          || (session.ticketKey ? configuredSonarBranchName(state, session.ticketKey) : null)
           || undefined;
         jenkins = await jenkinsRestClient.buildContext(
           jenkinsUrl,
@@ -615,19 +653,21 @@ export class ManagedProviderMonitor {
           url: jenkins.build.url || jenkins.jobOrBuildUrl || jenkinsUrl,
         });
         result.polled += 1;
-        this.options.projectTicketProviderState?.(session.ticketKey, {
-          build: {
-            number: jenkins.build.number,
-            status: jenkins.build.status,
-            url: jenkins.build.url || jenkins.jobOrBuildUrl || jenkinsUrl,
-          },
-        });
+        for (const ticketKey of monitoringTicketKeys(state, session)) {
+          this.options.projectTicketProviderState?.(ticketKey, {
+            build: {
+              number: jenkins.build.number,
+              status: jenkins.build.status,
+              url: jenkins.build.url || jenkins.jobOrBuildUrl || jenkinsUrl,
+            },
+          });
+        }
         const discoveredProjectKey = jenkins.sonarProjectKey
           || (!sonarTarget && isSonarRestConfigured() ? sonarProjectKeyHeuristic(state, session) : undefined);
         if (discoveredProjectKey) {
           const branch = jenkins.sonarBranch
             || sonarTarget?.branch
-            || configuredSonarBranchName(state, session.ticketKey);
+            || (session.ticketKey ? configuredSonarBranchName(state, session.ticketKey) : null);
           const discoveredOverridesMismatch = Boolean(jenkins.sonarProjectKey
             && sonarTarget?.projectKey !== jenkins.sonarProjectKey);
           if (branch && (!sonarTarget || discoveredOverridesMismatch)) {
@@ -649,7 +689,7 @@ export class ManagedProviderMonitor {
               this.options.updateProjectSonarTarget?.(projectName, discoveredProjectKey, branch);
             }
             this.log(
-              `Jenkins discovered SonarQube project ${discoveredProjectKey} for ${session.ticketKey}.`,
+              `Jenkins discovered SonarQube project ${discoveredProjectKey} for ${monitoringOwnerLabel(session)}.`,
               `${jenkins.sonarProjectKey ? 'Kronos bound the literal pipeline configuration' : 'Kronos used the registered repository-name heuristic'} to branch ${branch}.`,
             );
           }
@@ -657,7 +697,7 @@ export class ManagedProviderMonitor {
       } catch (error: unknown) {
         jenkinsReadFailure = providerReadFailureReason(error);
         result.failures += 1;
-        this.log(`Jenkins monitoring failed for ${session.ticketKey}.`, boundedOperationFailure(error, 'Jenkins monitoring failed.').display);
+        this.log(`Jenkins monitoring failed for ${monitoringOwnerLabel(session)}.`, boundedOperationFailure(error, 'Jenkins monitoring failed.').display);
       }
       if (!retainLease()) { return leaseLost(result); }
       try {
@@ -673,7 +713,7 @@ export class ManagedProviderMonitor {
       } catch (error: unknown) {
         result.failures += 1;
         this.log(
-          `Jenkins read-status monitoring failed for ${session.ticketKey}.`,
+          `Jenkins read-status monitoring failed for ${monitoringOwnerLabel(session)}.`,
           boundedOperationFailure(error, 'Jenkins read-status monitoring failed.').display,
         );
       }
@@ -692,7 +732,7 @@ export class ManagedProviderMonitor {
       } catch (error: unknown) {
         sonarReadFailure = providerReadFailureReason(error);
         result.failures += 1;
-        this.log(`SonarQube monitoring failed for ${session.ticketKey}.`, boundedOperationFailure(error, 'SonarQube monitoring failed.').display);
+        this.log(`SonarQube monitoring failed for ${monitoringOwnerLabel(session)}.`, boundedOperationFailure(error, 'SonarQube monitoring failed.').display);
       }
       if (!retainLease()) {
         for (const item of notices) { this.options.notify?.(item); }
@@ -712,7 +752,7 @@ export class ManagedProviderMonitor {
       } catch (error: unknown) {
         result.failures += 1;
         this.log(
-          `SonarQube read-status monitoring failed for ${session.ticketKey}.`,
+          `SonarQube read-status monitoring failed for ${monitoringOwnerLabel(session)}.`,
           boundedOperationFailure(error, 'SonarQube read-status monitoring failed.').display,
         );
       }
@@ -742,7 +782,7 @@ export class ManagedProviderMonitor {
 
       if (!previous) {
         notices.push(...initialCiNotices(session, digest, snapshotPath));
-        appendBaselineOnce(session, 'kronos', 'ci-monitor', session.ticketKey, ciDigestState(digest), digest.fingerprint, snapshotPath, {
+        appendBaselineOnce(session, 'kronos', 'ci-monitor', monitoringOwnerSubjectId(session), ciDigestState(digest), digest.fingerprint, snapshotPath, {
           jenkinsIncluded: Boolean(digest.jenkins),
           sonarIncluded: Boolean(digest.sonar),
         });
@@ -759,7 +799,7 @@ export class ManagedProviderMonitor {
       result.transitions += notices.length;
       return result;
     } catch (error: unknown) {
-      this.log(`CI monitoring state failed for ${session.ticketKey}.`, boundedOperationFailure(error, 'CI monitoring state failed.').display);
+      this.log(`CI monitoring state failed for ${monitoringOwnerLabel(session)}.`, boundedOperationFailure(error, 'CI monitoring state failed.').display);
       result.failures += 1;
       for (const item of notices) { this.options.notify?.(item); }
       result.transitions += notices.length;
@@ -772,16 +812,71 @@ export class ManagedProviderMonitor {
   }
 }
 
+function hasConfiguredProjectProvider(
+  state: KronosStateSnapshot | null,
+  projectName: string,
+): boolean {
+  const config = state?.projects[projectName]?.config;
+  return Boolean(
+    config?.gitlab_project_id
+      || config?.gitlab_project_path
+      || config?.jenkins_url
+      || config?.sonar_project_key
+      || config?.branch_profiles?.some(profile => profile.jenkins_url || profile.sonar_project_key),
+  );
+}
+
+function monitoringOwnerLabel(session: ProviderMonitoringOwner): string {
+  return session.ticketKey || session.projectName || session.title;
+}
+
+function monitoringOwnerSubjectId(session: ProviderMonitoringOwner): string {
+  return session.ticketKey || session.projectName || session.id;
+}
+
+function monitoringSubject(
+  session: ProviderMonitoringOwner,
+  kind: string,
+  id: string,
+): MonitorEventSubject {
+  return {
+    kind,
+    id,
+    ...(session.projectName ? { project: session.projectName } : {}),
+    ...(session.ticketKey ? { ticketKey: session.ticketKey } : {}),
+  };
+}
+
+function monitoringOwnerRecordPath(session: ProviderMonitoringOwner): string {
+  return isProjectMonitoringRecord(session)
+    ? projectMonitoringRecordPath(session.id)
+    : workSessionRecordPath(session.id);
+}
+
 function monitoringProjectName(
   state: KronosStateSnapshot | null,
-  session: TicketWorkSessionRecord,
+  session: ProviderMonitoringOwner,
 ): string | undefined {
-  return session.projectName || state?.tickets[session.ticketKey]?.linked_local_project;
+  return session.projectName
+    || (session.ticketKey ? state?.tickets[session.ticketKey]?.linked_local_project : undefined);
+}
+
+/** Provider state reaches Jira only through an explicit local-project link. */
+function monitoringTicketKeys(
+  state: KronosStateSnapshot | null,
+  session: ProviderMonitoringOwner,
+): string[] {
+  if (session.ticketKey) { return [session.ticketKey]; }
+  const projectName = monitoringProjectName(state, session);
+  if (!projectName || !state) { return []; }
+  return Object.entries(state.tickets)
+    .filter(([, ticket]) => ticket.linked_local_project === projectName)
+    .map(([ticketKey]) => ticketKey);
 }
 
 function sonarProjectKeyHeuristic(
   state: KronosStateSnapshot | null,
-  session: TicketWorkSessionRecord,
+  session: ProviderMonitoringOwner,
 ): string | undefined {
   const config = projectConfigurationForMonitoringSession(state, session);
   const candidate = optionalTrimmedStringFromUnknown(config.repo_name)
@@ -790,25 +885,28 @@ function sonarProjectKeyHeuristic(
 }
 
 function reconcileProviderBinding(
-  session: TicketWorkSessionRecord,
+  session: ProviderMonitoringOwner,
   input: AddWorkSessionProviderBindingInput,
-): TicketWorkSessionRecord {
+): ProviderMonitoringOwner {
   const current = newestProviderBinding(session, input.provider, input.resource, input.subjectId);
   const projectMatches = input.projectId === undefined || current?.projectId === input.projectId;
   const urlMatches = input.url === undefined || current?.url === input.url;
   const idMatches = input.id === undefined || current?.id === input.id;
   if (current && projectMatches && urlMatches && idMatches) { return session; }
-  const updated = addWorkSessionProviderBinding(session.id, {
+  const update = {
     ...input,
     ...(!input.id && current ? { id: current.id } : {}),
-  });
-  const monitored = monitorableWorkSession(updated);
-  if (!monitored) { throw new Error('Provider polling requires at least one explicit ticket context.'); }
+  };
+  if (isProjectMonitoringRecord(session)) {
+    return addProjectMonitoringProviderBinding(session.id, update);
+  }
+  const monitored = monitorableWorkSession(addWorkSessionProviderBinding(session.id, update));
+  if (!monitored) { throw new Error('Legacy Session polling requires an explicit Jira context.'); }
   return monitored;
 }
 
 function newestProviderBinding(
-  session: TicketWorkSessionRecord,
+  session: ProviderMonitoringOwner,
   provider: AddWorkSessionProviderBindingInput['provider'],
   resource: AddWorkSessionProviderBindingInput['resource'],
   subjectId?: string,
@@ -825,9 +923,18 @@ function emptyResult(): ManagedProviderPollResult {
   return { polled: 0, transitions: 0, failures: 0, skipped: 0, unconfigured: 0, leaseUnavailable: false };
 }
 
-function monitorableWorkSession(session: WorkSessionRecord): MonitoredWorkSessionRecord | undefined {
+function monitorableWorkSession(session: WorkSessionRecord): ProviderMonitoringOwner | undefined {
   const ticketKey = session.kind === 'ticket' ? session.ticketKey : session.ticketKeys[0];
   return ticketKey ? { ...session, ticketKey } : undefined;
+}
+
+function recordMonitoringResult(
+  owner: ProviderMonitoringOwner,
+  input: RecordWorkSessionMonitoringResultInput,
+): ProviderMonitoringOwner {
+  return isProjectMonitoringRecord(owner)
+    ? recordProjectMonitoringResult(owner.id, input)
+    : recordWorkSessionMonitoringResult(owner.id, input);
 }
 
 function combine(left: ManagedProviderPollResult, right: ManagedProviderPollResult): ManagedProviderPollResult {
@@ -849,26 +956,26 @@ function leaseLost(result: ManagedProviderPollResult): ManagedProviderPollResult
 }
 
 function safeReadGitLabBaseline(
-  session: TicketWorkSessionRecord,
+  session: ProviderMonitoringOwner,
   log: ManagedProviderMonitorOptions['log'],
 ): GitLabPipelineDigest | null {
   try {
     return readGitLabPipelineMonitorSnapshot(session.id);
   } catch (error: unknown) {
-    log?.(`Ignored an invalid GitLab baseline for ${session.ticketKey}.`, boundedOperationFailure(error, 'Invalid baseline.').display);
+    log?.(`Ignored an invalid GitLab baseline for ${monitoringOwnerLabel(session)}.`, boundedOperationFailure(error, 'Invalid baseline.').display);
     return null;
   }
 }
 
 function safeReadGitLabMergeRequestBaseline(
-  session: TicketWorkSessionRecord,
+  session: ProviderMonitoringOwner,
   log: ManagedProviderMonitorOptions['log'],
 ): GitLabMergeRequestDigest | null {
   try {
     return readGitLabMergeRequestMonitorSnapshot(session.id);
   } catch (error: unknown) {
     log?.(
-      `Ignored an invalid GitLab merge-request baseline for ${session.ticketKey}.`,
+      `Ignored an invalid GitLab merge-request baseline for ${monitoringOwnerLabel(session)}.`,
       boundedOperationFailure(error, 'Invalid merge-request baseline.').display,
     );
     return null;
@@ -876,14 +983,14 @@ function safeReadGitLabMergeRequestBaseline(
 }
 
 function safeReadGitLabMergeRequestReadStatus(
-  session: TicketWorkSessionRecord,
+  session: ProviderMonitoringOwner,
   log: ManagedProviderMonitorOptions['log'],
 ): GitLabMergeRequestReadStatus | null {
   try {
     return readGitLabMergeRequestReadStatus(session.id);
   } catch (error: unknown) {
     log?.(
-      `Ignored an invalid GitLab read-status baseline for ${session.ticketKey}.`,
+      `Ignored an invalid GitLab read-status baseline for ${monitoringOwnerLabel(session)}.`,
       boundedOperationFailure(error, 'Invalid GitLab read-status baseline.').display,
     );
     return null;
@@ -891,19 +998,19 @@ function safeReadGitLabMergeRequestReadStatus(
 }
 
 function safeReadCiBaseline(
-  session: TicketWorkSessionRecord,
+  session: ProviderMonitoringOwner,
   log: ManagedProviderMonitorOptions['log'],
 ): CiMonitorDigest | null {
   try {
     return readCiMonitorSnapshot(session.id);
   } catch (error: unknown) {
-    log?.(`Ignored an invalid CI baseline for ${session.ticketKey}.`, boundedOperationFailure(error, 'Invalid baseline.').display);
+    log?.(`Ignored an invalid CI baseline for ${monitoringOwnerLabel(session)}.`, boundedOperationFailure(error, 'Invalid baseline.').display);
     return null;
   }
 }
 
 function appendBaselineOnce(
-  session: TicketWorkSessionRecord,
+  session: ProviderMonitoringOwner,
   source: MonitorEventSource,
   kind: string,
   subjectId: string,
@@ -914,13 +1021,13 @@ function appendBaselineOnce(
 ): void {
   const id = deterministicEventId(session.id, source, 'baseline', subjectId, fingerprint);
   if (readMonitorEvent(id)) { return; }
-  const subject: MonitorEventSubject = { kind, id: subjectId, ticketKey: session.ticketKey };
+  const subject = monitoringSubject(session, kind, subjectId);
   appendMonitorEvent({
     id,
     sessionId: session.id,
     type: 'provider.baseline',
     source,
-    summary: `${session.ticketKey} ${kind} baseline recorded.`,
+    summary: `${monitoringOwnerLabel(session)} ${kind} baseline recorded.`,
     subject,
     after: { state, fingerprint },
     artifactPath,
@@ -942,14 +1049,10 @@ function appendBaselineOnce(
  * new transition while every earlier state remains in the audit ledger.
  */
 export function appendLocalMonitoringAttentionTransition(
-  session: TicketWorkSessionRecord,
+  session: ProviderMonitoringOwner,
   blocked: boolean,
 ): MonitorEvent | null {
-  const subject: MonitorEventSubject = {
-    kind: 'monitoring-blocker',
-    id: 'provider-configuration',
-    ticketKey: session.ticketKey,
-  };
+  const subject = monitoringSubject(session, 'monitoring-blocker', 'provider-configuration');
   const previous = listMonitorEvents({
     sessionId: session.id,
     source: 'kronos',
@@ -970,15 +1073,15 @@ export function appendLocalMonitoringAttentionTransition(
     session,
     source: 'kronos',
     summary: blocked
-      ? `${session.ticketKey} monitoring is blocked until GitLab, Jenkins, or SonarQube is configured for this project.`
-      : `${session.ticketKey} local provider monitoring setup recovered and is ready.`,
+      ? `${monitoringOwnerLabel(session)} monitoring is blocked until GitLab, Jenkins, or SonarQube is configured for this project.`
+      : `${monitoringOwnerLabel(session)} local provider monitoring setup recovered and is ready.`,
     subject,
     state: `monitoring/${state}`,
     fingerprint: `${state}-${generation}`,
     ...(previous?.after?.state && previous.after.fingerprint
       ? { beforeState: previous.after.state, beforeFingerprint: previous.after.fingerprint }
       : {}),
-    artifactPath: workSessionRecordPath(session.id),
+    artifactPath: monitoringOwnerRecordPath(session),
     transitionKey: `local-monitoring:${generation}:${transitionKind}`,
     metadata: {
       transitionKind,
@@ -990,18 +1093,18 @@ export function appendLocalMonitoringAttentionTransition(
 }
 
 function initialGitLabNotice(
-  session: TicketWorkSessionRecord,
+  session: ProviderMonitoringOwner,
   iid: number,
   digest: GitLabPipelineDigest,
   artifactPath: string,
 ): ManagedProviderNotice | null {
   if (!gitLabDigestUnhealthy(digest)) { return null; }
-  const summary = `${session.ticketKey} was first observed with pipeline ${digest.id} unhealthy (${digest.status}; ${digest.failedJobs.length} failed blocking job${digest.failedJobs.length === 1 ? '' : 's'}; ${digest.tests.failed + digest.tests.error} failed/error test${digest.tests.failed + digest.tests.error === 1 ? '' : 's'}).`;
+  const summary = `${monitoringOwnerLabel(session)} was first observed with pipeline ${digest.id} unhealthy (${digest.status}; ${digest.failedJobs.length} failed blocking job${digest.failedJobs.length === 1 ? '' : 's'}; ${digest.tests.failed + digest.tests.error} failed/error test${digest.tests.failed + digest.tests.error === 1 ? '' : 's'}).`;
   const event = appendTransitionOnce({
     session,
     source: 'gitlab',
     summary,
-    subject: { kind: 'pipeline', id: String(digest.id), ticketKey: session.ticketKey },
+    subject: monitoringSubject(session, 'pipeline', String(digest.id)),
     state: digest.status,
     fingerprint: digest.fingerprint,
     artifactPath,
@@ -1018,7 +1121,7 @@ function initialGitLabNotice(
 }
 
 function initialGitLabMergeRequestNotice(
-  session: TicketWorkSessionRecord,
+  session: ProviderMonitoringOwner,
   digest: GitLabMergeRequestDigest,
   artifactPath: string,
   providerUrl: string | undefined,
@@ -1030,13 +1133,13 @@ function initialGitLabMergeRequestNotice(
     reasons.push(`${digest.unresolvedDiscussions.count} unresolved discussion${digest.unresolvedDiscussions.count === 1 ? '' : 's'}`);
   }
   const summary = needsAttention
-    ? `${session.ticketKey} MR !${digest.iid} needs attention: ${reasons.join('; ')}.`
-    : `${session.ticketKey} MR !${digest.iid} first observed (${mergeRequestEventState(digest)}).`;
+    ? `${monitoringOwnerLabel(session)} MR !${digest.iid} needs attention: ${reasons.join('; ')}.`
+    : `${monitoringOwnerLabel(session)} MR !${digest.iid} first observed (${mergeRequestEventState(digest)}).`;
   const event = appendTransitionOnce({
     session,
     source: 'gitlab',
     summary,
-    subject: { kind: 'merge-request', id: String(digest.iid), ticketKey: session.ticketKey },
+    subject: monitoringSubject(session, 'merge-request', String(digest.iid)),
     state: mergeRequestEventState(digest),
     fingerprint: digest.fingerprint,
     artifactPath,
@@ -1051,7 +1154,7 @@ function initialGitLabMergeRequestNotice(
 }
 
 function initialCiNotices(
-  session: TicketWorkSessionRecord,
+  session: ProviderMonitoringOwner,
   digest: CiMonitorDigest,
   artifactPath: string,
 ): ManagedProviderNotice[] {
@@ -1060,12 +1163,12 @@ function initialCiNotices(
   if (jenkins && (FAILURE_BUILD_STATUSES.has(jenkins.status.toLowerCase())
     || jenkins.failedTestCount > 0
     || jenkins.failedStageNames.length > 0)) {
-    const summary = `${session.ticketKey} was first observed with Jenkins build ${jenkins.buildNumber} unhealthy (${jenkins.status}; ${jenkins.failedTestCount} failed test${jenkins.failedTestCount === 1 ? '' : 's'}; ${jenkins.failedStageNames.length} failed stage${jenkins.failedStageNames.length === 1 ? '' : 's'}).`;
+    const summary = `${monitoringOwnerLabel(session)} was first observed with Jenkins build ${jenkins.buildNumber} unhealthy (${jenkins.status}; ${jenkins.failedTestCount} failed test${jenkins.failedTestCount === 1 ? '' : 's'}; ${jenkins.failedStageNames.length} failed stage${jenkins.failedStageNames.length === 1 ? '' : 's'}).`;
     const event = appendTransitionOnce({
       session,
       source: 'jenkins',
       summary,
-      subject: { kind: 'build', id: String(jenkins.buildNumber), ticketKey: session.ticketKey },
+      subject: monitoringSubject(session, 'build', String(jenkins.buildNumber)),
       state: jenkins.status,
       fingerprint: jenkins.fingerprint,
       artifactPath,
@@ -1083,13 +1186,13 @@ function initialCiNotices(
   if (sonar && sonar.gateAvailable) {
     const healthy = PASSING_SONAR_GATES.has(sonar.gateStatus.toLowerCase());
     const summary = healthy
-      ? `${session.ticketKey} was first observed with a healthy SonarQube quality gate (${sonar.gateStatus}; ${sonar.unresolvedIssueCount} unresolved issue${sonar.unresolvedIssueCount === 1 ? '' : 's'}).`
-      : `${session.ticketKey} was first observed with SonarQube quality gate ${sonar.gateStatus} (${sonar.unresolvedIssueCount} unresolved issue${sonar.unresolvedIssueCount === 1 ? '' : 's'}).`;
+      ? `${monitoringOwnerLabel(session)} was first observed with a healthy SonarQube quality gate (${sonar.gateStatus}; ${sonar.unresolvedIssueCount} unresolved issue${sonar.unresolvedIssueCount === 1 ? '' : 's'}).`
+      : `${monitoringOwnerLabel(session)} was first observed with SonarQube quality gate ${sonar.gateStatus} (${sonar.unresolvedIssueCount} unresolved issue${sonar.unresolvedIssueCount === 1 ? '' : 's'}).`;
     const event = appendTransitionOnce({
       session,
       source: 'sonar',
       summary,
-      subject: { kind: 'quality-gate', id: `${sonar.projectKey}:${sonar.branch}`, ticketKey: session.ticketKey },
+      subject: monitoringSubject(session, 'quality-gate', `${sonar.projectKey}:${sonar.branch}`),
       state: sonar.gateStatus,
       fingerprint: sonar.fingerprint,
       artifactPath,
@@ -1115,18 +1218,18 @@ function initialCiNotices(
 }
 
 function appendGitLabTransitionOnce(
-  session: TicketWorkSessionRecord,
+  session: ProviderMonitoringOwner,
   iid: number,
   transition: GitLabPipelineTransition,
   artifactPath: string,
   url: string | undefined,
 ): ManagedProviderNotice | null {
-  const summary = `${session.ticketKey} pipeline ${transition.pipelineId}: ${transitionLabel(transition.kind)} (${transition.currentStatus}).`;
+  const summary = `${monitoringOwnerLabel(session)} pipeline ${transition.pipelineId}: ${transitionLabel(transition.kind)} (${transition.currentStatus}).`;
   const event = appendTransitionOnce({
     session,
     source: 'gitlab',
     summary,
-    subject: { kind: 'pipeline', id: String(transition.pipelineId), ticketKey: session.ticketKey },
+    subject: monitoringSubject(session, 'pipeline', String(transition.pipelineId)),
     state: transition.currentStatus,
     fingerprint: transition.currentFingerprint,
     artifactPath,
@@ -1144,7 +1247,7 @@ function appendGitLabTransitionOnce(
 }
 
 function appendGitLabMergeRequestTransitionOnce(
-  session: TicketWorkSessionRecord,
+  session: ProviderMonitoringOwner,
   transition: GitLabMergeRequestTransition,
   artifactPath: string,
   providerUrl: string | undefined,
@@ -1153,8 +1256,8 @@ function appendGitLabMergeRequestTransitionOnce(
   const event = appendTransitionOnce({
     session,
     source: 'gitlab',
-    summary: mergeRequestTransitionSummary(session.ticketKey, transition),
-    subject: { kind: 'merge-request', id: String(digest.iid), ticketKey: session.ticketKey },
+    summary: mergeRequestTransitionSummary(monitoringOwnerLabel(session), transition),
+    subject: monitoringSubject(session, 'merge-request', String(digest.iid)),
     state: mergeRequestEventState(digest),
     fingerprint: digest.fingerprint,
     beforeState: mergeRequestEventState(transition.previous),
@@ -1174,7 +1277,7 @@ function appendGitLabMergeRequestTransitionOnce(
 }
 
 function appendOpenMergeRequestReminder(
-  session: TicketWorkSessionRecord,
+  session: ProviderMonitoringOwner,
   digest: GitLabMergeRequestDigest,
   artifactPath: string,
   providerUrl: string | undefined,
@@ -1185,11 +1288,7 @@ function appendOpenMergeRequestReminder(
     types: ['provider.transition', 'notification.acknowledged'],
     limit: 2000,
   });
-  const reminderSubject: MonitorEventSubject = {
-    kind: 'merge-request',
-    id: String(digest.iid),
-    ticketKey: session.ticketKey,
-  };
+  const reminderSubject = monitoringSubject(session, 'merge-request', String(digest.iid));
   const reminderMetadata = mergeRequestMetadata(digest, 'open_mr_reminder');
   const reminderStreamKey = providerTransitionStreamKey({
     sessionId: session.id,
@@ -1208,8 +1307,8 @@ function appendOpenMergeRequestReminder(
     session,
     source: 'gitlab',
     summary: needsAttention
-      ? `${session.ticketKey} MR !${digest.iid} remains open and still needs attention after being cleared.`
-      : `${session.ticketKey} MR !${digest.iid} remains open after being cleared from Attention.`,
+      ? `${monitoringOwnerLabel(session)} MR !${digest.iid} remains open and still needs attention after being cleared.`
+      : `${monitoringOwnerLabel(session)} MR !${digest.iid} remains open after being cleared from Attention.`,
     subject: reminderSubject,
     state: mergeRequestEventState(digest),
     fingerprint: digest.fingerprint,
@@ -1226,14 +1325,14 @@ function appendOpenMergeRequestReminder(
 }
 
 function appendCiTransitionOnce(
-  session: TicketWorkSessionRecord,
+  session: ProviderMonitoringOwner,
   transition: CiMonitorTransition,
   artifactPath: string,
 ): ManagedProviderNotice | null {
   const source: MonitorEventSource = transition.provider === 'jenkins' ? 'jenkins' : 'sonar';
-  const subject: MonitorEventSubject = transition.provider === 'jenkins'
-    ? { kind: 'build', id: String(transition.buildNumber), ticketKey: session.ticketKey }
-    : { kind: 'quality-gate', id: `${transition.projectKey}:${transition.branch}`, ticketKey: session.ticketKey };
+  const subject = transition.provider === 'jenkins'
+    ? monitoringSubject(session, 'build', String(transition.buildNumber))
+    : monitoringSubject(session, 'quality-gate', `${transition.projectKey}:${transition.branch}`);
   const state = transition.provider === 'jenkins' ? transition.status : transition.gateStatus;
   const url = transition.url;
   const metadata: Record<string, string | number | boolean | null> = {
@@ -1252,7 +1351,7 @@ function appendCiTransitionOnce(
   const event = appendTransitionOnce({
     session,
     source,
-    summary: `${session.ticketKey} ${transition.provider === 'jenkins' ? 'Jenkins' : 'SonarQube'}: ${transitionLabel(transition.kind)} (${state}).`,
+    summary: `${monitoringOwnerLabel(session)} ${transition.provider === 'jenkins' ? 'Jenkins' : 'SonarQube'}: ${transitionLabel(transition.kind)} (${state}).`,
     subject,
     state,
     fingerprint: transition.currentFingerprint,
@@ -1357,7 +1456,7 @@ function mergeRequestTransitionIsWarning(kind: GitLabMergeRequestTransitionKind)
 }
 
 function updateGitLabMergeRequestReadStatus(
-  session: TicketWorkSessionRecord,
+  session: ProviderMonitoringOwner,
   iid: number,
   input: GitLabMergeRequestReadStatusInput,
   providerUrl: string | undefined,
@@ -1376,8 +1475,8 @@ function updateGitLabMergeRequestReadStatus(
     const transitionInput: AppendTransitionInput = {
       session,
       source: 'gitlab',
-      summary: mergeRequestReadStatusSummary(session.ticketKey, iid, previous, status),
-      subject: { kind: 'merge-request', id: String(iid), ticketKey: session.ticketKey },
+      summary: mergeRequestReadStatusSummary(monitoringOwnerLabel(session), iid, previous, status),
+      subject: monitoringSubject(session, 'merge-request', String(iid)),
       state: `monitoring/${status.state}`,
       fingerprint: status.fingerprint,
       artifactPath: gitLabMergeRequestReadStatusPath(session.id),
@@ -1430,7 +1529,7 @@ function mergeRequestReadStatusSummary(
 }
 
 function appendProviderReadStatusTransition(
-  session: TicketWorkSessionRecord,
+  session: ProviderMonitoringOwner,
   provider: 'jenkins' | 'sonar',
   state: ProviderReadState,
   reason: string,
@@ -1463,11 +1562,11 @@ function appendProviderReadStatusTransition(
     session,
     source: provider,
     summary: state === 'complete'
-      ? `${session.ticketKey} ${providerName} provider reads recovered.`
+      ? `${monitoringOwnerLabel(session)} ${providerName} provider reads recovered.`
       : state === 'partial'
-        ? `${session.ticketKey} ${providerName} provider reads are partial (${normalizedComponents.join(', ') || 'bounded data'}).`
-        : `${session.ticketKey} ${providerName} provider read failed (${readFailureLabel(reason)}).`,
-    subject: { kind: 'provider-read', id: provider, ticketKey: session.ticketKey },
+        ? `${monitoringOwnerLabel(session)} ${providerName} provider reads are partial (${normalizedComponents.join(', ') || 'bounded data'}).`
+        : `${monitoringOwnerLabel(session)} ${providerName} provider read failed (${readFailureLabel(reason)}).`,
+    subject: monitoringSubject(session, 'provider-read', provider),
     state: `monitoring/${state}`,
     fingerprint,
     artifactPath: ciMonitorSnapshotPath(session.id),
@@ -1517,14 +1616,14 @@ function transitionLabel(kind: string): string {
 
 function notice(
   event: MonitorEvent,
-  session: TicketWorkSessionRecord,
+  session: ProviderMonitoringOwner,
   severity: ManagedProviderNotice['severity'],
   providerUrl: string | undefined,
   contextCommand: ManagedProviderNotice['contextCommand'],
 ): ManagedProviderNotice {
   const value: ManagedProviderNotice = { event, session, severity };
   if (providerUrl) { value.providerUrl = providerUrl; }
-  if (contextCommand) { value.contextCommand = contextCommand; }
+  if (contextCommand && session.ticketKey) { value.contextCommand = contextCommand; }
   return value;
 }
 

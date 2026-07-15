@@ -517,7 +517,7 @@ test('project integration presentation exposes readiness without provider identi
     gitlab: false,
     jenkins: false,
     sonar: false,
-  }, 0);
+  });
   assert.deepEqual(needsCredentials, [
     'GitLab: target saved, credentials need Doctor',
     'Jenkins: target saved, credentials need Doctor',
@@ -527,11 +527,11 @@ test('project integration presentation exposes readiness without provider identi
     gitlab: true,
     jenkins: true,
     sonar: true,
-  }, 2);
+  });
   assert.deepEqual(active, [
-    'GitLab: automatic polling active for 2 ticket sessions',
-    'Jenkins: automatic polling active for 2 ticket sessions',
-    'SonarQube: automatic polling active for 2 ticket sessions',
+    'GitLab: automatic project polling active',
+    'Jenkins: automatic project polling active',
+    'SonarQube: automatic project polling active',
   ]);
   const rendered = [...needsCredentials, ...active].join('\n');
   assert.doesNotMatch(rendered, /private-application|private:application|jenkins\.example/);

@@ -237,8 +237,11 @@ function normalizeItem(value: unknown, root: string): ContextBasketItem {
   const projectName = optionalLine(refreshValue['projectName'], 200);
   if (ticketKey) { refresh.ticketKey = ticketKey; }
   if (projectName) { refresh.projectName = projectName; }
-  if ((kind === 'jira' || kind === 'gitlab' || kind === 'ci') && !ticketKey) {
-    throw new Error('Context basket provider refresh target requires a ticket key.');
+  if (kind === 'jira' && !ticketKey) {
+    throw new Error('Context basket Jira refresh target requires a ticket key.');
+  }
+  if ((kind === 'gitlab' || kind === 'ci') && !ticketKey && !projectName) {
+    throw new Error('Context basket provider refresh target requires a ticket or registered project.');
   }
   if (kind === 'git' && !projectName) { throw new Error('Context basket Git refresh target requires a project.'); }
   const item: ContextBasketItem = {

@@ -253,6 +253,13 @@ test('Attention tree groups newest project state, preserves nicknames, and redac
   assert.equal(empty[0].contextValue, 'attention_empty');
   assert.equal(empty[0].iconPath.id, 'check');
 
+  const defaultDisplayName = new attentionTree.AttentionTreeProvider({
+    loadMonitorEvents: () => [events[0]],
+    loadWorkSessions: () => [application],
+    loadRegisteredProjects: () => [{ name: 'Application', path: '/workspace/application' }],
+  }).getChildren();
+  assert.equal(defaultDisplayName[0].label, 'Application');
+
   const warning = t.mock.method(console, 'warn', () => {});
   const secret = ['glpat-', 'attentionconditionalfixture'].join('');
   const failedEvents = new attentionTree.AttentionTreeProvider({

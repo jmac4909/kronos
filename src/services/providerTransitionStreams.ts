@@ -34,7 +34,7 @@ export function providerTransitionStreamKey(
 
 /**
  * Strong provider-resource identity used only to correlate the same monitored
- * resource across legacy ticket sessions and current project sessions. It is
+ * resource across legacy ticket Sessions and the canonical project monitor. It is
  * intentionally unavailable when the provider project cannot be proven: an
  * MR IID alone is not unique across GitLab projects.
  */

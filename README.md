@@ -12,7 +12,7 @@
   <img alt="TypeScript strict" src="https://img.shields.io/badge/TypeScript-strict-3178C6">
   <img alt="VS Code 1.85 or newer" src="https://img.shields.io/badge/VS%20Code-%5E1.85-23A8F2">
   <img alt="Zero third-party runtime dependencies" src="https://img.shields.io/badge/runtime%20dependencies-0-22C55E">
-  <img alt="236 automated local tests" src="https://img.shields.io/badge/test%20suite-236%20local-22C55E">
+  <img alt="238 automated local tests" src="https://img.shields.io/badge/test%20suite-238%20local-22C55E">
   <img alt="Preview status" src="https://img.shields.io/badge/status-preview-F59E0B">
 </p>
 
@@ -28,7 +28,7 @@ Kronos solves a narrow enterprise-development problem: the evidence needed for a
 | --- | --- |
 | **Work** | Search and filter Jira work, see current/empty/loading/partial/stale/error refresh state without losing the last good result, explicitly link the right local project and branch, then open a focused ticket workspace. Shared Jira keys never infer a repository. |
 | **Sessions** | Organize operator-owned Claude terminals by local project, attach multiple Jira contexts when useful, and never read terminal contents. |
-| **Projects** | Track each registered repository's current branch and clean/dirty status, then open bounded diff, MR, CI, and provider actions. |
+| **Projects** | Track each registered repository's current branch and clean/dirty status, automatically poll its configured GitLab/Jenkins/SonarQube targets without a ticket or Session, then open bounded diff, MR, CI, and provider actions. |
 | **Attention** | Show the newest meaningful provider state by project, distinguish GitLab MR, Jenkins, and SonarQube with separate icons, use shared green/yellow/red state colors, resurface still-open MRs after the next poll, and retain full history in the private audit. |
 | **Context composer** | Review fetched evidence, edit the focus, and place one shell-inert line in the chosen terminal with submission disabled. |
 | **Context Basket** | Select multiple Jira, MR, CI, and local Git artifacts, review provenance/freshness/completeness/conflicts together, then place one reference-only bundle without copying or submitting provider content. |
@@ -37,13 +37,14 @@ Kronos solves a narrow enterprise-development problem: the evidence needed for a
 
 ### A 60-second workflow
 
-1. Select a Jira ticket and its local project.
-2. Attach a terminal you already own, or explicitly choose **Start Claude for Ticket**.
-3. Fetch bounded Jira, GitLab, Jenkins, or SonarQube evidence.
-4. Review the normalized evidence as untrusted data and edit the operator focus.
-5. Place one source immediately, or add several sources to **Context Basket** and edit one combined focus.
-6. Choose **Place in Terminal**. Kronos inserts one reference with execution disabled.
-7. Decide whether to press Enter yourself; later provider changes appear in **Attention** and the session audit.
+1. Register a local project and save whichever GitLab, Jenkins, or SonarQube targets it uses; project-owned polling begins immediately and continues on the configured interval.
+2. Optionally link a Jira ticket when you want ticket context or ticket-scoped provider projection.
+3. Attach a terminal you already own, choose **Start Claude in project** without Jira, or choose **Start Claude for Ticket**.
+4. Fetch bounded Jira, GitLab, Jenkins, or SonarQube evidence.
+5. Review the normalized evidence as untrusted data and edit the operator focus.
+6. Place one source immediately, or add several sources to **Context Basket** and edit one combined focus.
+7. Choose **Place in Terminal**. Kronos inserts one reference with execution disabled.
+8. Decide whether to press Enter yourself; later provider changes appear in project-level **Attention** and the private audit.
 
 ![Kronos two-step context review and post-insertion terminal sequence, using synthetic data](docs/assets/kronos-context-composer.png)
 
@@ -105,10 +106,10 @@ The installed extension uses the VS Code API and Node built-ins only. It has **z
 | Audited terminal-write paths | 2 |
 | Manifest-covered commands | 40 |
 | Manifest-covered settings | 11 |
-| Reachable runtime modules checked for cycles/dead exports | 84 |
+| Reachable runtime modules checked for cycles/dead exports | 85 |
 | Third-party runtime dependencies | 0 |
-| Automated Node/DOM/board tests | 236 |
-| Built-in runtime coverage | 81.09% lines / 73.11% branches / 86.80% functions |
+| Automated Node/DOM/board tests | 238 |
+| Built-in runtime coverage | 81.12% lines / 73.18% branches / 86.79% functions |
 
 Automated gates also cover the runtime graph, security boundary, context governance, activation surface, provider transitions, private state, credential redaction, and packaged extension contents.
 
@@ -161,7 +162,7 @@ Kronos reads provider credentials from the extension process environment and, wh
 | Jenkins | `JENKINS_URL` | `JENKINS_USER` / `JENKINS_USERNAME`, `JENKINS_API_TOKEN` / `JENKINS_TOKEN`, narrowly scoped `JENKINS_TLS_REJECT_UNAUTHORIZED=false` for a locally trusted corporate endpoint |
 | SonarQube | `SONAR_HOST_URL` or `SONAR_URL`, `SONAR_TOKEN` | project and branch bindings configured per local project |
 
-Use **Kronos: Setup** for guided configuration and **Kronos: Doctor** for readiness checks. They share one readiness snapshot, expose one bounded action per row, and never display credential values. **Open Private Config** creates a private comment-only template when needed; save provider values there, then refresh Setup or Doctor. **Poll Now** verifies configured project monitoring without mutating a provider.
+Use **Kronos: Setup** for guided configuration and **Kronos: Doctor** for readiness checks. They share one readiness snapshot, expose one bounded action per row, and never display credential values. **Open Private Config** creates a private comment-only template when needed; save provider values there, then refresh Setup or Doctor. Once a registered project has a GitLab ID/path, Jenkins URL, SonarQube key, or branch profile, it becomes the durable polling owner immediately—no Jira link and no terminal Session are required. **Poll Now** verifies that project-owned monitoring without mutating a provider. Project MR/CI insertion still requires an explicit operator-owned project terminal, but it does not require adding Jira context.
 
 Local state is stored under `~/.kronos` by default or an explicitly configured `KRONOS_DIR`. On the first default-path start, Kronos safely migrates an existing legacy `~/.claude/kronos` directory without requiring a Python helper. Provider payloads are normalized, bounded, secret-redacted, wrapped as untrusted data, and written to private per-user files where the platform supports private permissions.
 

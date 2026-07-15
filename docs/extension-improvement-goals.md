@@ -116,6 +116,8 @@ Cases to cover:
 - Newer pipelines, jobs, builds, test results, quality gates, and Sonar issues replace stale rows.
 - Acknowledging the newest event never resurrects an older one.
 - Restart and cross-window lease recovery do not duplicate transitions.
+- A configured registered project polls GitLab, Jenkins, and SonarQube without any Jira link or terminal Session.
+- Project-owned bindings, baselines, health, and Attention survive Session removal and extension reload.
 
 Completion evidence:
 
@@ -139,6 +141,7 @@ Cases to cover:
 - Provider URLs remain credential-free and pinned to the configured origin.
 - Jenkins job configuration, observed builds, and selected historical targets remain distinct.
 - SonarQube project and branch identity remains intact in dashboard URLs and branch selection.
+- Project actions can find and insert the known MR from the registered-project monitor without a Jira link; insertion still requires an explicit project terminal.
 
 Completion evidence:
 

@@ -3,7 +3,8 @@ import * as path from 'path';
 import { ensureImmutablePrivateFilePair, ensurePrivateDirectoryPath } from './privateFilePrimitives';
 import { KRONOS_DIR } from './stateStore';
 import {
-  GitLabMergeRequestContext,
+  type GitLabProviderContext,
+  normalizeGitLabContextProjectName,
   normalizeGitLabContextTicketKey,
   normalizeGitLabMergeRequestIid,
   renderGitLabContextPrompt,
@@ -25,16 +26,16 @@ const MAX_SERIALIZED_CONTEXT_BYTES = 12 * 1024 * 1024;
 const MAX_PROMPT_BYTES = 13 * 1024 * 1024;
 
 export function writeGitLabContextArtifacts(
-  context: GitLabMergeRequestContext,
+  context: GitLabProviderContext,
   options: GitLabContextStoreOptions = {},
 ): GitLabContextArtifactPaths {
   validateContextEnvelope(context);
-  const safeTicketKey = normalizeGitLabContextTicketKey(context.ticketKey);
+  const ownerDirectory = gitLabContextOwnerDirectory(context);
   const safeIid = normalizeGitLabMergeRequestIid(context.iid);
   const kronosDirectory = path.resolve(options.kronosDir || KRONOS_DIR);
   const rootPath = path.join(kronosDirectory, 'gitlab-context');
-  const ticketPath = path.join(rootPath, safeTicketKey);
-  const directoryPath = path.join(ticketPath, `MR-${safeIid}`);
+  const ownerPath = path.join(rootPath, ownerDirectory);
+  const directoryPath = path.join(ownerPath, `MR-${safeIid}`);
   assertContainedPath(kronosDirectory, directoryPath);
 
   ensurePrivateDirectoryPath(directoryPath, 'Kronos GitLab context');
@@ -68,18 +69,24 @@ export function writeGitLabContextArtifacts(
   return { directoryPath, jsonPath, promptPath, contentSha256 };
 }
 
-function validateContextEnvelope(context: GitLabMergeRequestContext): void {
+function validateContextEnvelope(context: GitLabProviderContext): void {
   if (!context || typeof context !== 'object') {
     throw new Error('GitLab context artifact must be a normalized context object.');
   }
   if (context.schemaVersion !== 1 || context.source !== 'gitlab-rest') {
     throw new Error('GitLab context artifact has an unsupported schema or source.');
   }
-  normalizeGitLabContextTicketKey(context.ticketKey);
+  gitLabContextOwnerDirectory(context);
   normalizeGitLabMergeRequestIid(context.iid);
   if (context.mergeRequest.iid !== context.iid) {
     throw new Error('GitLab context artifact MR IID does not match its merge request details.');
   }
+}
+
+function gitLabContextOwnerDirectory(context: GitLabProviderContext): string {
+  if ('ticketKey' in context) { return normalizeGitLabContextTicketKey(context.ticketKey); }
+  const projectName = normalizeGitLabContextProjectName(context.projectName);
+  return `PROJECT-${crypto.createHash('sha256').update(projectName).digest('hex').slice(0, 24).toUpperCase()}`;
 }
 
 function assertContainedPath(basePath: string, candidatePath: string): void {

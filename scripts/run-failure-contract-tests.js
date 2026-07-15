@@ -262,7 +262,7 @@ test('poll notice distinguishes another-window lease ownership from missing prov
   assert.equal(lease.kind, 'lease-unavailable');
   assert.match(lease.message, /Another Kronos window.*no duplicate read/i);
   assert.equal(configuration.kind, 'missing-configuration');
-  assert.match(configuration.message, /2 work sessions missing provider configuration/);
+  assert.match(configuration.message, /2 project or legacy session targets missing provider configuration/);
   assert.doesNotMatch(configuration.message, /lease/);
 });
 

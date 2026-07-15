@@ -6,9 +6,8 @@ import { redactSensitiveTokens } from './sensitiveText';
 import type { SonarBranchContext } from './sonarRestClient';
 import { KRONOS_DIR } from './stateStore';
 
-export interface KronosCiContext {
+interface KronosCiContextBase {
   schemaVersion: 1;
-  ticketKey: string;
   fetchedAt: string;
   completeness: {
     complete: boolean;
@@ -19,6 +18,16 @@ export interface KronosCiContext {
   jenkins?: JenkinsBuildContext;
   sonar?: SonarBranchContext;
 }
+
+export interface KronosCiContext extends KronosCiContextBase {
+  ticketKey: string;
+}
+
+export interface KronosProjectCiContext extends KronosCiContextBase {
+  projectName: string;
+}
+
+export type KronosCiProviderContext = KronosCiContext | KronosProjectCiContext;
 
 export interface BuildCiContextInput {
   jenkins?: JenkinsBuildContext;
@@ -48,12 +57,22 @@ const MAX_PROMPT_BYTES = 13 * 1024 * 1024;
 const SENSITIVE_KEY_PATTERN = /^(?:authorization|cookie|set-cookie|credential|password|passwd|secret|token|api[_-]?key|private[_-]?key|access[_-]?token|client[_-]?secret)$/i;
 
 export function buildCiContext(ticketKey: string, input: BuildCiContextInput): KronosCiContext {
-  const safeTicketKey = normalizeCiTicketKey(ticketKey);
+  return buildCiProviderContext({ ticketKey: normalizeCiTicketKey(ticketKey) }, input) as KronosCiContext;
+}
+
+export function buildProjectCiContext(projectName: string, input: BuildCiContextInput): KronosProjectCiContext {
+  return buildCiProviderContext({ projectName: normalizeCiProjectName(projectName) }, input) as KronosProjectCiContext;
+}
+
+function buildCiProviderContext(
+  owner: { ticketKey: string } | { projectName: string },
+  input: BuildCiContextInput,
+): KronosCiProviderContext {
   const tracker = { remainingChars: MAX_TOTAL_TEXT_CHARS, truncated: false };
   const warnings = [...new Set((input.warnings || []).map(warning => safeSingleLine(warning, 1000)).filter(Boolean))];
-  const context: KronosCiContext = {
+  const context: KronosCiProviderContext = {
     schemaVersion: 1,
-    ticketKey: safeTicketKey,
+    ...owner,
     fetchedAt: new Date().toISOString(),
     completeness: {
       complete: false,
@@ -79,11 +98,11 @@ export function buildCiContext(ticketKey: string, input: BuildCiContextInput): K
   return context;
 }
 
-export function renderCiContextPrompt(context: KronosCiContext, serializedContext?: string): string {
+export function renderCiContextPrompt(context: KronosCiProviderContext, serializedContext?: string): string {
   const payload = serializedContext || `${JSON.stringify(context, null, 2)}\n`;
   const boundary = injectionBoundary(payload);
   return [
-    `# CI context for ${normalizeCiTicketKey(context.ticketKey)}`,
+    `# CI context for ${ciContextOwnerLabel(context)}`,
     '',
     'This is a locally cached Jenkins and SonarQube evidence artifact. It may be stale or partial; inspect completeness and warnings.',
     '',
@@ -102,12 +121,12 @@ export function renderCiContextPrompt(context: KronosCiContext, serializedContex
 }
 
 export function writeCiContextArtifacts(
-  context: KronosCiContext,
+  context: KronosCiProviderContext,
   options: CiContextStoreOptions = {},
 ): CiContextArtifactPaths {
-  const ticketKey = normalizeCiTicketKey(context.ticketKey);
+  const ownerDirectory = ciContextOwnerDirectory(context);
   const rootPath = path.resolve(options.kronosDir || KRONOS_DIR, 'ci-context');
-  const directoryPath = path.join(rootPath, ticketKey);
+  const directoryPath = path.join(rootPath, ownerDirectory);
   ensurePrivateDirectoryPath(directoryPath, 'Kronos CI context');
   const serialized = `${JSON.stringify(context, null, 2)}\n`;
   if (Buffer.byteLength(serialized, 'utf8') > MAX_SERIALIZED_BYTES) {
@@ -145,6 +164,31 @@ export function normalizeCiTicketKey(value: string): string {
     throw new Error('CI context ticket key is missing or invalid.');
   }
   return normalized;
+}
+
+export function normalizeCiProjectName(value: string): string {
+  const normalized = value.replace(/\s+/g, ' ').trim();
+  if (!normalized || normalized.length > 200 || /[\u0000-\u001f\u007f\u2028\u2029]/.test(normalized)) {
+    throw new Error('CI context project name is missing or invalid.');
+  }
+  return normalized;
+}
+
+export function ciProjectContextDirectory(projectName: string): string {
+  const normalized = normalizeCiProjectName(projectName);
+  return `PROJECT-${crypto.createHash('sha256').update(normalized).digest('hex').slice(0, 24).toUpperCase()}`;
+}
+
+function ciContextOwnerDirectory(context: KronosCiProviderContext): string {
+  return 'ticketKey' in context
+    ? normalizeCiTicketKey(context.ticketKey)
+    : ciProjectContextDirectory(context.projectName);
+}
+
+function ciContextOwnerLabel(context: KronosCiProviderContext): string {
+  return 'ticketKey' in context
+    ? normalizeCiTicketKey(context.ticketKey)
+    : `project ${normalizeCiProjectName(context.projectName)}`;
 }
 
 function sanitizeProviderValue(value: unknown, tracker: { remainingChars: number; truncated: boolean }, depth: number): unknown {

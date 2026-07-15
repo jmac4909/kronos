@@ -51,7 +51,7 @@ export interface GitLabMergeRequestMonitorOptions extends GitLabRestRequestOptio
 
 export interface GitLabMergeRequestDiscoveryInput {
   projectIdOrPath: string;
-  ticketKey: string;
+  ticketKey?: string;
   sourceBranch?: string;
 }
 
@@ -169,6 +169,9 @@ export class GitLabRestClient {
     const ticketKey = normalizeDiscoveryTicketKey(input.ticketKey);
     const sourceBranch = optionalTrimmedStringFromUnknown(input.sourceBranch);
     if (!projectIdOrPath) { throw new GitLabRestError('GitLab MR discovery needs a project ID or path.'); }
+    if (!ticketKey && !sourceBranch) {
+      throw new GitLabRestError('GitLab MR discovery needs a current project branch or Jira ticket key.');
+    }
 
     if (sourceBranch) {
       const branchCandidates = normalizeDiscoveryCandidates((await this.requestJson(
@@ -181,8 +184,10 @@ export class GitLabRestClient {
       if (branchMatch.match || branchMatch.ambiguous) {
         return { ...branchMatch, strategy: 'source-branch' };
       }
+      if (!ticketKey) { return { ...branchMatch, strategy: 'source-branch' }; }
     }
 
+    if (!ticketKey) { return { candidateCount: 0, ambiguous: false, strategy: 'source-branch' }; }
     const ticketCandidates = normalizeDiscoveryCandidates((await this.requestJson(
       `/projects/${encodeURIComponent(projectIdOrPath)}/merge_requests`,
       `GitLab open MRs for ${ticketKey}`,
@@ -685,8 +690,9 @@ interface NormalizedDiscoveryCandidate extends GitLabDiscoveredMergeRequest {
   searchText: string;
 }
 
-function normalizeDiscoveryTicketKey(value: string): string {
-  const ticketKey = value.trim().toUpperCase();
+function normalizeDiscoveryTicketKey(value: string | undefined): string | undefined {
+  const ticketKey = value?.trim().toUpperCase();
+  if (!ticketKey) { return undefined; }
   if (!/^[A-Z][A-Z0-9_]{0,127}-[1-9][0-9]*$/.test(ticketKey)) {
     throw new GitLabRestError('GitLab MR discovery needs a valid Jira ticket key.');
   }
@@ -725,9 +731,9 @@ function normalizeDiscoveryCandidates(value: unknown): NormalizedDiscoveryCandid
 
 function uniqueDiscoveryMatch(
   candidates: NormalizedDiscoveryCandidate[],
-  ticketKey: string,
+  ticketKey: string | undefined,
 ): Omit<GitLabMergeRequestDiscoveryResult, 'strategy'> {
-  const narrowed = candidates.length > 1
+  const narrowed = candidates.length > 1 && ticketKey
     ? candidates.filter(candidate => candidate.searchText.includes(ticketKey))
     : candidates;
   const usable = narrowed.length > 0 ? narrowed : candidates;

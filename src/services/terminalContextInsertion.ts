@@ -1,5 +1,6 @@
 import * as path from 'path';
 import { normalizeJiraIssueKey } from './jiraRestClient';
+import { ciProjectContextDirectory } from './ciContextStore';
 
 export interface TerminalContextInsertionTarget {
   sendText(text: string, shouldExecute?: boolean): void;
@@ -53,6 +54,15 @@ export function buildCiContextReference(ticketKey: string, promptPath: string): 
   const absolutePromptPath = path.resolve(promptPath);
   assertShellInertPromptPath(absolutePromptPath);
   const reference = `[CI-${key}] Read Jenkins and SonarQube context file ${JSON.stringify(absolutePromptPath)}${REFERENCE_SUFFIX}`;
+  assertSafeTerminalContextReference(reference);
+  return reference;
+}
+
+export function buildProjectCiContextReference(projectName: string, promptPath: string): string {
+  const ownerDirectory = ciProjectContextDirectory(projectName);
+  const absolutePromptPath = path.resolve(promptPath);
+  assertShellInertPromptPath(absolutePromptPath);
+  const reference = `[CI-${ownerDirectory}] Read Jenkins and SonarQube context file ${JSON.stringify(absolutePromptPath)}${REFERENCE_SUFFIX}`;
   assertSafeTerminalContextReference(reference);
   return reference;
 }
@@ -172,6 +182,7 @@ function parseTerminalContextReference(reference: string):
   | { kind: 'jira'; key: string; promptPath: string }
   | { kind: 'gitlab'; iid: number; promptPath: string }
   | { kind: 'ci'; key: string; promptPath: string }
+  | { kind: 'ci-project'; ownerDirectory: string; promptPath: string }
   | { kind: 'git'; contextId: string; promptPath: string }
   | { kind: 'basket'; basketId: string; promptPath: string } {
   if (!reference || reference.length > MAX_REFERENCE_LENGTH || reference !== reference.trim()) {
@@ -201,6 +212,17 @@ function parseTerminalContextReference(reference: string):
       throw new Error('CI terminal context reference does not point to the expected prompt artifact.');
     }
     return { kind: 'ci', key, promptPath };
+  }
+
+  const projectCiPrefix = /^\[CI-(PROJECT-[A-F0-9]{24})\] Read Jenkins and SonarQube context file /.exec(reference);
+  if (projectCiPrefix && reference.endsWith(REFERENCE_SUFFIX)) {
+    const ownerDirectory = projectCiPrefix[1];
+    if (!ownerDirectory) { throw new Error('Project CI terminal context reference has no owner.'); }
+    const promptPath = parsePromptPathLiteral(reference, projectCiPrefix[0].length);
+    if (path.basename(path.dirname(promptPath)) !== ownerDirectory) {
+      throw new Error('Project CI terminal context reference does not point to the expected prompt artifact.');
+    }
+    return { kind: 'ci-project', ownerDirectory, promptPath };
   }
 
   const gitPrefix = /^\[(GIT-[A-Za-z0-9_.-]{1,100})\] Read local Git working-tree status and diff context file /.exec(reference);

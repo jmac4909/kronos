@@ -12,7 +12,7 @@ import { providerTransitionStreamKey } from './providerTransitionStreams';
 import type { WorkSessionRecord } from './workSessionStore';
 
 export interface AppendTransitionInput {
-  session: WorkSessionRecord & { ticketKey: string };
+  session: WorkSessionRecord;
   source: MonitorEventSource;
   summary: string;
   subject: MonitorEventSubject;

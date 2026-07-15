@@ -13,6 +13,7 @@ import {
   type ProjectGitEvidence,
 } from '../services/vscodeGitReadService';
 import { listWorkSessions, type WorkSessionRecord } from '../services/workSessionStore';
+import { readProjectMonitoringRecord } from '../services/projectMonitoringStore';
 import {
   projectProviderMonitoringHealth,
   providerMonitoringHealthSummary,
@@ -57,12 +58,14 @@ export class ProjectTreeProvider implements vscode.TreeDataProvider<ProjectTreeE
       });
       const config = state?.projects[project.name]?.config || {};
       const linkedSessions = sessions.filter(session => activeProjectMonitoringSession(session, project.name));
+      const projectMonitor = safeReadProjectMonitoringRecord(project.name);
+      const monitoringOwners = projectMonitor ? [projectMonitor] : linkedSessions;
       return new RegisteredProjectTreeItem(
         { projectName: project.name, projectPath: project.path, displayName: project.displayName },
         evidence,
         config,
-        linkedSessions.length,
-        projectProviderMonitoringHealth(linkedSessions, this.pollIntervalMs()),
+        Boolean(projectMonitor),
+        projectProviderMonitoringHealth(monitoringOwners, this.pollIntervalMs()),
       );
     }));
   }
@@ -87,6 +90,14 @@ export class ProjectTreeProvider implements vscode.TreeDataProvider<ProjectTreeE
   }
 }
 
+function safeReadProjectMonitoringRecord(projectName: string): WorkSessionRecord | null {
+  try { return readProjectMonitoringRecord(projectName); }
+  catch (error: unknown) {
+    console.warn(`Kronos project monitoring refresh failed: ${boundedOperationFailure(error, 'Project monitoring state could not be read.').display}`);
+    return null;
+  }
+}
+
 function activeProjectMonitoringSession(session: WorkSessionRecord, projectName: string): boolean {
   return session.projectName === projectName
     && session.ticketKeys.length > 0
@@ -103,7 +114,7 @@ class RegisteredProjectTreeItem extends vscode.TreeItem implements RegisteredPro
     readonly target: RegisteredProjectCommandTarget,
     evidence: ProjectGitEvidence,
     config: ProjectConfig,
-    linkedSessionCount: number,
+    projectPollingActive: boolean,
     monitoringHealth: ProviderMonitoringHealth,
   ) {
     super(target.displayName || target.projectName, vscode.TreeItemCollapsibleState.Collapsed);
@@ -120,7 +131,7 @@ class RegisteredProjectTreeItem extends vscode.TreeItem implements RegisteredPro
       gitlab: readiness.gitlab.configured,
       jenkins: readiness.jenkins.configured,
       sonar: readiness.sonar.configured,
-    }, linkedSessionCount);
+    });
     this.tooltip = [
       `Project: ${target.displayName || target.projectName}`,
       `Stable identity: ${target.projectName}`,
@@ -128,7 +139,7 @@ class RegisteredProjectTreeItem extends vscode.TreeItem implements RegisteredPro
       `Git branch: ${evidence.branch || 'unavailable'}`,
       `Git status: ${gitStatus.tooltip}`,
       'Git source: VS Code built-in Git model plus bounded local HEAD fallback',
-      `Active monitored ticket sessions: ${linkedSessionCount}`,
+      `Automatic project polling: ${projectPollingActive ? 'active' : 'waiting for the first configured poll'}`,
       `Last monitoring attempt: ${monitoringHealth.lastAttemptAt || 'never'}`,
       `Last successful poll: ${monitoringHealth.lastSuccessfulAt || 'never'}`,
       `Last meaningful provider change: ${monitoringHealth.lastMeaningfulChangeAt || 'never'}`,

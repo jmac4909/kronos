@@ -56,19 +56,16 @@ export function registeredProjectActionInventory(): readonly RegisteredProjectAc
 export function projectIntegrationStatusLines(
   config: ProjectConfig,
   credentials: ProjectProviderCredentialReadiness,
-  activeSessions: number,
 ): string[] {
   return [
-    providerStatus('GitLab', Boolean(config.gitlab_project_id || config.gitlab_project_path), credentials.gitlab, activeSessions),
-    providerStatus('Jenkins', Boolean(config.jenkins_url), credentials.jenkins, activeSessions),
-    providerStatus('SonarQube', Boolean(config.sonar_project_key), credentials.sonar, activeSessions),
+    providerStatus('GitLab', Boolean(config.gitlab_project_id || config.gitlab_project_path), credentials.gitlab),
+    providerStatus('Jenkins', Boolean(config.jenkins_url), credentials.jenkins),
+    providerStatus('SonarQube', Boolean(config.sonar_project_key), credentials.sonar),
   ];
 }
 
-function providerStatus(name: string, targetConfigured: boolean, credentialsReady: boolean, activeSessions: number): string {
+function providerStatus(name: string, targetConfigured: boolean, credentialsReady: boolean): string {
   if (!targetConfigured) { return `${name}: project setup needed`; }
   if (!credentialsReady) { return `${name}: target saved, credentials need Doctor`; }
-  return activeSessions > 0
-    ? `${name}: automatic polling active for ${activeSessions} ticket session${activeSessions === 1 ? '' : 's'}`
-    : `${name}: ready; automatic polling starts with a ticket session`;
+  return `${name}: automatic project polling active`;
 }

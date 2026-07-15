@@ -5,6 +5,7 @@ import type { GitLabMergeRequestDigest } from './gitlabMergeRequestTransitions';
 import type { MonitorEvent } from './monitorEventStore';
 import {
   projectConfigurationForTicket,
+  readProjectGitBranch,
   selectProjectBranchProfile,
 } from './projectCatalog';
 import { optionalTrimmedStringFromUnknown } from './records';
@@ -35,8 +36,6 @@ export interface ConfiguredCiPollingTargets {
   jenkinsBranch?: string;
   sonar?: { projectKey: string; branch: string; providerUrl?: string };
 }
-
-type TicketWorkSessionRecord = WorkSessionRecord & { ticketKey: string };
 
 /** Returns the explicit GitLab project identity configured for one local project. */
 export function configuredGitLabProjectIdentity(config: ProjectConfig | null | undefined): string | undefined {
@@ -211,10 +210,10 @@ export function withEffectiveTicketMergeRequest(
 
 export function configuredGitLabPollingTarget(
   state: KronosState | null,
-  session: TicketWorkSessionRecord,
+  session: WorkSessionRecord,
   env: NodeJS.ProcessEnv = process.env,
 ): ConfiguredGitLabPollingTarget | null {
-  const ticket = state?.tickets[session.ticketKey];
+  const ticket = session.ticketKey ? state?.tickets[session.ticketKey] : undefined;
   const config = projectConfigurationForMonitoringSession(state, session);
   const target = reconcileKnownGitLabMergeRequestTarget(
     ticket,
@@ -231,10 +230,10 @@ export function configuredGitLabPollingTarget(
 
 export function configuredCiPollingTargets(
   state: KronosState | null,
-  session: TicketWorkSessionRecord,
+  session: WorkSessionRecord,
   env: NodeJS.ProcessEnv = process.env,
 ): ConfiguredCiPollingTargets {
-  const ticket = state?.tickets[session.ticketKey];
+  const ticket = session.ticketKey ? state?.tickets[session.ticketKey] : undefined;
   const config = projectConfigurationForMonitoringSession(state, session);
   const jenkinsJobBinding = newestWorkSessionProviderBinding(
     session.providerBindings,
@@ -248,7 +247,7 @@ export function configuredCiPollingTargets(
     session.providerBindings,
     candidate => candidate.provider === 'sonar' && candidate.resource === 'quality-gate',
   );
-  const branchCandidates = ticketProviderBranchCandidates(ticket);
+  const branchCandidates = monitoringBranchCandidates(ticket, session);
   const profile = selectProjectBranchProfile(config, branchCandidates);
   const jenkinsCandidate = optionalTrimmedStringFromUnknown(profile?.jenkins_url)
     || optionalTrimmedStringFromUnknown(config.jenkins_url)
@@ -321,9 +320,9 @@ export function configuredSonarBranchName(state: KronosState | null, ticketKey: 
 
 export function projectConfigurationForMonitoringSession(
   state: KronosState | null,
-  session: TicketWorkSessionRecord,
+  session: WorkSessionRecord,
 ): ProjectConfig {
-  const ticket = state?.tickets[session.ticketKey];
+  const ticket = session.ticketKey ? state?.tickets[session.ticketKey] : undefined;
   const config = projectConfigurationForTicket(state, ticket);
   return session.projectName
     ? { ...config, ...(state?.projects[session.projectName]?.config || {}) }
@@ -353,6 +352,16 @@ export function providerBindingsForEvent(
 
 function ticketProviderBranchCandidates(ticket: Ticket | undefined): Array<string | undefined> {
   return [ticket?.mr?.source_branch];
+}
+
+function monitoringBranchCandidates(
+  ticket: Ticket | undefined,
+  session: Pick<WorkSessionRecord, 'projectPath'>,
+): Array<string | undefined> {
+  return [
+    ...ticketProviderBranchCandidates(ticket),
+    session.projectPath ? readProjectGitBranch(session.projectPath)?.branch : undefined,
+  ];
 }
 
 function isProviderSource(source: string): source is WorkSessionProviderBinding['provider'] {

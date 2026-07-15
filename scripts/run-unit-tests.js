@@ -34,6 +34,7 @@ const insertion = require('../out/services/terminalContextInsertion.js');
 const { createOperatorTerminalRegistry } = require('../out/services/operatorTerminalRegistry.js');
 const claudeTerminalLauncher = require('../out/services/claudeTerminalLauncher.js');
 const workSessions = require('../out/services/workSessionStore.js');
+const projectMonitoringStore = require('../out/services/projectMonitoringStore.js');
 const workSessionLifecycle = require('../out/services/workSessionLifecycle.js');
 const pipelineTransitions = require('../out/services/pipelineTransitions.js');
 const mergeRequestTransitions = require('../out/services/gitlabMergeRequestTransitions.js');
@@ -53,6 +54,15 @@ const errorUtils = require('../out/services/errorUtils.js');
 const sensitiveText = require('../out/services/sensitiveText.js');
 const providerUrls = require('../out/services/providerUrls.js');
 const attentionPresentation = require('../out/services/attentionPresentation.js');
+const attentionProjection = require('../out/services/attentionProjection.js');
+
+function restoreEnv(name, value) {
+  if (value === undefined) {
+    delete process.env[name];
+    return;
+  }
+  process.env[name] = value;
+}
 
 function createSymlinkOrSkip(t, target, linkPath, type = 'file') {
   try {
@@ -285,6 +295,42 @@ test('GitLab and CI context pairs share immutable publication and reject incompl
   );
   assert.equal(fs.existsSync(ciArtifact.jsonPath), true);
   assert.equal(fs.existsSync(ciArtifact.promptPath), false, 'an existing partial pair is never silently completed');
+
+  const projectGitLabContext = gitlabMergeRequestContext.normalizeGitLabProjectMergeRequestContext(
+    'Application API',
+    87,
+    {
+      fetchedAt: '2026-07-14T19:00:00.000Z',
+      mr: { iid: 87, title: 'Project-scoped context', state: 'opened' },
+      notes: [],
+      discussions: [],
+      diffs: [],
+      pipelines: [],
+      jobs: [],
+      completeness: {},
+    },
+  );
+  const projectGitLabArtifact = gitlabContextStore.writeGitLabContextArtifacts(projectGitLabContext, {
+    kronosDir: path.join(tempRoot, 'project-gitlab-context'),
+  });
+  assert.equal(projectGitLabContext.projectName, 'Application API');
+  assert.equal(Object.hasOwn(projectGitLabContext, 'ticketKey'), false);
+  assert.match(fs.readFileSync(projectGitLabArtifact.promptPath, 'utf8'), /project Application API \/ MR-87/);
+
+  const projectCiContext = ciContextStore.buildProjectCiContext('Application API', {
+    warnings: ['No provider evidence in fixture.'],
+  });
+  const projectCiArtifact = ciContextStore.writeCiContextArtifacts(projectCiContext, {
+    kronosDir: path.join(tempRoot, 'project-ci-context'),
+  });
+  const projectCiReference = insertion.buildProjectCiContextReference(
+    'Application API',
+    projectCiArtifact.promptPath,
+  );
+  assert.equal(projectCiContext.projectName, 'Application API');
+  assert.equal(Object.hasOwn(projectCiContext, 'ticketKey'), false);
+  assert.match(projectCiReference, /^\[CI-PROJECT-[A-F0-9]{24}\]/);
+  assert.equal(insertion.isSafeTerminalContextReference(projectCiReference), true);
 
   for (const sourceName of ['gitlabContextStore.ts', 'ciContextStore.ts']) {
     const source = fs.readFileSync(path.join(root, 'src', 'services', sourceName), 'utf8');
@@ -766,13 +812,16 @@ test('GitLab discovery selects a unique current-branch MR before ticket search',
     : []);
   const result = await fixture.client.discoverOpenMergeRequest({
     projectIdOrPath: 'team/app',
-    ticketKey: 'JIRA-123',
     sourceBranch: 'feature/JIRA-123',
   });
   assert.equal(result.strategy, 'source-branch');
   assert.equal(result.match.iid, 42);
   assert.equal(fixture.requests.length, 1);
   assert.equal(new URL(fixture.requests[0].url).searchParams.get('state'), 'opened');
+  await assert.rejects(
+    fixture.client.discoverOpenMergeRequest({ projectIdOrPath: 'team/app' }),
+    /current project branch or Jira ticket key/i,
+  );
 });
 
 test('GitLab discovery falls back to ticket key and refuses ambiguous matches', async () => {
@@ -864,17 +913,20 @@ test('managed provider polling automatically discovers and locally binds a proje
     assert.equal(result.polled, 1);
     assert.equal(result.transitions, 1);
     assert.equal(result.failures, 0);
-    const updated = workSessions.readWorkSession(session.id);
-    assert.ok(updated.providerBindings.some(binding =>
+    const projectMonitor = projectMonitoringStore.readProjectMonitoringRecord('Application');
+    assert.ok(projectMonitor, 'registered project configuration creates a project-owned polling record');
+    assert.equal(projectMonitor.ticketKeys.length, 0, 'project polling must not fabricate a Jira context');
+    assert.ok(projectMonitor.providerBindings.some(binding =>
       binding.provider === 'gitlab'
         && binding.resource === 'merge-request'
         && binding.subjectId === '90'
         && binding.projectId === 'team/application'
     ));
-    const digest = mergeRequestMonitorStore.readGitLabMergeRequestMonitorSnapshot(session.id);
+    assert.equal(workSessions.readWorkSession(session.id).providerBindings.length, 0, 'the terminal Session is not the project poll owner');
+    const digest = mergeRequestMonitorStore.readGitLabMergeRequestMonitorSnapshot(projectMonitor.id);
     const projected = providerBindingReconciliation.withEffectiveTicketMergeRequest(
       state.tickets['JIRA-900'],
-      updated,
+      projectMonitor,
       digest,
     );
     assert.deepEqual(projected.mr, {
@@ -889,20 +941,22 @@ test('managed provider polling automatically discovers and locally binds a proje
       discussions_resolved: true,
     });
     const discoveryEvent = monitorEventStore.listMonitorEvents({
-      sessionId: session.id,
+      sessionId: projectMonitor.id,
       types: ['provider.transition'],
     }).find(event => event.metadata?.transitionKind === 'initial_mr_observed');
     assert.ok(discoveryEvent);
     assert.equal(discoveryEvent.subject.kind, 'merge-request');
     assert.equal(discoveryEvent.subject.id, '90');
+    assert.equal(discoveryEvent.subject.project, 'Application');
+    assert.equal(discoveryEvent.subject.ticketKey, undefined);
     assert.match(discoveryEvent.summary, /first observed \(opened\/mergeable\)/);
     assert.equal(
       discoveryEvent.metadata.transitionStreamKey,
-      providerTransitionStreams.providerTransitionStreamKey(discoveryEvent, updated),
+      providerTransitionStreams.providerTransitionStreamKey(discoveryEvent, projectMonitor),
       'persisted transition evidence uses the same canonical stream key as Attention projection',
     );
     const baselineEvent = monitorEventStore.listMonitorEvents({
-      sessionId: session.id,
+      sessionId: projectMonitor.id,
       source: 'gitlab',
       types: ['provider.baseline'],
     }).find(event => event.subject?.kind === 'merge-request');
@@ -910,12 +964,12 @@ test('managed provider polling automatically discovers and locally binds a proje
     assert.equal(baselineEvent.metadata.transitionStreamKey, discoveryEvent.metadata.transitionStreamKey);
     const duplicate = await monitor.poll();
     assert.equal(duplicate.transitions, 0);
-    const acknowledgementEvent = monitorEventStore.acknowledgeMonitorEvent(discoveryEvent.id, session.id);
+    const acknowledgementEvent = monitorEventStore.acknowledgeMonitorEvent(discoveryEvent.id, projectMonitor.id);
     assert.equal(acknowledgementEvent.metadata.transitionStreamKey, discoveryEvent.metadata.transitionStreamKey);
     const afterClear = await monitor.poll();
     assert.equal(afterClear.transitions, 1, 'a still-open MR returns on the next poll after its Attention item is cleared');
     const reminderEvent = monitorEventStore.listMonitorEvents({
-      sessionId: session.id,
+      sessionId: projectMonitor.id,
       source: 'gitlab',
       types: ['provider.transition'],
     }).find(event => event.metadata?.transitionKind === 'open_mr_reminder');
@@ -925,32 +979,206 @@ test('managed provider polling automatically discovers and locally binds a proje
     assert.equal(reminderEvent.metadata.reminderAfterAcknowledgementId.startsWith('event-'), true);
     assert.equal(reminderEvent.metadata.transitionStreamKey, discoveryEvent.metadata.transitionStreamKey);
     assert.equal(
-      monitorEventStore.listMonitorEvents({ sessionId: session.id, types: ['provider.transition'] })
+      monitorEventStore.listMonitorEvents({ sessionId: projectMonitor.id, types: ['provider.transition'] })
         .some(event => event.id === discoveryEvent.id),
       true,
       'the original cleared event remains in the append-only audit',
     );
     const stableReminder = await monitor.poll();
     assert.equal(stableReminder.transitions, 0, 'an uncleared reminder is not duplicated on every poll');
-    monitorEventStore.acknowledgeMonitorEvent(reminderEvent.id, session.id);
+    monitorEventStore.acknowledgeMonitorEvent(reminderEvent.id, projectMonitor.id);
     const repeatedClear = await monitor.poll();
     assert.equal(repeatedClear.transitions, 1, 'clearing the reminder snoozes the still-open MR until one more poll');
     mergeRequestState = 'merged';
     const mergedPoll = await monitor.poll();
     assert.equal(mergedPoll.transitions, 1);
     const mergedEvent = monitorEventStore.listMonitorEvents({
-      sessionId: session.id,
+      sessionId: projectMonitor.id,
       source: 'gitlab',
       types: ['provider.transition'],
     }).find(event => event.metadata?.transitionKind === 'merge_request_merged');
     assert.ok(mergedEvent);
-    monitorEventStore.acknowledgeMonitorEvent(mergedEvent.id, session.id);
+    monitorEventStore.acknowledgeMonitorEvent(mergedEvent.id, projectMonitor.id);
     const afterMergedClear = await monitor.poll();
     assert.equal(afterMergedClear.transitions, 0, 'a cleared merged MR does not return on later polls');
   } finally {
     gitLabRestModule.gitlabRestClient.discoverOpenMergeRequest = originalDiscover;
     gitLabRestModule.gitlabRestClient.mergeRequestMonitor = originalMonitor;
     workSessions.removeWorkSession(session.id);
+  }
+});
+
+test('registered project configuration polls GitLab Jenkins and Sonar without a ticket or terminal Session', async () => {
+  const projectRoot = path.join(tempRoot, 'seamless-project-monitoring');
+  fs.mkdirSync(path.join(projectRoot, '.git'), { recursive: true });
+  fs.writeFileSync(path.join(projectRoot, '.git', 'HEAD'), 'ref: refs/heads/feature/project-monitoring\n');
+  const state = stateStore.emptyWorkCatalog();
+  state.projects.Seamless = {
+    path: projectRoot,
+    display_name: 'Seamless API',
+    config: {
+      gitlab_project_path: 'team/seamless',
+      jenkins_url: 'https://jenkins.example/job/seamless',
+      sonar_project_key: 'team:seamless',
+      sonar_branch: 'feature/project-monitoring',
+    },
+  };
+  const originals = {
+    discover: gitLabRestModule.gitlabRestClient.discoverOpenMergeRequest,
+    gitlab: gitLabRestModule.gitlabRestClient.mergeRequestMonitor,
+    jenkins: jenkinsRestModule.jenkinsRestClient.buildContext,
+    sonar: sonarRestModule.sonarRestClient.branchContext,
+    gitlabBase: process.env.GITLAB_BASE_URL,
+    jenkinsUrl: process.env.JENKINS_URL,
+    sonarUrl: process.env.SONAR_HOST_URL,
+  };
+  process.env.GITLAB_BASE_URL = 'https://gitlab.example';
+  process.env.JENKINS_URL = 'https://jenkins.example';
+  process.env.SONAR_HOST_URL = 'https://sonar.example';
+  let discoveryInput;
+  gitLabRestModule.gitlabRestClient.discoverOpenMergeRequest = async input => {
+    discoveryInput = input;
+    return {
+      match: {
+        iid: 77,
+        title: 'Project-owned monitoring',
+        sourceBranch: 'feature/project-monitoring',
+        targetBranch: 'main',
+        webUrl: 'https://gitlab.example/team/seamless/-/merge_requests/77',
+      },
+      strategy: 'source-branch',
+      candidateCount: 1,
+      ambiguous: false,
+    };
+  };
+  gitLabRestModule.gitlabRestClient.mergeRequestMonitor = async () => ({
+    mr: {
+      iid: 77,
+      state: 'opened',
+      title: 'Project-owned monitoring',
+      source_branch: 'feature/project-monitoring',
+      target_branch: 'main',
+      web_url: 'https://gitlab.example/team/seamless/-/merge_requests/77',
+      detailed_merge_status: 'mergeable',
+      reviewers: [],
+      updated_at: '2026-07-15T15:00:00.000Z',
+    },
+    notes: [],
+    discussions: [],
+    approvals: { approved: true, approvals_required: 0, approvals_left: 0, approved_by: [] },
+    pipelines: [],
+    jobs: [],
+    fetchedAt: '2026-07-15T15:00:00.000Z',
+    responseBytes: 0,
+    completeness: {
+      notesComplete: true,
+      discussionsComplete: true,
+      approvalsComplete: true,
+      pipelinesComplete: true,
+      jobsComplete: true,
+      testsComplete: true,
+      warnings: [],
+    },
+  });
+  jenkinsRestModule.jenkinsRestClient.buildContext = async jobOrBuildUrl => ({
+    schemaVersion: 1,
+    provider: 'jenkins',
+    fetchedAt: '2026-07-15T15:00:01.000Z',
+    jobOrBuildUrl,
+    build: {
+      number: 42,
+      status: 'SUCCESS',
+      building: false,
+      url: 'https://jenkins.example/job/seamless/42/',
+      causes: [],
+      artifacts: [],
+      changes: [],
+    },
+    completeness: {
+      complete: true,
+      buildComplete: true,
+      testReport: 'complete',
+      stages: 'complete',
+      configuration: 'complete',
+      logsIncluded: false,
+      warnings: [],
+    },
+  });
+  sonarRestModule.sonarRestClient.branchContext = async (projectKey, branch) => ({
+    schemaVersion: 1,
+    provider: 'sonarqube',
+    fetchedAt: '2026-07-15T15:00:02.000Z',
+    projectKey,
+    branch,
+    dashboardUrl: `https://sonar.example/dashboard?id=${encodeURIComponent(projectKey)}&branch=${encodeURIComponent(branch)}`,
+    qualityGate: { status: 'OK', conditions: [] },
+    measures: [],
+    issues: [],
+    completeness: {
+      complete: true,
+      qualityGateComplete: true,
+      measuresComplete: true,
+      issuesComplete: true,
+      issuesFetched: 0,
+      issuePages: 1,
+      issueResponseBytes: 2,
+      issuesTotal: 0,
+      warnings: [],
+    },
+  });
+  try {
+    assert.equal(workSessions.listWorkSessions().some(session => session.projectName === 'Seamless'), false);
+    const monitor = new managedProviderMonitor.ManagedProviderMonitor({ state: () => state });
+    const first = await monitor.poll();
+    assert.deepEqual(
+      { polled: first.polled, failures: first.failures, unconfigured: first.unconfigured },
+      { polled: 3, failures: 0, unconfigured: 0 },
+    );
+    assert.deepEqual(discoveryInput, {
+      projectIdOrPath: 'team/seamless',
+      sourceBranch: 'feature/project-monitoring',
+    });
+    const owner = projectMonitoringStore.readProjectMonitoringRecord('Seamless');
+    assert.ok(owner);
+    assert.equal(owner.title, 'Seamless API provider monitoring');
+    assert.deepEqual(owner.ticketKeys, []);
+    assert.equal(owner.monitoring.lastState, 'healthy');
+    assert.equal(owner.monitoring.currentError, undefined);
+    assert.equal(workSessions.readWorkSession(owner.id), null, 'project polling state must stay out of terminal Sessions');
+    assert.deepEqual(
+      owner.providerBindings
+        .map(binding => [binding.provider, binding.resource, binding.subjectId])
+        .sort((left, right) => left.join(':').localeCompare(right.join(':'))),
+      [
+        ['gitlab', 'merge-request', '77'],
+        ['jenkins', 'build', '42'],
+        ['jenkins', 'job', 'configured'],
+        ['sonar', 'quality-gate', 'team:seamless:feature/project-monitoring'],
+      ],
+    );
+    const events = monitorEventStore.listMonitorEvents({
+      sessionId: owner.id,
+      types: ['provider.transition', 'notification.acknowledged'],
+      limit: 2000,
+    });
+    assert.ok(events.length > 0);
+    assert.equal(events.every(event => event.subject?.ticketKey === undefined), true);
+    assert.equal(events.every(event => event.subject?.project === 'Seamless'), true);
+    const current = attentionProjection.currentAttentionTransitions(
+      events,
+      [owner],
+      [{ name: 'Seamless', path: projectRoot }],
+    );
+    assert.ok(current.length > 0);
+    assert.equal((await monitor.poll()).transitions, 0, 'unchanged project-owned polling stays quiet');
+  } finally {
+    gitLabRestModule.gitlabRestClient.discoverOpenMergeRequest = originals.discover;
+    gitLabRestModule.gitlabRestClient.mergeRequestMonitor = originals.gitlab;
+    jenkinsRestModule.jenkinsRestClient.buildContext = originals.jenkins;
+    sonarRestModule.sonarRestClient.branchContext = originals.sonar;
+    restoreEnv('GITLAB_BASE_URL', originals.gitlabBase);
+    restoreEnv('JENKINS_URL', originals.jenkinsUrl);
+    restoreEnv('SONAR_HOST_URL', originals.sonarUrl);
   }
 });
 
@@ -3354,7 +3582,7 @@ test('extension activation registers the bounded surface and explicit launch com
     assert.equal(projectItems[0].label, 'fixture');
     assert.equal(projectItems[0].projectName, 'fixture');
     assert.equal(projectItems[0].projectPath, tempRoot);
-    assert.equal(projectItems[0].description, 'feature/runtime-project • 1 change • poll paused');
+    assert.equal(projectItems[0].description, 'feature/runtime-project • 1 change • poll idle');
     assert.equal(projectItems[0].contextValue, 'registered_project');
     assert.match(projectItems[0].tooltip, /Git status: 1 total, 0 staged, 1 modified/);
     assert.match(projectItems[0].tooltip, /Last meaningful provider change: never/);
@@ -3372,13 +3600,13 @@ test('extension activation registers the bounded surface and explicit launch com
     ]);
     const panelsBeforeUnmanagedProjectContext = createdWebviewPanels.length;
     await commandHandlers.get('kronos.insertProjectGitContext')({ projectName: 'fixture', projectPath: tempRoot });
-    assert.match(lastWarningMessage, /start a Claude session.*before inserting the working diff/i);
+    assert.match(lastWarningMessage, /start a Claude session.*before inserting (?:the )?working diff/i);
     await commandHandlers.get('kronos.insertProjectGitLabContext')({
       target: { projectName: 'fixture', projectPath: path.join(tempRoot, 'stale-tree-path') },
     });
-    assert.match(lastWarningMessage, /add a Jira context.*before inserting MR evidence/i);
+    assert.match(lastWarningMessage, /start a Claude session.*before inserting MR evidence.*No Jira ticket is required/i);
     await commandHandlers.get('kronos.insertProjectCiContext')({ projectName: 'fixture', projectPath: tempRoot });
-    assert.match(lastWarningMessage, /add a Jira context.*before inserting CI evidence/i);
+    assert.match(lastWarningMessage, /start a Claude session.*before inserting Jenkins.*No Jira ticket is required/i);
     assert.equal(
       createdWebviewPanels.length,
       panelsBeforeUnmanagedProjectContext,
@@ -4273,18 +4501,20 @@ test('extension activation registers the bounded surface and explicit launch com
     assert.equal(reconnectedActions.at(-1)[2], false);
     assert.match(reconnectedActions.at(-1)[1], /^\[MR-88\]/);
 
-    singlePickHandler = items => items.find(item => item.label === 'JIRA-123');
+    vscode.window.activeTerminal = createdTerminals[0].terminal;
     providerPanelStart = createdWebviewPanels.length;
     await commandHandlers.get('kronos.insertProjectGitLabContext')({ projectName: 'fixture', projectPath: tempRoot });
     providerComposer = createdWebviewPanels.slice(providerPanelStart)
       .find(panel => panel.viewType === 'kronosContextComposer');
-    assert.ok(providerComposer, 'project MR insertion must route to a linked ticket composer');
-    providerWrites = reconnectedActions.length;
+    assert.ok(providerComposer, 'project MR insertion must work in a project Session with no Jira context');
+    providerWrites = createdTerminals[0].actions.length;
     await providerComposer.receive({ command: 'insertDraft', focus: 'Review project MR evidence.' });
-    assert.equal(reconnectedActions.length, providerWrites + 1);
-    assert.equal(reconnectedActions.at(-1)[2], false);
-    assert.match(reconnectedActions.at(-1)[1], /^\[MR-88\]/);
+    assert.equal(createdTerminals[0].actions.length, providerWrites + 1);
+    assert.equal(createdTerminals[0].actions.at(-1)[2], false);
+    assert.match(createdTerminals[0].actions.at(-1)[1], /^\[MR-88\]/);
+    assert.deepEqual(workSessions.readWorkSession(standalone.id).ticketKeys, []);
 
+    vscode.window.activeTerminal = reconnectedTerminal;
     providerPanelStart = createdWebviewPanels.length;
     await commandHandlers.get('kronos.insertCiContext')({ ticketKey: 'JIRA-123' });
     providerComposer = createdWebviewPanels.slice(providerPanelStart)
@@ -4297,22 +4527,30 @@ test('extension activation registers the bounded surface and explicit launch com
     assert.equal(reconnectedActions.length, providerWrites + 1);
     assert.equal(reconnectedActions.at(-1)[2], false);
     assert.match(reconnectedActions.at(-1)[1], /^\[CI-JIRA-123\]/);
-    singlePickHandler = items => items.find(item => item.label === 'JIRA-123');
+    vscode.window.activeTerminal = createdTerminals[0].terminal;
     providerPanelStart = createdWebviewPanels.length;
     await commandHandlers.get('kronos.insertProjectCiContext')({ projectName: 'fixture', projectPath: tempRoot });
     providerComposer = createdWebviewPanels.slice(providerPanelStart)
       .find(panel => panel.viewType === 'kronosContextComposer');
-    assert.ok(providerComposer, 'project CI insertion must route to a linked ticket composer');
-    providerWrites = reconnectedActions.length;
+    assert.ok(providerComposer, 'project CI insertion must work in a project Session with no Jira context');
+    providerWrites = createdTerminals[0].actions.length;
     await providerComposer.receive({ command: 'insertDraft', focus: 'Review project CI evidence.' });
-    assert.equal(reconnectedActions.length, providerWrites + 1);
-    assert.equal(reconnectedActions.at(-1)[2], false);
-    assert.match(reconnectedActions.at(-1)[1], /^\[CI-JIRA-123\]/);
+    assert.equal(createdTerminals[0].actions.length, providerWrites + 1);
+    assert.equal(createdTerminals[0].actions.at(-1)[2], false);
+    assert.match(createdTerminals[0].actions.at(-1)[1], /^\[CI-PROJECT-[A-F0-9]{24}\]/);
+    assert.deepEqual(workSessions.readWorkSession(standalone.id).ticketKeys, []);
+    vscode.window.activeTerminal = reconnectedTerminal;
 
     await commandHandlers.get('kronos.pollManagedWorkSessions')();
     const manuallyPolledSession = workSessions.getWorkSessionByTicket('JIRA-123');
-    assert.equal(manuallyPolledSession.monitoring.lastState, 'healthy');
-    assert.ok(manuallyPolledSession.monitoring.lastPolledAt);
+    const manuallyPolledProject = projectMonitoringStore.readProjectMonitoringRecord('fixture');
+    assert.equal(manuallyPolledProject.monitoring.lastState, 'healthy');
+    assert.ok(manuallyPolledProject.monitoring.lastPolledAt);
+    assert.equal(
+      manuallyPolledSession.monitoring.lastState,
+      undefined,
+      'a ticket Session is not the provider polling owner for a configured project',
+    );
     const projectedWorkCatalog = stateStore.readStateFileWithIssues().state;
     assert.equal(projectedWorkCatalog.tickets['JIRA-123'].mr.iid, 88);
     assert.equal(projectedWorkCatalog.tickets['JIRA-123'].mr.review_status, 'approved');
@@ -4320,7 +4558,7 @@ test('extension activation registers the bounded surface and explicit launch com
     assert.equal(projectedWorkCatalog.tickets['JIRA-123'].build.status, 'SUCCESS');
 
     await commandHandlers.get('kronos.pauseWorkSessionMonitoring')({ workSessionId: ticketSession.id });
-    assert.equal(workSessions.getWorkSessionByTicket('JIRA-123').monitoring.enabled, false);
+    assert.equal(workSessions.getWorkSessionByTicket('JIRA-123').monitoring.enabled, true);
     await commandHandlers.get('kronos.resumeWorkSessionMonitoring')({ workSessionId: ticketSession.id });
     assert.equal(workSessions.getWorkSessionByTicket('JIRA-123').monitoring.enabled, true);
     const reconnectActionsBeforeDetach = reconnectedActions.length;

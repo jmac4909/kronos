@@ -74,6 +74,26 @@ test('removing a basket selection never deletes its private source artifact', ()
   assert.equal(fs.readFileSync(artifact, 'utf8'), 'working tree evidence');
 });
 
+test('project MR and CI basket sources refresh without fabricated Jira identities', () => {
+  for (const kind of ['gitlab', 'ci']) {
+    const added = addContextBasketItem(input({
+      kind,
+      sourceKey: `${kind}:Application`,
+      label: `${kind} project evidence`,
+      provenance: `${kind} evidence for Application`,
+      promptPath: sourceArtifact(`${kind}-project`, `${kind} project evidence`),
+      refresh: { kind, projectName: 'Application' },
+    }));
+    assert.deepEqual(added.refresh, { kind, projectName: 'Application' });
+    assert.equal(Object.hasOwn(added.refresh, 'ticketKey'), false);
+  }
+  assert.throws(() => addContextBasketItem(input({
+    kind: 'gitlab',
+    sourceKey: 'gitlab:missing-owner',
+    refresh: { kind: 'gitlab' },
+  })), /requires a ticket or registered project/);
+});
+
 test('basket bundles retain references and hashes without copying source payloads', () => {
   addContextBasketItem(input({ promptPath: sourceArtifact('bundle-first', 'SECRET-SOURCE-PAYLOAD-ONE') }));
   addContextBasketItem(input({ promptPath: sourceArtifact('bundle-second', 'SECRET-SOURCE-PAYLOAD-TWO') }));

@@ -13,6 +13,7 @@ test.after(() => fs.rmSync(tempRoot, { recursive: true, force: true }));
 const dateValues = require('../out/services/dateValues.js');
 const pipelineTransitions = require('../out/services/pipelineTransitions.js');
 const pipelineStore = require('../out/services/gitlabPipelineMonitorStore.js');
+const projectMonitoringStore = require('../out/services/projectMonitoringStore.js');
 const stateStore = require('../out/services/stateStore.js');
 const workSessions = require('../out/services/workSessionStore.js');
 const { createOperatorTerminalRegistry } = require('../out/services/operatorTerminalRegistry.js');
@@ -262,6 +263,7 @@ test('Projects tree covers empty, clean, changed, unavailable, action, and faile
     { ...linked, id: 'ignored-no-ticket', ticketKeys: [] },
     { ...linked, id: 'ignored-other-project', projectName: 'Changed' },
   ];
+  projectMonitoringStore.ensureProjectMonitoringRecord({ name: 'Clean', path: cleanPath });
 
   const provider = new ProjectTreeProvider(() => state, () => [linked, ...ignored], () => 120_000);
   const changes = [];
@@ -272,8 +274,8 @@ test('Projects tree covers empty, clean, changed, unavailable, action, and faile
   assert.equal(byName.Clean.label, 'Customer API');
   assert.match(byName.Clean.description, /^main • clean • /);
   assert.equal(byName.Clean.iconPath.color.id, 'testing.iconPassed');
-  assert.match(byName.Clean.tooltip, /Active monitored ticket sessions: 1/);
-  assert.match(byName.Clean.tooltip, /GitLab: automatic polling active for 1 ticket session/);
+  assert.match(byName.Clean.tooltip, /Automatic project polling: active/);
+  assert.match(byName.Clean.tooltip, /GitLab: automatic project polling active/);
   assert.equal(byName.Changed.iconPath.color.id, 'gitDecoration.modifiedResourceForeground');
   assert.match(byName.Changed.description, /2 changes · 1 staged · 1 conflict/);
   assert.match(byName.Changed.tooltip, /Git read note: Diff remained bounded\./);
@@ -298,6 +300,11 @@ test('Projects tree covers empty, clean, changed, unavailable, action, and faile
 
   const warning = t.mock.method(console, 'warn', () => {});
   const secret = ['glpat-', 'projecttreefixturevalue'].join('');
+  const invalidMonitorPath = projectMonitoringStore.projectMonitoringRecordPath('Changed');
+  fs.mkdirSync(path.dirname(invalidMonitorPath), { recursive: true, mode: 0o700 });
+  fs.writeFileSync(invalidMonitorPath, '{', { mode: 0o600 });
+  assert.equal((await new ProjectTreeProvider(() => state, () => []).getChildren()).length, 3);
+  fs.rmSync(invalidMonitorPath, { force: true });
   const stateFailure = await new ProjectTreeProvider(
     () => { throw new Error(`Authorization: Bearer ${secret}`); },
     () => [],
@@ -308,7 +315,7 @@ test('Projects tree covers empty, clean, changed, unavailable, action, and faile
     () => { throw new Error(`Authorization: Bearer ${secret}`); },
   );
   assert.equal((await sessionFailureProvider.getChildren()).length, 3);
-  assert.equal(warning.mock.callCount(), 2);
+  assert.equal(warning.mock.callCount(), 3);
   const warnings = warning.mock.calls.map(call => call.arguments[0]).join(' ');
   assert.equal(warnings.includes(secret), false);
   assert.match(warnings, /REDACTED/);

@@ -67,6 +67,7 @@
       "automated": [
         { "file": "scripts/run-unit-tests.js", "test": "Attention stream identity is stable by project, provider, resource, logical subject, and facet" },
         { "file": "scripts/run-unit-tests.js", "test": "managed provider polling automatically discovers and locally binds a project MR" },
+        { "file": "scripts/run-unit-tests.js", "test": "registered project configuration polls GitLab Jenkins and Sonar without a ticket or terminal Session" },
         { "file": "scripts/run-unit-tests.js", "test": "GitLab MR review monitoring retains complete facets across partial reads and dedupes read health" },
         { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "GitLab merge-request transition matrix covers every declared structural transition" },
         { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "GitLab pipeline transition matrix covers every declared pipeline, job, and test transition" },
@@ -648,6 +649,19 @@
       "humanGates": ["multi-window"]
     },
     {
+      "requirements": ["G04-case-11:a3dd759b"],
+      "automated": [
+        { "file": "scripts/run-unit-tests.js", "test": "registered project configuration polls GitLab Jenkins and Sonar without a ticket or terminal Session" }
+      ]
+    },
+    {
+      "requirements": ["G04-case-12:cf96b211"],
+      "automated": [
+        { "file": "scripts/run-unit-tests.js", "test": "registered project configuration polls GitLab Jenkins and Sonar without a ticket or terminal Session" },
+        { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "Attention projection rebuilds after restart without stale-row resurrection" }
+      ]
+    },
+    {
       "requirements": ["G04-evidence-01:459964c3"],
       "automated": [
         { "file": "scripts/run-unit-tests.js", "test": "Attention stream identity is stable by project, provider, resource, logical subject, and facet" }
@@ -738,6 +752,13 @@
       "automated": [
         { "file": "scripts/run-provider-binding-reconciliation-tests.js", "test": "Jenkins job, build history, and SonarQube branch identities remain distinct under one resolver" },
         { "file": "scripts/run-handoff-branch-profile-tests.js", "test": "CI target selection uses an exact MR profile then explicit fallback without creating a ticket project link" }
+      ]
+    },
+    {
+      "requirements": ["G05-case-10:1aa47234"],
+      "automated": [
+        { "file": "scripts/run-unit-tests.js", "test": "extension activation registers the bounded surface and explicit launch commands create the right session kinds" },
+        { "file": "scripts/run-unit-tests.js", "test": "GitLab and CI context pairs share immutable publication and reject incomplete evidence" }
       ]
     },
     {

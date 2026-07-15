@@ -32,7 +32,8 @@ test('one provider binding reconciliation owner feeds Work, Sessions, Projects, 
   }
   const extension = fs.readFileSync(path.join(root, 'src/terminalFirstExtension.ts'), 'utf8');
   assert.doesNotMatch(extension, /currentMatchesTicket|mergeRequestNeedsEnrichment/);
-  assert.match(extension, /latestGitLabMergeRequestUrlAcrossSessions\(projectSessions\)/);
+  assert.match(extension, /const projectMonitor = this\.readProjectMonitor\(project\.projectName\)/);
+  assert.match(extension, /latestGitLabMergeRequestUrlAcrossSessions\(\[/);
 });
 
 test('bound MR identity wins stale catalog and only a matching monitor digest enriches it after reload', () => {
