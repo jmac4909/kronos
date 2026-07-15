@@ -2392,6 +2392,7 @@ test('Claude terminal launch is explicit, focused, validated, and operator-trigg
   assert.deepEqual(result.configuration, {
     command: 'claude --model opus',
     name: 'Claude: Kronos',
+    permissionMode: 'default',
     cwd: path.resolve(tempRoot),
   });
   assert.deepEqual(calls, [
@@ -2415,6 +2416,11 @@ test('Claude terminal launch is explicit, focused, validated, and operator-trigg
     'claude --dangerously-skip-permissions=true',
     'claude --dangerously-skip-permiss\\ions',
     'claude %KRONOS_CLAUDE_FLAG%',
+    'claude --permission-mode default',
+    'claude --permission-mode manual',
+    'claude --permission-mode plan',
+    'claude --permission-mode auto',
+    'claude --permission-mode dontAsk',
     'claude --permission-mode bypassPermissions',
     'claude --permission-mode acceptEdits',
     'claude --allow-dangerously-skip-permissions',
@@ -2441,10 +2447,27 @@ test('Claude terminal launch is explicit, focused, validated, and operator-trigg
   assert.equal(calls.length, callCount, 'invalid settings must fail before a terminal is created');
   assert.equal(
     claudeTerminalLauncher.normalizeClaudeTerminalLaunch({
-      command: 'claude --model=opus --effort high --permission-mode plan --ide --safe-mode --verbose',
+      command: 'claude --model=opus --effort high --ide --safe-mode --verbose',
+      permissionMode: 'plan',
       cwd: tempRoot,
     }).command,
-    'claude --model=opus --effort high --permission-mode plan --ide --safe-mode --verbose',
+    'claude --model=opus --effort high --ide --safe-mode --verbose --permission-mode plan',
+  );
+  assert.deepEqual(
+    ['default', 'acceptEdits', 'plan', 'auto', 'dontAsk', 'bypassPermissions'].map(permissionMode =>
+      claudeTerminalLauncher.normalizeClaudeTerminalLaunch({ permissionMode }).command),
+    [
+      'claude',
+      'claude --permission-mode acceptEdits',
+      'claude --permission-mode plan',
+      'claude --permission-mode auto',
+      'claude --permission-mode dontAsk',
+      'claude --dangerously-skip-permissions',
+    ],
+  );
+  assert.throws(
+    () => claudeTerminalLauncher.normalizeClaudeTerminalLaunch({ permissionMode: 'unreviewed-mode' }),
+    /permission mode must be one of/i,
   );
 
   const executableDirectory = path.join(tempRoot, 'claude-executable-path');
@@ -3073,6 +3096,7 @@ test('extension activation registers the bounded surface and explicit launch com
   let warningMessageResult;
   let lastWarningMessage;
   const warningMessages = [];
+  const warningMessageCalls = [];
   let failNextTerminalCreation = false;
   let deferNextProcessId = false;
   let resolveDeferredProcessId;
@@ -3113,9 +3137,10 @@ test('extension activation registers the bounded surface and explicit launch com
       },
       onDidCloseTerminal(handler) { closeTerminalHandler = handler; return disposable(); },
       createOutputChannel() { return { appendLine() {}, dispose() {} }; },
-      showWarningMessage(message) {
+      showWarningMessage(message, ...items) {
         lastWarningMessage = message;
         warningMessages.push(message);
+        warningMessageCalls.push([message, ...items]);
         const result = warningMessageResult;
         warningMessageResult = undefined;
         return Promise.resolve(result);
@@ -3664,10 +3689,64 @@ test('extension activation registers the bounded surface and explicit launch com
     await commandHandlers.get('kronos.newClaudeSession')();
     assert.equal(createdTerminals.length, 1, 'a rapid sequential standalone click must be ignored during the cooldown');
 
+    const originalBypassDateNow = Date.now;
+    const bypassLaunchTime = originalBypassDateNow() + 2_000;
+    configurationValues.set('claudePermissionMode', 'bypassPermissions');
+    await setupPanel.receive({ command: 'refreshPanel' });
+    assert.match(setupPanel.webview.html, /Bypass Permissions \(experimental\)/);
+    assert.match(doctorPanel.webview.html, /Bypass Permissions \(experimental\)/);
+    Date.now = () => bypassLaunchTime;
+    try {
+      const terminalsBeforeBypass = createdTerminals.length;
+      const sessionsBeforeBypass = workSessions.listWorkSessions().length;
+      await commandHandlers.get('kronos.newClaudeSession')();
+      assert.equal(createdTerminals.length, terminalsBeforeBypass, 'canceling the bypass warning must not create a terminal or session');
+      assert.equal(workSessions.listWorkSessions().length, sessionsBeforeBypass);
+      assert.equal(lastWarningMessage, 'Kronos is configured to start Claude with experimental permission bypass.');
+      assert.equal(warningMessageCalls.at(-1)[1].modal, true);
+      assert.match(warningMessageCalls.at(-1)[1].detail, /isolated environment/i);
+      assert.deepEqual(warningMessageCalls.at(-1).slice(2), [
+        'Launch Without Permission Prompts',
+        'Open Claude Settings',
+      ]);
+
+      warningMessageResult = 'Open Claude Settings';
+      await commandHandlers.get('kronos.newClaudeSession')();
+      assert.equal(createdTerminals.length, terminalsBeforeBypass, 'opening settings from the bypass warning must not launch');
+      assert.equal(workSessions.listWorkSessions().length, sessionsBeforeBypass);
+      assert.deepEqual(executedCommands.at(-1), ['workbench.action.openSettings', '@ext:jmacke01.kronos claude']);
+
+      warningMessageResult = 'Launch Without Permission Prompts';
+      await commandHandlers.get('kronos.newClaudeSession')();
+      assert.equal(createdTerminals.length, terminalsBeforeBypass + 1, 'explicit bypass confirmation launches exactly once');
+      assert.equal(workSessions.listWorkSessions().length, sessionsBeforeBypass + 1);
+      const bypassTerminalRecord = createdTerminals.at(-1);
+      assert.deepEqual(bypassTerminalRecord.actions, [
+        ['show', false],
+        ['sendText', 'claude --dangerously-skip-permissions', true],
+      ]);
+      const bypassSession = workSessions.listWorkSessions().find(session =>
+        session.kind === 'standalone' && session.id !== standalone.id && session.projectPath === tempRoot);
+      assert.ok(bypassSession);
+      assert.ok(monitorEventStore.listMonitorEvents({ sessionId: bypassSession.id }).some(event =>
+        event.metadata?.claudePermissionMode === 'bypassPermissions'
+        && event.metadata?.experimentalPermissionBypass === true
+      ));
+      closeTerminalHandler(bypassTerminalRecord.terminal);
+      workSessions.removeWorkSession(bypassSession.id);
+      vscode.window.terminals = vscode.window.terminals.filter(terminal => terminal !== bypassTerminalRecord.terminal);
+      createdTerminals.pop();
+      vscode.window.activeTerminal = createdTerminals[0].terminal;
+    } finally {
+      Date.now = originalBypassDateNow;
+      configurationValues.delete('claudePermissionMode');
+      await setupPanel.receive({ command: 'refreshPanel' });
+    }
+
     const originalWorkspaceName = vscode.workspace.name;
     const originalWorkspaceFolders = vscode.workspace.workspaceFolders;
     const originalDateNow = Date.now;
-    const noWorkspaceLaunchTime = originalDateNow() + 2_000;
+    const noWorkspaceLaunchTime = originalDateNow() + 4_000;
     vscode.workspace.name = undefined;
     vscode.workspace.workspaceFolders = undefined;
     Date.now = () => noWorkspaceLaunchTime;

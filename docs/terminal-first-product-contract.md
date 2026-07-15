@@ -34,7 +34,7 @@ Kronos never:
 - mutates Jira, GitLab, Jenkins, SonarQube, or database state;
 - closes, interrupts, or kills the operator's terminal when management stops.
 
-An explicit Claude-start action validates its configured executable, approved interactive flags, terminal name, and working directory before creating anything. Positional prompts/subcommands and permission-escalating, tool-allowing, directory-expanding, MCP, plugin, background, and non-interactive flags are rejected. It creates and focuses one VS Code terminal and executes the validated Claude command exactly once. It does not use a subprocess library, observe whether Claude succeeded, or read the resulting terminal.
+An explicit Claude-start action validates its configured executable, approved interactive flags, typed permission mode, terminal name, and working directory before creating anything. Positional prompts/subcommands and raw permission, tool-allowing, directory-expanding, MCP, plugin, background, and non-interactive flags are rejected. The typed launch mode is one of Manual/default, Accept Edits, Plan, Auto, Don't Ask, or Bypass Permissions. Non-default modes are appended only by the launcher. Bypass Permissions is explicitly experimental: Kronos shows a blocking warning for every requested bypass launch, offers launch, Claude Settings, or cancel, and creates no session or terminal unless the operator chooses the launch action. It creates and focuses one VS Code terminal and executes the resulting validated Claude command exactly once. It does not use a subprocess library, observe whether Claude succeeded, or read the resulting terminal.
 
 `Manage Focused Terminal` records a private association between a work session and the terminal object the operator explicitly focused. It does not grant Kronos general control of that terminal.
 
@@ -98,7 +98,7 @@ Supported session actions are focus, explicit reattach, detach, pause monitoring
 
 Selecting any Session means “open its terminal.” A live attachment is focused immediately. When VS Code has discarded the ephemeral attachment, Kronos never guesses from a saved process ID or duplicate terminal name: it reconnects the only unclaimed open terminal or asks the operator to choose one, then focuses it.
 
-**New Claude** creates a project-oriented session, validates the configured Claude command/name/cwd, creates and focuses one terminal, and starts Claude. From Sessions it uses the configured workspace/home launch choice; from a registered Project it always uses that exact project directory. The created terminal tab includes the branch read from the actual launch directory when Git `HEAD` is available. **Start Claude for Ticket** also includes the initiating ticket key in that title. This is launch-time display metadata only: Kronos does not invoke Git and does not write to or rename an existing terminal. A new project session contains no fake or placeholder ticket key. An operator may later attach one or more real Jira contexts to any explicitly managed terminal; this never creates or submits terminal input automatically. Legacy ticket-keyed records remain readable for migration compatibility, but Sessions and monitoring are presented and deduplicated by project when a project is known.
+**New Claude** creates a project-oriented session, validates the configured Claude command/permission-mode/name/cwd, creates and focuses one terminal, and starts Claude. From Sessions it uses the configured workspace/home launch choice; from a registered Project it always uses that exact project directory. The created terminal tab includes the branch read from the actual launch directory when Git `HEAD` is available. **Start Claude for Ticket** also includes the initiating ticket key in that title. This is launch-time display metadata only: Kronos does not invoke Git and does not write to or rename an existing terminal. A new project session contains no fake or placeholder ticket key. An operator may later attach one or more real Jira contexts to any explicitly managed terminal; this never creates or submits terminal input automatically. Legacy ticket-keyed records remain readable for migration compatibility, but Sessions and monitoring are presented and deduplicated by project when a project is known.
 
 Stopping management disables monitoring and detaches the in-memory association. It never closes the terminal.
 
@@ -218,7 +218,7 @@ Provider credentials are inherited from approved local configuration. They are n
 
 Credentialed requests are constrained to configured provider origins. Redirects and provider-returned URLs do not silently move credentials to another host. Response sizes, pagination, item counts, text sizes, and request timeouts are bounded.
 
-Setup is the dedicated guided dashboard for Claude launch, project discovery and registration, Jira work, optional monitoring providers, and private state. Doctor is a dedicated status dashboard that places blocked and warning checks first. Setup, Doctor, Projects, and project integration consume one canonical secret-free provider-readiness model; Setup and Doctor render the same readiness snapshot. Setup retains bounded configuration/navigation actions on their owning cards but omits redundant buttons from healthy provider-status cards; Doctor shows repair actions only on non-ready rows and routes discovery-folder repair back through Setup. Missing, present, and invalid-needs-test credential states are labels only—values are never rendered. The explicit private-config action opens the configured environment file and creates a private comment-only template when it is absent; the explicit Poll Now action performs only bounded provider reads. Both dashboards refresh in place and show the same native private-state/provider-file paths and reload requirements. Guided Settings returns to Setup; advanced VS Code Settings remain available from the relevant Setup rows and expose supported Claude command/name/cwd behavior and polling configuration. Provider credentials remain in the private environment-file path described by Setup, and no settings surface can authorize a generic shell command.
+Setup is the dedicated guided dashboard for Claude launch, project discovery and registration, Jira work, optional monitoring providers, and private state. Doctor is a dedicated status dashboard that places blocked and warning checks first. Setup, Doctor, Projects, and project integration consume one canonical secret-free provider-readiness model; Setup and Doctor render the same readiness snapshot. Setup retains bounded configuration/navigation actions on their owning cards but omits redundant buttons from healthy provider-status cards; Doctor shows repair actions only on non-ready rows and routes discovery-folder repair back through Setup. Missing, present, and invalid-needs-test credential states are labels only—values are never rendered. The explicit private-config action opens the configured environment file and creates a private comment-only template when it is absent; the explicit Poll Now action performs only bounded provider reads. Both dashboards refresh in place and show the same native private-state/provider-file paths and reload requirements. Guided Settings returns to Setup; advanced VS Code Settings remain available from the relevant Setup rows and expose supported Claude command/permission-mode/name/cwd behavior and polling configuration. Doctor names the active Claude permission mode, warns for Auto, and warns when experimental bypass is enabled. Provider credentials remain in the private environment-file path described by Setup, and no settings surface can authorize a generic shell command.
 
 ## Runtime Dependency Boundary
 
@@ -248,7 +248,7 @@ Ticket-linked journey:
 
 1. In Work, the operator searches or filters the Jira board, selects a ticket, and opens its workspace.
 2. The operator chooses `Start Claude for Ticket`, or focuses an existing terminal and chooses `Manage Focused Terminal`.
-3. On explicit start, Kronos validates the configured Claude command/name/cwd, creates and focuses one VS Code terminal, and executes only that command.
+3. On explicit start, Kronos validates the configured Claude command/permission-mode/name/cwd, obtains the per-launch modal confirmation when experimental bypass is selected, creates and focuses one VS Code terminal, and executes only the resulting validated command.
 4. The operator chooses `Insert [JIRA-123]`.
 5. Kronos opens the context composer with the fixed private artifact reference, fetched evidence, and an editable operator-focus field.
 6. The operator places the line into the terminal, reviews and submits it manually, then directs the work interactively.
@@ -260,7 +260,7 @@ Ticket-linked journey:
 Standalone journey:
 
 1. In Sessions, the operator chooses `New Claude`, or chooses `Start Claude in project` on a registered Project; Kronos derives a standalone title from that explicit project, the open workspace, or the launch time when neither is available.
-2. Kronos validates the configured Claude command/name/cwd, creates and focuses one terminal, and executes the Claude command exactly once.
+2. Kronos validates the configured Claude command/permission-mode/name/cwd, obtains the per-launch modal confirmation when experimental bypass is selected, creates and focuses one terminal, and executes the Claude command exactly once.
 3. Sessions records a standalone session without a ticket key.
 4. The operator owns and directs the conversation normally.
 5. Stopping management leaves the terminal and Claude process alone.
@@ -270,7 +270,8 @@ Standalone journey:
 Kronos fails closed at ownership and credential boundaries:
 
 - no focused or explicitly attached terminal means no insertion;
-- an invalid Claude command, name, or cwd fails before terminal creation;
+- an invalid Claude command, permission mode, name, or cwd fails before terminal creation;
+- canceling the experimental bypass warning or choosing Claude Settings creates no session, terminal, or launch cooldown;
 - a launch request whose executable is not `claude` or `claude-*` is rejected rather than treated as a generic shell command;
 - no explicit start action means no terminal or process launch;
 - a changed terminal binding cancels insertion;

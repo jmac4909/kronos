@@ -9,7 +9,7 @@ During this review, Kronos may read provider data, explicitly create/focus a VS 
 Kronos must never:
 
 - launch automatically, on reload, during refresh/polling, or without **New Claude** / **Start Claude for Ticket**;
-- execute an arbitrary program, positional Claude subcommand, or project command; only a validated `claude` or `claude-*` executable with approved interactive flags is allowed;
+- execute an arbitrary program, positional Claude subcommand, or project command; only a validated `claude` or `claude-*` executable with approved interactive flags and the typed permission-mode setting is allowed;
 - read terminal input, output, or scrollback;
 - press Enter or submit inserted provider-context text;
 - run a project test, build, scan, deployment, or remediation command;
@@ -28,7 +28,7 @@ Stop the review immediately if any boundary is crossed.
 5. Confirm exactly four views are visible: **Work**, **Sessions**, **Projects**, and **Attention**, with no nested Projects section inside Sessions.
 6. Run **Kronos: Setup** and confirm its dedicated dashboard clearly groups Claude launch, discovery folders, registered projects, Jira, monitoring providers, and private state without exposing secrets. Confirm its runtime guide shows the correct native private-state and provider-environment paths plus precise reload behavior. Exercise its Doctor, Jira Board, settings, discovery-folder, Projects, and Sessions actions; confirm these configuration/navigation actions are not repeated as primary buttons in every view header.
 7. Run **Kronos: Doctor** and confirm its dedicated dashboard shows ready/review/blocked totals, places actionable problems first, refreshes in place, and reports Jira/provider/Claude readiness without displaying credential values.
-8. Open **Kronos: Guided Settings** and confirm it returns to the existing Setup dashboard rather than opening a competing configuration flow. From the relevant Setup rows open Claude or visibility settings, identify the Claude command, terminal-name, cwd behavior, and polling options, then return to Setup. Keep the command at `claude` or a trusted `claude-*` wrapper with only approved interactive flags for the launch tests; provider credentials remain in the private environment-file path shown by Setup.
+8. Open **Kronos: Guided Settings** and confirm it returns to the existing Setup dashboard rather than opening a competing configuration flow. From the relevant Setup rows open Claude or visibility settings, identify the Claude command, permission mode, terminal-name, cwd behavior, and polling options, then return to Setup. Confirm permission mode offers Manual/default, Accept Edits, Plan, Auto, Don't Ask, and experimental Bypass Permissions with clear descriptions. Keep the command at `claude` or a trusted `claude-*` wrapper with only approved interactive flags for the launch tests; raw permission flags do not belong in the command. Provider credentials remain in the private environment-file path shown by Setup.
 
 For a safe synthetic local state, use:
 
@@ -120,16 +120,17 @@ If GitLab and CI providers are safely configured:
 
 1. Choose **New Claude** and confirm exactly one new terminal is created and focused without asking for a Jira ticket.
 2. Confirm the configured Claude command is executed exactly once and the session appears using its workspace-derived standalone title with no fake ticket key or ticket link.
-3. Confirm the project session shows its real Jira context(s), attached terminal state, provider bindings, monitoring state, last attempt, and latest result without showing terminal content.
-4. Select each attached Session and confirm its correct terminal opens immediately.
-5. Reload VS Code, select a detached Session, and confirm Kronos reconnects the sole unclaimed terminal or asks which open terminal belongs to the Session before opening it.
-6. Detach the standalone terminal and confirm it remains open and Claude remains operator-controlled.
-7. Pause monitoring on the project session with Jira context and confirm provider polling stops for that work session.
-8. Resume monitoring and run **Poll Managed Providers** once.
-9. Open the ticket workspace and confirm GitLab, Jenkins, and SonarQube each show active, discovering, paused, or setup state. Confirm GitLab discovers a unique open MR by current branch/ticket key without a manual connect prompt and refuses an ambiguous fixture.
-10. Open each available work-session audit. Confirm it uses the standalone title or real ticket identity as appropriate and contains no terminal transcript.
-11. Stop managing one session and confirm its terminal remains open and usable. Remove an old session, confirm the terminal still remains open, and confirm the removed row no longer appears while retained context/audit files remain local.
-12. After two unchanged polls, inspect both the Session and its Project. Confirm they show the same last attempt, last successful poll, last meaningful change, next scheduled poll, normalized current error, and increasing quiet/suppressed count without adding Attention rows.
+3. In a disposable isolated workspace, set Claude Permission Mode to experimental Bypass Permissions. Choose **New Claude**, confirm the modal explains that prompts will be skipped and offers **Launch Without Permission Prompts**, **Open Claude Settings**, and cancel. Cancel once and choose Settings once; both paths must create no terminal or Session. Confirm once and verify exactly one terminal starts with `claude --dangerously-skip-permissions`, then restore Manual/default before continuing.
+4. Confirm the project session shows its real Jira context(s), attached terminal state, provider bindings, monitoring state, last attempt, latest result, and audited launch permission mode without showing terminal content.
+5. Select each attached Session and confirm its correct terminal opens immediately.
+6. Reload VS Code, select a detached Session, and confirm Kronos reconnects the sole unclaimed terminal or asks which open terminal belongs to the Session before opening it.
+7. Detach the standalone terminal and confirm it remains open and Claude remains operator-controlled.
+8. Pause monitoring on the project session with Jira context and confirm provider polling stops for that work session.
+9. Resume monitoring and run **Poll Managed Providers** once.
+10. Open the ticket workspace and confirm GitLab, Jenkins, and SonarQube each show active, discovering, paused, or setup state. Confirm GitLab discovers a unique open MR by current branch/ticket key without a manual connect prompt and refuses an ambiguous fixture.
+11. Open each available work-session audit. Confirm it uses the standalone title or real ticket identity as appropriate and contains no terminal transcript.
+12. Stop managing one session and confirm its terminal remains open and usable. Remove an old session, confirm the terminal still remains open, and confirm the removed row no longer appears while retained context/audit files remain local.
+13. After two unchanged polls, inspect both the Session and its Project. Confirm they show the same last attempt, last successful poll, last meaningful change, next scheduled poll, normalized current error, and increasing quiet/suppressed count without adding Attention rows.
 
 ## Local Evidence Search
 

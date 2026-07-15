@@ -599,7 +599,29 @@
           "type": "string",
           "default": "claude",
           "scope": "machine",
-          "description": "Validated Claude CLI command submitted only after New Claude Session or Start Claude for Ticket. Only claude/claude-* plus approved interactive model, effort, safe-mode, IDE, display, and non-escalating permission flags are accepted."
+          "description": "Validated Claude CLI command submitted only after New Claude Session or Start Claude for Ticket. Only claude/claude-* plus approved interactive model, effort, safe-mode, IDE, and display flags are accepted. Permission behavior is controlled by the separate Claude Permission Mode setting."
+        },
+        "kronos.claudePermissionMode": {
+          "type": "string",
+          "enum": [
+            "default",
+            "acceptEdits",
+            "plan",
+            "auto",
+            "dontAsk",
+            "bypassPermissions"
+          ],
+          "enumDescriptions": [
+            "Manual/default: Claude asks before edits and commands that require approval.",
+            "Accept Edits: Claude may edit files and perform supported in-scope filesystem operations without prompting; other commands still prompt.",
+            "Plan: Claude starts in analysis and planning mode before edits are approved.",
+            "Auto: a supported Claude CLI and account use Claude's safety classifier to reduce routine prompts. Availability depends on the installed CLI, model, and account.",
+            "Don't Ask: only tools already approved by Claude permission rules run; otherwise Claude receives a denial instead of prompting.",
+            "Experimental Bypass Permissions: Claude skips normal permission prompts. Kronos shows a blocking modal warning on every launch. Use only in an isolated environment you control."
+          ],
+          "default": "default",
+          "scope": "machine",
+          "description": "Starting permission mode for explicit Kronos Claude launches. Raw permission flags in Claude Command are rejected so this typed setting remains the single permission-policy control."
         },
         "kronos.claudeTerminalName": {
           "type": "string",

@@ -42,7 +42,7 @@ for (const name of Object.keys(manifest.devDependencies || {})) {
 }
 if (manifest.contributes.commands.length !== 40) { fail('expected exactly 40 terminal-first commands'); }
 if (manifest.contributes.views.kronos.length !== 4) { fail('expected exactly Work, Sessions, Projects, and Attention'); }
-if (Object.keys(manifest.contributes.configuration.properties || {}).length !== 10) { fail('expected exactly ten mapped terminal-first settings'); }
+if (Object.keys(manifest.contributes.configuration.properties || {}).length !== 11) { fail('expected exactly eleven mapped terminal-first settings'); }
 
 requireMarkers('README.md', ['zero third-party runtime dependencies', 'Work', 'Sessions', 'Projects', 'Attention']);
 requireMarkers('docs/terminal-first-product-contract.md', ['Ownership Invariants', 'Context Insertion Contract', 'Monitoring Contract']);

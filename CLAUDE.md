@@ -15,7 +15,7 @@ Kronos never launches automatically, reads terminal contents, submits inserted c
 There are exactly two intentional terminal-write boundaries:
 
 - `src/services/terminalContextInsertion.ts` inserts a reviewed provider reference and must always pass `false` as the execution flag.
-- `src/services/claudeTerminalLauncher.ts` is called only by explicit **New Claude** or **Start Claude for Ticket** actions. It validates command, name, and cwd before terminal creation; accepts only a `claude` or `claude-*` executable with narrowly allowlisted interactive flags; rejects positional prompts/subcommands and permission-escalating/tool/MCP/plugin flags; focuses the new VS Code terminal; and passes `true` only for that validated Claude start command.
+- `src/services/claudeTerminalLauncher.ts` is called only by explicit **New Claude** or **Start Claude for Ticket** actions. It validates command, typed permission mode, name, and cwd before terminal creation; accepts only a `claude` or `claude-*` executable with narrowly allowlisted interactive flags; rejects positional prompts/subcommands and raw permission/tool/MCP/plugin flags; focuses the new VS Code terminal; and passes `true` only for that validated Claude start command. The separately typed `claudePermissionMode` may append a supported startup mode. Experimental `bypassPermissions` is the only path that appends `--dangerously-skip-permissions`, and `terminalFirstExtension.ts` must require a modal operator confirmation for every such launch before creating a session or terminal.
 
 Runtime code uses only the VS Code API and Node built-ins. Do not add runtime dependencies, external helper scripts, subprocess libraries, generic command execution, provider POST/PUT/PATCH/DELETE requests, or project automation.
 
@@ -59,6 +59,6 @@ The fixture uses `.invalid` provider URLs and must not contact or mutate real sy
 
 ## Credentials and Local Data
 
-Kronos loads provider values from the extension process environment and, when present, `~/.kronos/.env` (or `KRONOS_ENV_FILE`). Supported provider variables are documented in `README.md`. Claude command/name/cwd settings are operator-controlled but must pass the launcher validation; never weaken them into a general shell surface. Never log, persist, insert, or commit credential values.
+Kronos loads provider values from the extension process environment and, when present, `~/.kronos/.env` (or `KRONOS_ENV_FILE`). Supported provider variables are documented in `README.md`. Claude command/permission-mode/name/cwd settings are operator-controlled but must pass the launcher validation; never weaken them into a general shell surface. Never log, persist, insert, or commit credential values.
 
 The default data directory is `~/.kronos`; `KRONOS_DIR` may point to an isolated directory.

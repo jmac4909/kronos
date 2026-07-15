@@ -303,10 +303,19 @@ function checkClaudeLauncherContract() {
   if (!/CLAUDE_EXECUTABLE_BASENAME_PATTERN[\s\S]{0,2400}must resolve to claude or a claude-\* wrapper/.test(source)) {
     addGlobalViolation('EXPLICIT_CLAUDE_LAUNCH', 'Claude launch must reject arbitrary executable names.');
   }
+  const booleanFlags = /APPROVED_INTERACTIVE_BOOLEAN_FLAGS\s*=\s*new Set\(\[([\s\S]*?)\]\)/.exec(source)?.[1] || '';
+  const valueFlags = /APPROVED_INTERACTIVE_VALUE_FLAGS\s*=\s*new Set\(\[([\s\S]*?)\]\)/.exec(source)?.[1] || '';
+  const permissionModes = /CLAUDE_PERMISSION_MODES\s*=\s*\[([\s\S]*?)\]\s+as const/.exec(source)?.[1] || '';
+  const expectedPermissionModes = [
+    'default', 'acceptEdits', 'plan', 'auto', 'dontAsk', 'bypassPermissions',
+  ];
   if (!/APPROVED_INTERACTIVE_BOOLEAN_FLAGS[\s\S]{0,1600}APPROVED_INTERACTIVE_VALUE_FLAGS/.test(source)
     || !/validateApprovedInteractiveArguments\(argumentsList\)/.test(source)
     || !/accepts only approved interactive flags and no positional prompts or subcommands/.test(source)
-    || !/APPROVED_PERMISSION_MODES\s*=\s*new Set\(\['default', 'manual', 'plan'\]\)/.test(source)) {
+    || valueFlags.includes('--permission-mode')
+    || booleanFlags.includes('--dangerously-skip-permissions')
+    || !expectedPermissionModes.every(mode => permissionModes.includes(`'${mode}'`))
+    || !/applyClaudePermissionMode\(normalizeClaudeCommand\(input\.command\), permissionMode\)/.test(source)) {
     addGlobalViolation('EXPLICIT_CLAUDE_LAUNCH', 'Claude launch must use a narrow interactive flag allowlist and reject positional commands.');
   }
 
@@ -324,6 +333,9 @@ function checkClaudeLauncherContract() {
   }
   if (!/private\s+canLaunchClaude\(\)[\s\S]{0,700}workspace\.isTrusted/.test(runtimeCode)) {
     addGlobalViolation('EXPLICIT_CLAUDE_LAUNCH', 'Explicit Claude launch must be blocked in untrusted workspaces.');
+  }
+  if (!/confirmClaudePermissionMode\(mode:[\s\S]{0,1800}mode !== 'bypassPermissions'[\s\S]{0,1800}showWarningMessage\([\s\S]{0,1000}modal:\s*true[\s\S]{0,1000}CLAUDE_BYPASS_CONFIRM_ACTION/.test(runtimeSource)) {
+    addGlobalViolation('EXPLICIT_CLAUDE_LAUNCH', 'Experimental Claude permission bypass must require an explicit modal confirmation on every launch.');
   }
 }
 

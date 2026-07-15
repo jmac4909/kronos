@@ -60,6 +60,7 @@ const EXPECTED_SETTINGS = [
   'kronos.hideCompletedJiraWork',
   'kronos.completedJiraStatuses',
   'kronos.claudeCommand',
+  'kronos.claudePermissionMode',
   'kronos.claudeTerminalName',
   'kronos.claudeLaunchCwd',
 ];
@@ -262,6 +263,14 @@ function checkSettings() {
     || properties?.['kronos.claudeCommand']?.default !== 'claude'
     || properties?.['kronos.claudeCommand']?.scope !== 'machine') {
     fail('kronos.claudeCommand must be machine-scoped and default to the validated claude command.');
+  }
+  const permissionMode = properties?.['kronos.claudePermissionMode'];
+  if (permissionMode?.type !== 'string' || permissionMode?.default !== 'default'
+    || permissionMode?.scope !== 'machine'
+    || JSON.stringify(permissionMode?.enum) !== JSON.stringify([
+      'default', 'acceptEdits', 'plan', 'auto', 'dontAsk', 'bypassPermissions',
+    ])) {
+    fail('kronos.claudePermissionMode must expose the six typed Claude launch modes and default to manual/default.');
   }
   if (properties?.['kronos.claudeTerminalName']?.type !== 'string'
     || properties?.['kronos.claudeTerminalName']?.default !== 'Claude') {

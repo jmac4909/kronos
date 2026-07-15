@@ -6,6 +6,7 @@ All notable changes to the Kronos preview are documented here.
 
 ### Added
 
+- Added a typed Claude launch permission-mode setting for Manual/default, Accept Edits, Plan, Auto, Don't Ask, and experimental Bypass Permissions. Raw permission flags remain blocked in the command setting; bypass requires a modal confirmation on every launch, and cancel/settings choices create no terminal or Session.
 - Added a focused cross-view product-contract suite covering the four-view button hierarchy, canonical Setup/project ownership, ticket-free project launch, project-only Attention grouping, provider icon/severity language, rich Jira filtering, ticket-workspace action boundaries, and healthy Doctor behavior.
 - Made Attention grouping strictly project-level: registered projects own their provider rows, and work without an explicit project appears under **Unassigned project** instead of a Jira-ticket/session group.
 - Added an inline and expanded Project action that starts a ticket-free Claude session in the exact registered project directory and shows its observed branch in the new terminal title.

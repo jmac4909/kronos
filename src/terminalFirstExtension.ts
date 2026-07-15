@@ -99,11 +99,16 @@ import {
 } from './services/jiraWorkBoardView';
 import {
   DEFAULT_CLAUDE_COMMAND,
+  DEFAULT_CLAUDE_PERMISSION_MODE,
   DEFAULT_CLAUDE_TERMINAL_NAME,
   buildClaudeTerminalTitle,
+  claudePermissionModeLabel,
   launchClaudeTerminal,
   normalizeClaudeTerminalLaunch,
   probeClaudeExecutableAvailability,
+  type ClaudePermissionMode,
+  type ClaudeTerminalLaunchInput,
+  type NormalizedClaudeTerminalLaunch,
 } from './services/claudeTerminalLauncher';
 import {
   WEBVIEW_ACTION_PANEL_SCRIPT,
@@ -213,6 +218,8 @@ const OPERATIONS_PANEL_ACTIONS = new Set([
   'pollProvidersNow',
 ]);
 const CLAUDE_LAUNCH_COOLDOWN_MS = 1_000;
+const CLAUDE_BYPASS_CONFIRM_ACTION = 'Launch Without Permission Prompts';
+const CLAUDE_SETTINGS_ACTION = 'Open Claude Settings';
 
 interface TicketPanelRecord {
   panel: vscode.WebviewPanel;
@@ -227,6 +234,11 @@ interface JiraBoardPanelRecord {
 interface OperationsPanelRecord {
   panel: vscode.WebviewPanel;
   nonce: string;
+}
+
+interface ClaudeLaunchPlan {
+  request: ClaudeTerminalLaunchInput;
+  validated: NormalizedClaudeTerminalLaunch;
 }
 
 interface ContextComposerPanelRecord {
@@ -1280,9 +1292,12 @@ class TerminalFirstRuntime implements vscode.Disposable {
     this.claudeLaunchesInFlight.add(launchKey);
     let commandSubmitted = false;
     let closeSessionIfNotSubmitted = false;
+    let applyLaunchCooldown = false;
     let session: WorkSessionRecord | undefined;
     try {
-      const launch = this.claudeLaunchConfiguration(input.ticketKey, input.ticket, input.project);
+      const launch = this.claudeLaunchPlan(input.ticketKey, input.ticket, input.project);
+      if (!await this.confirmClaudePermissionMode(launch.validated.permissionMode)) { return; }
+      applyLaunchCooldown = true;
       if (input.ticketKey && input.ticket) {
         const previousSession = getWorkSessionByTicket(input.ticketKey);
         const sessionInput: Parameters<typeof createOrGetWorkSessionByTicket>[0] = {
@@ -1304,29 +1319,40 @@ class TerminalFirstRuntime implements vscode.Disposable {
       } else {
         const projectDetails = input.project
           ? { projectName: input.project.projectName, projectPath: input.project.projectPath }
-          : this.standaloneProjectDetails(launch.cwd);
+          : this.standaloneProjectDetails(launch.validated.cwd);
         session = createStandaloneWorkSession({ title: input.title, ...projectDetails });
         closeSessionIfNotSubmitted = true;
       }
-      const launched = launchClaudeTerminal(vscode.window, launch);
+      const launched = launchClaudeTerminal(vscode.window, launch.request);
       commandSubmitted = true;
       session = await this.attachTerminal(session, launched.terminal);
       const eventContext = workSessionEventContext(session);
+      const permissionMode = launched.configuration.permissionMode;
+      const permissionSummary = ` with ${claudePermissionModeLabel(permissionMode)} permission mode`;
       appendMonitorEvent({
         sessionId: session.id,
         type: 'decision.recorded',
         source: 'operator',
-        summary: `${eventContext.label} Claude command submitted in a focused terminal by explicit operator action.`,
+        summary: `${eventContext.label} Claude command submitted${permissionSummary} in a focused terminal by explicit operator action.`,
         subject: { kind: 'work-session', id: session.id, ...workSessionTicketMetadata(session) },
-        metadata: { explicitLaunch: true, commandSubmitted: true, terminalName: launched.configuration.name },
+        metadata: {
+          explicitLaunch: true,
+          commandSubmitted: true,
+          terminalName: launched.configuration.name,
+          claudePermissionMode: permissionMode,
+          experimentalPermissionBypass: permissionMode === 'bypassPermissions',
+        },
       });
       this.refreshTerminalFirstViews();
+      const submittedPrefix = permissionMode === 'bypassPermissions'
+        ? 'Submitted Claude with experimental permission bypass'
+        : 'Submitted Claude';
       void vscode.window.showInformationMessage(
         input.ticketKey
-          ? `Submitted Claude for ${input.ticketKey}. When Claude is ready, use Insert [${input.ticketKey}] to add the fetched Jira context.`
+          ? `${submittedPrefix} for ${input.ticketKey}. When Claude is ready, use Insert [${input.ticketKey}] to add the fetched Jira context.`
           : input.project
-            ? `Submitted Claude in ${input.project.displayName || input.project.projectName}. No Jira ticket was attached.`
-            : 'Submitted a standalone Claude command in a focused terminal. No Jira ticket was attached.',
+            ? `${submittedPrefix} in ${input.project.displayName || input.project.projectName}. No Jira ticket was attached.`
+            : `${submittedPrefix} as a standalone command in a focused terminal. No Jira ticket was attached.`,
       );
     } catch (error: unknown) {
       if (!commandSubmitted && closeSessionIfNotSubmitted && session) {
@@ -1355,17 +1381,40 @@ class TerminalFirstRuntime implements vscode.Disposable {
       );
     } finally {
       this.claudeLaunchesInFlight.delete(launchKey);
-      this.claudeLaunchCooldownUntil.set(launchKey, Date.now() + CLAUDE_LAUNCH_COOLDOWN_MS);
+      if (applyLaunchCooldown) {
+        this.claudeLaunchCooldownUntil.set(launchKey, Date.now() + CLAUDE_LAUNCH_COOLDOWN_MS);
+      } else {
+        this.claudeLaunchCooldownUntil.delete(launchKey);
+      }
     }
   }
 
-  private claudeLaunchConfiguration(
+  private async confirmClaudePermissionMode(mode: ClaudePermissionMode): Promise<boolean> {
+    if (mode !== 'bypassPermissions') { return true; }
+    const choice = await vscode.window.showWarningMessage(
+      'Kronos is configured to start Claude with experimental permission bypass.',
+      {
+        modal: true,
+        detail: 'Claude will skip its normal permission prompts and may edit files or run commands without asking. Use this only in an isolated environment you control. Kronos cannot inspect or stop the resulting terminal session.',
+      },
+      CLAUDE_BYPASS_CONFIRM_ACTION,
+      CLAUDE_SETTINGS_ACTION,
+    );
+    if (choice === CLAUDE_SETTINGS_ACTION) {
+      await vscode.commands.executeCommand('workbench.action.openSettings', '@ext:jmacke01.kronos claude');
+      return false;
+    }
+    return choice === CLAUDE_BYPASS_CONFIRM_ACTION;
+  }
+
+  private claudeLaunchPlan(
     ticketKey?: string,
     ticket?: Ticket,
     project?: RegisteredProjectCommandTarget,
-  ): { command: string; name: string; cwd?: string } {
+  ): ClaudeLaunchPlan {
     const configuration = vscode.workspace.getConfiguration('kronos');
     const command = configuration.get<string>('claudeCommand', DEFAULT_CLAUDE_COMMAND);
+    const permissionMode = configuration.get<string>('claudePermissionMode', DEFAULT_CLAUDE_PERMISSION_MODE);
     const configuredName = configuration.get<string>('claudeTerminalName', DEFAULT_CLAUDE_TERMINAL_NAME);
     const mode = configuration.get<string>('claudeLaunchCwd', 'ticketProject');
     const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
@@ -1377,7 +1426,8 @@ class TerminalFirstRuntime implements vscode.Disposable {
         : ticketProjectPath || workspacePath || os.homedir());
     const branch = readProjectGitBranch(cwd)?.branch;
     const name = buildClaudeTerminalTitle(configuredName, ticketKey, branch);
-    return normalizeClaudeTerminalLaunch({ command, name, cwd });
+    const request: ClaudeTerminalLaunchInput = { command, name, cwd, permissionMode };
+    return { request, validated: normalizeClaudeTerminalLaunch(request) };
   }
 
   private standaloneProjectDetails(cwd?: string): { projectName?: string; projectPath?: string } {
@@ -3357,27 +3407,43 @@ class TerminalFirstRuntime implements vscode.Disposable {
 
   private claudeReadinessCheck(): DoctorCheck {
     try {
-      const launch = this.claudeLaunchConfiguration();
-      const availability = probeClaudeExecutableAvailability(launch.command);
+      const launch = this.claudeLaunchPlan();
+      const normalized = launch.validated;
+      const availability = probeClaudeExecutableAvailability(launch.request.command);
+      const permissionLabel = claudePermissionModeLabel(normalized.permissionMode);
       if (!availability.available) {
         return {
           name: 'Claude launch settings',
           status: 'fail',
-          detail: `${availability.executable} was not found on the VS Code extension-host PATH. Your interactive terminal PATH may differ.`,
+          detail: `${availability.executable} was not found on the VS Code extension-host PATH. Your interactive terminal PATH may differ. Configured permission mode: ${permissionLabel}.`,
         };
       }
       if (!vscode.workspace.isTrusted) {
         return {
           name: 'Claude launch settings',
           status: 'warn',
-          detail: `${availability.executable} is available and launch settings are valid, but explicit launch is disabled until this workspace is trusted.`,
+          detail: `${availability.executable} is available and launch settings are valid, but explicit launch is disabled until this workspace is trusted. Configured permission mode: ${permissionLabel}.`,
         };
       }
-      const branch = launch.cwd ? readProjectGitBranch(launch.cwd)?.branch : undefined;
+      const branch = normalized.cwd ? readProjectGitBranch(normalized.cwd)?.branch : undefined;
+      if (normalized.permissionMode === 'bypassPermissions') {
+        return {
+          name: 'Claude launch settings',
+          status: 'warn',
+          detail: `${availability.executable} is available; syntax and starting directory are valid. ${permissionLabel} is enabled and every explicit launch will require a modal warning${branch ? `; terminal tabs will show branch ${branch}` : ''}.`,
+        };
+      }
+      if (normalized.permissionMode === 'auto') {
+        return {
+          name: 'Claude launch settings',
+          status: 'warn',
+          detail: `${availability.executable} is available; syntax and starting directory are valid. Auto permission mode reduces routine prompts and requires a supported Claude CLI, model, and account${branch ? `; terminal tabs will show branch ${branch}` : ''}.`,
+        };
+      }
       return {
         name: 'Claude launch settings',
         status: 'pass',
-        detail: `${availability.executable} is available; syntax and starting directory are valid${branch ? `; terminal tabs will show branch ${branch}` : ''}.`,
+        detail: `${availability.executable} is available; syntax and starting directory are valid; permission mode ${permissionLabel}${branch ? `; terminal tabs will show branch ${branch}` : ''}.`,
       };
     } catch (error: unknown) {
       return {

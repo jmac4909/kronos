@@ -55,7 +55,7 @@ Kronos has two intentional terminal-write boundaries:
 
 | Boundary | Allowed behavior | Guardrail |
 | --- | --- | --- |
-| Explicit Claude launch | Create and focus a new terminal after **New Claude** from Sessions/a Project or **Start Claude for Ticket** | Accepts only a validated `claude` or `claude-*` executable and narrowly allowlisted, non-escalating interactive flags |
+| Explicit Claude launch | Create and focus a new terminal after **New Claude** from Sessions/a Project or **Start Claude for Ticket** | Accepts only a validated `claude` or `claude-*` executable, narrowly allowlisted interactive flags, and one typed permission mode; experimental bypass requires a modal confirmation every time |
 | Context insertion | Place a reviewed reference and editable focus in an attached terminal | Uses shell-inert quoting and VS Code's `sendText(..., false)`; Kronos never presses Enter |
 
 Kronos reads, organizes, inserts, monitors, and audits. It does **not**:
@@ -69,6 +69,8 @@ Kronos reads, organizes, inserts, monitors, and audits. It does **not**:
 - close an operator's terminal.
 
 The complete normative boundary is in the [terminal-first product contract](docs/terminal-first-product-contract.md).
+
+Claude launch settings expose Manual/default, Accept Edits, Plan, Auto, Don't Ask, and experimental Bypass Permissions as an enum. Raw permission flags are rejected from the command setting, so the selected mode has one visible authority. Bypass is translated to `--dangerously-skip-permissions` only after the operator chooses that setting and confirms the blocking warning for that individual launch; canceling or opening Claude Settings creates no terminal or session.
 
 ## Architecture
 
@@ -102,7 +104,7 @@ The installed extension uses the VS Code API and Node built-ins only. It has **z
 | Focused VS Code views | 4 |
 | Audited terminal-write paths | 2 |
 | Manifest-covered commands | 40 |
-| Manifest-covered settings | 10 |
+| Manifest-covered settings | 11 |
 | Reachable runtime modules checked for cycles/dead exports | 84 |
 | Third-party runtime dependencies | 0 |
 | Automated Node/DOM/board tests | 215 |

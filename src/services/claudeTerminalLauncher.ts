@@ -4,6 +4,17 @@ import type * as vscode from 'vscode';
 
 export const DEFAULT_CLAUDE_COMMAND = 'claude';
 export const DEFAULT_CLAUDE_TERMINAL_NAME = 'Claude';
+export const DEFAULT_CLAUDE_PERMISSION_MODE = 'default';
+export const CLAUDE_PERMISSION_MODES = [
+  'default',
+  'acceptEdits',
+  'plan',
+  'auto',
+  'dontAsk',
+  'bypassPermissions',
+] as const;
+
+export type ClaudePermissionMode = typeof CLAUDE_PERMISSION_MODES[number];
 
 const MAX_COMMAND_LENGTH = 512;
 const MAX_TERMINAL_NAME_LENGTH = 80;
@@ -23,20 +34,21 @@ const APPROVED_INTERACTIVE_BOOLEAN_FLAGS = new Set([
   '--safe-mode',
   '--verbose',
 ]);
-const APPROVED_INTERACTIVE_VALUE_FLAGS = new Set(['--effort', '--model', '--permission-mode']);
+const APPROVED_INTERACTIVE_VALUE_FLAGS = new Set(['--effort', '--model']);
 const APPROVED_EFFORT_VALUES = new Set(['low', 'medium', 'high', 'xhigh', 'max', 'ultracode']);
-const APPROVED_PERMISSION_MODES = new Set(['default', 'manual', 'plan']);
 const MODEL_VALUE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/;
 
 export interface ClaudeTerminalLaunchInput {
   command?: unknown;
   name?: unknown;
   cwd?: unknown;
+  permissionMode?: unknown;
 }
 
 export interface NormalizedClaudeTerminalLaunch {
   command: string;
   name: string;
+  permissionMode: ClaudePermissionMode;
   cwd?: string;
 }
 
@@ -73,12 +85,24 @@ export function launchClaudeTerminal(
 export function normalizeClaudeTerminalLaunch(
   input: ClaudeTerminalLaunchInput = {},
 ): NormalizedClaudeTerminalLaunch {
-  const command = normalizeClaudeCommand(input.command);
+  const permissionMode = normalizeClaudePermissionMode(input.permissionMode);
+  const command = applyClaudePermissionMode(normalizeClaudeCommand(input.command), permissionMode);
   const name = normalizeTerminalName(input.name);
   const cwd = normalizeLaunchCwd(input.cwd);
-  const normalized: NormalizedClaudeTerminalLaunch = { command, name };
+  const normalized: NormalizedClaudeTerminalLaunch = { command, name, permissionMode };
   if (cwd) { normalized.cwd = cwd; }
   return normalized;
+}
+
+export function claudePermissionModeLabel(mode: ClaudePermissionMode): string {
+  switch (mode) {
+    case 'default': return 'Manual (default)';
+    case 'acceptEdits': return 'Accept Edits';
+    case 'plan': return 'Plan';
+    case 'auto': return 'Auto';
+    case 'dontAsk': return 'Don\'t Ask';
+    case 'bypassPermissions': return 'Bypass Permissions (experimental)';
+  }
 }
 
 /** Captures ticket/project branch context once for the terminal created at launch. */
@@ -183,10 +207,21 @@ function validateApprovedInteractiveArguments(argumentsList: readonly string[]):
     if (flag === '--effort' && !APPROVED_EFFORT_VALUES.has(value)) {
       throw new Error('Claude effort must be low, medium, high, xhigh, max, or ultracode.');
     }
-    if (flag === '--permission-mode' && !APPROVED_PERMISSION_MODES.has(value)) {
-      throw new Error('Claude permission mode may only be default, manual, or plan.');
-    }
   }
+}
+
+function normalizeClaudePermissionMode(value: unknown): ClaudePermissionMode {
+  const candidate = value === undefined ? DEFAULT_CLAUDE_PERMISSION_MODE : value;
+  if (typeof candidate !== 'string' || !CLAUDE_PERMISSION_MODES.includes(candidate as ClaudePermissionMode)) {
+    throw new Error(`Claude permission mode must be one of: ${CLAUDE_PERMISSION_MODES.join(', ')}.`);
+  }
+  return candidate as ClaudePermissionMode;
+}
+
+function applyClaudePermissionMode(command: string, mode: ClaudePermissionMode): string {
+  if (mode === 'default') { return command; }
+  if (mode === 'bypassPermissions') { return `${command} --dangerously-skip-permissions`; }
+  return `${command} --permission-mode ${mode}`;
 }
 
 function normalizeTerminalName(value: unknown): string {
