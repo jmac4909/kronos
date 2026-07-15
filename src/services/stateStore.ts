@@ -17,6 +17,12 @@ import {
 } from './privateFilePrimitives';
 import { isRecord } from './records';
 import { migrateLegacyKronosState } from './legacyStateMigration';
+import {
+  normalizeProjectBranch,
+  normalizeProjectGitLabPath,
+  normalizeProjectJenkinsUrl,
+  normalizeProjectSonarKey,
+} from './projectConfigNormalization';
 
 const explicitKronosDir = process.env['KRONOS_DIR']?.trim();
 const defaultKronosDir = path.join(os.homedir(), '.kronos');
@@ -141,14 +147,20 @@ function normalizeProjectConfig(value: unknown): ProjectConfig {
   const config: ProjectConfig = {};
   copyString(raw, config, 'repo_name');
   copyString(raw, config, 'jira_ticket_filter');
-  copyString(raw, config, 'gitlab_project_path');
-  copyString(raw, config, 'jenkins_url');
-  copyString(raw, config, 'sonar_project_key');
-  copyString(raw, config, 'sonar_branch');
-  copyString(raw, config, 'base_branch');
-  copyString(raw, config, 'default_branch');
   const gitlabProjectId = safePositiveInteger(raw['gitlab_project_id']);
+  const gitlabProjectPath = normalizeProjectGitLabPath(raw['gitlab_project_path']);
   if (gitlabProjectId !== undefined) { config.gitlab_project_id = gitlabProjectId; }
+  else if (gitlabProjectPath) { config.gitlab_project_path = gitlabProjectPath; }
+  const jenkinsUrl = normalizeProjectJenkinsUrl(raw['jenkins_url']);
+  const sonarProjectKey = normalizeProjectSonarKey(raw['sonar_project_key']);
+  const sonarBranch = normalizeProjectBranch(raw['sonar_branch']);
+  const baseBranch = normalizeProjectBranch(raw['base_branch']);
+  const defaultBranch = normalizeProjectBranch(raw['default_branch']);
+  if (jenkinsUrl) { config.jenkins_url = jenkinsUrl; }
+  if (sonarProjectKey) { config.sonar_project_key = sonarProjectKey; }
+  if (sonarBranch) { config.sonar_branch = sonarBranch; }
+  if (baseBranch) { config.base_branch = baseBranch; }
+  if (defaultBranch) { config.default_branch = defaultBranch; }
   const extraDirs = safeStringArray(raw['extra_dirs']);
   if (extraDirs.length > 0) { config.extra_dirs = extraDirs; }
   const branchProfiles = normalizeBranchProfiles(raw['branch_profiles']);
@@ -170,10 +182,9 @@ function normalizeBranchProfiles(value: unknown): ProjectBranchProfile[] {
     if (!isRecord(raw)) { continue; }
     const branch = safeProfileBranch(raw['branch']);
     if (!branch || seen.has(branch)) { continue; }
-    const jenkinsUrl = safeProviderUrl(raw['jenkins_url']);
-    const sonarProjectKey = safeString(raw['sonar_project_key']);
-    const sonarBranch = safeProfileBranch(raw['sonar_branch']);
-    if (sonarProjectKey && !/^[A-Za-z0-9_.:-]+$/.test(sonarProjectKey)) { continue; }
+    const jenkinsUrl = normalizeProjectJenkinsUrl(raw['jenkins_url']);
+    const sonarProjectKey = normalizeProjectSonarKey(raw['sonar_project_key']);
+    const sonarBranch = normalizeProjectBranch(raw['sonar_branch']);
     if (!jenkinsUrl && !sonarProjectKey) { continue; }
     const profile: ProjectBranchProfile = { branch };
     if (jenkinsUrl) { profile.jenkins_url = jenkinsUrl; }
@@ -186,31 +197,7 @@ function normalizeBranchProfiles(value: unknown): ProjectBranchProfile[] {
 }
 
 function safeProfileBranch(value: unknown): string | undefined {
-  const branch = safeString(value);
-  return branch
-    && /^[A-Za-z0-9][A-Za-z0-9._/@+-]{0,499}$/.test(branch)
-    && !branch.includes('..')
-    && !branch.includes('@{')
-    && !branch.includes('//')
-    && !branch.endsWith('/')
-    && !branch.endsWith('.')
-    && !branch.endsWith('.lock')
-    ? branch
-    : undefined;
-}
-
-function safeProviderUrl(value: unknown): string | undefined {
-  const candidate = safeString(value);
-  if (!candidate) { return undefined; }
-  try {
-    const url = new URL(candidate);
-    const loopback = url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '::1';
-    return !url.username && !url.password && (url.protocol === 'https:' || (url.protocol === 'http:' && loopback))
-      ? url.toString()
-      : undefined;
-  } catch {
-    return undefined;
-  }
+  return normalizeProjectBranch(value);
 }
 
 function normalizeTicket(value: unknown, sourceSchemaVersion?: number): Ticket | undefined {

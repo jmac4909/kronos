@@ -1809,6 +1809,93 @@ test('Work catalog strips legacy automation fields and persists privately', () =
   assert.doesNotMatch(source, /NO_FOLLOW|fs\.openSync|fs\.mkdirSync/);
 });
 
+test('project configuration is canonical at setup and Work catalog ingress', () => {
+  const normalized = stateStore.normalizeWorkCatalog({
+    schemaVersion: 2,
+    projects: {
+      Valid: {
+        path: '/tmp/valid-project',
+        config: {
+          repo_name: 'Valid',
+          gitlab_project_path: 'group/application',
+          jenkins_url: 'https://jenkins.example/job/team/job/application/?tree=result#build',
+          sonar_project_key: 'team:application',
+          sonar_branch: 'feature/sonar',
+          base_branch: 'release/next',
+          default_branch: 'main',
+          branch_profiles: [{
+            branch: 'feature/profile',
+            jenkins_url: 'https://jenkins.example/job/profile/?tree=result#build',
+            sonar_project_key: 'team:profile',
+            sonar_branch: 'feature/profile',
+          }],
+          active_branch_profile: 'feature/profile',
+          ignored_unknown_field: 'must not survive',
+        },
+      },
+      Invalid: {
+        path: '/tmp/invalid-project',
+        config: {
+          gitlab_project_id: 42,
+          gitlab_project_path: 'ambiguous/path',
+          jenkins_url: 'https://synthetic-user:synthetic-password@jenkins.example/job/application',
+          sonar_project_key: 'unsupported key',
+          sonar_branch: '../unsafe',
+          base_branch: 'bad..branch',
+          default_branch: 'bad.lock',
+          branch_profiles: [
+            { branch: '../unsafe', jenkins_url: 'https://jenkins.example/job/unsafe' },
+            { branch: 'safe/profile', jenkins_url: 'http://jenkins.example/job/plain-http' },
+          ],
+          active_branch_profile: 'missing/profile',
+        },
+      },
+    },
+    tickets: {
+      'JIRA-1': { ...fixtureTicket(), linked_local_project: 'Valid' },
+      'JIRA-2': { ...fixtureTicket(), linked_local_project: 'Invalid' },
+    },
+  }, '/fixture/canonical-project-config.json').state;
+
+  assert.deepEqual(normalized.projects.Valid.config, {
+    repo_name: 'Valid',
+    gitlab_project_path: 'group/application',
+    jenkins_url: 'https://jenkins.example/job/team/job/application',
+    sonar_project_key: 'team:application',
+    sonar_branch: 'feature/sonar',
+    base_branch: 'release/next',
+    default_branch: 'main',
+    branch_profiles: [{
+      branch: 'feature/profile',
+      jenkins_url: 'https://jenkins.example/job/profile',
+      sonar_project_key: 'team:profile',
+      sonar_branch: 'feature/profile',
+    }],
+    active_branch_profile: 'feature/profile',
+  });
+  assert.deepEqual(normalized.projects.Invalid.config, { gitlab_project_id: 42 });
+  assert.deepEqual(
+    projectCatalog.projectConfigurationForTicket(normalized, normalized.tickets['JIRA-1']),
+    normalized.projects.Valid.config,
+    'provider consumers receive only the canonical persisted project shape',
+  );
+  assert.deepEqual(
+    projectCatalog.projectConfigurationForTicket(normalized, normalized.tickets['JIRA-2']),
+    { gitlab_project_id: 42 },
+  );
+
+  const setupState = stateStore.emptyWorkCatalog();
+  setupState.projects.Valid = { path: tempRoot, config: {} };
+  assert.throws(() => projectCatalog.setLocalProjectIntegrations(setupState, [{
+    name: 'Valid',
+    defaultBranch: 'bad..branch',
+  }]), /default branch contains unsupported Git branch characters/i);
+  assert.throws(
+    () => projectCatalog.setLocalProjectSonarTarget(setupState, 'Valid', 'team:application', '../unsafe'),
+    /SonarQube branch contains unsupported Git branch characters/i,
+  );
+});
+
 test('Work catalog rejects unsupported future schemas without interpreting their identities', () => {
   const normalized = stateStore.normalizeWorkCatalog({
     schemaVersion: 3,

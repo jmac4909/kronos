@@ -51,7 +51,8 @@
       "automated": [
         { "file": "scripts/run-unit-tests.js", "test": "managed monitoring lease omits unsupported open flags on Windows and fails closed on POSIX" },
         { "file": "scripts/run-unit-tests.js", "test": "managed monitoring lease acquires, blocks duplicate owners, renews, and releases" },
-        { "file": "scripts/run-unit-tests.js", "test": "legacy ~/.claude/kronos state migrates once without helper scripts" }
+        { "file": "scripts/run-unit-tests.js", "test": "legacy ~/.claude/kronos state migrates once without helper scripts" },
+        { "file": "scripts/run-unit-tests.js", "test": "project configuration is canonical at setup and Work catalog ingress" }
       ],
       "humanGates": ["windows-native", "multi-window"]
     },

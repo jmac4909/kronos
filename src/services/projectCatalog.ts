@@ -9,8 +9,13 @@ import type {
   ProjectConfig,
   Ticket,
 } from '../state/types';
-import { normalizeJenkinsJobUrl } from './jenkinsRestClient';
 import { readBoundedPrivateUtf8File } from './stateStore';
+import {
+  normalizeProjectBranch,
+  normalizeProjectGitLabPath,
+  normalizeProjectJenkinsUrl,
+  normalizeProjectSonarKey,
+} from './projectConfigNormalization';
 
 const MAX_GIT_POINTER_BYTES = 4 * 1024;
 const MAX_LOCAL_PROJECTS = 200;
@@ -47,11 +52,11 @@ export function setLocalProjectSonarTarget(
   const projectName = requiredSingleLine(projectNameValue, 'project name', 200);
   const project = state.projects[projectName];
   if (!project) { return state; }
-  const projectKey = safeSingleLine(projectKeyValue, 400);
-  if (!projectKey || !/^[A-Za-z0-9_.:-]+$/.test(projectKey)) {
+  const projectKey = normalizeProjectSonarKey(projectKeyValue);
+  if (!projectKey) {
     throw new Error(`${projectName} discovered an invalid SonarQube project key.`);
   }
-  const branch = safeSingleLine(branchValue, 500);
+  const branch = branchValue ? normalizeProfileBranch(branchValue, `${projectName} SonarQube branch`) : undefined;
   if (project.config.sonar_project_key === projectKey
     && (!branch || project.config.sonar_branch === branch)) {
     return state;
@@ -225,22 +230,25 @@ export function setLocalProjectIntegrations(
         const projectId = Number(gitLabProject);
         if (!Number.isSafeInteger(projectId)) { throw new Error(`${name} GitLab project ID is too large.`); }
         config.gitlab_project_id = projectId;
-      } else if (/^[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)+$/.test(gitLabProject)) {
-        config.gitlab_project_path = gitLabProject;
       } else {
-        throw new Error(`${name} GitLab project must be a numeric ID or group/project path.`);
+        const projectPath = normalizeProjectGitLabPath(gitLabProject);
+        if (!projectPath) {
+          throw new Error(`${name} GitLab project must be a numeric ID or group/project path.`);
+        }
+        config.gitlab_project_path = projectPath;
       }
     }
     const jenkinsUrl = normalizeOptionalHttpUrl(value.jenkinsUrl, `${name} Jenkins job URL`);
     if (jenkinsUrl) { config.jenkins_url = jenkinsUrl; }
-    const sonarProjectKey = safeSingleLine(value.sonarProjectKey, 400);
+    const sonarProjectKey = normalizeProjectSonarKey(value.sonarProjectKey);
     if (sonarProjectKey) {
-      if (!/^[A-Za-z0-9_.:-]+$/.test(sonarProjectKey)) {
-        throw new Error(`${name} SonarQube project key contains unsupported characters.`);
-      }
       config.sonar_project_key = sonarProjectKey;
+    } else if (safeSingleLine(value.sonarProjectKey, 400)) {
+      throw new Error(`${name} SonarQube project key contains unsupported characters.`);
     }
-    const defaultBranch = safeSingleLine(value.defaultBranch, 500);
+    const defaultBranch = value.defaultBranch
+      ? normalizeProfileBranch(value.defaultBranch, `${name} default branch`)
+      : undefined;
     if (defaultBranch) { config.default_branch = defaultBranch; }
     const branchProfiles = parseProjectBranchProfiles(value.branchProfiles || '');
     if (branchProfiles.length > 0) { config.branch_profiles = branchProfiles; }
@@ -278,8 +286,8 @@ export function parseProjectBranchProfiles(value: string): ProjectBranchProfile[
     if (seen.has(branch)) { throw new Error(`Branch profile ${branch} is duplicated.`); }
     seen.add(branch);
     const jenkinsUrl = normalizeOptionalHttpUrl(parts[1], `${branch} Jenkins job URL`);
-    const sonarProjectKey = safeSingleLine(parts[2], 400);
-    if (sonarProjectKey && !/^[A-Za-z0-9_.:-]+$/.test(sonarProjectKey)) {
+    const sonarProjectKey = normalizeProjectSonarKey(parts[2]);
+    if (!sonarProjectKey && safeSingleLine(parts[2], 400)) {
       throw new Error(`${branch} SonarQube project key contains unsupported characters.`);
     }
     const sonarBranch = parts[3]
@@ -438,14 +446,8 @@ function normalizeTicketKey(value: string): string {
 }
 
 function normalizeProfileBranch(value: string, label: string): string {
-  const branch = requiredSingleLine(value, label, 500);
-  if (!/^[A-Za-z0-9][A-Za-z0-9._/@+-]{0,499}$/.test(branch)
-    || branch.includes('..')
-    || branch.includes('@{')
-    || branch.includes('//')
-    || branch.endsWith('/')
-    || branch.endsWith('.')
-    || branch.endsWith('.lock')) {
+  const branch = normalizeProjectBranch(value);
+  if (!branch) {
     throw new Error(`${label} contains unsupported Git branch characters.`);
   }
   return branch;
@@ -466,15 +468,9 @@ function safeSingleLine(value: unknown, maxLength: number): string {
 function normalizeOptionalHttpUrl(value: unknown, label: string): string | undefined {
   const candidate = safeSingleLine(value, 4_000);
   if (!candidate) { return undefined; }
-  try {
-    const url = new URL(candidate);
-    if ((url.protocol !== 'http:' && url.protocol !== 'https:') || url.username || url.password) {
-      throw new Error('unsupported URL');
-    }
-    const normalized = normalizeJenkinsJobUrl(url.toString());
-    if (!normalized) { throw new Error('unsupported URL'); }
-    return normalized;
-  } catch {
+  const normalized = normalizeProjectJenkinsUrl(candidate);
+  if (!normalized) {
     throw new Error(`${label} must be an HTTPS URL (or loopback HTTP URL) without embedded credentials.`);
   }
+  return normalized;
 }
