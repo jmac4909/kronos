@@ -4409,6 +4409,24 @@ test('extension activation registers the bounded surface and explicit launch com
     const standalone = workSessions.listWorkSessions().find(session => session.kind === 'standalone');
     assert.ok(standalone);
     assert.equal(Object.hasOwn(standalone, 'ticketKey'), false);
+    const panelsBeforeMissingPromptLibrary = createdWebviewPanels.length;
+    const actionsBeforeMissingPromptLibrary = createdTerminals[0].actions.length;
+    warningMessageResult = 'Open Prompt Library Settings';
+    await commandHandlers.get('kronos.openPromptLibrary')(projectItems[0]);
+    assert.equal(
+      createdWebviewPanels.length,
+      panelsBeforeMissingPromptLibrary,
+      'missing prompt configuration must not open an empty composer',
+    );
+    assert.equal(
+      createdTerminals[0].actions.length,
+      actionsBeforeMissingPromptLibrary,
+      'prompt setup recovery must not write to or submit the managed terminal',
+    );
+    assert.deepEqual(
+      executedCommands.at(-1),
+      ['workbench.action.openSettings', '@ext:jmacke01.kronos prompt library'],
+    );
     const promptManifestPath = path.join(tempRoot, 'kronos-prompts.json');
     fs.writeFileSync(promptManifestPath, JSON.stringify({
       schemaVersion: 1,

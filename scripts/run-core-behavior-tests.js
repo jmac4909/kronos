@@ -1,4 +1,5 @@
 const assert = require('node:assert/strict');
+const crypto = require('node:crypto');
 const fs = require('node:fs');
 const Module = require('node:module');
 const os = require('node:os');
@@ -96,6 +97,7 @@ try {
 
 const stateStore = require('../out/services/stateStore.js');
 const jiraContext = require('../out/services/jiraTicketContext.js');
+const jiraContextStore = require('../out/services/jiraContextStore.js');
 const jiraValuePruning = require('../out/services/jiraValuePruning.js');
 
 test('TerminalFirstState reports complete and partial Jira refreshes without losing prior provider evidence', async () => {
@@ -529,6 +531,43 @@ test('Jira context normalization reconciles comments, attachment outcomes, metad
   assert.match(context.completeness.warnings.join(' '), /attachment downloads were partial/i);
 });
 
+test('Jira context publication validates attachments and completeness before writing any files', () => {
+  const valid = capturedJiraContextFixture();
+  const validRoot = path.join(tempRoot, 'validated-jira-publication');
+  const artifact = jiraContextStore.writeJiraContextArtifacts(valid.context, {
+    kronosDir: validRoot,
+    attachmentContents: valid.attachmentContents,
+  });
+  assert.equal(artifact.attachmentPaths.length, 1);
+  assert.deepEqual(fs.readFileSync(artifact.attachmentPaths[0]), valid.bytes);
+  assert.equal(fs.readFileSync(artifact.jsonPath, 'utf8').includes('TRANSIENT-RAW-BYTES'), false);
+
+  const invalidEnvelope = capturedJiraContextFixture();
+  invalidEnvelope.context.completeness.attachmentBodiesCaptured = 0;
+  const invalidRoot = path.join(tempRoot, 'invalid-jira-publication');
+  assert.throws(() => jiraContextStore.writeJiraContextArtifacts(invalidEnvelope.context, {
+    kronosDir: invalidRoot,
+    attachmentContents: invalidEnvelope.attachmentContents,
+  }), /attachment completeness counts do not match/);
+  assert.equal(fs.existsSync(invalidRoot), false, 'invalid normalized evidence must not publish directories or attachment bytes');
+
+  for (const [label, mutateFixture, expected] of [
+    ['missing bytes', fixture => { delete fixture.attachmentContents[0].bytes; }, /missing its transient raw bytes/],
+    ['mismatched id', fixture => { fixture.attachmentContents[0].id = 'different'; }, /mismatched attachment id/],
+    ['mismatched hash', fixture => { fixture.attachmentContents[0].sourceSha256 = '0'.repeat(64); }, /SHA-256 integrity check/],
+    ['mismatched byte count', fixture => { fixture.context.attachments[0].contentBytes += 1; }, /byte-count integrity check/],
+  ]) {
+    const fixture = capturedJiraContextFixture();
+    mutateFixture(fixture);
+    const refusalRoot = path.join(tempRoot, `refused-jira-${label.replace(/\s+/g, '-')}`);
+    assert.throws(() => jiraContextStore.writeJiraContextArtifacts(fixture.context, {
+      kronosDir: refusalRoot,
+      attachmentContents: fixture.attachmentContents,
+    }), expected);
+    assert.equal(fs.existsSync(refusalRoot), false, `${label} must not leave partial local state`);
+  }
+});
+
 test('Jira fallback and global context budget stay useful, bounded, and explicit', () => {
   const fallback = jiraContext.buildFallbackJiraTicketContext('APP-10', {
     title: 'Cached ticket',
@@ -586,6 +625,39 @@ function jiraSnapshot(overrides = {}) {
     responseBytes: 512,
     ...overrides,
   };
+}
+
+function capturedJiraContextFixture() {
+  const bytes = Buffer.from('TRANSIENT-RAW-BYTES');
+  const sourceSha256 = crypto.createHash('sha256').update(bytes).digest('hex');
+  const attachmentContents = [{
+    index: 0,
+    id: 'attachment-1',
+    status: 'captured',
+    responseBytes: bytes.length,
+    sourceSha256,
+    bytes,
+  }];
+  const context = jiraContext.normalizeJiraTicketContext('APP-901', {
+    issue: {
+      fields: {
+        summary: 'Validated attachment publication',
+        attachment: [{ id: 'attachment-1', filename: '../evidence.msg', size: bytes.length }],
+      },
+      names: { summary: 'Summary', attachment: 'Attachment' },
+      schema: { summary: { type: 'string' }, attachment: { type: 'array', system: 'attachment' } },
+    },
+    comments: [],
+    commentsComplete: true,
+    commentPageCount: 1,
+    commentResponseBytes: 2,
+    attachmentContents,
+    attachmentFetchCount: 1,
+    attachmentResponseBytes: bytes.length,
+    warnings: [],
+    fetchedAt: '2026-07-16T12:00:00.000Z',
+  });
+  return { context, attachmentContents, bytes };
 }
 
 function jiraIssue(key, summary) {

@@ -75,6 +75,7 @@
         { "file": "scripts/run-webview-dom-tests.js", "test": "prompt library posts the complete edited prompt only after Place or Ctrl+Enter" },
         { "file": "scripts/run-core-behavior-tests.js", "test": "Jira rich text and recursive values preserve visible evidence while redacting unsafe content" },
         { "file": "scripts/run-core-behavior-tests.js", "test": "Jira context normalization reconciles comments, attachment outcomes, metadata, and completeness" },
+        { "file": "scripts/run-core-behavior-tests.js", "test": "Jira context publication validates attachments and completeness before writing any files" },
         { "file": "scripts/run-core-behavior-tests.js", "test": "Jira fallback and global context budget stay useful, bounded, and explicit" }
       ],
       "humanGates": ["operator-terminal", "real-vscode", "windows-native"]

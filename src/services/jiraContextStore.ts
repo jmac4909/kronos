@@ -23,6 +23,12 @@ export interface JiraContextStoreOptions {
   attachmentContents?: readonly JiraAttachmentContentSnapshot[];
 }
 
+interface PreparedJiraAttachment {
+  filePath: string;
+  bytes: Buffer;
+  index: number;
+}
+
 const FILE_MODE = 0o600;
 const MAX_SERIALIZED_CONTEXT_BYTES = 12 * 1024 * 1024;
 const MAX_PROMPT_BYTES = 13 * 1024 * 1024;
@@ -38,12 +44,10 @@ export function writeJiraContextArtifacts(
   const rootPath = path.join(kronosDirectory, 'jira-context');
   const directoryPath = path.join(rootPath, safeKey);
   assertContainedPath(kronosDirectory, directoryPath);
-  ensurePrivateDirectoryTree(directoryPath, kronosDirectory);
-  const attachmentPaths = materializeCapturedAttachments(
+  const preparedAttachments = prepareCapturedAttachments(
     context,
     options.attachmentContents || [],
     directoryPath,
-    kronosDirectory,
   );
 
   const validatedKey = validateContextEnvelope(context);
@@ -63,6 +67,8 @@ export function writeJiraContextArtifacts(
   const promptSha256 = sha256(prompt);
   const nameHash = contentSha256.slice(0, CONTENT_NAME_HASH_LENGTH);
 
+  ensurePrivateDirectoryTree(directoryPath, kronosDirectory);
+  materializePreparedAttachments(preparedAttachments, kronosDirectory);
   const jsonPath = path.join(directoryPath, `context-${nameHash}.json`);
   const promptPath = path.join(directoryPath, `prompt-${nameHash}.md`);
   ensureImmutablePrivateFilePair(
@@ -83,16 +89,22 @@ export function writeJiraContextArtifacts(
       fileMode: FILE_MODE,
     },
   );
-  return { directoryPath, jsonPath, promptPath, contentSha256, promptSha256, attachmentPaths };
+  return {
+    directoryPath,
+    jsonPath,
+    promptPath,
+    contentSha256,
+    promptSha256,
+    attachmentPaths: preparedAttachments.map(attachment => attachment.filePath),
+  };
 }
 
-function materializeCapturedAttachments(
+function prepareCapturedAttachments(
   context: JiraTicketContext,
   captures: readonly JiraAttachmentContentSnapshot[],
   directoryPath: string,
-  kronosDirectory: string,
-): string[] {
-  const attachmentPaths: string[] = [];
+): PreparedJiraAttachment[] {
+  const prepared: PreparedJiraAttachment[] = [];
   const attachmentsDirectory = path.join(directoryPath, 'attachments');
   for (let index = 0; index < context.attachments.length; index += 1) {
     const attachment = context.attachments[index];
@@ -115,27 +127,35 @@ function materializeCapturedAttachments(
     if (attachment.contentBytes !== capture.bytes.length) {
       throw new Error(`Downloaded Jira attachment ${index + 1} failed its byte-count integrity check.`);
     }
-    ensurePrivateDirectoryTree(attachmentsDirectory, kronosDirectory);
     const safeFilename = safeAttachmentFilename(attachment.filename, index);
     const filePath = path.join(
       attachmentsDirectory,
       `${String(index + 1).padStart(3, '0')}-${expectedHash.slice(0, 16)}-${safeFilename}`,
     );
     assertContainedPath(attachmentsDirectory, filePath);
+    attachment.localPath = filePath;
+    prepared.push({ filePath, bytes: capture.bytes, index });
+  }
+  return prepared;
+}
+
+function materializePreparedAttachments(
+  attachments: readonly PreparedJiraAttachment[],
+  kronosDirectory: string,
+): void {
+  for (const attachment of attachments) {
+    ensurePrivateDirectoryTree(path.dirname(attachment.filePath), kronosDirectory);
     ensureImmutablePrivateArtifact(
-      filePath,
-      capture.bytes,
+      attachment.filePath,
+      attachment.bytes,
       {
-        label: `Kronos Jira attachment ${index + 1}`,
+        label: `Kronos Jira attachment ${attachment.index + 1}`,
         maxBytes: MAX_STORED_ATTACHMENT_BYTES,
-        temporaryPrefix: `jira-attachment-${index + 1}`,
+        temporaryPrefix: `jira-attachment-${attachment.index + 1}`,
         fileMode: FILE_MODE,
       },
     );
-    attachment.localPath = filePath;
-    attachmentPaths.push(filePath);
   }
-  return attachmentPaths;
 }
 
 function safeAttachmentFilename(value: string, index: number): string {
