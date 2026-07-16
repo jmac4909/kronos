@@ -56,6 +56,11 @@ test('public surface scan precedes both tests and release packaging', () => {
       type: 'npm',
       script: 'test',
       group: { kind: 'test', isDefault: true },
+      windows: {
+        options: {
+          env: { PATH: '${env:KRONOS_NODE_HOME};${env:PATH}' },
+        },
+      },
       problemMatcher: [],
       label: 'Kronos: Run Full Test Suite',
     },

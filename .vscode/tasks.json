@@ -8,6 +8,13 @@
         "kind": "test",
         "isDefault": true
       },
+      "windows": {
+        "options": {
+          "env": {
+            "PATH": "${env:KRONOS_NODE_HOME};${env:PATH}"
+          }
+        }
+      },
       "problemMatcher": [],
       "label": "Kronos: Run Full Test Suite"
     },
