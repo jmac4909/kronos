@@ -56,7 +56,7 @@ test('2000 supplied audit events render only the newest 500 inside the checked b
   const events = Array.from({ length: 2_000 }, (_, index) => ({
     schemaVersion: 1,
     id: `event-${index}`,
-    at: new Date(Date.UTC(2026, 6, 14, 12, 0, index % 60)).toISOString(),
+    at: new Date(Date.UTC(2026, 6, 14, 12, 0, 0) + index * 1_000).toISOString(),
     sessionId: session.id,
     type: 'provider.transition',
     source: 'gitlab',
@@ -71,7 +71,13 @@ test('2000 supplied audit events render only the newest 500 inside the checked b
   assert.ok(elapsedMs < 1_000, `audit summary took ${elapsedMs.toFixed(1)} ms`);
   assert.ok(Buffer.byteLength(markdown, 'utf8') < 2 * 1024 * 1024, 'audit Markdown exceeded 2 MiB');
   assert.equal((markdown.match(/^\- \*\*/gm) || []).length, 500);
+  assert.match(markdown, /Bounded transition 1999 detail/);
+  assert.match(markdown, /Bounded transition 1500 detail/);
+  assert.doesNotMatch(markdown, /Bounded transition 1499 detail/);
+  assert.doesNotMatch(markdown, /Bounded transition 0 detail/);
   assert.match(markdown, /Showing the newest 500 of 2000 supplied events/);
+  assert.equal(events[0].id, 'event-0', 'audit rendering must not reorder caller-owned input');
+  assert.equal(events.at(-1).id, 'event-1999');
 });
 
 test('maximum project and session collections render bounded summaries within local budgets', () => {

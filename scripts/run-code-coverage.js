@@ -4,7 +4,7 @@ const { spawnSync } = require('node:child_process');
 const { testSuiteFiles } = require('./test-suite-files.js');
 
 const root = path.resolve(__dirname, '..');
-const COVERAGE_THRESHOLDS = Object.freeze({ lines: 84.5, branches: 76, functions: 88.5 });
+const COVERAGE_THRESHOLDS = Object.freeze({ lines: 84.7, branches: 76.2, functions: 88.6 });
 const CRITICAL_FILE_THRESHOLDS = Object.freeze({
   'contextBasketStore.js': Object.freeze({ lines: 90, branches: 78, functions: 93 }),
   'dateValues.js': Object.freeze({ lines: 100, branches: 100, functions: 100 }),
@@ -20,6 +20,8 @@ const CRITICAL_FILE_THRESHOLDS = Object.freeze({
   'claudeTerminalLauncher.js': Object.freeze({ lines: 97, branches: 91, functions: 75 }),
   'projectMonitoringStore.js': Object.freeze({ lines: 93, branches: 91, functions: 81 }),
   'workSessionStore.js': Object.freeze({ lines: 90, branches: 85, functions: 96 }),
+  'workSessionAuditView.js': Object.freeze({ lines: 100, branches: 89.5, functions: 100 }),
+  'webviewSecurity.js': Object.freeze({ lines: 100, branches: 97, functions: 100 }),
   'handoffBundleStore.js': Object.freeze({ lines: 95, branches: 76, functions: 88 }),
   'terminalFirstExtension.js': Object.freeze({ lines: 74.5, branches: 57.5, functions: 87.5 }),
   'projectCatalog.js': Object.freeze({ lines: 92, branches: 82, functions: 93 }),

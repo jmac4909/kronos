@@ -93,7 +93,7 @@ export function withWebviewCsp(html: string, options: WebviewCspOptions = {}): s
   const withDiagnostic = (value: string): string => injectDiagnostic
     ? injectWebviewScriptDiagnostic(value)
     : value;
-  if (/http-equiv=["']Content-Security-Policy["']/i.test(html)) {
+  if (/<meta\b[^>]*\bhttp-equiv\s*=\s*(?:"content-security-policy"|'content-security-policy'|content-security-policy)(?=\s|\/?>)[^>]*>/i.test(html)) {
     return withDiagnostic(html);
   }
   const meta = webviewCspMeta(options);

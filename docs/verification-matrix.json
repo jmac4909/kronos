@@ -46,7 +46,8 @@
         { "file": "scripts/run-product-surface-contract-tests.js", "test": "non-Jira ticket workspaces omit Jira insertion without weakening terminal ownership" },
         { "file": "scripts/run-feature-journey-tests.js", "test": "project session stays ticket-free until context is explicit, then becomes monitoring eligible without changing kind" },
         { "file": "scripts/run-feature-journey-tests.js", "test": "manifest Claude modes and validated launcher commands cannot drift apart" },
-        { "file": "scripts/run-conditional-unit-tests.js", "test": "managed Sessions tree covers every lifecycle context and loader fallback" }
+        { "file": "scripts/run-conditional-unit-tests.js", "test": "managed Sessions tree covers every lifecycle context and loader fallback" },
+        { "file": "scripts/run-persistence-recovery-tests.js", "test": "work-session audit renders complete local evidence and sorts supplied events newest first" }
       ],
       "humanGates": ["operator-terminal", "real-vscode"]
     },
@@ -325,7 +326,8 @@
         { "file": "scripts/run-release-surface-tests.js", "test": "release documents and package metadata remain linked to current evidence" },
         { "file": "scripts/run-release-surface-tests.js", "test": "public surface scan precedes both tests and release packaging" },
         { "file": "scripts/run-release-surface-tests.js", "test": "publish verifier requires a clean named branch and exact remote head" },
-        { "file": "scripts/run-feature-journey-tests.js", "test": "manifest Claude modes and validated launcher commands cannot drift apart" }
+        { "file": "scripts/run-feature-journey-tests.js", "test": "manifest Claude modes and validated launcher commands cannot drift apart" },
+        { "file": "scripts/run-conditional-unit-tests.js", "test": "webview security injects one real CSP and preserves safe script bootstrap metadata" }
       ],
       "humanGates": ["operator-terminal", "windows-native", "multi-window", "live-providers"]
     }

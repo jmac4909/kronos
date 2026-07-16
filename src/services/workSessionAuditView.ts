@@ -52,7 +52,9 @@ export function buildWorkSessionAuditMarkdown(
   }
 
   lines.push('', '## Timeline', '');
-  const boundedEvents = events.slice(0, MAX_TIMELINE_EVENTS);
+  const boundedEvents = [...events]
+    .sort((left, right) => right.at.localeCompare(left.at))
+    .slice(0, MAX_TIMELINE_EVENTS);
   if (boundedEvents.length === 0) {
     lines.push('_No audit events have been recorded for this session._');
   } else {

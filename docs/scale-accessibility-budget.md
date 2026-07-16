@@ -13,7 +13,7 @@ This is the checked G17 budget for the terminal-first preview. Limits are safety
 | Project discovery | 50 roots, depth 5, 500 results, 2,000 entries per directory, 5,000 visited directories | Results stop at the configured bound and report truncation. |
 | Work sessions | 200 rows by default, 1,000 hard maximum; each record has 64 terminals, 64 provider bindings, 200 artifacts, and 32 warnings | Views load newest records first; terminal contents are never read. |
 | Attention ledger | 2,000 newest ledger rows, 50 MiB read ceiling, 16 KiB per event | Only the newest unacknowledged state per logical provider stream renders. |
-| Session audit | Caller reads 1,000 newest events; Markdown renders 500 | A truncation line states how many supplied events were omitted. |
+| Session audit | Caller reads 1,000 newest events; Markdown sorts normalized event times and renders the newest 500 | A truncation line states how many supplied events were omitted; caller-owned input order is unchanged. |
 | Local Git | 500 changed paths and 512 KiB diff text | Summary renders before the immutable full bounded artifact reference. |
 | Context composer | 20 evidence summaries, 20 warnings, 2,000 operator-focus characters | Full evidence stays in private artifacts; insertion is one inert non-submitting reference. |
 | Team Prompt Library | 20 local paths, 10 remote URLs, 20 eligible files per directory, 100 prompts per library, 500 prompts total, 1 MiB and 10-second remote read per manifest, 20,000 characters per reviewed body | Explicit refresh builds one searchable Quick Pick; the full reviewed prompt remains in a private immutable snapshot and insertion is one inert non-submitting reference. |
@@ -32,7 +32,7 @@ The deterministic local scale gate uses deliberately generous CI ceilings so it 
 
 - Build a 500-ticket board with long summaries and labels in under 2,000 ms and under 8 MiB of HTML.
 - Filter and derive facets for 500 tickets in under 1,000 ms.
-- Render a 2,000-event supplied audit ledger into its 500-event Markdown summary in under 1,000 ms and under 2 MiB.
+- Render a 2,000-event supplied audit ledger into its exact newest 500-event Markdown summary in under 1,000 ms and under 2 MiB without mutating the source.
 - Render all 200 project-integration forms in under 2,000 ms and under 8 MiB, and project 200 maximally rich Session summaries in under 1,000 ms with each tooltip below 10,000 characters.
 - Render at most 20 bounded evidence summaries and 20 warnings from an oversized provider preview in under 1,000 ms and under 256 KiB; the full payload remains available only through its private artifact reference.
 - A newer explicit Jira refresh aborts the prior transport signal and owns the only state write. Scheduled refreshes and overlapping provider polls coalesce.

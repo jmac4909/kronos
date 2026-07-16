@@ -15,6 +15,7 @@ const pipelineTransitions = require('../out/services/pipelineTransitions.js');
 const pipelineStore = require('../out/services/gitlabPipelineMonitorStore.js');
 const projectMonitoringStore = require('../out/services/projectMonitoringStore.js');
 const stateStore = require('../out/services/stateStore.js');
+const webviewSecurity = require('../out/services/webviewSecurity.js');
 const workSessions = require('../out/services/workSessionStore.js');
 const { createOperatorTerminalRegistry } = require('../out/services/operatorTerminalRegistry.js');
 const coveragePolicy = require('./run-code-coverage.js');
@@ -98,6 +99,67 @@ test('coverage policy discovers the npm test graph and fails closed on missing o
   assert.equal(failures.length, 4);
   assert.ok(failures.some(failure => failure.includes('missing.js is missing')));
   assert.ok(failures.some(failure => failure.includes('branches coverage 72.02% is below 73.00%')));
+});
+
+test('webview security injects one real CSP and preserves safe script bootstrap metadata', () => {
+  const nonce = webviewSecurity.createWebviewNonce();
+  assert.match(nonce, /^[a-f0-9]{32}$/);
+  assert.notEqual(webviewSecurity.createWebviewNonce(), nonce);
+
+  const options = webviewSecurity.webviewScriptCspOptions('vscode-webview://fixture', nonce);
+  const misleadingText = '<html><body>Example: http-equiv="Content-Security-Policy"</body></html>';
+  const secured = webviewSecurity.withWebviewCsp(misleadingText, options);
+  assert.equal((secured.match(/<meta\b[^>]*Content-Security-Policy/gi) || []).length, 1);
+  assert.match(secured, /script-src vscode-webview:\/\/fixture 'nonce-[a-f0-9]{32}'/);
+  assert.match(secured, /data-kronos-script-required/);
+
+  const existing = '<html><head><meta content="default-src \'none\'" http-equiv="Content-Security-Policy"></head><body></body></html>';
+  const preserved = webviewSecurity.withWebviewCsp(existing, options);
+  assert.equal((preserved.match(/<meta\b/gi) || []).length, 1);
+  assert.equal((preserved.match(/data-kronos-script-required/gi) || []).length, 1);
+  assert.equal(
+    (webviewSecurity.withWebviewCsp(preserved, options).match(/data-kronos-script-required/gi) || []).length,
+    1,
+  );
+  assert.equal(webviewSecurity.withWebviewCsp(existing), existing);
+
+  const existingHead = webviewSecurity.withWebviewCsp(
+    '<!DOCTYPE html><html><head><title>Kronos</title></head><body>Ready</body></html>',
+  );
+  assert.equal((existingHead.match(/<head>/gi) || []).length, 1);
+  assert.match(existingHead, /<head>\n<meta[^]*<title>Kronos<\/title>/);
+  const scriptedHeadFragment = webviewSecurity.withWebviewCsp('<head></head>', options);
+  assert.match(scriptedHeadFragment, /^<div[^]*<head>\n<meta/);
+
+  const fragment = webviewSecurity.withWebviewCsp('<p>Safe fragment</p>', { imgSrc: ['https:', 'data:'] });
+  assert.match(fragment, /^<!DOCTYPE html><html><head>/);
+  assert.match(fragment, /script-src 'none'/);
+  assert.match(fragment, /img-src https: data:/);
+  assert.match(fragment, /<body><p>Safe fragment<\/p><\/body><\/html>$/);
+  assert.match(
+    webviewSecurity.withWebviewCsp('<html lang="en"><body>Safe body</body></html>'),
+    /<html lang="en"><head>[^]*Content-Security-Policy[^]*<\/head><body>/,
+  );
+  assert.match(
+    webviewSecurity.withWebviewCsp('<body>Existing body</body>'),
+    /^<!DOCTYPE html><html><head>[^]*<\/head><body>Existing body<\/body><\/html>$/,
+  );
+
+  const scriptUri = 'vscode-resource://fixture/media/kronos-action-panel.js?version=4#asset';
+  assert.equal(
+    webviewSecurity.webviewRuntimeScriptUri(scriptUri),
+    'vscode-resource://fixture/media/kronos-webview-runtime.js?version=4#asset',
+  );
+  assert.equal(webviewSecurity.webviewRuntimeScriptUri('kronos-action-panel.js'), 'kronos-webview-runtime.js');
+  const scripts = webviewSecurity.webviewActionScriptTag('nonce&value', 'Panel <name>', [
+    { messageKey: 'ticket"Key', dataAttribute: 'data-ticket' },
+  ], { readyCommand: 'ready&now', scriptUri });
+  assert.match(scripts, /id="kronos-webview-runtime-script"/);
+  assert.match(scripts, /id="kronos-action-panel-script"/);
+  assert.match(scripts, /nonce="nonce&amp;value"/);
+  assert.match(scripts, /data-kronos-webview-name="Panel &lt;name&gt;"/);
+  assert.match(scripts, /data-kronos-ready-command="ready&amp;now"/);
+  assert.ok(scripts.includes('ticket\\&quot;Key'));
 });
 
 test('GitLab pipeline snapshot persistence covers missing, complete, malformed, and unsafe identities', () => {

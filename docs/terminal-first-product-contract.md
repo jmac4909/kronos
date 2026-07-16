@@ -217,7 +217,7 @@ The one-time migration from the legacy default directory uses a private target-s
 - compact monitor snapshots contain the latest comparison baseline;
 - the append-only monitor-event ledger records session, context, transition, notification, acknowledgement, and operator-decision events; each JSONL record is capped at 16 KiB, each UI read uses a bounded complete-line tail window, and append/tail operations share the cross-platform path/descriptor identity layer.
 
-The audit may include provider summaries, timestamps, completeness warnings, hashes, and private artifact paths. It never contains terminal input, terminal output, scrollback, provider credentials, authorization headers, cookies, raw job traces, or Jenkins console logs.
+The audit may include provider summaries, timestamps, completeness warnings, hashes, and private artifact paths. The audit view sorts normalized events by observed time before rendering at most the newest 500, regardless of caller input order, without rewriting the append-only ledger. It never contains terminal input, terminal output, scrollback, provider credentials, authorization headers, cookies, raw job traces, or Jenkins console logs.
 
 Kronos does not publish audit content externally. Opening an audit is a local read.
 

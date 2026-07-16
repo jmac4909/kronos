@@ -16,6 +16,7 @@ const workSessions = require('../out/services/workSessionStore.js');
 const projectMonitoringStore = require('../out/services/projectMonitoringStore.js');
 const gitLabMonitorStore = require('../out/services/gitlabMergeRequestMonitorStore.js');
 const gitLabRestModule = require('../out/services/gitlabRestClient.js');
+const { buildWorkSessionAuditMarkdown } = require('../out/services/workSessionAuditView.js');
 const { ManagedProviderMonitor } = require('../out/services/managedProviderMonitor.js');
 
 test.after(() => fs.rmSync(tempRoot, { recursive: true, force: true }));
@@ -480,6 +481,91 @@ test('work-session provider, artifact, and monitoring projections cover every op
     () => workSessions.markWorkSessionTerminalClosed(session.id, 'missing-terminal', undefined, options),
     /Terminal binding not found/i,
   );
+});
+
+test('work-session audit renders complete local evidence and sorts supplied events newest first', () => {
+  const options = {
+    kronosDir: path.join(tempRoot, 'work-session-audit'),
+    now: new Date('2026-07-15T12:00:00.000Z'),
+  };
+  let session = workSessions.createOrGetWorkSessionByTicket({
+    ticketKey: 'AUDIT-7',
+    title: 'Review *unsafe* [formatting]',
+    projectName: 'Customer #API',
+  }, options);
+  session = workSessions.attachWorkSessionTerminal(session.id, {
+    bindingId: 'terminal-audit',
+    name: 'Audit terminal',
+  }, options);
+  session = workSessions.addWorkSessionProviderBinding(session.id, {
+    provider: 'gitlab',
+    resource: 'merge-request',
+    subjectId: '91',
+  }, options);
+  session = workSessions.addWorkSessionProviderBinding(session.id, {
+    provider: 'gitlab',
+    resource: 'pipeline',
+    subjectId: '904',
+  }, options);
+  session = workSessions.recordWorkSessionContextArtifact(session.id, {
+    id: 'artifact-audit',
+    kind: 'jira',
+    label: 'Jira [context]',
+    promptPath: path.join(options.kronosDir, 'contexts', 'audit`context.md'),
+    fetchedAt: '2026-07-15T11:55:00.000Z',
+    complete: false,
+    contentSha256: 'a'.repeat(64),
+    warnings: ['Comments *partial*'],
+  }, options);
+  const events = [
+    {
+      schemaVersion: 1,
+      id: 'event-older',
+      at: '2026-07-15T11:58:00.000Z',
+      sessionId: session.id,
+      type: 'provider.transition',
+      source: 'gitlab',
+      summary: 'Older *summary*',
+      before: { state: 'running' },
+      after: { state: 'failed' },
+    },
+    {
+      schemaVersion: 1,
+      id: 'event-newer',
+      at: '2026-07-15T11:59:00.000Z',
+      sessionId: session.id,
+      type: 'context.inserted',
+      source: 'jira',
+      summary: 'Newest [summary]\ncontinued',
+      subject: { kind: 'ticket', id: 'AUDIT-7' },
+      artifactPath: path.join(options.kronosDir, 'audit', 'event`new.json'),
+    },
+  ];
+  const markdown = buildWorkSessionAuditMarkdown(session, events);
+  assert.match(markdown, /^# Customer \\#API managed work session/m);
+  assert.match(markdown, /Review \\\*unsafe\\\* \\\[formatting\\\]/);
+  assert.ok(markdown.includes('- Kind: ticket-linked (AUDIT\\-7)'));
+  assert.match(markdown, /Operator terminals currently recorded as attached: 1/);
+  assert.match(markdown, /Providers: gitlab/);
+  assert.ok(markdown.includes('- Jira \\[context\\] (partial, fetched 2026\\-07\\-15T11:55:00\\.000Z)'));
+  assert.match(markdown, /Content SHA-256: `a{64}`/);
+  assert.match(markdown, /Warning: Comments \\\*partial\\\*/);
+  assert.ok(markdown.indexOf('Newest \\[summary\\] continued') < markdown.indexOf('Older \\*summary\\*'));
+  assert.match(markdown, /ticket `AUDIT-7`/);
+  assert.match(markdown, /State: running → failed/);
+  assert.match(markdown, /eventˋnew\.json`/);
+  assert.deepEqual(events.map(event => event.id), ['event-older', 'event-newer']);
+
+  const empty = workSessions.createStandaloneWorkSession({ title: 'Empty audit' }, {
+    kronosDir: path.join(tempRoot, 'empty-work-session-audit'),
+  });
+  const emptyMarkdown = buildWorkSessionAuditMarkdown(empty, []);
+  assert.match(emptyMarkdown, /^# Empty audit managed session/m);
+  assert.match(emptyMarkdown, /Kind: standalone/);
+  assert.match(emptyMarkdown, /Ticket contexts: none/);
+  assert.match(emptyMarkdown, /Providers: none/);
+  assert.match(emptyMarkdown, /No audit events have been recorded/);
+  assert.doesNotMatch(emptyMarkdown, /## Context artifacts/);
 });
 
 test('registered-project monitoring owners refresh identity, reject stale bindings, and isolate returned state', () => {
