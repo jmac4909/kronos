@@ -331,7 +331,7 @@ function createGitProject(name, branch) {
   const projectPath = path.join(tempRoot, name);
   fs.mkdirSync(path.join(projectPath, '.git'), { recursive: true, mode: 0o700 });
   fs.writeFileSync(path.join(projectPath, '.git', 'HEAD'), `ref: refs/heads/${branch}\n`, { mode: 0o600 });
-  return fs.realpathSync(projectPath);
+  return fs.realpathSync.native(projectPath);
 }
 
 function gitEvidence(projectPath, overrides = {}) {

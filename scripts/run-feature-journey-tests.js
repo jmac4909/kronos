@@ -84,7 +84,7 @@ test('explicit project journey keeps one stable identity across Work, Projects, 
   })), [{
     name: 'payments-api',
     displayName: 'Payments API',
-    path: fs.realpathSync(projectPath),
+    path: fs.realpathSync.native(projectPath),
     branch: 'feature/payment-reconciliation',
   }]);
   assert.equal(state.tickets['ABC-123'].linked_local_project, 'payments-api');
