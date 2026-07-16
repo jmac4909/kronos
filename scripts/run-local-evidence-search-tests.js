@@ -97,6 +97,64 @@ test('local evidence search actions retain only the bounded local target needed 
   assert.doesNotMatch(JSON.stringify(index), /PROVIDER-BODY-MUST-NOT-INDEX/);
 });
 
+test('local evidence search explains sparse and unavailable extra-feature metadata without inventing targets', () => {
+  const sparseSession = session({
+    id: 'session-sparse',
+    kind: 'standalone',
+    title: 'Sparse standalone',
+    projectName: undefined,
+    projectPath: undefined,
+    ticketKey: undefined,
+    ticketKeys: [],
+    providerBindings: [
+      ...['jenkins', 'sonar', 'jira', 'operator', 'kronos', 'custom'].map((provider, index) => ({
+        ...providerBinding(`provider-${provider}`),
+        provider,
+        resource: index === 0 ? 'build' : 'evidence',
+        subjectId: String(index + 1),
+        projectId: undefined,
+        url: undefined,
+      })),
+    ],
+    artifacts: [{
+      ...artifact('artifact-partial'),
+      complete: false,
+      contentSha256: undefined,
+    }],
+  });
+  const index = buildLocalEvidenceSearchIndex({
+    projects: [
+      { name: 'missing', displayName: 'Missing checkout', path: '/projects/missing', detached: false, available: false },
+      { name: 'detached', displayName: '', path: '/projects/detached', branch: 'abc1234', detached: true, available: true },
+    ],
+    sessions: [sparseSession],
+    events: [event({
+      id: 'event-fallback',
+      sessionId: sparseSession.id,
+      source: 'custom',
+      subject: undefined,
+    })],
+  });
+  const missing = index.find(entry => entry.id === 'project:missing');
+  assert.equal(missing.label, 'Missing checkout');
+  assert.equal(missing.description, 'branch unavailable');
+  assert.match(missing.detail, /registered path unavailable/);
+  assert.equal(index.find(entry => entry.id === 'project:detached').description, 'detached abc1234');
+  const sessionEntry = index.find(entry => entry.id === 'session:session-sparse');
+  assert.match(sessionEntry.description, /no project.*standalone/);
+  assert.equal(sessionEntry.detail, 'No Jira context attached');
+  assert.equal(index.some(entry => entry.kind === 'ticket'), false);
+  assert.deepEqual(
+    index.filter(entry => entry.kind === 'provider').map(entry => entry.label),
+    ['Jenkins build: 1', 'SonarQube evidence: 2', 'Jira evidence: 3', 'Operator evidence: 4', 'Kronos evidence: 5', 'custom evidence: 6'],
+  );
+  assert.ok(index.filter(entry => entry.kind === 'provider').every(entry => Object.hasOwn(entry.action, 'url') === false));
+  const partial = index.find(entry => entry.kind === 'artifact');
+  assert.match(partial.description, /partial/);
+  assert.doesNotMatch(partial.detail, /SHA/);
+  assert.equal(index.find(entry => entry.id === 'event:event-fallback').detail, 'Session session-sparse');
+});
+
 function project(name, branch) {
   return { name, path: `/projects/${name}`, branch, detached: false, available: true };
 }

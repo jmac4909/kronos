@@ -931,7 +931,9 @@ function boundedFieldText(value: JiraContextValue, tracker: JiraValueNormalizati
 }
 
 function stringArray(value: unknown): string[] {
-  return uniqueStrings(arrayFromUnknown(value).map(item => redactProviderText(firstString(item))).filter(Boolean));
+  return uniqueStrings(arrayFromUnknown(value)
+    .map(item => redactProviderText(firstString(item)))
+    .filter(item => pruneEmptyJiraValue(item) !== undefined));
 }
 
 function uniqueStrings(values: readonly string[]): string[] {

@@ -16,7 +16,10 @@
         { "file": "scripts/run-product-surface-contract-tests.js", "test": "Jira board keeps filtering and launch controls while ticket workspace owns detailed context controls" },
         { "file": "scripts/run-feature-journey-tests.js", "test": "explicit project journey keeps one stable identity across Work, Projects, Sessions, and Attention" },
         { "file": "scripts/run-feature-journey-tests.js", "test": "unregistering a project clears launch authority but preserves Jira namespace and provider-only metadata" },
-        { "file": "scripts/run-feature-journey-tests.js", "test": "Work and Jira board free-text search index the same rich ticket evidence" }
+        { "file": "scripts/run-feature-journey-tests.js", "test": "Work and Jira board free-text search index the same rich ticket evidence" },
+        { "file": "scripts/run-core-behavior-tests.js", "test": "TerminalFirstState reports complete and partial Jira refreshes without losing prior provider evidence" },
+        { "file": "scripts/run-core-behavior-tests.js", "test": "TerminalFirstState keeps the newest explicit refresh and exposes a bounded error state" },
+        { "file": "scripts/run-core-behavior-tests.js", "test": "Work tree directly covers project-rich rows, sorting, filters, empty states, and refresh errors" }
       ],
       "humanGates": ["operator-terminal"]
     },
@@ -63,7 +66,10 @@
         { "file": "scripts/run-prompt-library-tests.js", "test": "local and remote Git manifests merge with origin-pinned GitLab auth and latest-good cache fallback" },
         { "file": "scripts/run-prompt-library-tests.js", "test": "reviewed prompt snapshots are immutable, credential-redacted, and inserted without submission" },
         { "file": "scripts/run-prompt-library-tests.js", "test": "prompt library composer escapes content and accepts only bounded editor messages" },
-        { "file": "scripts/run-webview-dom-tests.js", "test": "prompt library posts the complete edited prompt only after Place or Ctrl+Enter" }
+        { "file": "scripts/run-webview-dom-tests.js", "test": "prompt library posts the complete edited prompt only after Place or Ctrl+Enter" },
+        { "file": "scripts/run-core-behavior-tests.js", "test": "Jira rich text and recursive values preserve visible evidence while redacting unsafe content" },
+        { "file": "scripts/run-core-behavior-tests.js", "test": "Jira context normalization reconciles comments, attachment outcomes, metadata, and completeness" },
+        { "file": "scripts/run-core-behavior-tests.js", "test": "Jira fallback and global context budget stay useful, bounded, and explicit" }
       ],
       "humanGates": ["operator-terminal", "real-vscode", "windows-native"]
     },
@@ -135,6 +141,7 @@
       "id": "projects-and-git",
       "goals": ["G09"],
       "automated": [
+        { "file": "scripts/run-core-behavior-tests.js", "test": "TerminalFirstState project mutations preserve explicit identities and watcher refreshes" },
         { "file": "scripts/run-project-catalog-tests.js", "test": "project discovery honors configured roots, depth, limits, and workspace folders" },
         { "file": "scripts/run-project-catalog-tests.js", "test": "project discovery canonicalizes root aliases and skips symbolic child repositories" },
         { "file": "scripts/run-project-catalog-tests.js", "test": "project nickname sets and clears while registration identity stays canonical by path" },
@@ -263,7 +270,8 @@
         { "file": "scripts/run-local-evidence-search-tests.js", "test": "local evidence search covers sessions, tickets, projects, branches, providers, artifacts, and events without terminal content" },
         { "file": "scripts/run-local-evidence-search-tests.js", "test": "local evidence search enforces independent source budgets and a 2000-entry total ceiling" },
         { "file": "scripts/run-local-evidence-search-tests.js", "test": "local evidence search strips controls and bounds every visible field" },
-        { "file": "scripts/run-local-evidence-search-tests.js", "test": "local evidence search actions retain only the bounded local target needed to open a result" }
+        { "file": "scripts/run-local-evidence-search-tests.js", "test": "local evidence search actions retain only the bounded local target needed to open a result" },
+        { "file": "scripts/run-local-evidence-search-tests.js", "test": "local evidence search explains sparse and unavailable extra-feature metadata without inventing targets" }
       ],
       "humanGates": ["real-vscode"]
     },
