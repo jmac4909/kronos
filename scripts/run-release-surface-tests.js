@@ -41,10 +41,21 @@ test('release documents and package metadata remain linked to current evidence',
 
 test('public surface scan precedes both tests and release packaging', () => {
   const manifest = require('../package.json');
+  const workspaceTasks = require('../.vscode/tasks.json');
   assert.match(manifest.scripts.test, /^npm run public:check &&/);
   assert.match(manifest.scripts['release:preflight'], /^npm run public:check &&/);
   assert.match(manifest.scripts.package, /^npm run release:preflight &&/);
   assert.match(manifest.scripts['release:preflight'], /npm run compile && npm run release:surface$/);
+  assert.deepEqual(
+    workspaceTasks.tasks.find(task => task.label === 'Kronos: Run Full Test Suite'),
+    {
+      type: 'npm',
+      script: 'test',
+      group: { kind: 'test', isDefault: true },
+      problemMatcher: [],
+      label: 'Kronos: Run Full Test Suite',
+    },
+  );
 });
 
 test('publish verifier requires a clean named branch and exact remote head', () => {
