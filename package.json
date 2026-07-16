@@ -166,6 +166,11 @@
         "icon": "$(archive)"
       },
       {
+        "command": "kronos.openPromptLibrary",
+        "title": "Kronos: Open Team Prompt Library",
+        "icon": "$(library)"
+      },
+      {
         "command": "kronos.searchLocalEvidence",
         "title": "Kronos: Search Local Sessions and Evidence",
         "icon": "$(search)"
@@ -379,19 +384,34 @@
           "group": "attention@1"
         },
         {
-          "command": "kronos.createLocalHandoff",
+          "command": "kronos.openPromptLibrary",
+          "when": "view == kronosWork",
+          "group": "work@4"
+        },
+        {
+          "command": "kronos.openPromptLibrary",
           "when": "view == kronosSessions",
           "group": "sessions@4"
         },
         {
-          "command": "kronos.createLocalHandoff",
+          "command": "kronos.openPromptLibrary",
           "when": "view == kronosProjects",
           "group": "projects@4"
         },
         {
+          "command": "kronos.createLocalHandoff",
+          "when": "view == kronosSessions",
+          "group": "sessions@5"
+        },
+        {
+          "command": "kronos.createLocalHandoff",
+          "when": "view == kronosProjects",
+          "group": "projects@5"
+        },
+        {
           "command": "kronos.setup",
           "when": "view == kronosWork",
-          "group": "work@4"
+          "group": "work@5"
         }
       ],
       "view/item/context": [
@@ -431,6 +451,11 @@
           "group": "context@3"
         },
         {
+          "command": "kronos.openPromptLibrary",
+          "when": "viewItem == work_ticket",
+          "group": "context@4"
+        },
+        {
           "command": "kronos.focusWorkSessionTerminal",
           "when": "viewItem == work_session_attached || viewItem == work_session_attached_paused || viewItem == standalone_session_attached",
           "group": "inline@1"
@@ -449,6 +474,11 @@
           "command": "kronos.insertOtherTicket",
           "when": "viewItem == work_session_attached || viewItem == work_session_attached_paused || viewItem == standalone_session_attached",
           "group": "context@1"
+        },
+        {
+          "command": "kronos.openPromptLibrary",
+          "when": "viewItem == work_session_attached || viewItem == work_session_attached_paused || viewItem == standalone_session_attached",
+          "group": "context@2"
         },
         {
           "command": "kronos.pauseWorkSessionMonitoring",
@@ -499,6 +529,11 @@
           "command": "kronos.insertProjectCiContext",
           "when": "viewItem == registered_project",
           "group": "context@2"
+        },
+        {
+          "command": "kronos.openPromptLibrary",
+          "when": "viewItem == registered_project",
+          "group": "context@3"
         },
         {
           "command": "kronos.configureProjectIntegrations",
@@ -595,6 +630,23 @@
           "default": [],
           "description": "Additional Jira status names that Kronos should treat as completed, for teams whose workflow does not use Jira's Done status category."
         },
+        "kronos.promptLibraryLocalPaths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "scope": "machine",
+          "description": "Local prompt-library manifest files or folders. A folder is scanned only for top-level kronos-prompts.json and *.kronos-prompts.json files. Point this at a checked-out team Git repository to use its current local revision. Use ~ for the current home folder."
+        },
+        "kronos.promptLibraryRemoteManifestUrls": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Raw HTTPS URLs for schemaVersion 1 prompt-library JSON manifests stored in a team Git repository. Kronos performs bounded read-only GET requests, refuses redirects and credential-bearing URLs, privately caches the latest valid copy, and never clones or changes Git. A private GitLab URL may reuse GITLAB_TOKEN only on the exact configured GitLab origin in a trusted workspace."
+        },
         "kronos.claudeCommand": {
           "type": "string",
           "default": "claude",
@@ -654,7 +706,7 @@
     "release:preflight": "npm run public:check && node scripts/check-manifest.js && node scripts/check-runtime-graph.js && node scripts/check-security.js && node scripts/check-context-governance.js && node scripts/check-roadmap-evidence.js && node scripts/check-quality-evidence.js && npm run compile && npm run release:surface",
     "release:surface": "node scripts/run-release-surface-tests.js",
     "publish:verify": "node scripts/verify-published-branch.js",
-    "test": "npm run public:check && node scripts/check-manifest.js && node scripts/check-runtime-graph.js && node scripts/check-security.js && node scripts/check-context-governance.js && node scripts/check-roadmap-evidence.js && node scripts/check-quality-evidence.js && npm run compile && npm run command:routing && npm run product:surface && npm run feature:journeys && npm run terminal:lifecycle && npm run unit:conditionals && npm run persistence:recovery && npm run schema:invariants && npm run failure:contract && npm run provider:readiness && npm run project:catalog && npm run provider:bindings && node scripts/run-unit-tests.js && npm run work:orchestration && npm run provider:reconciliation && npm run attention:matrix && npm run attention:conditionals && npm run provider:health && npm run provider:fixtures && npm run context:basket && npm run local:search && npm run handoff:profiles && npm run scale:a11y && npm run release:surface && npm run webview:dom && npm run webview:jira-board && npm run coverage:check",
+    "test": "npm run public:check && node scripts/check-manifest.js && node scripts/check-runtime-graph.js && node scripts/check-security.js && node scripts/check-context-governance.js && node scripts/check-roadmap-evidence.js && node scripts/check-quality-evidence.js && npm run compile && npm run command:routing && npm run product:surface && npm run feature:journeys && npm run terminal:lifecycle && npm run unit:conditionals && npm run persistence:recovery && npm run schema:invariants && npm run failure:contract && npm run provider:readiness && npm run project:catalog && npm run provider:bindings && node scripts/run-unit-tests.js && npm run work:orchestration && npm run provider:reconciliation && npm run attention:matrix && npm run attention:conditionals && npm run provider:health && npm run provider:fixtures && npm run context:basket && npm run prompt:library && npm run local:search && npm run handoff:profiles && npm run scale:a11y && npm run release:surface && npm run webview:dom && npm run webview:jira-board && npm run coverage:check",
     "public:check": "node scripts/check-public-surface.js",
     "webview:dom": "node scripts/run-webview-dom-tests.js",
     "webview:jira-board": "node scripts/run-jira-work-board-tests.js",
@@ -679,6 +731,7 @@
     "attention:conditionals": "node scripts/run-attention-conditional-tests.js",
     "provider:health": "node scripts/run-provider-health-visibility-tests.js",
     "context:basket": "node scripts/run-context-basket-tests.js",
+    "prompt:library": "node scripts/run-prompt-library-tests.js",
     "local:search": "node scripts/run-local-evidence-search-tests.js",
     "handoff:profiles": "node scripts/run-handoff-branch-profile-tests.js",
     "feedback:state": "node scripts/create-feedback-state.js",

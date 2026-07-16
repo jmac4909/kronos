@@ -85,6 +85,15 @@ export function buildContextBasketTerminalReference(basketIdValue: string, promp
   return reference;
 }
 
+export function buildPromptLibraryTerminalReference(promptIdValue: string, promptPath: string): string {
+  const promptId = normalizePromptLibraryContextId(promptIdValue);
+  const absolutePromptPath = path.resolve(promptPath);
+  assertShellInertPromptPath(absolutePromptPath);
+  const reference = `[${promptId}] Read reviewed prompt library instruction file ${JSON.stringify(absolutePromptPath)}${REFERENCE_SUFFIX}`;
+  assertSafeTerminalContextReference(reference);
+  return reference;
+}
+
 export function insertTerminalContextReference(
   terminal: TerminalContextInsertionTarget,
   reference: string,
@@ -184,7 +193,8 @@ function parseTerminalContextReference(reference: string):
   | { kind: 'ci'; key: string; promptPath: string }
   | { kind: 'ci-project'; ownerDirectory: string; promptPath: string }
   | { kind: 'git'; contextId: string; promptPath: string }
-  | { kind: 'basket'; basketId: string; promptPath: string } {
+  | { kind: 'basket'; basketId: string; promptPath: string }
+  | { kind: 'prompt-library'; promptId: string; promptPath: string } {
   if (!reference || reference.length > MAX_REFERENCE_LENGTH || reference !== reference.trim()) {
     throw new Error('Terminal context reference is missing or invalid.');
   }
@@ -249,6 +259,18 @@ function parseTerminalContextReference(reference: string):
     return { kind: 'basket', basketId, promptPath };
   }
 
+  const promptLibraryPrefix = /^\[(PROMPT-[A-F0-9]{24})\] Read reviewed prompt library instruction file /.exec(reference);
+  if (promptLibraryPrefix && reference.endsWith(REFERENCE_SUFFIX)) {
+    const promptIdValue = promptLibraryPrefix[1];
+    if (!promptIdValue) { throw new Error('Prompt library terminal reference has no prompt id.'); }
+    const promptId = normalizePromptLibraryContextId(promptIdValue);
+    const promptPath = parsePromptPathLiteral(reference, promptLibraryPrefix[0].length);
+    if (path.basename(path.dirname(promptPath)) !== promptId) {
+      throw new Error('Prompt library terminal reference does not point to the expected prompt artifact.');
+    }
+    return { kind: 'prompt-library', promptId, promptPath };
+  }
+
   const prefixMatch = /^\[([A-Z][A-Z0-9_]{0,127}-[1-9][0-9]*)\] Read Jira context file /.exec(reference);
   if (!prefixMatch || !reference.endsWith(REFERENCE_SUFFIX)) {
     throw new Error('Terminal context reference has an invalid format.');
@@ -301,6 +323,14 @@ function normalizeBasketContextId(value: string): string {
   const normalized = value.trim().toUpperCase();
   if (!/^BASKET-[A-F0-9]{24}$/.test(normalized)) {
     throw new Error('Context basket id is missing or invalid.');
+  }
+  return normalized;
+}
+
+function normalizePromptLibraryContextId(value: string): string {
+  const normalized = value.trim().toUpperCase();
+  if (!/^PROMPT-[A-F0-9]{24}$/.test(normalized)) {
+    throw new Error('Prompt library context id is missing or invalid.');
   }
   return normalized;
 }

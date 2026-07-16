@@ -19,6 +19,10 @@ export type ContextBasketMessage =
   | { command: 'clear'; focus: string }
   | { command: 'close' };
 
+export type PromptLibraryComposerMessage =
+  | { command: 'insertPrompt'; body: string }
+  | { command: 'openSettings' | 'cancel' };
+
 export type ProjectIntegrationMessage =
   | { command: 'cancel' }
   | {
@@ -89,6 +93,16 @@ export function normalizeContextBasketMessage(raw: unknown): ContextBasketMessag
     && typeof message['focus'] === 'string' && message['focus'].length <= 4_000
     ? { command, entryId, focus: message['focus'] }
     : null;
+}
+
+export function normalizePromptLibraryComposerMessage(raw: unknown): PromptLibraryComposerMessage | null {
+  const message = recordFromUnknown(raw);
+  const command = message['command'];
+  if (command === 'openSettings' || command === 'cancel') { return { command }; }
+  if (command !== 'insertPrompt' || typeof message['body'] !== 'string' || message['body'].length > 20_000) {
+    return null;
+  }
+  return { command, body: message['body'] };
 }
 
 export function normalizeProjectIntegrationMessage(raw: unknown): ProjectIntegrationMessage | null {

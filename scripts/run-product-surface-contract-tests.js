@@ -63,7 +63,7 @@ test('discovery, setup, and project management each retain one canonical UI home
   assert.deepEqual(titleMenus.filter(item => item.command === 'kronos.setup'), [{
     command: 'kronos.setup',
     when: 'view == kronosWork',
-    group: 'work@4',
+    group: 'work@5',
   }]);
   assert.deepEqual(titleMenus.filter(item => item.command === 'kronos.doctor'), []);
   const commandIds = new Set(manifest.contributes.commands.map(command => command.command));
@@ -81,6 +81,7 @@ test('registered project actions start ticket-free Claude before read-only and p
     { label: 'Open merge request page', icon: 'git-merge', command: 'kronos.openProjectMergeRequest' },
     { label: 'Insert MR evidence', icon: 'git-merge', command: 'kronos.insertProjectGitLabContext' },
     { label: 'Insert Jenkins / Sonar evidence', icon: 'beaker', command: 'kronos.insertProjectCiContext' },
+    { label: 'Open team prompt library', icon: 'library', command: 'kronos.openPromptLibrary', description: 'editable; non-submitting' },
     { label: 'Configure provider polling', icon: 'settings-gear', command: 'kronos.configureProjectIntegrations' },
     { label: 'Set project nickname', icon: 'edit', command: 'kronos.renameLocalProject', description: 'optional; identity and links stay unchanged' },
   ]);
@@ -249,7 +250,7 @@ test('Jira board keeps filtering and launch controls while ticket workspace owns
   assert.ok(workspace.indexOf('workspace-action-label">Terminal') < workspace.indexOf('workspace-action-label">Context'));
   assert.deepEqual(extractActions(workspace), [
     'chooseTicketProject', 'startClaudeForTicket', 'manageActiveTerminal',
-    'insertJiraContext', 'insertGitLabContext', 'insertCiContext',
+    'insertJiraContext', 'insertGitLabContext', 'insertCiContext', 'openPromptLibrary',
   ]);
   assert.match(workspace, /Kronos Extension/);
   assert.match(workspace, /feature\/contracts/);
@@ -265,7 +266,7 @@ test('non-Jira ticket workspaces omit Jira insertion without weakening terminal 
   });
   assert.deepEqual(extractActions(workspace), [
     'chooseTicketProject', 'startClaudeForTicket', 'manageActiveTerminal',
-    'insertGitLabContext', 'insertCiContext',
+    'insertGitLabContext', 'insertCiContext', 'openPromptLibrary',
   ]);
   assert.match(workspace, /attach one you already own/);
   assert.match(workspace, /never press Enter/);

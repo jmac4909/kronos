@@ -26,7 +26,7 @@ Stop the review immediately if any boundary is crossed.
 3. Reload VS Code.
 4. Open the Kronos activity icon.
 5. Confirm exactly four views are visible: **Work**, **Sessions**, **Projects**, and **Attention**, with no nested Projects section inside Sessions.
-6. Run **Kronos: Setup** and confirm its dedicated dashboard clearly groups Claude launch, discovery folders, registered projects, Jira, monitoring providers, and private state without exposing secrets. Confirm its runtime guide shows the correct native private-state and provider-environment paths plus precise reload behavior. Exercise its Doctor, Jira Board, settings, discovery-folder, Projects, and Sessions actions; confirm these configuration/navigation actions are not repeated as primary buttons in every view header.
+6. Run **Kronos: Setup** and confirm its dedicated dashboard clearly groups Claude launch, discovery folders, registered projects, Jira, monitoring providers, Team Prompt Library, and private state without exposing secrets. Confirm its runtime guide shows the correct native private-state and provider-environment paths plus precise reload behavior. If **Open Private Config** creates the file, confirm Kronos immediately warns that saved values require **Developer: Reload Window** before the extension host and Doctor can see them. Exercise its Doctor, Jira Board, prompt/settings, discovery-folder, Projects, and Sessions actions; confirm these configuration/navigation actions are not repeated as primary buttons in every view header.
 7. Run **Kronos: Doctor** and confirm its dedicated dashboard shows ready/review/blocked totals, places actionable problems first, refreshes in place, and reports Jira/provider/Claude readiness without displaying credential values.
 8. Open **Kronos: Guided Settings** and confirm it returns to the existing Setup dashboard rather than opening a competing configuration flow. From the relevant Setup rows open Claude or visibility settings, identify the Claude command, permission mode, terminal-name, cwd behavior, and polling options, then return to Setup. Confirm permission mode offers Manual/default, Accept Edits, Plan, Auto, Don't Ask, and experimental Bypass Permissions with clear descriptions. Keep the command at `claude` or a trusted `claude-*` wrapper with only approved interactive flags for the launch tests; raw permission flags do not belong in the command. Provider credentials remain in the private environment-file path shown by Setup.
 
@@ -108,6 +108,15 @@ If GitLab and CI providers are safely configured:
 
 12. Insert the linked `[MR-N]` context and confirm the composer includes recent notes/discussions plus explicit review, pipeline, job, and test completeness.
 13. Insert `[CI-TICKET-KEY]` and confirm Jenkins and SonarQube evidence clearly says which provider portions were fetched, partial, or unavailable.
+
+## Team Prompt Library
+
+1. Create a safe local schema-v1 manifest with two prompts and configure its file or parent directory in `kronos.promptLibraryLocalPaths`. Configure a raw HTTPS manifest from a disposable Git branch in `kronos.promptLibraryRemoteManifestUrls`; do not put a token in the URL.
+2. Open **Team Prompt Library** from a ticket workspace, Session, and registered Project. Confirm it always targets an already managed terminal and never creates a terminal, launches Claude, requires a Jira ticket for the Project path, or writes anything while the picker/editor opens.
+3. Search by title, library, description, tag, and suggested context. Choose a prompt using `{{session.title}}`, `{{project.name}}`, `{{project.path}}`, `{{project.branch}}`, `{{jira.key}}`, `{{jira.keys}}`, and one unknown variable. Confirm allowlisted values are filled from the selected Session, the unknown variable stays visible with a warning, and no Jira key is invented for a ticket-free Project Session.
+4. Confirm the editor shows the complete prompt, source provenance, tags, suggested context, filled variables, and warnings. Edit it with normal Enter/newlines; confirm nothing reaches the terminal until **Place in Terminal** or Ctrl/Cmd+Enter.
+5. Place once and confirm exactly one `[PROMPT-*]` reference is inserted into the intended terminal with Enter not pressed. Inspect the referenced private Markdown/JSON pair and confirm it contains the reviewed redacted body and source revision, not terminal contents or provider credentials. Re-trigger the webview action if practical and confirm no duplicate snapshot or terminal write appears.
+6. Make the remote URL temporarily unavailable and reopen the library. Confirm Kronos labels its bounded warning and offers the private latest-good copy. Restore it with a changed valid manifest and confirm the next explicit open shows the new revision. Confirm no redirect is followed and no remote manifest can launch Claude, execute a command, change Git, or submit terminal input.
 
 ## Context Basket
 

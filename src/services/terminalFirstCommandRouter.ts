@@ -20,6 +20,7 @@ export interface TerminalFirstCommandHandlers {
     insertGitLabContext: TerminalFirstCommandHandler;
     insertCiContext: TerminalFirstCommandHandler;
     openContextBasket: TerminalFirstCommandHandler;
+    openPromptLibrary: TerminalFirstCommandHandler;
     searchLocalEvidence: TerminalFirstCommandHandler;
     createLocalHandoff: TerminalFirstCommandHandler;
   };
@@ -89,6 +90,7 @@ const COMMAND_ROUTES = Object.freeze([
   route('kronos.insertGitLabContext', 'context', 'insertGitLabContext'),
   route('kronos.insertCiContext', 'context', 'insertCiContext'),
   route('kronos.openContextBasket', 'context', 'openContextBasket'),
+  route('kronos.openPromptLibrary', 'context', 'openPromptLibrary'),
   route('kronos.searchLocalEvidence', 'context', 'searchLocalEvidence'),
   route('kronos.createLocalHandoff', 'context', 'createLocalHandoff'),
   route('kronos.pollManagedWorkSessions', 'sessions', 'pollManagedWorkSessions'),

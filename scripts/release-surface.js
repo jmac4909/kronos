@@ -34,6 +34,7 @@ const MEDIA_FILES = [
   'media/kronos-icon.svg',
   'media/kronos-context-composer.js',
   'media/kronos-context-basket.js',
+  'media/kronos-prompt-library.js',
   'media/kronos-action-panel.js',
 ];
 const REQUIRED_IGNORE_MARKERS = [

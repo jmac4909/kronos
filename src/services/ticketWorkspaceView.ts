@@ -52,6 +52,7 @@ export function buildTicketWorkspaceHtml(input: TicketWorkspaceViewInput): strin
       { ticket: ticketKey },
     ),
     ticketWorkspaceActionButton('insertCiContext', `Insert [CI-${ticketKey}] Evidence`, { ticket: ticketKey }),
+    ticketWorkspaceActionButton('openPromptLibrary', 'Open Team Prompt Library', { ticket: ticketKey }),
   ];
 
   return `<!DOCTYPE html>

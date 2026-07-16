@@ -29,6 +29,7 @@ interface ParsedDotEnv {
 export const MAX_PROVIDER_ENV_BYTES = 256 * 1024;
 const PROVIDER_ENV_TEMPLATE = `# Kronos private provider configuration.
 # Uncomment only the providers you use. Never commit this file.
+# IMPORTANT: after saving values, reload the VS Code window so the extension host picks them up.
 
 # Jira
 # JIRA_BASE_URL=https://jira.example.com

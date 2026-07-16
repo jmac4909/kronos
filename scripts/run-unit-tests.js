@@ -3181,7 +3181,7 @@ test('ticket workspace exposes explicit Claude launch, project branch, terminal 
       available: true,
     },
   });
-  for (const action of ['startClaudeForTicket', 'manageActiveTerminal', 'chooseTicketProject', 'insertJiraContext', 'insertGitLabContext', 'insertCiContext']) {
+  for (const action of ['startClaudeForTicket', 'manageActiveTerminal', 'chooseTicketProject', 'insertJiraContext', 'insertGitLabContext', 'insertCiContext', 'openPromptLibrary']) {
     assert.match(html, new RegExp(`data-action="${action}"`));
   }
   assert.match(html, /Change \/ Unlink Project: fixture/);
@@ -3788,6 +3788,7 @@ test('extension activation registers the bounded surface and explicit launch com
       'Open merge request page',
       'Insert MR evidence',
       'Insert Jenkins / Sonar evidence',
+      'Open team prompt library',
       'Configure provider polling',
       'Set project nickname',
     ]);
@@ -4129,6 +4130,14 @@ test('extension activation registers the bounded surface and explicit launch com
     assert.deepEqual(executedCommands.at(-1), ['kronosProjects.focus']);
     await setupPanel.receive({ command: 'openSessionsView' });
     assert.deepEqual(executedCommands.at(-1), ['kronosSessions.focus']);
+    const providerEnvPath = path.join(process.env.KRONOS_DIR, '.env');
+    fs.rmSync(providerEnvPath, { force: true });
+    await setupPanel.receive({ command: 'openProviderEnvironment' });
+    assert.equal(shownTextDocuments.at(-1).document.fsPath, providerEnvPath);
+    assert.ok(fs.existsSync(providerEnvPath));
+    assert.ok(warningMessages.some(message =>
+      /must reload the VS Code window so the extension host picks them up/i.test(message)
+    ));
     const setupRevealCount = setupPanel.revealCalls.length;
     await commandHandlers.get('kronos.settings')();
     assert.equal(createdWebviewPanels.filter(panel => panel.viewType === 'kronosSetup').length, 1);
@@ -4202,6 +4211,46 @@ test('extension activation registers the bounded surface and explicit launch com
     const standalone = workSessions.listWorkSessions().find(session => session.kind === 'standalone');
     assert.ok(standalone);
     assert.equal(Object.hasOwn(standalone, 'ticketKey'), false);
+    const promptManifestPath = path.join(tempRoot, 'kronos-prompts.json');
+    fs.writeFileSync(promptManifestPath, JSON.stringify({
+      schemaVersion: 1,
+      name: 'Fixture Team',
+      prompts: [{
+        id: 'review-project',
+        title: 'Review Project',
+        body: 'Review {{project.name}} on {{project.branch}} in {{session.title}}.',
+        tags: ['review'],
+        suggestedContext: ['git', 'merge-request'],
+      }],
+    }));
+    configurationValues.set('promptLibraryLocalPaths', [promptManifestPath]);
+    singlePickHandler = items => items[0];
+    const promptPanelStart = createdWebviewPanels.length;
+    const promptWritesBefore = createdTerminals[0].actions.length;
+    await commandHandlers.get('kronos.openPromptLibrary')(projectItems[0]);
+    const promptPanel = createdWebviewPanels.slice(promptPanelStart)
+      .find(panel => panel.viewType === 'kronosPromptLibrary');
+    assert.ok(promptPanel, 'a configured team prompt opens the dedicated editable composer');
+    assert.match(promptPanel.webview.html, /Review Project/);
+    assert.match(promptPanel.webview.html, /Review Fixture API on feature\/runtime-project/);
+    assert.equal(createdTerminals[0].actions.length, promptWritesBefore, 'opening a team prompt must not write to the terminal');
+    await promptPanel.receive({
+      command: 'insertPrompt',
+      body: 'Review fixture carefully, then report the evidence.',
+    });
+    assert.equal(createdTerminals[0].actions.length, promptWritesBefore + 1);
+    assert.equal(createdTerminals[0].actions.at(-1)[2], false, 'team prompt placement never submits the terminal line');
+    assert.match(createdTerminals[0].actions.at(-1)[1], /^\[PROMPT-[A-F0-9]{24}\]/);
+    const promptArtifactRoot = path.join(process.env.KRONOS_DIR, 'prompt-library-context');
+    const promptArtifactCount = fs.readdirSync(promptArtifactRoot).length;
+    assert.equal(promptArtifactCount, 1);
+    assert.equal(
+      workSessions.readWorkSession(standalone.id).artifacts.filter(artifact => artifact.kind === 'prompt-library').length,
+      1,
+    );
+    await promptPanel.receive({ command: 'insertPrompt', body: 'Late duplicate must be ignored.' });
+    assert.equal(createdTerminals[0].actions.length, promptWritesBefore + 1);
+    assert.equal(fs.readdirSync(promptArtifactRoot).length, promptArtifactCount, 'duplicate placement must not create an unused snapshot');
     await commandHandlers.get('kronos.newClaudeSession')();
     assert.equal(createdTerminals.length, 1, 'a rapid sequential standalone click must be ignored during the cooldown');
 

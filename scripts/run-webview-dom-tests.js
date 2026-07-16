@@ -8,6 +8,7 @@ const actionPanelSource = fs.readFileSync(path.join(__dirname, '..', 'media', 'k
 const contextBasketSource = fs.readFileSync(path.join(__dirname, '..', 'media', 'kronos-context-basket.js'), 'utf8');
 const contextComposerSource = fs.readFileSync(path.join(__dirname, '..', 'media', 'kronos-context-composer.js'), 'utf8');
 const projectIntegrationSource = fs.readFileSync(path.join(__dirname, '..', 'media', 'kronos-project-integration.js'), 'utf8');
+const promptLibrarySource = fs.readFileSync(path.join(__dirname, '..', 'media', 'kronos-prompt-library.js'), 'utf8');
 
 function createHarness(options = {}) {
   const messages = [];
@@ -178,6 +179,43 @@ test('context basket preserves focus across explicit refresh and non-submitting 
   focusListeners.get('keydown')({ key: 'Enter', ctrlKey: true, metaKey: false, preventDefault() { prevented = true; } });
   assert.equal(prevented, true);
   assert.deepEqual(harness.messages.at(-1), { command: 'insert', focus: 'Place the combined evidence' });
+});
+
+test('prompt library posts the complete edited prompt only after Place or Ctrl+Enter', () => {
+  const editorListeners = new Map();
+  const editor = {
+    value: 'Review the selected project and current branch.',
+    addEventListener(name, listener) { editorListeners.set(name, listener); },
+    focus() {},
+  };
+  const harness = createFormHarness({
+    scriptId: 'kronos-prompt-library-script',
+    elements: new Map([['prompt-body', editor]]),
+  });
+  vm.runInContext(promptLibrarySource, harness.context, { filename: 'kronos-prompt-library.js' });
+  assert.equal(harness.messages.length, 1, 'only readiness is posted before an explicit action');
+  let ordinaryEnterPrevented = false;
+  editorListeners.get('keydown')({
+    key: 'Enter', ctrlKey: false, metaKey: false,
+    preventDefault() { ordinaryEnterPrevented = true; },
+  });
+  assert.equal(ordinaryEnterPrevented, false);
+  assert.equal(harness.messages.length, 1);
+  harness.click('insertPrompt');
+  assert.deepEqual(harness.messages.at(-1), {
+    command: 'insertPrompt',
+    body: 'Review the selected project and current branch.',
+  });
+  editor.value = 'Use the edited team instruction.';
+  let prevented = false;
+  editorListeners.get('keydown')({
+    key: 'Enter', ctrlKey: true, metaKey: false,
+    preventDefault() { prevented = true; },
+  });
+  assert.equal(prevented, true);
+  assert.deepEqual(harness.messages.at(-1), { command: 'insertPrompt', body: 'Use the edited team instruction.' });
+  harness.click('openSettings');
+  assert.deepEqual(harness.messages.at(-1), { command: 'openSettings' });
 });
 
 test('project integration form collects only bounded project setup fields', () => {

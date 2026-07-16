@@ -8,6 +8,7 @@ export type OperationsReadinessAction =
   | 'openSettings'
   | 'openClaudeSettings'
   | 'openProviderEnvironment'
+  | 'openPromptLibrarySettings'
   | 'chooseProjectDiscoveryFolders'
   | 'openProjectsView'
   | 'openSessionsView'
@@ -47,6 +48,7 @@ export interface OperationsReadinessInput {
   };
   workCatalog: { available: boolean; tickets: number; issues: number; firstIssue?: string };
   jiraVisibility: { hideCompleted: boolean; additionalCompletedStatuses: number };
+  promptLibrary: { localPaths: number; remoteUrls: number };
   providers: readonly ProviderReadiness[];
   providerDiagnostics?: readonly ProviderReadDiagnostic[];
   polling: { activeTargets: number; detail: string };
@@ -126,6 +128,15 @@ export function buildOperationsReadiness(input: OperationsReadinessInput): Opera
       actionLabel: 'Visibility Settings',
       surfaces: ['doctor'],
     },
+    {
+      id: 'prompt-library',
+      title: 'Team prompt library',
+      detail: promptLibraryDetail(input.promptLibrary),
+      status: input.promptLibrary.localPaths > 0 || input.promptLibrary.remoteUrls > 0 ? 'pass' : 'warn',
+      action: 'openPromptLibrarySettings',
+      actionLabel: 'Prompt Library Settings',
+      surfaces: both,
+    },
     ...input.providers.map(provider => providerItem(
       provider,
       input.providerDiagnostics?.find(diagnostic => diagnostic.provider === provider.id),
@@ -160,6 +171,13 @@ export function buildOperationsReadiness(input: OperationsReadinessInput): Opera
       surfaces: both,
     },
   ];
+}
+
+function promptLibraryDetail(input: OperationsReadinessInput['promptLibrary']): string {
+  if (input.localPaths === 0 && input.remoteUrls === 0) {
+    return 'No local or remote prompt library is configured. Add a checked-out manifest path, a raw HTTPS Git manifest URL, or both.';
+  }
+  return `${input.localPaths} local manifest path${input.localPaths === 1 ? '' : 's'} and ${input.remoteUrls} remote Git manifest URL${input.remoteUrls === 1 ? '' : 's'} configured. Remote content refreshes explicitly when the library opens and retains a private latest-good cache.`;
 }
 
 function providerItem(

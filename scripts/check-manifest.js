@@ -18,6 +18,7 @@ const EXPECTED_COMMANDS = [
   'kronos.insertGitLabContext',
   'kronos.insertCiContext',
   'kronos.openContextBasket',
+  'kronos.openPromptLibrary',
   'kronos.searchLocalEvidence',
   'kronos.createLocalHandoff',
   'kronos.pollManagedWorkSessions',
@@ -59,6 +60,8 @@ const EXPECTED_SETTINGS = [
   'kronos.projectDiscoveryLimit',
   'kronos.hideCompletedJiraWork',
   'kronos.completedJiraStatuses',
+  'kronos.promptLibraryLocalPaths',
+  'kronos.promptLibraryRemoteManifestUrls',
   'kronos.claudeCommand',
   'kronos.claudePermissionMode',
   'kronos.claudeTerminalName',
@@ -89,9 +92,12 @@ const EXPECTED_VIEW_TITLE_ITEMS = [
   'kronos.searchLocalEvidence|view == kronosSessions|sessions@3',
   'kronos.searchLocalEvidence|view == kronosProjects|projects@3',
   'kronos.searchLocalEvidence|view == kronosAttention|attention@1',
-  'kronos.createLocalHandoff|view == kronosSessions|sessions@4',
-  'kronos.createLocalHandoff|view == kronosProjects|projects@4',
-  'kronos.setup|view == kronosWork|work@4',
+  'kronos.openPromptLibrary|view == kronosWork|work@4',
+  'kronos.openPromptLibrary|view == kronosSessions|sessions@4',
+  'kronos.openPromptLibrary|view == kronosProjects|projects@4',
+  'kronos.createLocalHandoff|view == kronosSessions|sessions@5',
+  'kronos.createLocalHandoff|view == kronosProjects|projects@5',
+  'kronos.setup|view == kronosWork|work@5',
 ];
 
 const ALLOWED_CODICONS = new Set([
@@ -114,6 +120,7 @@ const ALLOWED_CODICONS = new Set([
   'layout',
   'link',
   'link-external',
+  'library',
   'open-preview',
   'pulse',
   'repo',
@@ -258,6 +265,16 @@ function checkSettings() {
   if (statuses?.type !== 'array' || statuses?.items?.type !== 'string'
     || JSON.stringify(statuses.default) !== '[]') {
     fail('kronos.completedJiraStatuses must be a string array with an empty default.');
+  }
+  const localPromptPaths = properties?.['kronos.promptLibraryLocalPaths'];
+  if (localPromptPaths?.type !== 'array' || localPromptPaths?.items?.type !== 'string'
+    || JSON.stringify(localPromptPaths.default) !== '[]' || localPromptPaths?.scope !== 'machine') {
+    fail('kronos.promptLibraryLocalPaths must be a machine-scoped string array with an empty default.');
+  }
+  const remotePromptUrls = properties?.['kronos.promptLibraryRemoteManifestUrls'];
+  if (remotePromptUrls?.type !== 'array' || remotePromptUrls?.items?.type !== 'string'
+    || JSON.stringify(remotePromptUrls.default) !== '[]') {
+    fail('kronos.promptLibraryRemoteManifestUrls must be a string array with an empty default.');
   }
   if (properties?.['kronos.claudeCommand']?.type !== 'string'
     || properties?.['kronos.claudeCommand']?.default !== 'claude'

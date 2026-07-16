@@ -51,6 +51,7 @@ import {
   buildJiraContextReference,
   buildProjectCiContextReference,
   buildProjectGitContextReference,
+  buildPromptLibraryTerminalReference,
   captureTerminalContextPlacement,
   isTerminalContextPlacementCurrent,
   placeEditableTerminalContextReference,
@@ -138,6 +139,7 @@ import {
   normalizeContextBasketMessage,
   normalizeContextComposerMessage,
   normalizeOperationsActionMessage,
+  normalizePromptLibraryComposerMessage,
   normalizeProjectIntegrationMessage,
 } from './services/webviewMessages';
 import {
@@ -199,6 +201,17 @@ import {
 } from './services/projectIntegrationView';
 import { readGitLabMergeRequestMonitorSnapshot } from './services/gitlabMergeRequestMonitorStore';
 import {
+  loadPromptLibraries,
+  renderPromptTemplate,
+  type PromptLibraryPrompt,
+  type PromptTemplateContext,
+} from './services/promptLibrary';
+import { writePromptLibraryArtifact } from './services/promptLibraryArtifactStore';
+import {
+  PROMPT_LIBRARY_SCRIPT,
+  buildPromptLibraryComposerHtml,
+} from './services/promptLibraryView';
+import {
   catalogGitLabBindingCandidate,
   configuredCiPollingTargets,
   configuredGitLabPollingTarget,
@@ -218,6 +231,7 @@ const TICKET_WORKSPACE_ACTIONS = new Set([
   'insertJiraContext',
   'insertGitLabContext',
   'insertCiContext',
+  'openPromptLibrary',
 ]);
 const JIRA_BOARD_ACTIONS = new Set<string>(JIRA_WORK_BOARD_ACTIONS);
 const OPERATIONS_PANEL_ACTIONS = new Set([
@@ -227,6 +241,7 @@ const OPERATIONS_PANEL_ACTIONS = new Set([
   'openSettings',
   'openClaudeSettings',
   'openProviderEnvironment',
+  'openPromptLibrarySettings',
   'chooseProjectDiscoveryFolders',
   'openProjectsView',
   'openSessionsView',
@@ -287,6 +302,16 @@ interface ContextBasketPanelRecord {
   panel: vscode.WebviewPanel;
   nonce: string;
   focus: string;
+}
+
+interface PromptLibraryPanelRecord {
+  panel: vscode.WebviewPanel;
+  nonce: string;
+  placement: TerminalContextPlacement<vscode.Terminal>;
+  selection: TerminalSelection;
+  prompt: PromptLibraryPrompt;
+  templateContext: PromptTemplateContext;
+  warnings: string[];
 }
 
 interface ProjectIntegrationPanelRecord {
@@ -355,6 +380,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
   private readonly operationsPanelActionsInFlight = new Set<string>();
   private readonly contextComposerPanels = new Map<string, ContextComposerPanelRecord>();
   private contextBasketPanel: ContextBasketPanelRecord | undefined;
+  private promptLibraryPanel: PromptLibraryPanelRecord | undefined;
   private contextBasketInsertionInFlight = false;
   private readonly claudeLaunchesInFlight = new Set<string>();
   private readonly claudeLaunchCooldownUntil = new Map<string, number>();
@@ -431,6 +457,8 @@ class TerminalFirstRuntime implements vscode.Disposable {
     this.contextComposerPanels.clear();
     this.contextBasketPanel?.panel.dispose();
     this.contextBasketPanel = undefined;
+    this.promptLibraryPanel?.panel.dispose();
+    this.promptLibraryPanel = undefined;
     this.projectIntegrationPanel?.panel.dispose();
     this.projectIntegrationPanel = undefined;
     for (const disposable of this.disposables.splice(0)) { disposable.dispose(); }
@@ -464,6 +492,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
         insertGitLabContext: async argument => this.insertGitLabContext(argument),
         insertCiContext: async argument => this.insertCiContext(argument),
         openContextBasket: async () => this.openContextBasket(),
+        openPromptLibrary: async argument => this.openPromptLibrary(argument),
         searchLocalEvidence: async () => this.searchLocalEvidence(),
         createLocalHandoff: async argument => this.createLocalHandoff(argument),
       },
@@ -562,6 +591,13 @@ class TerminalFirstRuntime implements vscode.Disposable {
       roots: this.configurationStringArray('projectDiscoveryRoots', 50, 4_000),
       depth: boundedIntegerSetting(configuration.get<unknown>('projectDiscoveryDepth', 2), 2, 0, 5),
       limit: boundedIntegerSetting(configuration.get<unknown>('projectDiscoveryLimit', 100), 100, 1, 500),
+    };
+  }
+
+  private promptLibrarySettings(): { localPaths: string[]; remoteUrls: string[] } {
+    return {
+      localPaths: this.configurationStringArray('promptLibraryLocalPaths', 20, 4_000),
+      remoteUrls: this.configurationStringArray('promptLibraryRemoteManifestUrls', 10, 4_000),
     };
   }
 
@@ -1719,6 +1755,312 @@ class TerminalFirstRuntime implements vscode.Disposable {
       nonce: record.nonce,
       scriptUri,
     }), webviewScriptCspOptions(panel.webview.cspSource, record.nonce));
+  }
+
+  private async openPromptLibrary(argument: unknown): Promise<void> {
+    const settings = this.promptLibrarySettings();
+    if (settings.localPaths.length === 0 && settings.remoteUrls.length === 0) {
+      const choice = await vscode.window.showWarningMessage(
+        'No Kronos prompt library is configured. Add a local manifest path, a raw HTTPS Git manifest URL, or both in extension settings.',
+        'Open Prompt Library Settings',
+      );
+      if (choice === 'Open Prompt Library Settings') {
+        await vscode.commands.executeCommand('workbench.action.openSettings', '@ext:jmacke01.kronos prompt library');
+      }
+      return;
+    }
+    const selection = await this.choosePromptLibraryTerminal(argument);
+    if (!selection) { return; }
+    const result = await vscode.window.withProgress(
+      { location: vscode.ProgressLocation.Notification, title: 'Kronos: Refreshing prompt libraries...' },
+      () => loadPromptLibraries({
+        localPaths: settings.localPaths,
+        remoteUrls: settings.remoteUrls,
+        allowCredentialedRemote: vscode.workspace.isTrusted,
+      }),
+    );
+    if (result.warnings.length > 0) {
+      this.log('Prompt library refresh completed with warnings.', result.warnings.join('\n'));
+      void vscode.window.showWarningMessage(
+        `Kronos loaded ${result.prompts.length} prompt${result.prompts.length === 1 ? '' : 's'} with ${result.warnings.length} bounded library warning${result.warnings.length === 1 ? '' : 's'}. Details are in the Kronos output channel.`,
+      );
+    }
+    if (result.prompts.length === 0) {
+      const choice = await vscode.window.showWarningMessage(
+        'No valid prompts were found in the configured libraries. Review the manifest paths and URLs in extension settings.',
+        'Open Prompt Library Settings',
+      );
+      if (choice === 'Open Prompt Library Settings') {
+        await vscode.commands.executeCommand('workbench.action.openSettings', '@ext:jmacke01.kronos prompt library');
+      }
+      return;
+    }
+    const picked = await vscode.window.showQuickPick(result.prompts.map(prompt => ({
+      label: `$(library) ${prompt.title}`,
+      description: `${prompt.libraryName} • ${prompt.sourceKind}`,
+      detail: [
+        prompt.description,
+        prompt.tags.length > 0 ? `Tags: ${prompt.tags.join(', ')}` : '',
+        prompt.suggestedContext.length > 0 ? `Suggested context: ${prompt.suggestedContext.join(', ')}` : '',
+      ].filter(Boolean).join(' • '),
+      prompt,
+    })), {
+      title: 'Choose a Team Prompt',
+      placeHolder: 'Search titles, libraries, descriptions, tags, and context recipes',
+      matchOnDescription: true,
+      matchOnDetail: true,
+    });
+    if (!picked) { return; }
+    const session = selection.workSession || readWorkSession(selection.binding.sessionId);
+    if (!session || session.status !== 'active') {
+      void vscode.window.showWarningMessage('The selected managed session is no longer active. Reopen the prompt library from the intended Session or Project.');
+      return;
+    }
+    const templateContext = this.promptTemplateContext(session);
+    const rendered = renderPromptTemplate(picked.prompt, templateContext);
+    const sourceWarning = result.sources.find(source => source.location === picked.prompt.sourceLocation
+      && source.kind === picked.prompt.sourceKind)?.warning;
+    this.openPromptLibraryComposer({
+      selection: { ...selection, workSession: session },
+      prompt: picked.prompt,
+      templateContext,
+      body: rendered.body,
+      appliedVariables: rendered.appliedVariables,
+      warnings: [...new Set([...rendered.warnings, ...(sourceWarning ? [sourceWarning] : [])])],
+    });
+  }
+
+  private openPromptLibraryComposer(input: {
+    selection: TerminalSelection;
+    prompt: PromptLibraryPrompt;
+    templateContext: PromptTemplateContext;
+    body: string;
+    appliedVariables: string[];
+    warnings: string[];
+  }): void {
+    const placement = captureTerminalContextPlacement({
+      terminal: input.selection.terminal,
+      sessionId: input.selection.binding.sessionId,
+      bindingId: input.selection.binding.bindingId,
+    });
+    if (!isTerminalContextPlacementCurrent(placement, this.currentTerminalContextAttachment(placement))) {
+      void vscode.window.showWarningMessage('The managed terminal attachment changed while the prompt library was loading. Reopen it from the intended Session or Project.');
+      return;
+    }
+    this.promptLibraryPanel?.panel.dispose();
+    const panel = vscode.window.createWebviewPanel(
+      'kronosPromptLibrary',
+      `Kronos Prompt — ${input.prompt.title}`,
+      vscode.ViewColumn.One,
+      {
+        enableScripts: true,
+        enableCommandUris: false,
+        localResourceRoots: [vscode.Uri.joinPath(this.context.extensionUri, 'media')],
+      },
+    );
+    panel.iconPath = vscode.Uri.joinPath(this.context.extensionUri, 'media', 'kronos-icon.svg');
+    const record: PromptLibraryPanelRecord = {
+      panel,
+      nonce: createWebviewNonce(),
+      placement,
+      selection: input.selection,
+      prompt: input.prompt,
+      templateContext: input.templateContext,
+      warnings: input.warnings,
+    };
+    this.promptLibraryPanel = record;
+    panel.onDidDispose(() => {
+      if (this.promptLibraryPanel?.panel === panel) { this.promptLibraryPanel = undefined; }
+    });
+    panel.webview.onDidReceiveMessage(async raw => {
+      if (isRecord(raw) && raw['command'] === WEBVIEW_READY_COMMAND) { return; }
+      const message = normalizePromptLibraryComposerMessage(raw);
+      if (!message) {
+        void vscode.window.showWarningMessage('Kronos ignored an invalid prompt-library request.');
+        return;
+      }
+      if (message.command === 'cancel') { panel.dispose(); return; }
+      if (message.command === 'openSettings') {
+        await vscode.commands.executeCommand('workbench.action.openSettings', '@ext:jmacke01.kronos prompt library');
+        return;
+      }
+      if (message.command !== 'insertPrompt') { return; }
+      await this.placePromptLibraryArtifact(record, message.body);
+    });
+    const scriptUri = panel.webview.asWebviewUri(
+      vscode.Uri.joinPath(this.context.extensionUri, 'media', PROMPT_LIBRARY_SCRIPT),
+    ).toString();
+    panel.webview.html = withWebviewCsp(buildPromptLibraryComposerHtml({
+      title: input.prompt.title,
+      description: input.prompt.description,
+      libraryName: input.prompt.libraryName,
+      sourceLabel: `${input.prompt.sourceKind} • ${input.prompt.sourceLocation}`,
+      terminalName: input.selection.terminal.name,
+      body: input.body,
+      tags: input.prompt.tags,
+      suggestedContext: input.prompt.suggestedContext,
+      appliedVariables: input.appliedVariables,
+      warnings: input.warnings,
+      nonce: record.nonce,
+      scriptUri,
+    }), webviewScriptCspOptions(panel.webview.cspSource, record.nonce));
+  }
+
+  private async placePromptLibraryArtifact(record: PromptLibraryPanelRecord, editedBody: string): Promise<void> {
+    if (record.placement.phase !== 'ready') { return; }
+    if (!isTerminalContextPlacementCurrent(record.placement, this.currentTerminalContextAttachment(record.placement))) {
+      void vscode.window.showWarningMessage('The managed terminal attachment changed while this prompt was being edited. Reopen the library from the intended Session or Project.');
+      return;
+    }
+    let artifact: ReturnType<typeof writePromptLibraryArtifact>;
+    try {
+      artifact = writePromptLibraryArtifact({
+        prompt: record.prompt,
+        editedBody,
+        context: record.templateContext,
+        warnings: record.warnings,
+      });
+    } catch (error: unknown) {
+      const detail = boundedOperationFailure(error, 'Kronos could not write the private prompt snapshot.').display;
+      this.log('Prompt library snapshot write failed.', detail);
+      void vscode.window.showErrorMessage(detail);
+      return;
+    }
+    const reference = buildPromptLibraryTerminalReference(artifact.id, artifact.promptPath);
+    let placementResult;
+    try {
+      placementResult = placeEditableTerminalContextReference(
+        record.placement,
+        this.currentTerminalContextAttachment(record.placement),
+        reference,
+        '',
+      );
+    } catch (error: unknown) {
+      const detail = boundedOperationFailure(error, 'Prompt library insertion failed.').display;
+      this.log('Prompt library insertion failed.', detail);
+      void vscode.window.showErrorMessage(detail);
+      return;
+    }
+    if (placementResult.kind === 'busy' || placementResult.kind === 'already-placed') { return; }
+    if (placementResult.kind === 'target-changed') {
+      void vscode.window.showWarningMessage('The managed terminal attachment changed before prompt placement. The private snapshot was retained, but nothing was inserted.');
+      return;
+    }
+    const session = record.selection.workSession || readWorkSession(record.selection.binding.sessionId);
+    if (!session) {
+      void vscode.window.showErrorMessage('The prompt reference was inserted without submission, but the managed Session disappeared before local audit could be updated.');
+      record.panel.dispose();
+      return;
+    }
+    const outcome = finalizeInsertedContext({
+      operation: `${artifact.id} prompt library placement`,
+      providerRead: {
+        state: 'succeeded',
+        detail: `The ${record.prompt.sourceKind} prompt manifest was read and reviewed explicitly.`,
+      },
+      artifactWrite: { state: 'succeeded', detail: 'The edited prompt was saved as a private immutable snapshot.' },
+      snapshot: contextSnapshotStep(true),
+      sessionUpdate: () => {
+        recordWorkSessionContextArtifact(session.id, {
+          id: `prompt-library-${artifact.contentSha256.slice(0, 24)}`,
+          kind: 'prompt-library',
+          label: `[${artifact.id}] ${record.prompt.title}`,
+          promptPath: artifact.promptPath,
+          fetchedAt: artifact.createdAt,
+          complete: true,
+          warnings: artifact.warnings,
+          contentSha256: artifact.contentSha256,
+        });
+        return session;
+      },
+      auditAppend: () => appendMonitorEvent({
+        sessionId: session.id,
+        type: 'context.inserted',
+        source: 'operator',
+        summary: `${workSessionEventContext(session).label} reviewed prompt ${record.prompt.title} inserted without submission.`,
+        subject: { kind: 'prompt-library', id: record.prompt.id, ...workSessionTicketMetadata(session) },
+        artifactPath: artifact.promptPath,
+        metadata: {
+          submitted: false,
+          artifactSha256: artifact.contentSha256,
+          revisionSha256: record.prompt.revisionSha256,
+          sourceKind: record.prompt.sourceKind,
+        },
+      }),
+    });
+    this.refreshTerminalFirstViews();
+    record.panel.dispose();
+    if (outcome.failed) {
+      this.log('Prompt was placed, but later local evidence steps failed.', outcome.display);
+      void vscode.window.showErrorMessage(`The prompt reference was inserted without submission. Review retained and failed steps: ${outcome.display}`);
+      return;
+    }
+    const redaction = artifact.bodyRedacted ? ' Credential-shaped text was redacted from the snapshot.' : '';
+    void vscode.window.showInformationMessage(
+      `Placed ${artifact.id} in ${record.selection.terminal.name} without submitting it. Review the line, then press Enter yourself.${redaction}`,
+    );
+  }
+
+  private promptTemplateContext(session: WorkSessionRecord): PromptTemplateContext {
+    const projectName = session.projectName
+      ? this.state.state?.projects[session.projectName]?.display_name || session.projectName
+      : undefined;
+    const projectBranch = session.projectPath ? readProjectGitBranch(session.projectPath)?.branch : undefined;
+    return {
+      sessionTitle: session.title,
+      ...(projectName ? { projectName } : {}),
+      ...(session.projectPath ? { projectPath: session.projectPath } : {}),
+      ...(projectBranch ? { projectBranch } : {}),
+      jiraKeys: session.ticketKeys,
+    };
+  }
+
+  private async choosePromptLibraryTerminal(argument: unknown): Promise<TerminalSelection | undefined> {
+    if (projectTargetStringProperty(argument, 'projectName') || projectTargetStringProperty(argument, 'projectPath')) {
+      const project = this.resolveRegisteredProject(argument);
+      return project ? this.chooseProjectInsertionTerminal(project, 'a team prompt') : undefined;
+    }
+    const ticketKey = normalizeTicketKey(stringProperty(argument, 'ticketKey'));
+    if (ticketKey && this.state.state?.tickets[ticketKey]) {
+      return this.chooseInsertionTerminal(ticketKey, stringProperty(argument, 'workSessionId'));
+    }
+    const directSession = await this.resolveWorkSession(argument, false);
+    if (directSession) {
+      if (directSession.status !== 'active') {
+        void vscode.window.showWarningMessage('Choose an active managed Session before placing a team prompt.');
+        return undefined;
+      }
+      const selected = await this.chooseLiveTerminal(directSession.id);
+      if (!selected) {
+        void vscode.window.showWarningMessage(`Focus or reconnect the operator-owned terminal for ${workSessionEventContext(directSession).label} before opening the prompt library.`);
+        return undefined;
+      }
+      selected.terminal.show(false);
+      return { ...selected, workSession: directSession };
+    }
+    const active = vscode.window.activeTerminal;
+    const activeBinding = active ? this.operatorTerminals.bindingForTerminal(active) : undefined;
+    const activeSession = activeBinding ? readWorkSession(activeBinding.sessionId) : undefined;
+    if (active && activeBinding && activeSession?.status === 'active') {
+      return { terminal: active, binding: activeBinding, workSession: activeSession };
+    }
+    const candidates = listWorkSessions({ status: 'active' })
+      .filter(session => this.operatorTerminals.listBindings(session.id).length > 0);
+    if (candidates.length === 0) {
+      void vscode.window.showWarningMessage('Start or reconnect an operator-owned Claude Session before opening the prompt library. Kronos never inserts into an unmanaged terminal.');
+      return undefined;
+    }
+    const session = candidates.length === 1 ? candidates[0] : (await vscode.window.showQuickPick(candidates.map(candidate => ({
+      label: workSessionEventContext(candidate).label,
+      description: candidate.projectName || (candidate.kind === 'ticket' ? candidate.ticketKey : 'standalone'),
+      detail: candidate.title,
+      session: candidate,
+    })), { title: 'Choose the managed Session for this prompt', matchOnDescription: true, matchOnDetail: true }))?.session;
+    if (!session) { return undefined; }
+    const selected = await this.chooseLiveTerminal(session.id);
+    if (!selected) { return undefined; }
+    selected.terminal.show(false);
+    return { ...selected, workSession: session };
   }
 
   private openContextBasket(): void {
@@ -3356,6 +3698,8 @@ class TerminalFirstRuntime implements vscode.Disposable {
         await vscode.commands.executeCommand('workbench.action.openSettings', '@ext:jmacke01.kronos claude');
       } else if (action === 'openProviderEnvironment') {
         await this.openProviderEnvironment();
+      } else if (action === 'openPromptLibrarySettings') {
+        await vscode.commands.executeCommand('workbench.action.openSettings', '@ext:jmacke01.kronos prompt library');
       } else if (action === 'chooseProjectDiscoveryFolders') {
         await this.configureProjectDiscoveryFolders();
       } else if (action === 'openProjectsView') {
@@ -3384,8 +3728,8 @@ class TerminalFirstRuntime implements vscode.Disposable {
     const document = await vscode.workspace.openTextDocument(vscode.Uri.file(result.path));
     await vscode.window.showTextDocument(document, { preview: false });
     if (result.created) {
-      void vscode.window.showInformationMessage(
-        'Created a private, comment-only Kronos provider template. Uncomment only the providers you use, save it, then use Refresh in Setup or Doctor.',
+      void vscode.window.showWarningMessage(
+        'Created the private Kronos environment template. After entering and saving provider values, you must reload the VS Code window so the extension host picks them up; then run Doctor again.',
       );
     }
   }
@@ -3467,6 +3811,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
     const projects = listLocalProjects(this.state.state);
     const unavailableProjects = projects.filter(project => !project.available);
     const discovery = this.projectDiscoverySettings();
+    const promptLibrary = this.promptLibrarySettings();
     const claude = this.claudeReadinessCheck();
     const sessions = listWorkSessions();
     const sessionIssues = listWorkSessionStoreIssues();
@@ -3531,6 +3876,10 @@ class TerminalFirstRuntime implements vscode.Disposable {
       jiraVisibility: {
         hideCompleted: this.hideCompletedJiraWork(),
         additionalCompletedStatuses: this.completedJiraStatuses().length,
+      },
+      promptLibrary: {
+        localPaths: promptLibrary.localPaths.length,
+        remoteUrls: promptLibrary.remoteUrls.length,
       },
       providers: [readiness.jira, readiness.gitlab, readiness.jenkins, readiness.sonar],
       providerDiagnostics: currentProviderReadDiagnostics(

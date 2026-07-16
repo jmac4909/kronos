@@ -5,6 +5,7 @@ Kronos normalizes data at provider, file, and webview-message ingress. Views con
 ```mermaid
 flowchart LR
   P[Jira / GitLab / Jenkins / SonarQube] -->|bounded origin-pinned GET| N[Provider normalization]
+  L[Configured local / HTTPS prompt manifests] -->|bounded explicit refresh| Q[Prompt library loader and latest-good cache]
   G[VS Code Git model and bounded Git HEAD] --> N
   N --> W[Work catalog owner]
   N --> S[Work-session owner]
@@ -27,9 +28,12 @@ flowchart LR
   C --> X[Editable context composer]
   C --> K[Private bounded Context Basket]
   K --> X
+  Q --> PX[Editable team-prompt composer]
+  PX --> PC[Immutable reviewed prompt snapshot]
   S --> H[Private local handoff bundles]
   E --> H
   X -->|one verified sendText execute=false| T[Explicitly attached VS Code terminal]
+  PC -->|one verified sendText execute=false| T
 ```
 
 ## Record ownership
@@ -37,6 +41,7 @@ flowchart LR
 | Record or state | Sole write owner | Canonical ingress and bounds | Compatibility and failure behavior | Consumers |
 | --- | --- | --- | --- | --- |
 | Provider environment | `providerEnv.ts` | Allowlisted keys; bounded private UTF-8 file; process environment values already present win | Missing file is valid; malformed keys are skipped; target and ancestor links are rejected; values are never rendered or copied into other records | Provider clients, readiness |
+| Prompt-library configuration and remote cache | `promptLibrary.ts` | Two VS Code string-array settings; at most 20 local paths, 10 remote URLs, 20 eligible files per directory, 100 prompts per library, 500 prompts total, 1 MiB per manifest, 20,000 characters per body, and a 10-second remote timeout | Local paths are read-only; remote URLs require HTTPS or loopback HTTP, no userinfo/sensitive query/hash/redirect, and origin-exact GitLab credential use only in trusted workspaces; failed remote refresh may use the private latest-good manifest; manifest text is data-only and credential-redacted | Setup/Doctor readiness, prompt Quick Pick, prompt composer |
 | Work catalog | `stateStore.ts`, coordinated by `TerminalFirstState.ts` | `work.json`; schema v2; 32 MiB; private bounded atomic replacement | Schema v1 launch links migrate once at read; legacy project tags are ignored; unsupported future schemas and corrupt files fail closed with visible issues | Work, Projects, Setup, provider target reconciliation |
 | Jira refresh lifecycle | `TerminalFirstState.ts` | In-memory `idle/loading/complete/partial/error` snapshot with bounded redacted detail | A failed or partial read retains the prior catalog; another window's catalog write resets local transient status to idle; stale is derived from catalog time and configured interval | Work tree and Jira board |
 | In-flight Work refresh | `WorkRefreshCoordinator.ts` | One in-memory abort controller and active read | Scheduled overlap coalesces; a newer explicit request supersedes; disposal aborts | Extension Work command orchestration |
@@ -55,6 +60,7 @@ flowchart LR
 | Monitoring lease | `managedMonitorLease.ts` | One exclusive private lease per `KRONOS_DIR`, bounded owner/expiry record, renewable pins | POSIX requires `O_NOFOLLOW`; Windows uses exclusive creation and lstat/fstat identity checks; loss of ownership stops persistence and the next provider read | Managed provider monitor |
 | Monitor and audit event ledger | `monitorEventStore.ts` | Append-only bounded JSONL records with canonical event, session, source, subject, state, and metadata fields | Invalid lines are skipped; reads are bounded tails; Attention projects newest state but never deletes history | Attention, session audit |
 | Jira, GitLab, CI, and Git context artifacts | The matching `*ContextStore.ts` | Private content-addressed immutable JSON/Markdown pair, or one immutable Git artifact; byte and collection caps; SHA-256 identity | Existing content must match; incomplete pairs are refused; raw Jira attachments are immutable private bytes and are never parsed | Composer, session artifact reference, terminal reference |
+| Reviewed team-prompt snapshot | `promptLibraryArtifactStore.ts` | Private content-addressed immutable JSON/Markdown pair containing the reviewed redacted body, source revision, filled context, and warnings; 20,000-character body | Created only by explicit Place in Terminal; exact attachment is revalidated before insertion; duplicate placement creates no second snapshot; manifest commands/unknown variables have no authority and credentials are redacted | Session artifact reference, terminal reference, audit |
 | Context Basket selections and bundles | `contextBasketStore.ts` | `context-basket.json` schema v1; at most 20 reference-only entries and 256 KiB; selected artifacts must remain inside `KRONOS_DIR`; immutable bundle contains paths, hashes, provenance, freshness, completeness, size, conflicts, warnings, and operator focus | Unsupported/corrupt state fails closed; exact artifacts deduplicate; changed hashes for one source remain visible as conflicts; remove/clear never deletes source artifacts; refresh is explicit | Context Basket webview, session artifact reference, terminal reference, audit |
 | Local evidence search index | `localEvidenceSearch.ts` | Ephemeral rebuild-on-open metadata projection; at most 2,000 entries across separately capped projects, sessions, ticket contexts, provider bindings, artifacts, and audit events | Never persisted, so closing/reloading removes it; every search rebuilds from current private canonical state; terminal bindings and contents are not accepted as inputs | Native VS Code Quick Pick and bounded result actions |
 | Local handoff bundle | `handoffBundleStore.ts` | Immutable private Markdown/JSON pair; at most 100 selections from capped context/audit candidates; 2 MiB per file; context paths must remain inside `KRONOS_DIR`; all text is credential-redacted | Missing/external context references, incomplete immutable pairs, invalid timestamps, and oversized selections fail closed; source payloads and terminal content are never copied | Operator-opened local document, audit decision reference |
@@ -78,6 +84,8 @@ All private runtime paths are rooted below `KRONOS_DIR`. “Atomic” means a bo
 | Jira, GitLab, and CI context pairs | Matching `*ContextStore.ts`; schema v1 JSON plus Markdown | 12 MiB JSON and 13 MiB prompt per pair | Immutable content-addressed pair; incomplete pre-existing pairs fail closed | Shared evidence; session removal deletes only its reference, not the artifact |
 | Raw Jira attachments | `jiraContextStore.ts`; byte-for-byte provider payload plus hashed metadata | 100 MiB per stored attachment, with separate count/total fetch caps | Immutable private bytes; never parsed, previewed, or executed | Shared evidence; retained after session removal |
 | Local Git context | `projectGitContextStore.ts`; bounded Markdown evidence | 768 KiB | Immutable content-addressed publication | Shared evidence; retained after session removal |
+| Prompt-library remote cache | `promptLibrary.ts`; one bounded manifest per URL hash | 1 MiB per configured remote manifest | Private atomic latest-good replacement only after validation; no redirects or credential-bearing URL; unavailable remote reads may reuse it explicitly | Shared cache; retained independently of sessions |
+| Reviewed prompt context | `promptLibraryArtifactStore.ts`; schema v1 Markdown/JSON | 20,000-character reviewed body plus bounded metadata | Immutable content-addressed pair; credential-shaped text is redacted before publication | Shared evidence; session removal deletes only its reference |
 | Context Basket | `contextBasketStore.ts`; schema v1 | 256 KiB state; referenced artifacts retain their own caps | Bounded atomic reference-only state plus immutable bundle publication | Remove/Clear deletes selections only and never source artifacts |
 | Local handoff pair | `handoffBundleStore.ts`; schema v1 Markdown/JSON | 2 MiB per file | Immutable private pair; incomplete or external selections fail closed | Operator-owned local evidence; no provider/session cleanup deletes it |
 

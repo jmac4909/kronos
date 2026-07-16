@@ -35,6 +35,12 @@ const REGISTERED_PROJECT_ACTIONS: readonly RegisteredProjectActionPresentation[]
   Object.freeze({ label: 'Open merge request page', icon: 'git-merge', command: 'kronos.openProjectMergeRequest' }),
   Object.freeze({ label: 'Insert MR evidence', icon: 'git-merge', command: 'kronos.insertProjectGitLabContext' }),
   Object.freeze({ label: 'Insert Jenkins / Sonar evidence', icon: 'beaker', command: 'kronos.insertProjectCiContext' }),
+  Object.freeze({
+    label: 'Open team prompt library',
+    icon: 'library',
+    command: 'kronos.openPromptLibrary',
+    description: 'editable; non-submitting',
+  }),
   Object.freeze({ label: 'Configure provider polling', icon: 'settings-gear', command: 'kronos.configureProjectIntegrations' }),
   Object.freeze({
     label: 'Set project nickname',

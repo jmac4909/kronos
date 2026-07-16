@@ -284,11 +284,13 @@ test('Projects tree covers empty, clean, changed, unavailable, action, and faile
   assert.equal(provider.getTreeItem(byName.Clean), byName.Clean);
 
   const actions = await provider.getChildren(byName.Clean);
-  assert.equal(actions.length, 8);
+  assert.equal(actions.length, 9);
   assert.equal(actions[0].command.command, 'kronos.newClaudeSession');
   assert.equal(actions[0].command.arguments[0].projectPath, cleanPath);
   assert.equal(actions[0].description, 'no Jira ticket');
   assert.equal(actions[3].description, undefined);
+  assert.equal(actions[6].command.command, 'kronos.openPromptLibrary');
+  assert.equal(actions[6].description, 'editable; non-submitting');
   assert.deepEqual(await provider.getChildren(actions[0]), []);
   provider.refresh();
   assert.deepEqual(changes, [undefined]);

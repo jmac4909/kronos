@@ -95,6 +95,7 @@ test('one readiness snapshot feeds Setup and Doctor and gives every non-ready ro
     },
     workCatalog: { available: true, tickets: 0, issues: 0 },
     jiraVisibility: { hideCompleted: true, additionalCompletedStatuses: 0 },
+    promptLibrary: { localPaths: 0, remoteUrls: 0 },
     providers,
     providerDiagnostics: [{
       provider: 'gitlab',
@@ -145,6 +146,7 @@ test('one readiness snapshot feeds Setup and Doctor and gives every non-ready ro
     },
     workCatalog: { available: true, tickets: 1, issues: 0 },
     jiraVisibility: { hideCompleted: true, additionalCompletedStatuses: 0 },
+    promptLibrary: { localPaths: 1, remoteUrls: 1 },
     providers: configuredProviders,
     providerDiagnostics: [{
       provider: 'gitlab',
@@ -169,7 +171,7 @@ test('guided readiness distinguishes first-run, partial, fully ready, and live p
     providers: Object.values(providerReadiness.providerReadiness({})),
   }));
   for (const id of ['provider-environment', 'project-discovery', 'local-projects', 'work-catalog',
-    'provider-jira', 'provider-gitlab', 'provider-jenkins', 'provider-sonar', 'project-integrations', 'automatic-polling']) {
+    'prompt-library', 'provider-jira', 'provider-gitlab', 'provider-jenkins', 'provider-sonar', 'project-integrations', 'automatic-polling']) {
     assert.notEqual(firstRun.find(item => item.id === id).status, 'pass', `${id} must explain first-run setup`);
   }
   assert.ok(firstRun.filter(item => item.status !== 'pass').every(item => item.action && item.actionLabel));
@@ -207,6 +209,7 @@ test('guided readiness distinguishes first-run, partial, fully ready, and live p
     workCatalog: { available: true, tickets: 1, issues: 0 },
     providers: readyProviders,
     polling: { activeTargets: 3, detail: 'Three active targets.' },
+    promptLibrary: { localPaths: 1, remoteUrls: 1 },
   }));
   assert.ok(fullyReady.every(item => item.status === 'pass'));
 
@@ -235,6 +238,7 @@ test('opening provider configuration creates one private comment-only template w
   const template = fs.readFileSync(filePath, 'utf8');
   assert.match(template, /# JIRA_BASE_URL=/);
   assert.match(template, /# GITLAB_TOKEN=/);
+  assert.match(template, /reload the VS Code window/i);
   assert.doesNotMatch(template, /^GITLAB_TOKEN=/m);
   if (process.platform !== 'win32') {
     assert.equal(fs.statSync(filePath).mode & 0o777, 0o600);
@@ -255,6 +259,7 @@ function operationsInput(overrides = {}) {
     },
     workCatalog: { available: true, tickets: 0, issues: 0 },
     jiraVisibility: { hideCompleted: true, additionalCompletedStatuses: 0 },
+    promptLibrary: { localPaths: 0, remoteUrls: 0 },
     providers: Object.values(providerReadiness.providerReadiness({})),
     polling: { activeTargets: 0, detail: 'No active polling.' },
     sessions: { count: 0, issues: 0 },
