@@ -137,6 +137,7 @@
         { "file": "scripts/run-persistence-recovery-tests.js", "test": "work-session mutations preserve one identity across replacement, close, and reopen decisions" },
         { "file": "scripts/run-persistence-recovery-tests.js", "test": "work-session storage rejects mismatched identities and unsafe removal entries" },
         { "file": "scripts/run-persistence-recovery-tests.js", "test": "work-session provider, artifact, and monitoring projections cover every operator-visible state" },
+        { "file": "scripts/run-persistence-recovery-tests.js", "test": "ticket-session context limits retain the primary identity and newest explicit Jira work" },
         { "file": "scripts/run-persistence-recovery-tests.js", "test": "registered-project monitoring owners refresh identity, reject stale bindings, and isolate returned state" },
         { "file": "scripts/run-persistence-recovery-tests.js", "test": "project monitoring state fails closed for missing owners, invalid identity, and invalid timestamps" },
         { "file": "scripts/run-persistence-recovery-tests.js", "test": "disposing the monitor releases its lease and prevents late provider state writes" },
@@ -296,6 +297,7 @@
         { "file": "scripts/run-handoff-branch-profile-tests.js", "test": "local handoff writes a private immutable Markdown and JSON reference pair without copying source payloads" },
         { "file": "scripts/run-handoff-branch-profile-tests.js", "test": "local handoff has no provider, Git, or terminal side effects" },
         { "file": "scripts/run-handoff-branch-profile-tests.js", "test": "local handoff refuses external artifact paths and oversized selections" },
+        { "file": "scripts/run-handoff-branch-profile-tests.js", "test": "local handoff verifies every referenced artifact even when a persisted hash is present" },
         { "file": "scripts/run-handoff-branch-profile-tests.js", "test": "project integration parses, formats, and stores explicit Jenkins and SonarQube branch profiles" },
         { "file": "scripts/run-handoff-branch-profile-tests.js", "test": "branch profile validation refuses duplicates, unsafe branches, credentials, and unknown active profiles" },
         { "file": "scripts/run-handoff-branch-profile-tests.js", "test": "CI target selection uses an exact MR profile then explicit fallback without creating a ticket project link" }

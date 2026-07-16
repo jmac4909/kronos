@@ -305,6 +305,48 @@ test('work-session mutations preserve one identity across replacement, close, an
   assert.equal(standalone.monitoring.enabled, false, 'ticket-free terminals do not become legacy polling owners');
 });
 
+test('ticket-session context limits retain the primary identity and newest explicit Jira work', () => {
+  const options = {
+    kronosDir: path.join(tempRoot, 'work-session-ticket-context-limit'),
+    now: new Date('2026-07-15T10:30:00.000Z'),
+  };
+  let ticket = workSessions.createOrGetWorkSessionByTicket({
+    ticketKey: 'PRIMARY-1',
+    title: 'Long-lived ticket Session',
+  }, options);
+  for (let index = 1; index <= 100; index += 1) {
+    ticket = workSessions.addWorkSessionTicketContext(ticket.id, `RELATED-${index}`, options);
+  }
+  assert.equal(ticket.ticketKeys.length, 100);
+  assert.equal(ticket.ticketKeys[0], 'PRIMARY-1', 'the initiating ticket remains the canonical first context');
+  assert.equal(ticket.ticketKeys.includes('RELATED-1'), false, 'the oldest secondary context is evicted at the bound');
+  assert.equal(ticket.ticketKeys.includes('RELATED-100'), true, 'the newest explicit context is retained');
+  assert.equal(workSessions.getWorkSessionForTicketContext('PRIMARY-1', options).id, ticket.id);
+  assert.equal(workSessions.getWorkSessionForTicketContext('RELATED-100', options).id, ticket.id);
+  assert.deepEqual(workSessions.workSessionTicketMetadata(ticket), { ticketKey: 'PRIMARY-1' });
+  assert.match(workSessions.workSessionEventContext(ticket).label, /^PRIMARY-1:/);
+
+  let standalone = workSessions.createStandaloneWorkSession({
+    title: 'Project Session with explicit Jira context',
+    projectName: 'Application',
+    projectPath: tempRoot,
+  }, options);
+  standalone = workSessions.addWorkSessionTicketContext(standalone.id, 'RELATED-200', options);
+  assert.equal(standalone.monitoring.enabled, true, 'an explicit Jira context makes a project Session eligible for legacy fallback monitoring');
+  assert.equal(workSessions.getWorkSessionForTicketContext('RELATED-200', options).id, standalone.id);
+  assert.deepEqual(workSessions.workSessionTicketMetadata(standalone), {});
+  assert.match(workSessions.workSessionEventContext(standalone).label, /^Application:/);
+
+  ticket = workSessions.closeWorkSession(ticket.id, options);
+  assert.deepEqual(workSessions.listWorkSessions({ ...options, kind: 'ticket' }).map(session => session.id), [ticket.id]);
+  assert.deepEqual(workSessions.listWorkSessions({ ...options, status: 'closed' }).map(session => session.id), [ticket.id]);
+  assert.deepEqual(
+    workSessions.listWorkSessions({ ...options, monitoringEnabled: true }).map(session => session.id),
+    [standalone.id],
+  );
+  assert.equal(workSessions.listWorkSessions({ ...options, limit: 1 }).length, 1);
+});
+
 test('work-session storage rejects mismatched identities and unsafe removal entries', () => {
   const options = { kronosDir: path.join(tempRoot, 'work-session-identity') };
   const ticket = workSessions.createOrGetWorkSessionByTicket({ ticketKey: 'SAFE-2', title: 'Identity fixture' }, options);

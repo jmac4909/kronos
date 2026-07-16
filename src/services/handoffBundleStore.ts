@@ -195,14 +195,15 @@ function auditCandidate(event: MonitorEvent): HandoffCandidate {
 function normalizeSelection(selection: HandoffSelection, root: string): HandoffSelection {
   if (selection.kind === 'context') {
     const promptPath = requiredArtifactPath(selection.promptPath, root);
-    let contentSha256 = optionalSha(selection.contentSha256);
-    if (!contentSha256) {
-      const content = readPrivateBufferFileIfPresent(promptPath, {
-        label: 'Kronos handoff source artifact',
-        maxBytes: MAX_ARTIFACT_BYTES,
-      });
-      if (!content) { throw new Error(`Handoff source artifact is unavailable: ${promptPath}`); }
-      contentSha256 = sha256(content);
+    const content = readPrivateBufferFileIfPresent(promptPath, {
+      label: 'Kronos handoff source artifact',
+      maxBytes: MAX_ARTIFACT_BYTES,
+    });
+    if (!content) { throw new Error(`Handoff source artifact is unavailable: ${promptPath}`); }
+    const contentSha256 = sha256(content);
+    const suppliedSha256 = optionalSha(selection.contentSha256);
+    if (suppliedSha256 && suppliedSha256 !== contentSha256) {
+      throw new Error(`Handoff source artifact does not match its supplied SHA-256 hash: ${promptPath}`);
     }
     return {
       kind: 'context',
@@ -332,7 +333,9 @@ function redactedMultiline(value: string, maxLength: number): string {
 }
 
 function optionalSha(value: string | undefined): string | undefined {
-  return value && /^[a-f0-9]{64}$/.test(value) ? value : undefined;
+  if (value === undefined || value === '') { return undefined; }
+  if (!/^[a-f0-9]{64}$/.test(value)) { throw new Error('Handoff source artifact SHA-256 is invalid.'); }
+  return value;
 }
 
 function sha256(value: string | Buffer): string { return crypto.createHash('sha256').update(value).digest('hex'); }

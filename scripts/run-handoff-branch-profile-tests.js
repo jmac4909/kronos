@@ -117,6 +117,41 @@ test('local handoff refuses external artifact paths and oversized selections', (
   }), /at most 100/);
 });
 
+test('local handoff verifies every referenced artifact even when a persisted hash is present', () => {
+  const source = sourceArtifact('integrity-source', 'exact retained prompt content');
+  const correctSha256 = crypto.createHash('sha256').update(fs.readFileSync(source)).digest('hex');
+  const correctSelection = buildHandoffCandidates(session({
+    artifacts: [artifact('integrity-context', { promptPath: source, contentSha256: correctSha256 })],
+  }), [])[0].selection;
+  assert.doesNotThrow(() => writeLocalHandoffBundle({
+    session: session(),
+    selections: [correctSelection],
+    title: 'Verified handoff',
+  }));
+
+  const mismatchedSelection = {
+    ...correctSelection,
+    contentSha256: '0'.repeat(64),
+  };
+  assert.throws(() => writeLocalHandoffBundle({
+    session: session(),
+    selections: [mismatchedSelection],
+    title: 'Mismatched handoff',
+  }), /does not match its supplied SHA-256 hash/);
+  assert.throws(() => writeLocalHandoffBundle({
+    session: session(),
+    selections: [{ ...correctSelection, contentSha256: 'not-a-sha' }],
+    title: 'Malformed handoff',
+  }), /SHA-256 is invalid/);
+
+  fs.unlinkSync(source);
+  assert.throws(() => writeLocalHandoffBundle({
+    session: session(),
+    selections: [correctSelection],
+    title: 'Missing source handoff',
+  }), /source artifact is unavailable/);
+});
+
 test('project integration parses, formats, and stores explicit Jenkins and SonarQube branch profiles', () => {
   const projectPath = path.join(kronosDir, 'project');
   fs.mkdirSync(projectPath, { mode: 0o700 });

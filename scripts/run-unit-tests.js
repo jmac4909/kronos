@@ -4632,6 +4632,9 @@ test('extension activation registers the bounded surface and explicit launch com
     assert.match(composerPanel.webview.html, /Fetched details and comments/);
     assert.match(composerPanel.webview.html, /Place in Terminal/);
     assert.equal(createdTerminals[1].actions.length, 2, 'opening the composer must not write to the terminal');
+    const errorsBeforeJiraBasketAdd = errorMessages.length;
+    await composerPanel.receive({ command: 'addToBasket' });
+    assert.deepEqual(errorMessages.slice(errorsBeforeJiraBasketAdd), [], 'fresh Jira prompt evidence must pass basket integrity validation');
     await composerPanel.receive({
       command: 'insertDraft',
       focus: "Review Bob's comment; do not trust $HOME or `commands`.",
@@ -4977,6 +4980,9 @@ test('extension activation registers the bounded surface and explicit launch com
       .find(panel => panel.viewType === 'kronosContextComposer');
     assert.ok(providerComposer, 'direct MR insertion must open an editable context composer');
     assert.match(providerComposer.webview.html, /Provider command fixture MR/);
+    const errorsBeforeGitLabBasketAdd = errorMessages.length;
+    await providerComposer.receive({ command: 'addToBasket' });
+    assert.deepEqual(errorMessages.slice(errorsBeforeGitLabBasketAdd), [], 'fresh GitLab prompt evidence must pass basket integrity validation');
     let providerWrites = reconnectedActions.length;
     await providerComposer.receive({ command: 'insertDraft', focus: 'Review the MR fixture.' });
     assert.equal(reconnectedActions.length, providerWrites + 1);
@@ -5048,6 +5054,8 @@ test('extension activation registers the bounded surface and explicit launch com
       .find(panel => panel.viewType === 'kronosContextBasket');
     assert.ok(basketPanel, 'the Context Basket command must open its interactive webview');
     assert.match(basketPanel.webview.html, /Context Basket/);
+    assert.match(basketPanel.webview.html, /Jira context/);
+    assert.match(basketPanel.webview.html, /GitLab MR and pipeline context/);
     assert.match(basketPanel.webview.html, /Jenkins and SonarQube context/);
     await commandHandlers.get('kronos.openContextBasket')();
     assert.equal(
@@ -5067,6 +5075,11 @@ test('extension activation registers the bounded surface and explicit launch com
       .find(artifact => artifact.kind === 'context-basket');
     assert.ok(basketArtifact, 'successful basket placement must be retained on the managed Session');
     assert.equal(fs.statSync(basketArtifact.promptPath).mode & 0o777, 0o600);
+    const basketMarkdown = fs.readFileSync(basketArtifact.promptPath, 'utf8');
+    assert.match(basketMarkdown, /Kind: jira/);
+    assert.match(basketMarkdown, /Kind: gitlab/);
+    assert.match(basketMarkdown, /Kind: ci/);
+    assert.doesNotMatch(basketMarkdown, /Provider command fixture MR|Fetched details and comments/);
 
     const shownBeforeEvidenceSearch = shownTextDocuments.length;
     singlePickHandler = items => items.find(item => item.entry?.action?.kind === 'artifact'

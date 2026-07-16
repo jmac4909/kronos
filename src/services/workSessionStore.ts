@@ -524,11 +524,11 @@ export function addWorkSessionTicketContext(
   const ticketKey = normalizeTicketKey(ticketKeyValue);
   return mutateWorkSession(sessionId, options, record => {
     requireActiveSession(record);
-    record.ticketKeys = [...new Set([...record.ticketKeys, ticketKey])].slice(-100);
+    const ticketKeys = [...new Set([...record.ticketKeys, ticketKey])];
+    record.ticketKeys = record.kind === 'ticket'
+      ? [record.ticketKey, ...ticketKeys.filter(candidate => candidate !== record.ticketKey).slice(-99)]
+      : ticketKeys.slice(-100);
     if (record.kind === 'standalone' && (record.projectName || record.projectPath)) { record.monitoring.enabled = true; }
-    if (record.kind === 'ticket' && !record.ticketKeys.includes(record.ticketKey)) {
-      record.ticketKeys.unshift(record.ticketKey);
-    }
   });
 }
 
