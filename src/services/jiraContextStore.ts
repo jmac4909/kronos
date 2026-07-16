@@ -14,6 +14,7 @@ export interface JiraContextArtifactPaths {
   jsonPath: string;
   promptPath: string;
   contentSha256: string;
+  promptSha256: string;
   attachmentPaths: string[];
 }
 
@@ -59,6 +60,7 @@ export function writeJiraContextArtifacts(
   const prompt = buildJiraContextPrompt(context, serializedContext);
   assertContentByteLimit(prompt, MAX_PROMPT_BYTES, 'Jira context prompt');
   const contentSha256 = sha256(serializedContext);
+  const promptSha256 = sha256(prompt);
   const nameHash = contentSha256.slice(0, CONTENT_NAME_HASH_LENGTH);
 
   const jsonPath = path.join(directoryPath, `context-${nameHash}.json`);
@@ -81,7 +83,7 @@ export function writeJiraContextArtifacts(
       fileMode: FILE_MODE,
     },
   );
-  return { directoryPath, jsonPath, promptPath, contentSha256, attachmentPaths };
+  return { directoryPath, jsonPath, promptPath, contentSha256, promptSha256, attachmentPaths };
 }
 
 function materializeCapturedAttachments(

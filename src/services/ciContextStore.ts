@@ -40,6 +40,7 @@ export interface CiContextArtifactPaths {
   jsonPath: string;
   promptPath: string;
   contentSha256: string;
+  promptSha256: string;
 }
 
 export interface CiContextStoreOptions {
@@ -137,6 +138,7 @@ export function writeCiContextArtifacts(
   const jsonPath = path.join(directoryPath, `context-${contentId}.json`);
   const promptPath = path.join(directoryPath, `prompt-${contentId}.md`);
   const prompt = renderCiContextPrompt(context, serialized);
+  const promptSha256 = crypto.createHash('sha256').update(prompt, 'utf8').digest('hex');
   ensureImmutablePrivateFilePair(
     jsonPath,
     serialized,
@@ -155,7 +157,7 @@ export function writeCiContextArtifacts(
       fileMode: FILE_MODE,
     },
   );
-  return { directoryPath, jsonPath, promptPath, contentSha256 };
+  return { directoryPath, jsonPath, promptPath, contentSha256, promptSha256 };
 }
 
 export function normalizeCiTicketKey(value: string): string {

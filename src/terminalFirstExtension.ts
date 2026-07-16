@@ -2565,7 +2565,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
           complete: jiraContext.completeness.complete,
           warnings: jiraContext.completeness.warnings,
           refresh: { kind: 'jira', ticketKey },
-          contentSha256: artifact.contentSha256,
+          contentSha256: artifact.promptSha256,
         },
         onInserted: () => {
           const managedSession = selection.workSession;
@@ -2587,12 +2587,12 @@ class TerminalFirstRuntime implements vscode.Disposable {
                 fetchedAt: jiraContext.fetchedAt,
                 complete: jiraContext.completeness.complete,
                 warnings: jiraContext.completeness.warnings,
-                contentSha256: artifact.contentSha256,
+                contentSha256: artifact.promptSha256,
               });
               return managedSession;
             } : undefined,
             auditAppend: managedSession ? updatedSession => {
-              this.appendContextEvent(updatedSession || managedSession, 'jira', ticketKey, artifact.promptPath, artifact.contentSha256);
+              this.appendContextEvent(updatedSession || managedSession, 'jira', ticketKey, artifact.promptPath, artifact.promptSha256);
             } : undefined,
           });
           this.refreshTerminalFirstViews();
@@ -2711,7 +2711,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
           refresh: project
             ? { kind: 'gitlab', projectName: project.projectName }
             : { kind: 'gitlab', ticketKey: ticketKey || '' },
-          contentSha256: artifact.contentSha256,
+          contentSha256: artifact.promptSha256,
         },
         onInserted: () => {
           const managedSession = selection.workSession;
@@ -2752,12 +2752,12 @@ class TerminalFirstRuntime implements vscode.Disposable {
                 fetchedAt: context.fetchedAt,
                 complete: context.completeness.complete,
                 warnings: context.completeness.warnings,
-                contentSha256: artifact.contentSha256,
+                contentSha256: artifact.promptSha256,
               });
               return session;
             } : undefined,
             auditAppend: managedSession ? updatedSession => {
-              this.appendContextEvent(updatedSession || managedSession, 'gitlab', String(iid), artifact.promptPath, artifact.contentSha256);
+              this.appendContextEvent(updatedSession || managedSession, 'gitlab', String(iid), artifact.promptPath, artifact.promptSha256);
             } : undefined,
           });
           this.refreshTerminalFirstViews();
@@ -2942,7 +2942,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
           refresh: project
             ? { kind: 'ci', projectName: project.projectName }
             : { kind: 'ci', ticketKey: ticketKey || '' },
-          contentSha256: artifact.contentSha256,
+          contentSha256: artifact.promptSha256,
         },
         onInserted: () => {
           const managedSession = selection.workSession;
@@ -2984,12 +2984,12 @@ class TerminalFirstRuntime implements vscode.Disposable {
                 fetchedAt: context.fetchedAt,
                 complete: context.completeness.complete,
                 warnings: context.completeness.warnings,
-                contentSha256: artifact.contentSha256,
+                contentSha256: artifact.promptSha256,
               });
               return session;
             } : undefined,
             auditAppend: managedSession ? updatedSession => {
-              this.appendContextEvent(updatedSession || managedSession, 'kronos', ownerKey, artifact.promptPath, artifact.contentSha256);
+              this.appendContextEvent(updatedSession || managedSession, 'kronos', ownerKey, artifact.promptPath, artifact.promptSha256);
             } : undefined,
           });
           this.refreshTerminalFirstViews();

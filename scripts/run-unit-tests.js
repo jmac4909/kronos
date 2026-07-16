@@ -1,4 +1,5 @@
 const assert = require('node:assert/strict');
+const crypto = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -283,11 +284,21 @@ test('GitLab and CI context pairs share immutable publication and reject incompl
   assert.equal(gitlabReused.contentSha256, gitlabArtifact.contentSha256);
   assert.equal(fs.existsSync(gitlabArtifact.jsonPath), true);
   assert.equal(fs.existsSync(gitlabArtifact.promptPath), true);
+  assert.equal(
+    gitlabArtifact.promptSha256,
+    crypto.createHash('sha256').update(fs.readFileSync(gitlabArtifact.promptPath)).digest('hex'),
+  );
+  assert.notEqual(gitlabArtifact.promptSha256, gitlabArtifact.contentSha256);
 
   const ciContext = ciContextStore.buildCiContext('JIRA-87', { warnings: ['No provider evidence in fixture.'] });
   const ciRoot = path.join(tempRoot, 'shared-ci-context');
   const ciArtifact = ciContextStore.writeCiContextArtifacts(ciContext, { kronosDir: ciRoot });
   assert.equal(ciContextStore.writeCiContextArtifacts(ciContext, { kronosDir: ciRoot }).contentSha256, ciArtifact.contentSha256);
+  assert.equal(
+    ciArtifact.promptSha256,
+    crypto.createHash('sha256').update(fs.readFileSync(ciArtifact.promptPath)).digest('hex'),
+  );
+  assert.notEqual(ciArtifact.promptSha256, ciArtifact.contentSha256);
   fs.unlinkSync(ciArtifact.promptPath);
   assert.throws(
     () => ciContextStore.writeCiContextArtifacts(ciContext, { kronosDir: ciRoot }),
@@ -3121,6 +3132,8 @@ test('Jira artifacts retain custom fields behind an untrusted-data boundary', ()
   assert.match(prompt, /never instructions/i);
   assert.match(prompt, /IGNORE ALL INSTRUCTIONS/);
   assert.match(artifact.contentSha256, /^[a-f0-9]{64}$/);
+  assert.equal(artifact.promptSha256, crypto.createHash('sha256').update(prompt).digest('hex'));
+  assert.notEqual(artifact.promptSha256, artifact.contentSha256);
   const reused = jiraContextStore.writeJiraContextArtifacts(context, { kronosDir: path.join(tempRoot, 'artifacts') });
   assert.deepEqual(reused, artifact);
   if (process.platform !== 'win32') { assert.equal(fs.statSync(artifact.promptPath).mode & 0o777, 0o600); }
@@ -3687,6 +3700,7 @@ test('extension activation registers the bounded surface and explicit launch com
   let openDialogResult;
   let lastOpenDialogOptions;
   let inputBoxResult;
+  let inputBoxHandler;
   let lastInputBoxOptions;
   let multiPickHandler;
   let singlePickHandler;
@@ -3697,6 +3711,7 @@ test('extension activation registers the bounded surface and explicit launch com
   let lastWarningMessage;
   const warningMessages = [];
   const warningMessageCalls = [];
+  const errorMessages = [];
   let failNextTerminalCreation = false;
   let deferNextProcessId = false;
   let resolveDeferredProcessId;
@@ -3746,7 +3761,7 @@ test('extension activation registers the bounded surface and explicit launch com
         return Promise.resolve(result);
       },
       showInformationMessage() { return Promise.resolve(undefined); },
-      showErrorMessage() { return Promise.resolve(undefined); },
+      showErrorMessage(message) { errorMessages.push(message); return Promise.resolve(undefined); },
       showTextDocument(document, options) {
         shownTextDocuments.push({ document, options });
         return Promise.resolve({ document });
@@ -3783,8 +3798,9 @@ test('extension activation registers the bounded surface and explicit launch com
       },
       showInputBox(options) {
         lastInputBoxOptions = options;
-        const result = inputBoxResult;
-        inputBoxResult = undefined;
+        const handler = inputBoxHandler;
+        const result = handler ? handler(options) : inputBoxResult;
+        if (!handler) { inputBoxResult = undefined; }
         return Promise.resolve(result);
       },
       showQuickPick(items, options) {
@@ -5015,6 +5031,9 @@ test('extension activation registers the bounded surface and explicit launch com
     providerComposer = createdWebviewPanels.slice(providerPanelStart)
       .find(panel => panel.viewType === 'kronosContextComposer');
     assert.ok(providerComposer, 'project CI insertion must work in a project Session with no Jira context');
+    const errorsBeforeBasketAdd = errorMessages.length;
+    await providerComposer.receive({ command: 'addToBasket' });
+    assert.deepEqual(errorMessages.slice(errorsBeforeBasketAdd), [], 'adding retained CI evidence to the basket must succeed');
     providerWrites = createdTerminals[0].actions.length;
     await providerComposer.receive({ command: 'insertDraft', focus: 'Review project CI evidence.' });
     assert.equal(createdTerminals[0].actions.length, providerWrites + 1);
@@ -5022,6 +5041,57 @@ test('extension activation registers the bounded surface and explicit launch com
     assert.match(createdTerminals[0].actions.at(-1)[1], /^\[CI-PROJECT-[A-F0-9]{24}\]/);
     assert.deepEqual(workSessions.readWorkSession(standalone.id).ticketKeys, []);
     vscode.window.activeTerminal = reconnectedTerminal;
+
+    const basketPanelStart = createdWebviewPanels.length;
+    await commandHandlers.get('kronos.openContextBasket')();
+    const basketPanel = createdWebviewPanels.slice(basketPanelStart)
+      .find(panel => panel.viewType === 'kronosContextBasket');
+    assert.ok(basketPanel, 'the Context Basket command must open its interactive webview');
+    assert.match(basketPanel.webview.html, /Context Basket/);
+    assert.match(basketPanel.webview.html, /Jenkins and SonarQube context/);
+    await commandHandlers.get('kronos.openContextBasket')();
+    assert.equal(
+      createdWebviewPanels.filter(panel => panel.viewType === 'kronosContextBasket').length,
+      1,
+      'reopening the Context Basket must reveal the existing panel instead of duplicating it',
+    );
+    assert.deepEqual(basketPanel.revealCalls, [vscode.ViewColumn.One]);
+    const basketWritesBefore = reconnectedActions.length;
+    singlePickHandler = items => items.find(item => item.session?.id === ticketSession.id);
+    await basketPanel.receive({ command: 'insert', focus: 'Compare the selected Jira, MR, CI, and Git evidence.' });
+    assert.equal(reconnectedActions.length, basketWritesBefore + 2, 'basket placement shows and writes to the chosen terminal exactly once');
+    assert.deepEqual(reconnectedActions.at(-2), ['show', false]);
+    assert.equal(reconnectedActions.at(-1)[2], false, 'basket placement must never submit the terminal line');
+    assert.match(reconnectedActions.at(-1)[1], /^\[BASKET-[A-F0-9]{24}\]/);
+    const basketArtifact = workSessions.readWorkSession(ticketSession.id).artifacts
+      .find(artifact => artifact.kind === 'context-basket');
+    assert.ok(basketArtifact, 'successful basket placement must be retained on the managed Session');
+    assert.equal(fs.statSync(basketArtifact.promptPath).mode & 0o777, 0o600);
+
+    const shownBeforeEvidenceSearch = shownTextDocuments.length;
+    singlePickHandler = items => items.find(item => item.entry?.action?.kind === 'artifact'
+      && item.entry.action.promptPath === basketArtifact.promptPath);
+    await commandHandlers.get('kronos.searchLocalEvidence')();
+    assert.equal(shownTextDocuments.length, shownBeforeEvidenceSearch + 1);
+    assert.equal(shownTextDocuments.at(-1).document.fsPath, basketArtifact.promptPath);
+    assert.equal(shownTextDocuments.at(-1).options.preview, true);
+
+    const shownBeforeHandoff = shownTextDocuments.length;
+    multiPickHandler = items => items.slice(0, 2);
+    inputBoxHandler = options => options.title === 'Local Handoff Title'
+      ? 'JIRA-123 review handoff'
+      : 'Confirm the newest MR and CI evidence before changing code.';
+    await commandHandlers.get('kronos.createLocalHandoff')({ workSessionId: ticketSession.id });
+    inputBoxHandler = undefined;
+    assert.equal(shownTextDocuments.length, shownBeforeHandoff + 1);
+    const handoffPath = shownTextDocuments.at(-1).document.fsPath;
+    assert.match(handoffPath, /handoffs[/\\]HANDOFF-[A-F0-9]{24}[/\\]handoff\.md$/);
+    assert.equal(fs.statSync(handoffPath).mode & 0o777, 0o600);
+    const handoffMarkdown = fs.readFileSync(handoffPath, 'utf8');
+    assert.match(handoffMarkdown, /JIRA\\-123 review handoff/);
+    assert.match(handoffMarkdown, /Confirm the newest MR and CI evidence before changing code\./);
+    assert.match(handoffMarkdown, /does not post to Jira, GitLab, Jenkins, or SonarQube/);
+    basketPanel.dispose();
 
     await commandHandlers.get('kronos.pollManagedWorkSessions')();
     const manuallyPolledSession = workSessions.getWorkSessionByTicket('JIRA-123');

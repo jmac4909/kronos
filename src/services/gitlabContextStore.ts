@@ -15,6 +15,7 @@ export interface GitLabContextArtifactPaths {
   jsonPath: string;
   promptPath: string;
   contentSha256: string;
+  promptSha256: string;
 }
 
 export interface GitLabContextStoreOptions {
@@ -48,6 +49,7 @@ export function writeGitLabContextArtifacts(
   const promptPath = path.join(directoryPath, `prompt-${artifactId}.md`);
   const prompt = renderGitLabContextPrompt(context, serializedContext);
   assertContentByteLimit(prompt, MAX_PROMPT_BYTES, 'GitLab context prompt');
+  const promptSha256 = crypto.createHash('sha256').update(prompt, 'utf8').digest('hex');
   ensureImmutablePrivateFilePair(
     jsonPath,
     serializedContext,
@@ -66,7 +68,7 @@ export function writeGitLabContextArtifacts(
       fileMode: FILE_MODE,
     },
   );
-  return { directoryPath, jsonPath, promptPath, contentSha256 };
+  return { directoryPath, jsonPath, promptPath, contentSha256, promptSha256 };
 }
 
 function validateContextEnvelope(context: GitLabProviderContext): void {

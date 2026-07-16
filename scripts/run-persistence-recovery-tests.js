@@ -219,6 +219,227 @@ test('catalog, session, and monitor readers reject incomplete or unsupported pri
   assert.equal(gitLabMonitorStore.readGitLabMergeRequestReadStatus(monitorSession.id, snapshotOptions), null);
 });
 
+test('work-session mutations preserve one identity across replacement, close, and reopen decisions', () => {
+  const root = path.join(tempRoot, 'work-session-mutations');
+  const at = value => ({ kronosDir: root, now: new Date(value) });
+  let ticket = workSessions.createOrGetWorkSessionByTicket({
+    ticketKey: 'FLOW-1',
+    title: 'Original title',
+    projectName: 'Application',
+    projectPath: tempRoot,
+    monitoringEnabled: false,
+  }, at('2026-07-15T10:00:00.000Z'));
+  const duplicate = workSessions.createOrGetWorkSessionByTicket({
+    ticketKey: 'flow-1',
+    title: 'A duplicate create must not replace persisted state',
+  }, at('2026-07-15T10:01:00.000Z'));
+  assert.equal(duplicate.id, ticket.id);
+  assert.equal(duplicate.title, 'Original title');
+  assert.equal(duplicate.createdAt, '2026-07-15T10:00:00.000Z');
+
+  ticket = workSessions.attachWorkSessionTerminal(ticket.id, {
+    name: 'Original terminal',
+    cwd: tempRoot,
+    processId: 4100,
+    shell: 'bash',
+  }, at('2026-07-15T10:02:00.000Z'));
+  const bindingId = ticket.terminals[0].id;
+  assert.match(bindingId, /^terminal-/);
+  assert.deepEqual({
+    cwd: ticket.terminals[0].cwd,
+    processId: ticket.terminals[0].processId,
+    shell: ticket.terminals[0].shell,
+  }, { cwd: tempRoot, processId: 4100, shell: 'bash' });
+
+  ticket = workSessions.attachWorkSessionTerminal(ticket.id, {
+    bindingId,
+    name: 'Replacement terminal metadata',
+  }, at('2026-07-15T10:03:00.000Z'));
+  assert.equal(ticket.terminals.length, 1);
+  assert.equal(ticket.terminals[0].name, 'Replacement terminal metadata');
+  assert.equal(ticket.terminals[0].cwd, undefined);
+  assert.equal(ticket.terminals[0].processId, undefined);
+  assert.equal(ticket.terminals[0].shell, undefined);
+
+  ticket = workSessions.setWorkSessionProject(ticket.id, {}, at('2026-07-15T10:04:00.000Z'));
+  assert.equal(ticket.projectName, undefined);
+  assert.equal(ticket.projectPath, undefined);
+  ticket = workSessions.setWorkSessionMonitoring(
+    ticket.id,
+    true,
+    '2026-07-15T10:04:30.000Z',
+    at('2026-07-15T10:05:00.000Z'),
+  );
+  assert.equal(ticket.monitoring.enabled, true);
+  assert.equal(ticket.monitoring.lastPolledAt, '2026-07-15T10:04:30.000Z');
+
+  ticket = workSessions.closeWorkSession(ticket.id, at('2026-07-15T10:06:00.000Z'));
+  assert.equal(ticket.closedAt, '2026-07-15T10:06:00.000Z');
+  assert.equal(ticket.terminals[0].status, 'detached');
+  assert.equal(ticket.terminals[0].detachReason, 'Work session management stopped; terminal remains operator-owned.');
+  const closedAgain = workSessions.closeWorkSession(ticket.id, at('2026-07-15T10:07:00.000Z'));
+  assert.equal(closedAgain.closedAt, ticket.closedAt, 'closing an already-closed session must retain its original close time');
+  assert.throws(
+    () => workSessions.addWorkSessionProviderBinding(ticket.id, {
+      provider: 'gitlab', resource: 'merge-request', subjectId: '1',
+    }, at('2026-07-15T10:08:00.000Z')),
+    /is closed/i,
+  );
+
+  ticket = workSessions.reopenWorkSession(ticket.id, at('2026-07-15T10:09:00.000Z'));
+  assert.equal(ticket.status, 'active');
+  assert.equal(ticket.closedAt, undefined);
+  assert.equal(ticket.monitoring.enabled, true, 'ticket sessions resume monitoring when management resumes');
+  assert.equal(
+    workSessions.reopenWorkSession(ticket.id, at('2026-07-15T10:10:00.000Z')).status,
+    'active',
+  );
+
+  let standalone = workSessions.createStandaloneWorkSession({
+    title: 'Project console without Jira',
+    projectName: 'Application',
+    projectPath: tempRoot,
+  }, at('2026-07-15T10:11:00.000Z'));
+  standalone = workSessions.closeWorkSession(standalone.id, at('2026-07-15T10:12:00.000Z'));
+  standalone = workSessions.reopenWorkSession(standalone.id, at('2026-07-15T10:13:00.000Z'));
+  assert.equal(standalone.monitoring.enabled, false, 'ticket-free terminals do not become legacy polling owners');
+});
+
+test('work-session storage rejects mismatched identities and unsafe removal entries', () => {
+  const options = { kronosDir: path.join(tempRoot, 'work-session-identity') };
+  const ticket = workSessions.createOrGetWorkSessionByTicket({ ticketKey: 'SAFE-2', title: 'Identity fixture' }, options);
+  const recordPath = workSessions.workSessionRecordPath(ticket.id, options);
+  const raw = JSON.parse(fs.readFileSync(recordPath, 'utf8'));
+  raw.kind = 'standalone';
+  delete raw.ticketKey;
+  raw.ticketKeys = [];
+  fs.writeFileSync(recordPath, `${JSON.stringify(raw, null, 2)}\n`, { mode: 0o600 });
+  assert.throws(
+    () => workSessions.getWorkSessionByTicket('SAFE-2', options),
+    /is not linked to SAFE-2/i,
+  );
+
+  raw.id = 'session-different-owner';
+  fs.writeFileSync(recordPath, `${JSON.stringify(raw, null, 2)}\n`, { mode: 0o600 });
+  assert.throws(
+    () => workSessions.readWorkSession(ticket.id, options),
+    /record id does not match/i,
+  );
+
+  const root = workSessions.workSessionsDirectory(options);
+  fs.writeFileSync(path.join(root, 'not-a-session-directory'), 'unsafe entry\n', { mode: 0o600 });
+  const issues = workSessions.listWorkSessionStoreIssues(options);
+  assert.ok(issues.some(issue => /unsafe or invalid work session directory entry/i.test(issue.detail)));
+  assert.ok(issues.some(issue => /record id does not match/i.test(issue.detail)));
+
+  const removable = workSessions.createStandaloneWorkSession({ title: 'Unsafe removal fixture' }, options);
+  const removableDirectory = workSessions.workSessionDirectory(removable.id, options);
+  const nested = path.join(removableDirectory, 'unexpected-directory');
+  fs.mkdirSync(nested);
+  assert.throws(
+    () => workSessions.removeWorkSession(removable.id, options),
+    /refused an unsafe directory entry/i,
+  );
+  assert.equal(fs.existsSync(removableDirectory), true, 'failed removal must retain the complete session directory');
+  fs.rmdirSync(nested);
+  assert.equal(workSessions.removeWorkSession(removable.id, options).id, removable.id);
+  assert.throws(() => workSessions.removeWorkSession(removable.id, options), /not found/i);
+});
+
+test('work-session provider, artifact, and monitoring projections cover every operator-visible state', () => {
+  const options = {
+    kronosDir: path.join(tempRoot, 'work-session-projections'),
+    now: new Date('2026-07-15T11:00:00.000Z'),
+  };
+  let session = workSessions.createStandaloneWorkSession({ title: 'Projection fixture' }, options);
+  const initial = workSessions.nextWorkSessionProviderBindings([], {
+    id: 'gitlab-mr-7',
+    provider: 'gitlab',
+    resource: 'merge-request',
+    subjectId: '7',
+    projectId: 'team/application',
+    url: 'https://gitlab.example/team/application/-/merge_requests/7',
+  }, '2026-07-15T10:55:00.000Z');
+  const withBuild = workSessions.nextWorkSessionProviderBindings(initial, {
+    provider: 'jenkins',
+    resource: 'build',
+    subjectId: '41',
+    url: 'https://jenkins.example/job/application/41/',
+  }, '2026-07-15T10:56:00.000Z');
+  const replaced = workSessions.nextWorkSessionProviderBindings(withBuild, {
+    id: 'gitlab-mr-7-current',
+    provider: 'gitlab',
+    resource: 'merge-request',
+    subjectId: '7',
+    projectId: 'team/application',
+  }, '2026-07-15T10:57:00.000Z');
+  assert.deepEqual(replaced.map(binding => binding.provider), ['jenkins', 'gitlab']);
+  assert.equal(
+    workSessions.newestWorkSessionProviderBinding(replaced, binding => binding.provider === 'gitlab').id,
+    'gitlab-mr-7-current',
+  );
+  assert.equal(workSessions.newestWorkSessionProviderBinding(replaced, binding => binding.provider === 'sonar'), undefined);
+
+  const states = [
+    [{ polled: 0, failures: 0, skipped: 0 }, 'idle', undefined],
+    [{ polled: 0, failures: 1, skipped: 0 }, 'blocked', 'provider_read_failed'],
+    [{ polled: 1, failures: 1, skipped: 0 }, 'partial', 'provider_read_failed'],
+    [{ polled: 0, failures: 0, skipped: 1 }, 'blocked', 'provider_target_unavailable'],
+    [{ polled: 1, failures: 0, skipped: 1 }, 'partial', 'provider_evidence_partial'],
+    [{ polled: 1, failures: 0, skipped: 0 }, 'healthy', undefined],
+  ];
+  for (const [input, expectedState, expectedError] of states) {
+    const monitoring = workSessions.nextWorkSessionMonitoring(
+      { enabled: true, currentError: 'provider_read_failed' },
+      input,
+      '2026-07-15T10:58:00.000Z',
+    );
+    assert.equal(monitoring.lastState, expectedState);
+    assert.equal(monitoring.currentError, expectedError);
+  }
+  const changed = workSessions.nextWorkSessionMonitoring(
+    { enabled: true, suppressedUnchangedCount: 9 },
+    { polled: 1, transitions: 1, failures: 0, skipped: 0, summary: 'One meaningful transition.' },
+    '2026-07-15T10:59:00.000Z',
+  );
+  assert.equal(changed.lastMeaningfulChangeAt, '2026-07-15T10:59:00.000Z');
+  assert.equal(changed.suppressedUnchangedCount, 0);
+  assert.equal(changed.lastSummary, 'One meaningful transition.');
+
+  const promptPath = path.join(options.kronosDir, 'contexts', 'projection.md');
+  session = workSessions.recordWorkSessionContextArtifact(session.id, {
+    id: 'artifact-projection',
+    kind: 'jira',
+    label: 'Initial context',
+    promptPath,
+    fetchedAt: '2026-07-15T10:50:00.000Z',
+    complete: false,
+    warnings: ['Partial comments', 'Partial comments'],
+  }, options);
+  assert.deepEqual(session.artifacts[0].warnings, ['Partial comments']);
+  assert.equal(session.artifacts[0].contentSha256, undefined);
+  session = workSessions.recordWorkSessionContextArtifact(session.id, {
+    id: 'artifact-projection',
+    kind: 'jira',
+    label: 'Updated context',
+    promptPath,
+    complete: true,
+    contentSha256: 'c'.repeat(64),
+  }, { ...options, now: new Date('2026-07-15T11:01:00.000Z') });
+  assert.equal(session.artifacts.length, 1);
+  assert.equal(session.artifacts[0].label, 'Updated context');
+  assert.equal(session.artifacts[0].fetchedAt, '2026-07-15T11:01:00.000Z');
+  assert.equal(session.artifacts[0].contentSha256, 'c'.repeat(64));
+  assert.throws(
+    () => workSessions.detachWorkSessionTerminal(session.id, 'missing-terminal', undefined, options),
+    /Terminal binding not found/i,
+  );
+  assert.throws(
+    () => workSessions.markWorkSessionTerminalClosed(session.id, 'missing-terminal', undefined, options),
+    /Terminal binding not found/i,
+  );
+});
+
 test('registered-project monitoring owners refresh identity, reject stale bindings, and isolate returned state', () => {
   const firstPath = path.join(tempRoot, 'registered-project-v1');
   const renamedPath = path.join(tempRoot, 'registered-project-v2');
