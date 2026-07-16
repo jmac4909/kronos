@@ -74,12 +74,14 @@ export function discoverLocalProjects(options: ProjectDiscoveryOptions): Project
     const current = queue.shift();
     if (!current) { break; }
     visitedDirectories += 1;
-    if (hasGitMetadata(current.directory)) {
+    const git = readProjectGitBranch(current.directory);
+    if (git) {
       if (!workspacePaths.has(pathKey(current.directory))) {
         retainProject(projects, {
           name: path.basename(current.directory) || current.directory,
           path: current.directory,
           source: 'configured-root',
+          branch: git.branch,
         }, limit);
       }
       continue;
@@ -121,15 +123,6 @@ function retainProject(target: Map<string, DiscoveredProject>, project: Discover
   const key = pathKey(project.path);
   const previous = target.get(key);
   if (!previous || project.source === 'workspace') { target.set(key, project); }
-}
-
-function hasGitMetadata(directory: string): boolean {
-  try {
-    const stat = fs.lstatSync(path.join(directory, '.git'));
-    return !stat.isSymbolicLink() && (stat.isDirectory() || (stat.isFile() && stat.size <= 4 * 1024));
-  } catch {
-    return false;
-  }
 }
 
 function normalizeDirectory(value: string): string | undefined {

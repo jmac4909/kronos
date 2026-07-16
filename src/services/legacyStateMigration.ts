@@ -43,29 +43,70 @@ export function migrateLegacyKronosState(
   } catch {
     return { migrated: false, reason: 'unsafe' };
   }
-  try {
-    fs.renameSync(legacyPath, targetPath);
-    try {
-      makePrivateTree(targetPath);
-      return { migrated: true, method: 'rename' };
-    } catch {
-      try { fs.renameSync(targetPath, legacyPath); } catch { /* the target still contains the complete state */ }
-      return { migrated: fs.existsSync(targetPath), ...(fs.existsSync(targetPath) ? { method: 'rename' as const } : { reason: 'failed' as const }) };
-    }
-  } catch (error: unknown) {
-    if (errorCode(error) !== 'EXDEV') { return { migrated: false, reason: 'failed' }; }
-  }
-
   const temporaryPath = `${targetPath}.migration-${process.pid}-${Date.now()}`;
   try {
-    copyLegacyDirectory(legacyPath, temporaryPath);
-    fs.renameSync(temporaryPath, targetPath);
-    makePrivateTree(targetPath);
-    return { migrated: true, method: 'copy' };
+    if (lstatIfPresent(temporaryPath)) { return { migrated: false, reason: 'failed' }; }
   } catch {
-    try { fs.rmSync(temporaryPath, { recursive: true, force: true }); } catch { /* best effort temporary cleanup */ }
     return { migrated: false, reason: 'failed' };
   }
+
+  try {
+    fs.renameSync(legacyPath, temporaryPath);
+  } catch (error: unknown) {
+    if (errorCode(error) === 'EXDEV') {
+      return copyLegacyKronosState(legacyPath, temporaryPath, targetPath);
+    }
+    return { migrated: false, reason: 'failed' };
+  }
+
+  try {
+    makePrivateTree(temporaryPath);
+  } catch {
+    restoreStagedLegacyDirectory(temporaryPath, legacyPath);
+    return { migrated: false, reason: 'unsafe' };
+  }
+  try {
+    if (lstatIfPresent(targetPath)) {
+      restoreStagedLegacyDirectory(temporaryPath, legacyPath);
+      return { migrated: false, reason: 'target-exists' };
+    }
+    fs.renameSync(temporaryPath, targetPath);
+    return { migrated: true, method: 'rename' };
+  } catch {
+    restoreStagedLegacyDirectory(temporaryPath, legacyPath);
+    return { migrated: false, reason: 'failed' };
+  }
+}
+
+function copyLegacyKronosState(
+  legacyPath: string,
+  temporaryPath: string,
+  targetPath: string,
+): LegacyStateMigrationResult {
+  try {
+    copyLegacyDirectory(legacyPath, temporaryPath);
+    makePrivateTree(temporaryPath);
+    if (lstatIfPresent(targetPath)) {
+      removeStagedLegacyDirectory(temporaryPath);
+      return { migrated: false, reason: 'target-exists' };
+    }
+    fs.renameSync(temporaryPath, targetPath);
+    return { migrated: true, method: 'copy' };
+  } catch {
+    removeStagedLegacyDirectory(temporaryPath);
+    return { migrated: false, reason: 'failed' };
+  }
+}
+
+function restoreStagedLegacyDirectory(temporaryPath: string, legacyPath: string): void {
+  try {
+    if (lstatIfPresent(legacyPath)) { return; }
+    fs.renameSync(temporaryPath, legacyPath);
+  } catch { /* the private staging path retains the complete recovery copy */ }
+}
+
+function removeStagedLegacyDirectory(temporaryPath: string): void {
+  try { fs.rmSync(temporaryPath, { recursive: true, force: true }); } catch { /* best effort temporary cleanup */ }
 }
 
 function copyLegacyDirectory(sourceRoot: string, targetRoot: string): void {

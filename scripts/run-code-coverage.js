@@ -4,7 +4,7 @@ const { spawnSync } = require('node:child_process');
 const { testSuiteFiles } = require('./test-suite-files.js');
 
 const root = path.resolve(__dirname, '..');
-const COVERAGE_THRESHOLDS = Object.freeze({ lines: 84.3, branches: 75.9, functions: 88.45 });
+const COVERAGE_THRESHOLDS = Object.freeze({ lines: 84.5, branches: 76, functions: 88.5 });
 const CRITICAL_FILE_THRESHOLDS = Object.freeze({
   'contextBasketStore.js': Object.freeze({ lines: 90, branches: 78, functions: 93 }),
   'dateValues.js': Object.freeze({ lines: 100, branches: 100, functions: 100 }),
@@ -12,6 +12,7 @@ const CRITICAL_FILE_THRESHOLDS = Object.freeze({
   'jiraTicketContext.js': Object.freeze({ lines: 85, branches: 85, functions: 94 }),
   'jiraContextStore.js': Object.freeze({ lines: 75, branches: 59, functions: 90 }),
   'jiraValuePruning.js': Object.freeze({ lines: 97, branches: 96, functions: 100 }),
+  'legacyStateMigration.js': Object.freeze({ lines: 86, branches: 75, functions: 82 }),
   'localEvidenceSearch.js': Object.freeze({ lines: 96, branches: 92, functions: 100 }),
   'managedProviderMonitor.js': Object.freeze({ lines: 83, branches: 75, functions: 90 }),
   'monitorEventStore.js': Object.freeze({ lines: 94, branches: 92, functions: 90 }),
@@ -21,7 +22,8 @@ const CRITICAL_FILE_THRESHOLDS = Object.freeze({
   'workSessionStore.js': Object.freeze({ lines: 90, branches: 85, functions: 96 }),
   'handoffBundleStore.js': Object.freeze({ lines: 95, branches: 76, functions: 88 }),
   'terminalFirstExtension.js': Object.freeze({ lines: 74.5, branches: 57.5, functions: 87.5 }),
-  'projectCatalog.js': Object.freeze({ lines: 92, branches: 81, functions: 93 }),
+  'projectCatalog.js': Object.freeze({ lines: 92, branches: 82, functions: 93 }),
+  'projectDiscovery.js': Object.freeze({ lines: 85, branches: 66, functions: 80 }),
   'providerReadHealth.js': Object.freeze({ lines: 94, branches: 88, functions: 78 }),
   'TerminalFirstState.js': Object.freeze({ lines: 91, branches: 74, functions: 83 }),
   'AttentionTreeProvider.js': Object.freeze({ lines: 98, branches: 89, functions: 89 }),

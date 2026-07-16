@@ -2124,6 +2124,249 @@ test('legacy ~/.claude/kronos state migrates once without helper scripts', t => 
   });
 });
 
+test('legacy state uses a private staging path and never publishes an unsafe target', t => {
+  const home = path.join(tempRoot, 'legacy-staging-failure-home');
+  const legacy = path.join(home, '.claude', 'kronos');
+  const target = path.join(home, '.kronos');
+  const outside = path.join(home, 'outside');
+  fs.mkdirSync(legacy, { recursive: true });
+  fs.mkdirSync(outside, { recursive: true });
+  fs.writeFileSync(path.join(outside, 'retained.txt'), 'outside\n');
+  if (!createSymlinkOrSkip(t, outside, path.join(legacy, 'unsafe-child'), 'dir')) { return; }
+
+  const originalRenameSync = fs.renameSync;
+  let renameCalls = 0;
+  fs.renameSync = (source, destination) => {
+    renameCalls += 1;
+    if (renameCalls === 2) {
+      const error = new Error('synthetic rollback refusal');
+      error.code = 'EACCES';
+      throw error;
+    }
+    return originalRenameSync(source, destination);
+  };
+  let result;
+  try {
+    result = legacyStateMigration.migrateLegacyKronosState(target, legacy);
+  } finally {
+    fs.renameSync = originalRenameSync;
+  }
+
+  assert.deepEqual(result, { migrated: false, reason: 'unsafe' });
+  assert.equal(fs.existsSync(target), false, 'an unvalidated tree must never become the live Kronos directory');
+  const recoveryPaths = fs.readdirSync(home)
+    .filter(name => name.startsWith('.kronos.migration-'));
+  assert.equal(recoveryPaths.length, 1, 'failed rollback retains one private recovery copy outside the live target');
+  assert.equal(fs.readFileSync(path.join(outside, 'retained.txt'), 'utf8'), 'outside\n');
+});
+
+test('legacy state uses a complete private copy when rename reports a cross-device boundary', () => {
+  const home = path.join(tempRoot, 'legacy-cross-device-home');
+  const legacy = path.join(home, '.claude', 'kronos');
+  const target = path.join(home, '.kronos');
+  fs.mkdirSync(path.join(legacy, 'work-sessions'), { recursive: true });
+  fs.writeFileSync(path.join(legacy, 'work.json'), '{"schemaVersion":1}\n', { mode: 0o644 });
+  fs.writeFileSync(path.join(legacy, 'work-sessions', 'session.json'), '{}\n', { mode: 0o644 });
+
+  const originalRenameSync = fs.renameSync;
+  fs.renameSync = (source, destination) => {
+    if (path.resolve(source) === path.resolve(legacy)) {
+      const error = new Error('synthetic cross-device boundary');
+      error.code = 'EXDEV';
+      throw error;
+    }
+    return originalRenameSync(source, destination);
+  };
+  let result;
+  try {
+    result = legacyStateMigration.migrateLegacyKronosState(target, legacy);
+  } finally {
+    fs.renameSync = originalRenameSync;
+  }
+
+  assert.deepEqual(result, { migrated: true, method: 'copy' });
+  assert.equal(fs.existsSync(legacy), true, 'cross-device migration retains the complete legacy recovery copy');
+  assert.equal(fs.readFileSync(path.join(target, 'work.json'), 'utf8'), '{"schemaVersion":1}\n');
+  assert.equal(fs.readFileSync(path.join(target, 'work-sessions', 'session.json'), 'utf8'), '{}\n');
+  assert.equal(
+    fs.readdirSync(home).some(name => name.startsWith('.kronos.migration-')),
+    false,
+    'the published copy must not leave a staging directory behind',
+  );
+  if (process.platform !== 'win32') {
+    assert.equal(fs.statSync(target).mode & 0o777, 0o700);
+    assert.equal(fs.statSync(path.join(target, 'work.json')).mode & 0o777, 0o600);
+  }
+});
+
+test('legacy migration refuses publish races and rename failures without overwriting either location', () => {
+  const raceHome = path.join(tempRoot, 'legacy-target-race-home');
+  const raceLegacy = path.join(raceHome, '.claude', 'kronos');
+  const raceTarget = path.join(raceHome, '.kronos');
+  fs.mkdirSync(raceLegacy, { recursive: true });
+  fs.writeFileSync(path.join(raceLegacy, 'work.json'), 'legacy\n');
+
+  const originalRenameSync = fs.renameSync;
+  let renameCalls = 0;
+  fs.renameSync = (source, destination) => {
+    renameCalls += 1;
+    const result = originalRenameSync(source, destination);
+    if (renameCalls === 1) {
+      fs.mkdirSync(raceTarget, { mode: 0o700 });
+      fs.writeFileSync(path.join(raceTarget, 'owner.txt'), 'new owner\n');
+    }
+    return result;
+  };
+  let raceResult;
+  try {
+    raceResult = legacyStateMigration.migrateLegacyKronosState(raceTarget, raceLegacy);
+  } finally {
+    fs.renameSync = originalRenameSync;
+  }
+  assert.deepEqual(raceResult, { migrated: false, reason: 'target-exists' });
+  assert.equal(fs.readFileSync(path.join(raceTarget, 'owner.txt'), 'utf8'), 'new owner\n');
+  assert.equal(fs.readFileSync(path.join(raceLegacy, 'work.json'), 'utf8'), 'legacy\n');
+  assert.equal(fs.readdirSync(raceHome).some(name => name.startsWith('.kronos.migration-')), false);
+
+  const failedHome = path.join(tempRoot, 'legacy-rename-failure-home');
+  const failedLegacy = path.join(failedHome, '.claude', 'kronos');
+  const failedTarget = path.join(failedHome, '.kronos');
+  fs.mkdirSync(failedLegacy, { recursive: true });
+  fs.writeFileSync(path.join(failedLegacy, 'work.json'), 'retained\n');
+  fs.renameSync = () => {
+    const error = new Error('synthetic rename refusal');
+    error.code = 'EACCES';
+    throw error;
+  };
+  let failedResult;
+  try {
+    failedResult = legacyStateMigration.migrateLegacyKronosState(failedTarget, failedLegacy);
+  } finally {
+    fs.renameSync = originalRenameSync;
+  }
+  assert.deepEqual(failedResult, { migrated: false, reason: 'failed' });
+  assert.equal(fs.existsSync(failedTarget), false);
+  assert.equal(fs.readFileSync(path.join(failedLegacy, 'work.json'), 'utf8'), 'retained\n');
+});
+
+test('cross-device legacy migration removes its partial copy when nested state is unsafe', t => {
+  const home = path.join(tempRoot, 'legacy-cross-device-unsafe-home');
+  const legacy = path.join(home, '.claude', 'kronos');
+  const target = path.join(home, '.kronos');
+  const outside = path.join(home, 'outside');
+  fs.mkdirSync(legacy, { recursive: true });
+  fs.mkdirSync(outside, { recursive: true });
+  if (!createSymlinkOrSkip(t, outside, path.join(legacy, 'unsafe-child'), 'dir')) { return; }
+
+  const originalRenameSync = fs.renameSync;
+  fs.renameSync = (source, destination) => {
+    if (path.resolve(source) === path.resolve(legacy)) {
+      const error = new Error('synthetic cross-device boundary');
+      error.code = 'EXDEV';
+      throw error;
+    }
+    return originalRenameSync(source, destination);
+  };
+  let result;
+  try {
+    result = legacyStateMigration.migrateLegacyKronosState(target, legacy);
+  } finally {
+    fs.renameSync = originalRenameSync;
+  }
+  assert.deepEqual(result, { migrated: false, reason: 'failed' });
+  assert.equal(fs.existsSync(target), false);
+  assert.equal(fs.existsSync(legacy), true);
+  assert.equal(fs.readdirSync(home).some(name => name.startsWith('.kronos.migration-')), false);
+});
+
+test('legacy migration refuses stale staging state and restores after final publication fails', () => {
+  const staleHome = path.join(tempRoot, 'legacy-stale-staging-home');
+  const staleLegacy = path.join(staleHome, '.claude', 'kronos');
+  const staleTarget = path.join(staleHome, '.kronos');
+  const fixedNow = 1_726_000_000_000;
+  const staleTemporary = `${staleTarget}.migration-${process.pid}-${fixedNow}`;
+  fs.mkdirSync(staleLegacy, { recursive: true });
+  fs.mkdirSync(staleTemporary, { recursive: true });
+  fs.writeFileSync(path.join(staleLegacy, 'work.json'), 'legacy owner\n');
+  fs.writeFileSync(path.join(staleTemporary, 'owner.txt'), 'stale owner\n');
+
+  const originalDateNow = Date.now;
+  Date.now = () => fixedNow;
+  let staleResult;
+  try {
+    staleResult = legacyStateMigration.migrateLegacyKronosState(staleTarget, staleLegacy);
+  } finally {
+    Date.now = originalDateNow;
+  }
+  assert.deepEqual(staleResult, { migrated: false, reason: 'failed' });
+  assert.equal(fs.readFileSync(path.join(staleLegacy, 'work.json'), 'utf8'), 'legacy owner\n');
+  assert.equal(fs.readFileSync(path.join(staleTemporary, 'owner.txt'), 'utf8'), 'stale owner\n');
+  assert.equal(fs.existsSync(staleTarget), false);
+
+  const failedHome = path.join(tempRoot, 'legacy-final-publication-failure-home');
+  const failedLegacy = path.join(failedHome, '.claude', 'kronos');
+  const failedTarget = path.join(failedHome, '.kronos');
+  fs.mkdirSync(failedLegacy, { recursive: true });
+  fs.writeFileSync(path.join(failedLegacy, 'work.json'), 'complete state\n');
+  const originalRenameSync = fs.renameSync;
+  let renameCalls = 0;
+  fs.renameSync = (source, destination) => {
+    renameCalls += 1;
+    if (renameCalls === 2) {
+      const error = new Error('synthetic final publication refusal');
+      error.code = 'EACCES';
+      throw error;
+    }
+    return originalRenameSync(source, destination);
+  };
+  let failedResult;
+  try {
+    failedResult = legacyStateMigration.migrateLegacyKronosState(failedTarget, failedLegacy);
+  } finally {
+    fs.renameSync = originalRenameSync;
+  }
+  assert.deepEqual(failedResult, { migrated: false, reason: 'failed' });
+  assert.equal(fs.existsSync(failedTarget), false);
+  assert.equal(fs.readFileSync(path.join(failedLegacy, 'work.json'), 'utf8'), 'complete state\n');
+  assert.equal(fs.readdirSync(failedHome).some(name => name.startsWith('.kronos.migration-')), false);
+});
+
+test('legacy rollback preserves a newly claimed legacy path and keeps staging out of the live target', t => {
+  const home = path.join(tempRoot, 'legacy-rollback-owner-race-home');
+  const legacy = path.join(home, '.claude', 'kronos');
+  const target = path.join(home, '.kronos');
+  const outside = path.join(home, 'outside');
+  fs.mkdirSync(legacy, { recursive: true });
+  fs.mkdirSync(outside, { recursive: true });
+  if (!createSymlinkOrSkip(t, outside, path.join(legacy, 'unsafe-child'), 'dir')) { return; }
+
+  const originalRenameSync = fs.renameSync;
+  let renameCalls = 0;
+  fs.renameSync = (source, destination) => {
+    renameCalls += 1;
+    const result = originalRenameSync(source, destination);
+    if (renameCalls === 1) {
+      fs.mkdirSync(legacy, { recursive: true });
+      fs.writeFileSync(path.join(legacy, 'owner.txt'), 'new legacy owner\n');
+    }
+    return result;
+  };
+  let result;
+  try {
+    result = legacyStateMigration.migrateLegacyKronosState(target, legacy);
+  } finally {
+    fs.renameSync = originalRenameSync;
+  }
+  assert.deepEqual(result, { migrated: false, reason: 'unsafe' });
+  assert.equal(fs.existsSync(target), false);
+  assert.equal(fs.readFileSync(path.join(legacy, 'owner.txt'), 'utf8'), 'new legacy owner\n');
+  const recoveryPaths = fs.readdirSync(home).filter(name => name.startsWith('.kronos.migration-'));
+  assert.equal(recoveryPaths.length, 1);
+  if (process.platform !== 'win32') {
+    assert.equal(fs.statSync(path.join(home, recoveryPaths[0])).mode & 0o777, 0o700);
+  }
+});
+
 test('Work catalog strips legacy automation fields and persists privately', () => {
   const normalized = stateStore.normalizeWorkCatalog({
     schemaVersion: 1,

@@ -507,6 +507,33 @@ test('project discovery canonicalizes root aliases and skips symbolic child repo
   }]);
 });
 
+test('project discovery recognizes real Git worktrees and rejects malformed Git marker files', () => {
+  const discoveryRoot = path.join(tempRoot, 'worktree-discovery-root');
+  const worktree = path.join(discoveryRoot, 'valid-worktree');
+  const gitDirectory = path.join(tempRoot, 'worktree-discovery-git-data');
+  const malformed = path.join(discoveryRoot, 'malformed-marker');
+  const oversized = path.join(discoveryRoot, 'oversized-marker');
+  for (const directory of [worktree, gitDirectory, malformed, oversized]) {
+    fs.mkdirSync(directory, { recursive: true });
+  }
+  fs.writeFileSync(path.join(worktree, '.git'), `gitdir: ${gitDirectory}\n`);
+  fs.writeFileSync(path.join(gitDirectory, 'HEAD'), 'ref: refs/heads/feature/discovered-worktree\n');
+  fs.writeFileSync(path.join(malformed, '.git'), 'not a gitdir pointer\n');
+  fs.writeFileSync(path.join(oversized, '.git'), 'x'.repeat(4_097));
+
+  const discovered = projectDiscovery.discoverLocalProjects({
+    roots: [discoveryRoot],
+    depth: 1,
+    limit: 100,
+  });
+  assert.deepEqual(discovered.projects, [{
+    name: 'valid-worktree',
+    path: fs.realpathSync.native(worktree),
+    source: 'configured-root',
+    branch: 'feature/discovered-worktree',
+  }]);
+});
+
 test('project integration presentation exposes readiness without provider identifiers or credentials', () => {
   const config = {
     gitlab_project_path: 'group/private-application',
