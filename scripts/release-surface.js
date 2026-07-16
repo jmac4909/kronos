@@ -64,14 +64,27 @@ const FORBIDDEN_PACKAGE_PATHS = [
 ];
 
 function collectVsceReleaseFiles(workspaceRoot = root) {
-  const npx = process.platform === 'win32' ? 'npx.cmd' : 'npx';
-  const output = execFileSync(npx, [
+  const invocation = vsceListInvocation();
+  const output = execFileSync(invocation.command, invocation.args, {
+    cwd: workspaceRoot,
+    encoding: 'utf8',
+    maxBuffer: 4 * 1024 * 1024,
+  });
+  return output.split(/\r?\n/).map(value => value.trim()).filter(Boolean);
+}
+
+function vsceListInvocation(platform = process.platform, commandInterpreter = process.env.ComSpec) {
+  const args = [
     '--yes',
     `@vscode/vsce@${VSCE_VERSION}`,
     'ls',
     '--no-dependencies',
-  ], { cwd: workspaceRoot, encoding: 'utf8', maxBuffer: 4 * 1024 * 1024 });
-  return output.split(/\r?\n/).map(value => value.trim()).filter(Boolean);
+  ];
+  if (platform !== 'win32') { return { command: 'npx', args }; }
+  return {
+    command: commandInterpreter || 'cmd.exe',
+    args: ['/d', '/s', '/c', ['npx.cmd', ...args].join(' ')],
+  };
 }
 
 function expectedReleaseFiles(workspaceRoot = root) {
@@ -208,4 +221,5 @@ module.exports = {
   releaseDocumentationFailures,
   releaseSurfaceFailures,
   assertReleaseSurface,
+  vsceListInvocation,
 };

@@ -8,6 +8,10 @@ const { normalizeRepositoryText } = require('./repository-text.js');
 const { publishedStateFailures } = require('./verify-published-branch.js');
 
 test('actual VSIX release surface is exact and runtime-dependency-free', () => {
+  assert.deepEqual(release.vsceListInvocation('win32', 'C:\\Windows\\System32\\cmd.exe'), {
+    command: 'C:\\Windows\\System32\\cmd.exe',
+    args: ['/d', '/s', '/c', 'npx.cmd --yes @vscode/vsce@3.9.2 ls --no-dependencies'],
+  });
   const files = release.collectVsceReleaseFiles(root);
   assert.deepEqual(release.releaseSurfaceFailures(files, { root }), []);
   assert.deepEqual([...files].sort(), release.expectedReleaseFiles(root));
