@@ -7,7 +7,12 @@ const root = path.resolve(__dirname, '..');
 const fixtureDir = path.join(root, '.kronos', 'feedback-state');
 
 function run(command, args) {
-  const result = spawnSync(command, args, { cwd: root, encoding: 'utf8', stdio: 'inherit' });
+  const useWindowsCmd = process.platform === 'win32' && command === 'npm';
+  const executable = useWindowsCmd ? (process.env.ComSpec || 'cmd.exe') : command;
+  const executionArgs = useWindowsCmd
+    ? ['/d', '/s', '/c', ['npm.cmd', ...args].join(' ')]
+    : args;
+  const result = spawnSync(executable, executionArgs, { cwd: root, encoding: 'utf8', stdio: 'inherit' });
   if (result.error) { throw result.error; }
   if (result.status !== 0) { throw new Error(`${command} ${args.join(' ')} exited with ${result.status}`); }
 }
