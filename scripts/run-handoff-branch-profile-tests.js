@@ -54,8 +54,10 @@ test('local handoff writes a private immutable Markdown and JSON reference pair 
   assert.match(markdown, /\[REDACTED/);
   assert.doesNotMatch(`${markdown}\n${json}`, /SOURCE-PAYLOAD-MUST-NOT-BE-COPIED|redact-this-fixture-value/);
   assert.equal(JSON.parse(json).selections.length, 2);
-  assert.equal(fs.statSync(bundle.markdownPath).mode & 0o777, 0o600);
-  assert.equal(fs.statSync(bundle.jsonPath).mode & 0o777, 0o600);
+  if (process.platform !== 'win32') {
+    assert.equal(fs.statSync(bundle.markdownPath).mode & 0o777, 0o600);
+    assert.equal(fs.statSync(bundle.jsonPath).mode & 0o777, 0o600);
+  }
 });
 
 test('local handoff has no provider, Git, or terminal side effects', t => {

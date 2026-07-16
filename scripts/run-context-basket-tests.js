@@ -33,7 +33,9 @@ test('context basket stores bounded provenance beside private artifact reference
   assert.equal(listed[0].provenance, 'Jira ticket BASKET-1');
   assert.equal(listed[0].sizeBytes, Buffer.byteLength('private Jira fixture'));
   assert.match(listed[0].contentSha256, /^[a-f0-9]{64}$/);
-  assert.equal(fs.statSync(contextBasketPath()).mode & 0o777, 0o600);
+  if (process.platform !== 'win32') {
+    assert.equal(fs.statSync(contextBasketPath()).mode & 0o777, 0o600);
+  }
   assert.throws(() => addContextBasketItem(input({
     promptPath: artifact,
     contentSha256: '0'.repeat(64),
