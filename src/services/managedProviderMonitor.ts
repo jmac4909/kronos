@@ -324,6 +324,7 @@ export class ManagedProviderMonitor {
   private async pollGitLab(
     session: ProviderMonitoringOwner,
     retainLease: () => boolean,
+    followFinishedTarget = true,
   ): Promise<ManagedProviderPollResult> {
     const binding = latestGitLabMergeRequestBinding(session);
     const state = this.options.state();
@@ -462,6 +463,7 @@ export class ManagedProviderMonitor {
 
     const notices: ManagedProviderNotice[] = [];
     let stateFailures = 0;
+    let finishedProjectTargetObserved = false;
     try {
       const readNotice = updateGitLabMergeRequestReadStatus(
         session,
@@ -538,6 +540,9 @@ export class ManagedProviderMonitor {
         if (!previousMr || previousMr.fingerprint !== mrDigest.fingerprint) {
           writeGitLabMergeRequestMonitorSnapshot(session.id, mrDigest);
         }
+        finishedProjectTargetObserved = Boolean(
+          isProjectMonitoringRecord(session) && mergeRequestDigestIsTerminal(mrDigest),
+        );
         const projectionState = this.options.state();
         for (const ticketKey of monitoringTicketKeys(projectionState, session)) {
           const currentTicket = projectionState?.tickets[ticketKey];
@@ -610,7 +615,12 @@ export class ManagedProviderMonitor {
     }
 
     for (const item of notices) { this.options.notify?.(item); }
-    return { ...result, transitions: notices.length, failures: stateFailures };
+    const completed = { ...result, transitions: notices.length, failures: stateFailures };
+    if (followFinishedTarget && finishedProjectTargetObserved && configuredProject) {
+      if (!retainLease()) { return leaseLost(completed); }
+      return combine(completed, await this.pollGitLab(session, retainLease, false));
+    }
+    return completed;
   }
 
   private async pollCi(

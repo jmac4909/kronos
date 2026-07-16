@@ -1307,9 +1307,12 @@ test('registered project polling follows branch MRs and replaces a merged MR wit
     assert.equal((await monitor.poll()).transitions, 0, 'returning to an already observed open MR does not duplicate Attention');
     assert.equal((await monitor.poll()).transitions, 0, 'the promoted earlier MR remains the current branch target');
     mergeRequestStates.set(171, 'merged');
-    assert.equal((await monitor.poll()).transitions, 1, 'the currently bound MR becoming merged is observed');
     mergeRequests.set('feature/project-one', 173);
-    assert.equal((await monitor.poll()).transitions, 1, 'the poll after a merge discovers the replacement MR on the same branch');
+    assert.equal(
+      (await monitor.poll()).transitions,
+      2,
+      'one poll observes the current MR merge and discovers its replacement on the same branch',
+    );
     assert.deepEqual(discoveryInputs, [
       { projectIdOrPath: 'team/branching', sourceBranch: 'feature/project-one' },
       { projectIdOrPath: 'team/branching', sourceBranch: 'feature/project-two' },
