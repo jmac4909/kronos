@@ -103,6 +103,73 @@ test('prompt templates fill only allowlisted session variables and preserve unkn
   assert.deepEqual(rendered.warnings, ['Unknown template variable {{custom.team}} was left for operator review.']);
 });
 
+test('prompt templates stay useful without a ticket or linked project and redact variable values', () => {
+  const prompt = promptLibrary.parsePromptLibraryManifest(JSON.stringify({
+    schemaVersion: 1,
+    name: 'Terminal-first extras',
+    prompts: [{
+      id: 'standalone-review',
+      title: 'Standalone review',
+      body: [
+        'Session: {{ session.title }}',
+        'Project: {{project.name}} at {{project.path}} on {{project.branch}}',
+        'Primary ticket: {{jira.key}}',
+        'All tickets: {{jira.keys}}',
+        'Repeat: {{project.name}}',
+      ].join('\n'),
+    }],
+  }), { kind: 'local', location: '/safe/standalone.kronos-prompts.json' }).prompts[0];
+  prompt.warnings.push('Fixture warning remains visible.');
+
+  const standalone = promptLibrary.renderPromptTemplate(prompt, {
+    sessionTitle: '  Interactive\nterminal  ',
+    jiraKeys: [],
+  });
+  assert.match(standalone.body, /Session: Interactive terminal/);
+  assert.match(standalone.body, /Project: No linked project at No linked project path on Branch unavailable/);
+  assert.match(standalone.body, /Primary ticket: No Jira context/);
+  assert.match(standalone.body, /All tickets: No Jira context/);
+  assert.deepEqual(standalone.appliedVariables, [
+    'jira.key',
+    'jira.keys',
+    'project.branch',
+    'project.name',
+    'project.path',
+    'session.title',
+  ]);
+  assert.deepEqual(standalone.warnings, ['Fixture warning remains visible.']);
+
+  const secret = ['TOKEN=', 'fixture-template-secret'].join('');
+  const linked = promptLibrary.renderPromptTemplate(prompt, {
+    sessionTitle: 'Review session',
+    projectName: `Payments ${secret}`,
+    projectPath: '/projects/payments',
+    projectBranch: 'feature/review',
+    jiraKeys: ['PAY-41', secret],
+  });
+  assert.doesNotMatch(linked.body, /fixture-template-secret/);
+  assert.match(linked.body, /\[REDACTED\]/);
+  assert.match(linked.body, /PAY-41/);
+});
+
+test('one invalid shared prompt never hides valid neighboring prompts', () => {
+  const parsed = promptLibrary.parsePromptLibraryManifest(JSON.stringify({
+    schemaVersion: 1,
+    name: 'Shared team prompts',
+    prompts: [
+      { id: 'before', title: 'Before', body: 'Review before the invalid entry.' },
+      { id: 'too-long', title: 'Too long', body: 'x'.repeat(20_001) },
+      { id: 'missing-body', title: 'Missing body' },
+      { id: 'after', title: 'After', body: 'Review after the invalid entry.' },
+    ],
+  }), { kind: 'remote', location: 'https://git.example/team/kronos-prompts.json' });
+  assert.deepEqual(parsed.prompts.map(prompt => prompt.id), ['before', 'after']);
+  assert.equal(parsed.warnings.length, 2);
+  assert.match(parsed.warnings[0], /Prompt too-long body must be 1-20000 characters/i);
+  assert.match(parsed.warnings[1], /Prompt missing-body body is missing/i);
+  assert.ok(parsed.warnings.every(warning => warning.length <= 2_000));
+});
+
 test('local and remote Git manifests merge with origin-pinned GitLab auth and latest-good cache fallback', async () => {
   const localDirectory = path.join(tempRoot, 'team-prompts');
   fs.mkdirSync(localDirectory, { recursive: true });

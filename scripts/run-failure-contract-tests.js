@@ -266,6 +266,62 @@ test('poll notice distinguishes another-window lease ownership from missing prov
   assert.doesNotMatch(configuration.message, /lease/);
 });
 
+test('poll notice reports complete and failed outcomes with accurate singular grammar', () => {
+  const complete = managedProviderMonitor.managedProviderPollNotice({
+    polled: 1,
+    transitions: 1,
+    failures: 0,
+    skipped: 0,
+    unconfigured: 0,
+    leaseUnavailable: false,
+  });
+  assert.deepEqual(complete, {
+    kind: 'complete',
+    message: 'Read 1 provider context; recorded 1 new attention item; 0 failed; 0 skipped; 0 project or legacy session targets missing provider configuration.',
+    warning: false,
+  });
+
+  const failed = managedProviderMonitor.managedProviderPollNotice({
+    polled: 2,
+    transitions: 0,
+    failures: 1,
+    skipped: 1,
+    unconfigured: 0,
+    leaseUnavailable: true,
+    leaseReason: 'renewal-failed',
+  });
+  assert.equal(failed.kind, 'failed');
+  assert.equal(failed.warning, true);
+  assert.match(failed.message, /Read 2 provider contexts/);
+  assert.match(failed.message, /1 failed; 1 skipped/);
+});
+
+test('GitLab partial-read diagnostics enumerate only incomplete monitor facets', () => {
+  const allComplete = {
+    pipelinesComplete: true,
+    jobsComplete: true,
+    testsComplete: true,
+    notesComplete: true,
+    discussionsComplete: true,
+    approvalsComplete: true,
+  };
+  assert.deepEqual(managedProviderMonitor.gitLabIncompleteMonitorComponents(allComplete), []);
+  assert.deepEqual(managedProviderMonitor.gitLabIncompleteMonitorComponents({
+    ...allComplete,
+    pipelinesComplete: false,
+    testsComplete: false,
+    discussionsComplete: false,
+  }), ['pipelines', 'tests', 'discussions']);
+  assert.deepEqual(managedProviderMonitor.gitLabIncompleteMonitorComponents({
+    pipelinesComplete: false,
+    jobsComplete: false,
+    testsComplete: false,
+    notesComplete: false,
+    discussionsComplete: false,
+    approvalsComplete: false,
+  }), ['pipelines', 'jobs', 'tests', 'notes', 'discussions', 'approvals']);
+});
+
 test('failed monitoring remains visible while last-known-good timestamps stay retained', () => {
   const session = workSessions.createOrGetWorkSessionByTicket({ ticketKey: 'FAIL-7', title: 'Failure contract' });
   workSessions.recordWorkSessionMonitoringResult(session.id, {

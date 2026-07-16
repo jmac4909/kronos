@@ -67,7 +67,11 @@ export function readProjectMonitoringRecordById(
   });
   if (serialized === null) { return null; }
   const record = normalizeWorkSessionRecord(JSON.parse(serialized) as unknown, options);
-  if (record.kind !== 'standalone' || record.id !== recordId || !record.projectName || !record.projectPath) {
+  if (record.kind !== 'standalone'
+    || record.id !== recordId
+    || !record.projectName
+    || !record.projectPath
+    || !isProjectMonitoringRecord(record)) {
     throw new Error('Project monitoring record has an invalid owner identity.');
   }
   return cloneProjectMonitoringRecord(record);

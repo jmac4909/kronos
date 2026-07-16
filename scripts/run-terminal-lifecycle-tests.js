@@ -372,3 +372,198 @@ test('a closed or rebound terminal invalidates captured context placement withou
   assert.deepEqual(firstCalls, [[placed.text, false]]);
   assert.deepEqual(secondCalls, []);
 });
+
+test('terminal context placement is reentrancy-safe and rejects ambiguous attachment identities', () => {
+  const promptPath = path.join(tempRoot, 'JIRA-401', `prompt-${'d'.repeat(24)}.md`);
+  const reference = terminalContextInsertion.buildJiraContextReference('JIRA-401', promptPath);
+  let nestedResult;
+  let placement;
+  let current;
+  const sends = [];
+  const terminal = {
+    sendText(text, shouldExecute) {
+      sends.push([text, shouldExecute]);
+      nestedResult = terminalContextInsertion.placeEditableTerminalContextReference(
+        placement,
+        current,
+        reference,
+        'A nested UI callback must not insert twice.',
+      );
+    },
+  };
+  placement = terminalContextInsertion.captureTerminalContextPlacement({
+    terminal,
+    sessionId: ' session-reentrant ',
+    bindingId: ' binding-reentrant ',
+  });
+  current = {
+    terminal,
+    sessionId: 'session-reentrant',
+    bindingId: 'binding-reentrant',
+  };
+
+  const result = terminalContextInsertion.placeEditableTerminalContextReference(
+    placement,
+    current,
+    reference,
+    "Review Bob's update.\nKeep the operator in control.",
+  );
+  assert.equal(result.kind, 'placed');
+  assert.deepEqual(nestedResult, { kind: 'busy' });
+  assert.deepEqual(sends, [[result.text, false]]);
+  assert.equal(placement.phase, 'placed');
+  assert.match(result.text, /Operator focus: 'Review Bob'\\''s update\. Keep the operator in control\.'/);
+
+  for (const [field, value] of [
+    ['sessionId', ''],
+    ['sessionId', 'x'.repeat(201)],
+    ['bindingId', 'binding\nchanged'],
+  ]) {
+    assert.throws(
+      () => terminalContextInsertion.captureTerminalContextPlacement({
+        terminal,
+        sessionId: 'session-valid',
+        bindingId: 'binding-valid',
+        [field]: value,
+      }),
+      /placement .* id is missing or invalid/i,
+    );
+  }
+  assert.equal(terminalContextInsertion.isTerminalContextPlacementCurrent(placement, {
+    ...current,
+    sessionId: 'session-other',
+  }), false);
+  assert.equal(terminalContextInsertion.isTerminalContextPlacementCurrent(placement, {
+    ...current,
+    bindingId: 'binding-other',
+  }), false);
+});
+
+test('all terminal context reference classes enforce their own private artifact location', () => {
+  const hash = 'e'.repeat(24);
+  const cases = [
+    terminalContextInsertion.buildGitLabMergeRequestContextReference(
+      42,
+      path.join(tempRoot, 'MR-42', `prompt-${hash}.md`),
+    ),
+    terminalContextInsertion.buildCiContextReference(
+      'OPS-42',
+      path.join(tempRoot, 'OPS-42', `prompt-${hash}.md`),
+    ),
+    terminalContextInsertion.buildProjectGitContextReference(
+      'GIT-Kronos.main',
+      path.join(tempRoot, 'GIT-Kronos.main', `prompt-${hash}.md`),
+    ),
+    terminalContextInsertion.buildContextBasketTerminalReference(
+      `BASKET-${'A'.repeat(24)}`,
+      path.join(tempRoot, 'basket-context', `prompt-${hash}.md`),
+    ),
+    terminalContextInsertion.buildPromptLibraryTerminalReference(
+      `PROMPT-${'B'.repeat(24)}`,
+      path.join(tempRoot, `PROMPT-${'B'.repeat(24)}`, `prompt-${hash}.md`),
+    ),
+  ];
+  for (const reference of cases) {
+    assert.equal(terminalContextInsertion.isSafeTerminalContextReference(reference), true, reference);
+    assert.equal(
+      terminalContextInsertion.isSafeTerminalContextReference(reference.replace(`${path.sep}prompt-`, `${path.sep}outside${path.sep}prompt-`)),
+      false,
+      'moving an artifact out of its expected owner directory must invalidate the reference',
+    );
+  }
+
+  for (const reference of [
+    '',
+    ' [OPS-42] Read Jira context file "/tmp/OPS-42/prompt.md" before answering.',
+    '[OPS-42] Read Jira context file not-json before answering.',
+    '[OPS-42] Read Jira context file "relative/prompt.md" before answering.',
+    '[OPS-42] Read Jira context file "/tmp/OPS-42/context.txt" before answering.',
+    '[OPS-42] Read Jira context file "/tmp/OPS-42/prompt.md" before answering.\nnext',
+  ]) {
+    assert.equal(terminalContextInsertion.isSafeTerminalContextReference(reference), false, reference);
+  }
+  assert.throws(
+    () => terminalContextInsertion.buildGitLabMergeRequestContextReference(0, path.join(tempRoot, 'MR-0', 'prompt.md')),
+    /IID is missing or invalid/i,
+  );
+  assert.throws(
+    () => terminalContextInsertion.buildProjectGitContextReference('not-a-git-context', path.join(tempRoot, 'prompt.md')),
+    /Git context id is missing or invalid/i,
+  );
+  assert.throws(
+    () => terminalContextInsertion.buildEditableTerminalContextReference(cases[0], { focus: 'not text' }),
+    /focus must be text/i,
+  );
+  assert.throws(
+    () => terminalContextInsertion.buildEditableTerminalContextReference(cases[0], 'x'.repeat(2001)),
+    /2000 characters or fewer/i,
+  );
+});
+
+test('Claude launch validation covers labels, filesystem failures, and PATH probe failures before creation', () => {
+  assert.deepEqual(
+    claudeTerminalLauncher.CLAUDE_PERMISSION_MODES.map(mode => claudeTerminalLauncher.claudePermissionModeLabel(mode)),
+    [
+      'Manual (default)',
+      'Accept Edits',
+      'Plan',
+      'Auto',
+      "Don't Ask",
+      'Bypass Permissions (experimental)',
+    ],
+  );
+  assert.deepEqual(claudeTerminalLauncher.normalizeClaudeTerminalLaunch({ cwd: null }), {
+    command: 'claude',
+    name: 'Claude',
+    permissionMode: 'default',
+  });
+  assert.equal(
+    claudeTerminalLauncher.normalizeClaudeTerminalLaunch({
+      command: 'claude-team.cmd --model=claude-opus-4-1 --effort=xhigh --ide',
+      name: '  Team   Claude  ',
+    }).command,
+    'claude-team.cmd --model=claude-opus-4-1 --effort=xhigh --ide',
+  );
+
+  for (const [command, pattern] of [
+    ['', /non-empty string/i],
+    [`claude${'x'.repeat(513)}`, /no longer than 512/i],
+    ['claude --ide=true', /does not accept a value/i],
+    ['claude --model', /requires an approved value/i],
+    ['claude --model bad/value', /model must be a shell-inert alias/i],
+    ['claude --effort turbo', /effort must be/i],
+  ]) {
+    assert.throws(() => claudeTerminalLauncher.normalizeClaudeTerminalLaunch({ command }), pattern);
+  }
+  for (const name of [null, '', 'x'.repeat(81), 'Claude\nunsafe']) {
+    assert.throws(
+      () => claudeTerminalLauncher.normalizeClaudeTerminalLaunch({ name }),
+      /terminal name must be/i,
+    );
+  }
+
+  const fileCwd = path.join(tempRoot, 'not-a-directory.txt');
+  fs.writeFileSync(fileCwd, 'fixture\n');
+  for (const cwd of [42, 'relative/path', path.join(tempRoot, 'missing-directory'), fileCwd, `${tempRoot}\nunsafe`]) {
+    assert.throws(
+      () => claudeTerminalLauncher.normalizeClaudeTerminalLaunch({ cwd }),
+      /working directory/i,
+    );
+  }
+
+  assert.deepEqual(claudeTerminalLauncher.probeClaudeExecutableAvailability('claude', {}), {
+    executable: 'claude',
+    available: false,
+  });
+  const probeDirectory = path.join(tempRoot, 'probe-failures');
+  fs.mkdirSync(path.join(probeDirectory, 'claude-directory'), { recursive: true });
+  fs.writeFileSync(path.join(probeDirectory, 'claude-no-execute'), '#!/bin/sh\n', { mode: 0o600 });
+  assert.deepEqual(
+    claudeTerminalLauncher.probeClaudeExecutableAvailability('claude-directory', { Path: `"${probeDirectory}"` }),
+    { executable: 'claude-directory', available: false },
+  );
+  assert.deepEqual(
+    claudeTerminalLauncher.probeClaudeExecutableAvailability('claude-no-execute', { path: probeDirectory }),
+    { executable: 'claude-no-execute', available: process.platform === 'win32' },
+  );
+});

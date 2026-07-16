@@ -13,6 +13,7 @@ const managedMonitorLease = require('../out/services/managedMonitorLease.js');
 const privateFiles = require('../out/services/privateFilePrimitives.js');
 const stateStore = require('../out/services/stateStore.js');
 const workSessions = require('../out/services/workSessionStore.js');
+const projectMonitoringStore = require('../out/services/projectMonitoringStore.js');
 const gitLabMonitorStore = require('../out/services/gitlabMergeRequestMonitorStore.js');
 const gitLabRestModule = require('../out/services/gitlabRestClient.js');
 const { ManagedProviderMonitor } = require('../out/services/managedProviderMonitor.js');
@@ -216,6 +217,138 @@ test('catalog, session, and monitor readers reject incomplete or unsupported pri
   const readStatusPath = gitLabMonitorStore.gitLabMergeRequestReadStatusPath(monitorSession.id, snapshotOptions);
   fs.writeFileSync(readStatusPath, '{"schemaVersion":99}\n', { mode: 0o600 });
   assert.equal(gitLabMonitorStore.readGitLabMergeRequestReadStatus(monitorSession.id, snapshotOptions), null);
+});
+
+test('registered-project monitoring owners refresh identity, reject stale bindings, and isolate returned state', () => {
+  const firstPath = path.join(tempRoot, 'registered-project-v1');
+  const renamedPath = path.join(tempRoot, 'registered-project-v2');
+  const options = {
+    kronosDir: path.join(tempRoot, 'project-monitor-owner'),
+    now: new Date('2026-07-15T12:00:00.000Z'),
+  };
+  const newestSeed = {
+    id: 'gitlab-merge-request-82',
+    provider: 'gitlab',
+    resource: 'merge-request',
+    subjectId: '82',
+    projectId: 'team/application',
+    url: 'https://gitlab.example/team/application/-/merge_requests/82',
+    attachedAt: '2026-07-15T11:59:00.000Z',
+  };
+  const created = projectMonitoringStore.ensureProjectMonitoringRecord({
+    name: 'Application',
+    path: firstPath,
+    displayName: 'Customer API',
+    seedBindings: [newestSeed],
+  }, options);
+  assert.match(created.id, /^project-monitor-[a-f0-9]{48}$/);
+  assert.equal(created.title, 'Customer API provider monitoring');
+  assert.deepEqual(created.ticketKeys, []);
+  assert.deepEqual(created.terminals, []);
+  assert.equal(created.providerBindings[0].subjectId, '82');
+  assert.equal(projectMonitoringStore.isProjectMonitoringRecord(created), true);
+  assert.equal(projectMonitoringStore.isProjectMonitoringRecord({ id: created.id }), false);
+
+  created.ticketKeys.push('MUTATED-1');
+  created.providerBindings[0].subjectId = 'mutated';
+  created.monitoring.enabled = false;
+  const isolated = projectMonitoringStore.readProjectMonitoringRecord('Application', options);
+  assert.deepEqual(isolated.ticketKeys, []);
+  assert.equal(isolated.providerBindings[0].subjectId, '82');
+  assert.equal(isolated.monitoring.enabled, true);
+
+  const recordPath = projectMonitoringStore.projectMonitoringRecordPath(created.id, options);
+  const closed = JSON.parse(fs.readFileSync(recordPath, 'utf8'));
+  closed.status = 'closed';
+  closed.closedAt = '2026-07-15T12:01:00.000Z';
+  closed.monitoring.enabled = false;
+  fs.writeFileSync(recordPath, `${JSON.stringify(closed, null, 2)}\n`, { mode: 0o600 });
+
+  const refreshed = projectMonitoringStore.ensureProjectMonitoringRecord({
+    name: 'Application',
+    path: renamedPath,
+    displayName: 'Customer API v2',
+    seedBindings: [{
+      ...newestSeed,
+      id: 'gitlab-merge-request-stale',
+      url: 'https://gitlab.example/team/application/-/merge_requests/82?stale=1',
+      attachedAt: '2026-07-15T11:58:00.000Z',
+    }],
+  }, { ...options, now: new Date('2026-07-15T12:02:00.000Z') });
+  assert.equal(refreshed.status, 'active');
+  assert.equal(refreshed.closedAt, undefined);
+  assert.equal(refreshed.monitoring.enabled, true);
+  assert.equal(refreshed.title, 'Customer API v2 provider monitoring');
+  assert.equal(refreshed.projectPath, renamedPath);
+  assert.equal(refreshed.providerBindings[0].id, newestSeed.id, 'an older legacy seed must not replace current project state');
+  assert.equal(refreshed.updatedAt, '2026-07-15T12:02:00.000Z');
+
+  const rebound = projectMonitoringStore.ensureProjectMonitoringRecord({
+    name: 'Application',
+    path: renamedPath,
+    displayName: 'Customer API v2',
+    seedBindings: [{
+      ...newestSeed,
+      id: 'gitlab-merge-request-82-newer',
+      url: 'https://gitlab.example/team/application/-/merge_requests/82?current=1',
+      attachedAt: '2026-07-15T12:03:00.000Z',
+    }],
+  }, { ...options, now: new Date('2026-07-15T12:03:00.000Z') });
+  assert.equal(rebound.providerBindings[0].id, 'gitlab-merge-request-82-newer');
+  assert.equal(rebound.providerBindings[0].attachedAt, '2026-07-15T12:03:00.000Z');
+
+  const withJenkins = projectMonitoringStore.addProjectMonitoringProviderBinding(rebound.id, {
+    provider: 'jenkins',
+    resource: 'build',
+    subjectId: '41',
+    projectId: 'https://jenkins.example/job/application',
+    url: 'https://jenkins.example/job/application/41/',
+  }, { ...options, now: new Date('2026-07-15T12:04:00.000Z') });
+  assert.deepEqual(withJenkins.providerBindings.map(binding => binding.provider), ['gitlab', 'jenkins']);
+  const healthy = projectMonitoringStore.recordProjectMonitoringResult(rebound.id, {
+    polled: 2,
+    transitions: 1,
+    failures: 0,
+    skipped: 0,
+    summary: 'GitLab and Jenkins are healthy.',
+  }, { ...options, now: new Date('2026-07-15T12:05:00.000Z') });
+  assert.equal(healthy.monitoring.lastState, 'healthy');
+  assert.equal(healthy.monitoring.lastSuccessfulAt, '2026-07-15T12:05:00.000Z');
+  assert.equal(healthy.monitoring.lastSummary, 'GitLab and Jenkins are healthy.');
+});
+
+test('project monitoring state fails closed for missing owners, invalid identity, and invalid timestamps', () => {
+  const options = { kronosDir: path.join(tempRoot, 'project-monitor-invalid') };
+  assert.throws(() => projectMonitoringStore.projectMonitoringRecordId('  '), /requires a project name/i);
+  assert.equal(projectMonitoringStore.readProjectMonitoringRecordById('session-not-a-project-owner', options), null);
+  assert.throws(
+    () => projectMonitoringStore.ensureProjectMonitoringRecord({ name: 'Invalid Time', path: tempRoot }, {
+      ...options,
+      now: new Date('invalid'),
+    }),
+    /timestamp is invalid/i,
+  );
+  assert.throws(
+    () => projectMonitoringStore.addProjectMonitoringProviderBinding(
+      projectMonitoringStore.projectMonitoringRecordId('Missing'),
+      { provider: 'gitlab', resource: 'merge-request', subjectId: '1' },
+      options,
+    ),
+    /record not found/i,
+  );
+
+  const created = projectMonitoringStore.ensureProjectMonitoringRecord({
+    name: 'Corrupt Identity',
+    path: tempRoot,
+  }, options);
+  const recordPath = projectMonitoringStore.projectMonitoringRecordPath(created.id, options);
+  const serialized = JSON.parse(fs.readFileSync(recordPath, 'utf8'));
+  serialized.projectName = 'Different Project';
+  fs.writeFileSync(recordPath, `${JSON.stringify(serialized, null, 2)}\n`, { mode: 0o600 });
+  assert.throws(
+    () => projectMonitoringStore.readProjectMonitoringRecord('Corrupt Identity', options),
+    /invalid owner identity/i,
+  );
 });
 
 test('disposing the monitor releases its lease and prevents late provider state writes', async () => {

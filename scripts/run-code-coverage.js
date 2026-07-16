@@ -4,22 +4,25 @@ const { spawnSync } = require('node:child_process');
 const { testSuiteFiles } = require('./test-suite-files.js');
 
 const root = path.resolve(__dirname, '..');
-const COVERAGE_THRESHOLDS = Object.freeze({ lines: 82, branches: 74, functions: 87.25 });
+const COVERAGE_THRESHOLDS = Object.freeze({ lines: 83, branches: 75, functions: 87.75 });
 const CRITICAL_FILE_THRESHOLDS = Object.freeze({
   'dateValues.js': Object.freeze({ lines: 100, branches: 100, functions: 100 }),
   'gitlabPipelineMonitorStore.js': Object.freeze({ lines: 92, branches: 69, functions: 76 }),
   'jiraTicketContext.js': Object.freeze({ lines: 85, branches: 85, functions: 94 }),
   'jiraValuePruning.js': Object.freeze({ lines: 97, branches: 96, functions: 100 }),
   'localEvidenceSearch.js': Object.freeze({ lines: 96, branches: 92, functions: 100 }),
-  'managedProviderMonitor.js': Object.freeze({ lines: 83, branches: 73, functions: 89 }),
+  'managedProviderMonitor.js': Object.freeze({ lines: 83, branches: 75, functions: 90 }),
   'monitorEventStore.js': Object.freeze({ lines: 94, branches: 92, functions: 90 }),
+  'terminalContextInsertion.js': Object.freeze({ lines: 93, branches: 87, functions: 91 }),
+  'claudeTerminalLauncher.js': Object.freeze({ lines: 97, branches: 91, functions: 75 }),
+  'projectMonitoringStore.js': Object.freeze({ lines: 93, branches: 91, functions: 81 }),
   'projectCatalog.js': Object.freeze({ lines: 92, branches: 81, functions: 93 }),
   'providerReadHealth.js': Object.freeze({ lines: 94, branches: 88, functions: 78 }),
   'TerminalFirstState.js': Object.freeze({ lines: 91, branches: 74, functions: 83 }),
   'AttentionTreeProvider.js': Object.freeze({ lines: 98, branches: 89, functions: 89 }),
   'ManagedSessionTreeProvider.js': Object.freeze({ lines: 95, branches: 87, functions: 76 }),
-  'ProjectTreeProvider.js': Object.freeze({ lines: 96, branches: 78, functions: 82 }),
-  'WorkTreeProvider.js': Object.freeze({ lines: 95, branches: 82, functions: 76 }),
+  'ProjectTreeProvider.js': Object.freeze({ lines: 96, branches: 80, functions: 82 }),
+  'WorkTreeProvider.js': Object.freeze({ lines: 95, branches: 83, functions: 76 }),
 });
 const MINIMUM_NODE_VERSION = Object.freeze({ major: 22, minor: 5 });
 
