@@ -33,7 +33,7 @@ test('session provider health derives the next poll and legacy successful-poll f
   assert.equal(health.lastSuccessfulAt, '2026-07-14T12:00:00.000Z');
   assert.equal(health.nextScheduledAt, '2026-07-14T12:05:00.000Z');
   assert.equal(health.suppressedUnchangedCount, 4);
-  assert.equal(providerMonitoringHealthSummary(health), 'poll healthy • quiet 4');
+  assert.equal(providerMonitoringHealthSummary(health), 'Up to date');
 });
 
 test('project provider health aggregates latest evidence and earliest scheduled poll', () => {
@@ -108,7 +108,7 @@ test('health-only updates stay out of Attention history and use observation-only
 
   const stored = readWorkSession(created.id);
   const health = sessionProviderMonitoringHealth(stored, 300_000);
-  assert.equal(providerMonitoringHealthSummary(health), 'poll healthy • quiet 1');
+  assert.equal(providerMonitoringHealthSummary(health), 'Up to date');
   assert.doesNotMatch(providerMonitoringHealthSummary(health), /repair|remediat|fixed automatically/i);
   assert.deepEqual(listMonitorEvents({
     sessionId: created.id,
@@ -185,8 +185,10 @@ test('provider diagnostics retain current live failures and partial reads until 
     ['jenkins', 'warn', 'pollProvidersNow'],
     ['sonar', 'fail', 'pollProvidersNow'],
   ]);
+  assert.equal(diagnostics.find(item => item.provider === 'gitlab').actionLabel, 'Fix Provider Config');
   assert.match(diagnostics.find(item => item.provider === 'gitlab').detail, /authentication unavailable/);
   assert.doesNotMatch(JSON.stringify(diagnostics), /must-not-surface|session-one|session-two/);
+  assert.doesNotMatch(JSON.stringify(diagnostics), /read stream|incomplete components|complete facets|remain retained/i);
   assert.match(diagnostics.find(item => item.provider === 'jenkins').detail, /stages, tests/);
   assert.match(diagnostics.find(item => item.provider === 'sonar').detail, /timed out.*reachability/i);
 

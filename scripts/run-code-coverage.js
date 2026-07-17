@@ -4,13 +4,16 @@ const { spawnSync } = require('node:child_process');
 const { testSuiteFiles } = require('./test-suite-files.js');
 
 const root = path.resolve(__dirname, '..');
-const COVERAGE_THRESHOLDS = Object.freeze({ lines: 84.7, branches: 76.2, functions: 88.6 });
+const COVERAGE_THRESHOLDS = Object.freeze({ lines: 86.4, branches: 77.4, functions: 89.5 });
 const CRITICAL_FILE_THRESHOLDS = Object.freeze({
   'contextBasketStore.js': Object.freeze({ lines: 90, branches: 78, functions: 93 }),
   'dateValues.js': Object.freeze({ lines: 100, branches: 100, functions: 100 }),
   'gitlabPipelineMonitorStore.js': Object.freeze({ lines: 92, branches: 69, functions: 76 }),
+  'gitlabRestClient.js': Object.freeze({ lines: 82, branches: 69, functions: 87 }),
+  'jenkinsRestClient.js': Object.freeze({ lines: 73, branches: 60, functions: 89 }),
   'jiraTicketContext.js': Object.freeze({ lines: 85, branches: 85, functions: 94 }),
   'jiraContextStore.js': Object.freeze({ lines: 75, branches: 59, functions: 90 }),
+  'jiraRestClient.js': Object.freeze({ lines: 79, branches: 78, functions: 88 }),
   'jiraValuePruning.js': Object.freeze({ lines: 97, branches: 96, functions: 100 }),
   'legacyStateMigration.js': Object.freeze({ lines: 86, branches: 75, functions: 82 }),
   'localEvidenceSearch.js': Object.freeze({ lines: 96, branches: 92, functions: 100 }),
@@ -23,10 +26,12 @@ const CRITICAL_FILE_THRESHOLDS = Object.freeze({
   'workSessionAuditView.js': Object.freeze({ lines: 100, branches: 89.5, functions: 100 }),
   'webviewSecurity.js': Object.freeze({ lines: 100, branches: 97, functions: 100 }),
   'handoffBundleStore.js': Object.freeze({ lines: 95, branches: 76, functions: 88 }),
-  'terminalFirstExtension.js': Object.freeze({ lines: 74.5, branches: 57.5, functions: 87.5 }),
+  'terminalFirstExtension.js': Object.freeze({ lines: 77.5, branches: 60, functions: 89.5 }),
   'projectCatalog.js': Object.freeze({ lines: 92, branches: 82, functions: 93 }),
   'projectDiscovery.js': Object.freeze({ lines: 85, branches: 66, functions: 80 }),
+  'pipelineTransitions.js': Object.freeze({ lines: 95, branches: 88, functions: 88 }),
   'providerReadHealth.js': Object.freeze({ lines: 94, branches: 88, functions: 78 }),
+  'sonarRestClient.js': Object.freeze({ lines: 77, branches: 65, functions: 90 }),
   'TerminalFirstState.js': Object.freeze({ lines: 91, branches: 74, functions: 83 }),
   'AttentionTreeProvider.js': Object.freeze({ lines: 98, branches: 89, functions: 89 }),
   'ManagedSessionTreeProvider.js': Object.freeze({ lines: 95, branches: 87, functions: 76 }),

@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { boundedOperationFailure } from '../services/errorUtils';
+import { formatDateTimeLabel } from '../services/dateLabels';
 import {
   MonitorEvent,
   MonitorEventSource,
@@ -24,6 +25,7 @@ import {
   attentionProviderIconId,
   attentionProviderChoicesForEvent,
   attentionSeverity,
+  attentionSeverityLabel,
   attentionSeverityColorId,
   attentionTicketKey,
   groupAttentionEntriesByProject,
@@ -65,6 +67,7 @@ export class AttentionTreeProvider implements vscode.TreeDataProvider<AttentionT
   private readonly loadWorkSessions: () => WorkSessionRecord[];
   private readonly loadRegisteredProjects: () => readonly AttentionRegisteredProject[];
   private readonly loadProjectDisplayName: (projectName: string) => string | undefined;
+  private loadWarning = false;
   readonly onDidChangeTreeData = this.changeEmitter.event;
 
   constructor(options: AttentionTreeProviderOptions = {}) {
@@ -88,12 +91,14 @@ export class AttentionTreeProvider implements vscode.TreeDataProvider<AttentionT
     }
     if (element) { return []; }
 
+    this.loadWarning = false;
     const entries = this.unacknowledgedEntries();
+    const warningItems = this.loadWarning ? [new AttentionMessageTreeItem('warning')] : [];
     if (entries.length === 0) {
-      return [new AttentionMessageTreeItem()];
+      return warningItems.length > 0 ? warningItems : [new AttentionMessageTreeItem()];
     }
 
-    return groupAttentionEntriesByProject(entries)
+    const groups = groupAttentionEntriesByProject(entries)
       .map(group => new AttentionGroupTreeItem(
         group.entries,
         group.identity,
@@ -101,6 +106,7 @@ export class AttentionTreeProvider implements vscode.TreeDataProvider<AttentionT
       ))
       .sort((left, right) => right.newestAt.localeCompare(left.newestAt)
         || left.labelText.localeCompare(right.labelText));
+    return [...warningItems, ...groups];
   }
 
   refresh(): void {
@@ -116,6 +122,7 @@ export class AttentionTreeProvider implements vscode.TreeDataProvider<AttentionT
     try {
       events = this.loadMonitorEvents();
     } catch (error: unknown) {
+      this.loadWarning = true;
       console.warn(`Kronos attention refresh failed: ${boundedOperationFailure(error, 'Attention events could not be read.').display}`);
       return [];
     }
@@ -148,6 +155,7 @@ export class AttentionTreeProvider implements vscode.TreeDataProvider<AttentionT
     try {
       return this.loadWorkSessions();
     } catch (error: unknown) {
+      this.loadWarning = true;
       console.warn(`Kronos attention session correlation failed: ${boundedOperationFailure(error, 'Attention session state could not be read.').display}`);
       return [];
     }
@@ -157,6 +165,7 @@ export class AttentionTreeProvider implements vscode.TreeDataProvider<AttentionT
     try {
       return this.loadRegisteredProjects();
     } catch (error: unknown) {
+      this.loadWarning = true;
       console.warn(`Kronos attention project correlation failed: ${boundedOperationFailure(error, 'Registered projects could not be read.').display}`);
       return [];
     }
@@ -181,21 +190,18 @@ export class AttentionGroupTreeItem extends vscode.TreeItem {
     const projectName = group.projectName;
     const nicknameIdentity = projectName && displayName ? attentionProjectGroupIdentity(displayName) : undefined;
     const label = nicknameIdentity?.projectName ? nicknameIdentity.label : group.label;
-    const sessionIds = [...new Set(entries.map(entry => entry.event.sessionId))];
     super(label, vscode.TreeItemCollapsibleState.Expanded);
     this.newestAt = newest.event.at;
     this.labelText = label;
     this.projectName = projectName;
     this.id = group.id;
     this.contextValue = 'attention_group';
-    this.description = `${entries.length} current item${entries.length === 1 ? '' : 's'} • newest ${displayTimestamp(this.newestAt)}`;
+    this.description = `${entries.length} item${entries.length === 1 ? '' : 's'} • ${displayTimestamp(this.newestAt)}`;
     this.tooltip = [
       `Project: ${label}`,
-      ...(projectName && label !== projectName ? [`Stable project identity: ${projectName}`] : []),
-      `Contributing work sessions: ${sessionIds.length}`,
-      `Unacknowledged provider transitions: ${entries.length}`,
-      `Newest transition: ${this.newestAt}`,
-      'Jira contexts are optional row-level actions and never define an Attention group.',
+      `${entries.length} current item${entries.length === 1 ? '' : 's'}`,
+      `Latest update: ${formatDateTimeLabel(this.newestAt, 'Unknown')}`,
+      'Expand to review provider changes.',
     ].join('\n');
     this.iconPath = new vscode.ThemeIcon('bell-dot', new vscode.ThemeColor('charts.yellow'));
   }
@@ -274,16 +280,24 @@ export function attentionPrimaryCommand(
   }
   return {
     command: 'kronos.doctor',
-    title: 'Open Kronos Doctor',
+    title: 'Check Setup',
   };
 }
 
 export class AttentionMessageTreeItem extends vscode.TreeItem {
-  constructor() {
-    super('No provider or monitoring changes need attention', vscode.TreeItemCollapsibleState.None);
+  constructor(kind: 'empty' | 'warning' = 'empty') {
+    super(kind === 'warning' ? 'Attention may be incomplete' : 'No changes need attention', vscode.TreeItemCollapsibleState.None);
+    if (kind === 'warning') {
+      this.contextValue = 'attention_error';
+      this.description = 'Open Check Setup, then refresh';
+      this.tooltip = 'Kronos could not load all saved provider updates. Select to open Check Setup.';
+      this.iconPath = new vscode.ThemeIcon('warning', new vscode.ThemeColor('list.warningForeground'));
+      this.command = { command: 'kronos.doctor', title: 'Check Setup' };
+      return;
+    }
     this.contextValue = 'attention_empty';
-    this.description = 'monitoring is clear';
-    this.tooltip = 'Current GitLab, Jenkins, SonarQube, provider-health, and local-monitoring transitions stay here until you clear them.';
+    this.description = 'all provider updates are clear';
+    this.tooltip = 'Merge request, build, quality, and provider problems appear here. Clear an item after review; its Session history remains available.';
     this.iconPath = new vscode.ThemeIcon('check', new vscode.ThemeColor('testing.iconPassed'));
   }
 }
@@ -305,31 +319,29 @@ function isProviderUrlSource(source: MonitorEventSource): source is WorkSessionP
 function eventTooltip(entry: AttentionEntry): string {
   const event = entry.event;
   const presentation = attentionEventPresentation(event, entry.session);
-  const before = event.before?.state || 'unknown';
-  const after = event.after?.state || 'unknown';
+  const primaryAction = attentionPrimaryActionLabel(entry);
   const lines = [
-    'Current Attention state (audit history is retained after clearing)',
-    `Event: ${event.id}`,
+    presentation.why,
     `Project: ${presentation.project}`,
-    `Optional Jira context: ${entry.ticketKey || 'none'}`,
-    `Work session: ${event.sessionId}`,
+    ...(entry.ticketKey ? [`Jira ticket: ${entry.ticketKey}`] : []),
     `Provider: ${presentation.provider}`,
     `Subject: ${presentation.subject}`,
-    `Severity: ${presentation.severity}`,
-    `Why attention: ${presentation.why}`,
-    `State: ${before} -> ${after}`,
-    `Transition: ${metadataString(event, 'transitionKind') || 'provider state changed'}`,
-    `Observed: ${presentation.observedAt}`,
-    `Last changed: ${presentation.changedAt}`,
-    `Provider URL: ${entry.providerUrl || 'not recorded'}`,
-    `Primary action: ${entry.providerUrl ? 'open the validated provider page' : entry.session?.projectName && entry.session.projectPath ? 'repair this project provider setup' : 'open Kronos Doctor'}`,
-    `Clear behavior: ${event.source === 'gitlab' && event.subject?.kind === 'merge-request' ? 'an open MR returns after the next successful poll; merged or closed MRs stay cleared' : 'the row stays cleared until a real state transition occurs'}`,
+    `Status: ${attentionSeverityLabel(presentation.severity)}`,
+    `Observed: ${formatDateTimeLabel(presentation.observedAt, 'Unknown')}`,
+    `Last changed: ${formatDateTimeLabel(presentation.changedAt, 'Unknown')}`,
+    `Select to ${primaryAction}.`,
+    `After clearing: ${event.source === 'gitlab' && event.subject?.kind === 'merge-request' ? 'an open merge request returns after the next successful check; merged or closed requests stay cleared' : 'the item stays cleared until its state changes'}`,
   ];
   for (const [key, label] of METADATA_TOOLTIP_FIELDS) {
     const value = event.metadata?.[key];
     if (value !== undefined && value !== null) { lines.push(`${label}: ${String(value)}`); }
   }
   return lines.join('\n');
+}
+
+function attentionPrimaryActionLabel(entry: AttentionEntry): string {
+  if (entry.providerUrl) { return 'open the provider page'; }
+  return entry.session?.projectName && entry.session.projectPath ? 'open project integrations' : 'check setup';
 }
 
 const METADATA_TOOLTIP_FIELDS: ReadonlyArray<readonly [string, string]> = [
@@ -359,11 +371,6 @@ function eventIcon(event: MonitorEvent): vscode.ThemeIcon {
     case 'warning': return new vscode.ThemeIcon('warning', new vscode.ThemeColor('list.warningForeground'));
     case 'information': return new vscode.ThemeIcon('bell-dot', new vscode.ThemeColor('charts.yellow'));
   }
-}
-
-function metadataString(event: MonitorEvent, key: string): string {
-  const value = event.metadata?.[key];
-  return typeof value === 'string' ? value : '';
 }
 
 function displayTimestamp(value: string): string {

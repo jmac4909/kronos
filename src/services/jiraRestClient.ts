@@ -526,6 +526,7 @@ export class JiraRestClient {
     let startAt = 0;
     let total: number | undefined;
     let complete = false;
+    let stoppedWithWarning = false;
 
     while (pageCount < this.maxCommentPages) {
       const pageNumber = pageCount + 1;
@@ -541,16 +542,19 @@ export class JiraRestClient {
       } catch (error: unknown) {
         if (isJiraRequestCancelled(error, options.signal)) { throw error; }
         warnings.push(`Jira comment page ${pageNumber} could not be fetched; ${comments.length} previously fetched comment${comments.length === 1 ? '' : 's'} were retained.`);
+        stoppedWithWarning = true;
         break;
       }
       if (responseBytes + response.bodyBytes > this.maxTotalCommentBytes) {
         warnings.push(`Jira comment collection stopped before page ${pageNumber} because responses reached the ${this.maxTotalCommentBytes}-byte cumulative safety limit.`);
+        stoppedWithWarning = true;
         break;
       }
       responseBytes += response.bodyBytes;
       const page = isRecord(response.value) ? response.value : undefined;
       if (!page) {
         warnings.push(`Jira comment page ${pageNumber} returned an invalid pagination object; previously fetched comments were retained.`);
+        stoppedWithWarning = true;
         break;
       }
       const pageComments = arrayFromUnknown(page['comments']);
@@ -570,12 +574,13 @@ export class JiraRestClient {
       }
       if (pageComments.length === 0 || nextStartAt <= startAt) {
         warnings.push(`Jira comment collection stopped at page ${pageNumber} because pagination did not advance safely.`);
+        stoppedWithWarning = true;
         break;
       }
       startAt = nextStartAt;
     }
 
-    if (!complete) {
+    if (!complete && !stoppedWithWarning) {
       warnings.push(`Jira comment collection stopped at the safety limit of ${this.maxCommentPages} pages.`);
     }
     // Jira pages newest-first so a bounded/partial read retains recent operator

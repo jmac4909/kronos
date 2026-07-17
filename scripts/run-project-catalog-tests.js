@@ -381,13 +381,15 @@ test('project integration values round-trip, clear, and default to the observed 
     scriptUri: 'vscode-webview://fixture/kronos-project-integration.js',
   });
   assert.match(html, /value="group\/application"/);
-  assert.match(html, /Project nickname \(optional\)/);
+  assert.match(html, /Display name \(optional\)/);
   assert.match(html, /value="Customer API"/);
-  assert.match(html, /Stable project: Application/);
+  assert.match(html, /Project ID: Application/);
   assert.match(html, /value="https:\/\/jenkins\.example\/job\/application"/);
   assert.match(html, /value="team:application"/);
   assert.match(html, /value="feature\/observed-branch"/);
-  assert.match(html, /Blank fields clear that optional nickname or integration/);
+  assert.match(html, /Leaving a field blank removes that optional setting/);
+  assert.match(html, /Save changes/);
+  assert.match(html, /grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)/);
   assert.doesNotMatch(html, /Connect registered folders/);
 });
 
@@ -546,9 +548,9 @@ test('project integration presentation exposes readiness without provider identi
     sonar: false,
   });
   assert.deepEqual(needsCredentials, [
-    'GitLab: target saved, credentials need Doctor',
-    'Jenkins: target saved, credentials need Doctor',
-    'SonarQube: target saved, credentials need Doctor',
+    'GitLab: credentials needed',
+    'Jenkins: credentials needed',
+    'SonarQube: credentials needed',
   ]);
   const active = projectInventoryPresentation.projectIntegrationStatusLines(config, {
     gitlab: true,
@@ -556,9 +558,9 @@ test('project integration presentation exposes readiness without provider identi
     sonar: true,
   });
   assert.deepEqual(active, [
-    'GitLab: automatic project polling active',
-    'Jenkins: automatic project polling active',
-    'SonarQube: automatic project polling active',
+    'GitLab: ready',
+    'Jenkins: ready',
+    'SonarQube: ready',
   ]);
   const rendered = [...needsCredentials, ...active].join('\n');
   assert.doesNotMatch(rendered, /private-application|private:application|jenkins\.example/);
@@ -641,6 +643,28 @@ test('project configuration is canonical at setup and Work catalog ingress', () 
 
   const setupState = stateStore.emptyWorkCatalog();
   setupState.projects.Valid = { path: tempRoot, config: {} };
+  assert.equal(
+    projectCatalog.setLocalProjectSonarTarget(setupState, 'Missing', 'team:application'),
+    setupState,
+    'provider discovery ignores a project removed before its result arrives',
+  );
+  assert.throws(
+    () => projectCatalog.setLocalProjectSonarTarget(setupState, 'Valid', 'unsupported key'),
+    /invalid SonarQube project key/i,
+  );
+  const discoveredSonar = projectCatalog.setLocalProjectSonarTarget(
+    setupState,
+    'Valid',
+    'team:application',
+    'feature/sonar',
+  );
+  assert.equal(discoveredSonar.projects.Valid.config.sonar_project_key, 'team:application');
+  assert.equal(discoveredSonar.projects.Valid.config.sonar_branch, 'feature/sonar');
+  assert.equal(
+    projectCatalog.setLocalProjectSonarTarget(discoveredSonar, 'Valid', 'team:application', 'feature/sonar'),
+    discoveredSonar,
+    'an unchanged discovered SonarQube target preserves state identity',
+  );
   assert.throws(() => projectCatalog.setLocalProjectIntegrations(setupState, [{
     name: 'Valid',
     defaultBranch: 'bad..branch',

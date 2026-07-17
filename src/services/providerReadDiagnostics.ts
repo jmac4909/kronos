@@ -55,9 +55,9 @@ export function currentProviderReadDiagnostics(
       diagnostics.push({
         provider,
         status: 'fail',
-        detail: `${problems.length} current provider read stream${problems.length === 1 ? '' : 's'} failed or remained partial. Latest failure: ${failure.display}`,
+        detail: `${problems.length} provider update source${problems.length === 1 ? ' needs' : 's need'} attention. Latest problem: ${failure.display}`,
         action: failure.retryable ? 'pollProvidersNow' : 'openProviderEnvironment',
-        actionLabel: failure.retryable ? 'Poll Now' : 'Repair Private Config',
+        actionLabel: failure.retryable ? 'Check Now' : 'Fix Provider Config',
         problemCount: problems.length,
         ...(observedAt ? { observedAt } : {}),
       });
@@ -68,9 +68,9 @@ export function currentProviderReadDiagnostics(
     diagnostics.push({
       provider,
       status: 'warn',
-      detail: `${problems.length} current provider read stream${problems.length === 1 ? ' is' : 's are'} partial. Latest incomplete components: ${components.join(', ') || 'bounded provider evidence'}. Last-known complete facets remain retained.`,
+      detail: `${problems.length} provider update source${problems.length === 1 ? '' : 's'} returned incomplete results. Missing: ${components.join(', ') || 'some provider details'}. Earlier complete results remain visible.`,
       action: 'pollProvidersNow',
-      actionLabel: 'Poll Now',
+      actionLabel: 'Check Now',
       problemCount: problems.length,
       ...(observedAt ? { observedAt } : {}),
     });
@@ -85,7 +85,7 @@ function jiraDiagnostic(status: JiraWorkRefreshStatus | undefined): ProviderRead
     return {
       provider: 'jira',
       status: 'warn',
-      detail: `The latest Jira read is partial with ${boundedCount(status.warningCount)} warning${status.warningCount === 1 ? '' : 's'}; ${boundedCount(status.retainedFromPrevious)} prior ticket${status.retainedFromPrevious === 1 ? ' was' : 's were'} retained.`,
+      detail: `The latest Jira refresh completed with ${boundedCount(status.warningCount)} warning${status.warningCount === 1 ? '' : 's'}. ${boundedCount(status.retainedFromPrevious)} earlier ticket${status.retainedFromPrevious === 1 ? ' remains' : 's remain'} visible.`,
       action: 'openJiraBoard',
       actionLabel: 'Open Jira Board',
       problemCount: 1,

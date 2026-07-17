@@ -545,7 +545,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
     this.providerEnvironmentLoad = result;
     if (result.error) {
       this.log('Could not load the local provider environment.', result.error);
-      void vscode.window.showWarningMessage('Kronos could not load its provider environment file. Provider reads may be unavailable; run Kronos: Doctor.');
+      void vscode.window.showWarningMessage('Kronos could not load its provider environment file. Provider reads may be unavailable; run Kronos: Check Setup.');
     } else if (result.present) {
       this.log('Loaded local provider environment.', `${result.loaded} value(s) loaded; ${result.skippedExisting} existing value(s) preserved.`);
     }
@@ -613,15 +613,18 @@ class TerminalFirstRuntime implements vscode.Disposable {
   private async configureWorkFilter(): Promise<void> {
     const current = this.workTree.getFilter();
     const options = this.workTree.getFilterOptions();
+    const workState = current.jiraStatus
+      ? `Status: ${current.jiraStatus}`
+      : workCompletionLabel(current.completion || this.workTree.defaultCompletion());
     const selection = await vscode.window.showQuickPick([
-      { label: '$(search) Search text', description: current.query || 'none', id: 'query' },
-      { label: '$(issue-opened) Completion', description: current.jiraStatus ? `status: ${current.jiraStatus}` : current.completion || this.workTree.defaultCompletion(), id: 'completion' },
-      { label: '$(list-filter) Jira status', description: current.jiraStatus || 'any active status', id: 'status' },
-      { label: '$(issues) Jira project', description: current.jiraProject || 'all Jira projects', id: 'jiraProject' },
-      { label: '$(repo) Local project', description: current.localProject || 'all local projects', id: 'localProject' },
-      { label: '$(tag) Label', description: current.label || 'all labels', id: 'label' },
-      { label: '$(clear-all) Clear filters', description: 'return to the configured Jira visibility default', id: 'clear' },
-    ], { title: 'Filter Kronos Work', placeHolder: 'Choose a filter to change' });
+      { label: '$(search) Search', description: current.query || 'Any text', id: 'query' },
+      { label: '$(issue-opened) Work state', description: workState, id: 'completion' },
+      { label: '$(list-filter) Jira status', description: current.jiraStatus || 'Any active status', id: 'status' },
+      { label: '$(issues) Jira project', description: current.jiraProject || 'All Jira projects', id: 'jiraProject' },
+      { label: '$(repo) Local project', description: current.localProject || 'All local projects', id: 'localProject' },
+      { label: '$(tag) Label', description: current.label || 'All labels', id: 'label' },
+      { label: '$(clear-all) Clear all filters', description: 'Show the default Work view', id: 'clear' },
+    ], { title: 'Filter Work', placeHolder: 'Choose what to filter' });
     if (!selection) { return; }
     if (selection.id === 'clear') {
       this.workTree.clearFilter();
@@ -629,8 +632,8 @@ class TerminalFirstRuntime implements vscode.Disposable {
     }
     if (selection.id === 'query') {
       const query = await vscode.window.showInputBox({
-        title: 'Search Kronos Work',
-        prompt: 'Match ticket key, summary, description, status, label, project, MR, or build',
+        title: 'Search Work',
+        prompt: 'Match ticket keys, summaries, statuses, labels, projects, merge requests, and builds',
         value: current.query || '',
       });
       if (query !== undefined) { this.workTree.setFilter({ ...current, query }); }
@@ -638,10 +641,10 @@ class TerminalFirstRuntime implements vscode.Disposable {
     }
     if (selection.id === 'completion') {
       const completion = await vscode.window.showQuickPick([
-        { label: 'Active', description: 'Hide Jira work in the Done status category', value: 'active' as const },
-        { label: 'Completed', description: 'Show only Jira work in the Done status category', value: 'completed' as const },
-        { label: 'All', description: 'Show active and completed Jira work', value: 'all' as const },
-      ], { title: 'Filter by completion' });
+        { label: 'Active', description: 'Hide completed tickets', value: 'active' as const },
+        { label: 'Completed', description: 'Show only completed tickets', value: 'completed' as const },
+        { label: 'All', description: 'Show active and completed tickets', value: 'all' as const },
+      ], { title: 'Choose Work State' });
       if (completion) {
         const next = { ...current, completion: completion.value };
         delete next.jiraStatus;
@@ -726,7 +729,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
       };
       return {
         label: registered.displayName,
-        description: `registered · ${registered.branch || (registered.available ? 'branch unavailable' : 'folder unavailable')}`,
+        description: `Registered • ${registered.branch || (registered.available ? 'Branch unavailable' : 'Folder unavailable')}`,
         detail: registered.path,
         picked: true,
         registered: true,
@@ -737,7 +740,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
       .filter(project => !registeredPathKeys.has(localProjectPathKey(project.path)))
       .map(project => ({
         label: project.name,
-        description: `not registered · ${project.branch || 'branch unavailable'} · ${project.source === 'workspace' ? 'open workspace' : 'configured root'}`,
+        description: `Available • ${project.branch || 'Branch unavailable'} • ${project.source === 'workspace' ? 'Open workspace' : 'Project folder'}`,
         detail: project.path,
         picked: false,
         registered: false,
@@ -745,10 +748,10 @@ class TerminalFirstRuntime implements vscode.Disposable {
       }));
     const choices = [...registeredChoices, ...discoveredChoices];
     const selected = await vscode.window.showQuickPick(choices, {
-      title: 'Manage Registered Local Projects',
+      title: 'Manage Projects',
       placeHolder: discovery.truncated
-        ? 'Bounded discovery limit reached; checked projects stay registered and unchecked projects are removed'
-        : 'Check projects to register; uncheck registered projects to remove them',
+        ? 'Project limit reached. Select projects to keep; clear a checked project to remove it'
+        : 'Select projects to keep; clear a checked project to remove it',
       canPickMany: true,
       matchOnDescription: true,
       matchOnDetail: true,
@@ -777,7 +780,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
     }
     this.refreshTerminalFirstViews();
     void vscode.window.showInformationMessage(
-      `${registrations.length} local project${registrations.length === 1 ? ' is' : 's are'} registered; ${removedProjects.length} unregistered${linkedTicketKeys.length > 0 ? ` and unlinked from ${linkedTicketKeys.length} ticket${linkedTicketKeys.length === 1 ? '' : 's'}` : ''}${discovery.truncated ? ' from bounded discovery results' : ''}.`,
+      `${registrations.length} local project${registrations.length === 1 ? ' is' : 's are'} registered; ${removedProjects.length} unregistered${linkedTicketKeys.length > 0 ? ` and unlinked from ${linkedTicketKeys.length} ticket${linkedTicketKeys.length === 1 ? '' : 's'}` : ''}${discovery.truncated ? ' from the current results' : ''}.`,
     );
     if (newlyRegistered.length > 0) {
       this.openProjectIntegrationSetup(newlyRegistered.map(project => project.name));
@@ -790,8 +793,8 @@ class TerminalFirstRuntime implements vscode.Disposable {
       canSelectFiles: false,
       canSelectFolders: true,
       canSelectMany: true,
-      title: 'Choose Kronos Project Discovery Folders',
-      openLabel: 'Add Discovery Folders',
+      title: 'Choose Project Folders',
+      openLabel: 'Add Folders',
       ...(defaultUri ? { defaultUri } : {}),
     });
     if (!selectedFolders || selectedFolders.length === 0) { return; }
@@ -837,13 +840,13 @@ class TerminalFirstRuntime implements vscode.Disposable {
       ? localProjects.filter(project => requested.has(project.name))
       : localProjects;
     if (selectedProjects.length === 0) {
-      void vscode.window.showWarningMessage('Register at least one local project before configuring provider polling.');
+      void vscode.window.showWarningMessage('Register at least one project before configuring integrations.');
       return;
     }
     this.projectIntegrationPanel?.panel.dispose();
     const panel = vscode.window.createWebviewPanel(
       'kronosProjectIntegrationSetup',
-      'Kronos — Project Integration Setup',
+      'Kronos — Project integrations',
       vscode.ViewColumn.One,
       {
         enableScripts: true,
@@ -885,7 +888,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
         void this.pollProviders(false);
         panel.dispose();
         void vscode.window.showInformationMessage(
-          `Saved nickname and read-only provider polling setup for ${message.projects.length} project${message.projects.length === 1 ? '' : 's'}. Run Doctor to verify credentials and remaining prerequisites.`,
+          `Saved the name and integrations for ${message.projects.length} project${message.projects.length === 1 ? '' : 's'}. Check setup to verify provider access.`,
         );
       } catch (error: unknown) {
         const detail = boundedOperationFailure(error, 'Project integration setup could not be saved.').display;
@@ -976,8 +979,8 @@ class TerminalFirstRuntime implements vscode.Disposable {
       }, ...projectChoices.slice(1)].filter((item): item is vscode.QuickPickItem & { project?: LocalProjectSummary; unlink?: true } => Boolean(item))
       : projectChoices;
     const choice = await vscode.window.showQuickPick(choices, {
-      title: current ? `Change or Unlink ${ticketKey} Local Project` : `Add ${ticketKey} Local Project`,
-      placeHolder: 'Claude will start in this folder; Kronos will not move existing terminals',
+      title: `${ticketKey}: ${current ? 'Change project' : 'Choose project'}`,
+      placeHolder: 'New Claude sessions start here. Existing terminals do not move.',
       matchOnDescription: true,
       matchOnDetail: true,
     });
@@ -1008,11 +1011,11 @@ class TerminalFirstRuntime implements vscode.Disposable {
       }
       if (showResult) {
         const retained = result.retainedFromPrevious > 0
-          ? ` ${result.retainedFromPrevious} prior ticket${result.retainedFromPrevious === 1 ? ' was' : 's were'} retained because the read was partial.`
+          ? ` ${result.retainedFromPrevious} earlier ticket${result.retainedFromPrevious === 1 ? ' remains' : 's remain'} visible because the refresh was incomplete.`
           : '';
         const message = `Kronos refreshed ${result.ticketCount} Jira ticket${result.ticketCount === 1 ? '' : 's'} across ${result.pageCount} page${result.pageCount === 1 ? '' : 's'}.${retained}`;
         if (result.complete && result.warnings.length === 0) { void vscode.window.showInformationMessage(message); }
-        else { void vscode.window.showWarningMessage(`${message} Open Doctor for details.`); }
+        else { void vscode.window.showWarningMessage(`${message} Check setup for details.`); }
       }
       void this.pollProviders(false);
     } catch (error: unknown) {
@@ -1100,7 +1103,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
 
     const panel = vscode.window.createWebviewPanel(
       'kronosTicketWorkspace',
-      `${ticketKey} — Terminal Workspace`,
+      `${ticketKey} — Ticket`,
       vscode.ViewColumn.One,
       {
         enableScripts: true,
@@ -1226,34 +1229,34 @@ class TerminalFirstRuntime implements vscode.Disposable {
     const gitLab: ProviderPollingViewStatus = !gitLabConfigured
       ? { provider: 'GitLab', state: 'setup', detail: 'Add the project ID or group/project path.' }
       : !isGitLabRestConfigured()
-        ? { provider: 'GitLab', state: 'setup', detail: 'Project linked; credentials need Doctor.' }
+        ? { provider: 'GitLab', state: 'setup', detail: 'Project linked; check setup for credentials.' }
         : !polling
-          ? { provider: 'GitLab', state: 'paused', detail: 'Automatic project polling starts as soon as the registered project setup is saved.' }
+          ? { provider: 'GitLab', state: 'paused', detail: 'Automatic checks start as soon as the registered project setup is saved.' }
           : gitLabTarget
-            ? { provider: 'GitLab', state: 'active', detail: `Polling MR !${gitLabTarget.iid}, review, pipeline, jobs, and tests.` }
-            : { provider: 'GitLab', state: 'discovering', detail: 'Polling is active; finding a unique open MR by branch or ticket key.' };
+            ? { provider: 'GitLab', state: 'active', detail: `Checking merge request !${gitLabTarget.iid}, reviews, pipeline, jobs, and tests.` }
+            : { provider: 'GitLab', state: 'discovering', detail: 'Provider checks are active and looking for an open merge request by branch or ticket key.' };
 
     const ciTargets = monitoringOwner ? configuredCiPollingTargets(this.state.state, monitoringOwner) : {};
     const jenkinsConfigured = Boolean(ciTargets.jenkinsUrl || ticket.build?.url || config.jenkins_url);
     const jenkins: ProviderPollingViewStatus = !jenkinsConfigured
       ? { provider: 'Jenkins', state: 'setup', detail: 'Add the project Jenkins job URL.' }
       : !isJenkinsRestConfigured()
-        ? { provider: 'Jenkins', state: 'setup', detail: 'Job linked; credentials need Doctor.' }
+        ? { provider: 'Jenkins', state: 'setup', detail: 'Job linked; check setup for credentials.' }
         : polling
-          ? { provider: 'Jenkins', state: 'active', detail: 'Polling the configured job, stages, and tests.' }
-          : { provider: 'Jenkins', state: 'paused', detail: 'Automatic project polling starts as soon as the registered project setup is saved.' };
+          ? { provider: 'Jenkins', state: 'active', detail: 'Checking the configured job, stages, and tests.' }
+          : { provider: 'Jenkins', state: 'paused', detail: 'Automatic checks start as soon as the registered project setup is saved.' };
 
     const sonarTarget = ciTargets.sonar || configuredSonarBranch(this.state.state, ticketKey);
     const sonarConfigured = Boolean(sonarTarget || config.sonar_project_key);
     const sonar: ProviderPollingViewStatus = !sonarConfigured
       ? { provider: 'SonarQube', state: 'setup', detail: 'Add the SonarQube project key.' }
       : !sonarTarget
-        ? { provider: 'SonarQube', state: 'setup', detail: 'Add or discover the branch used for SonarQube polling.' }
+        ? { provider: 'SonarQube', state: 'setup', detail: 'Add or discover the branch used for SonarQube checks.' }
         : !isSonarRestConfigured()
-          ? { provider: 'SonarQube', state: 'setup', detail: 'Project linked; credentials need Doctor.' }
+          ? { provider: 'SonarQube', state: 'setup', detail: 'Project linked; check setup for credentials.' }
           : polling
-            ? { provider: 'SonarQube', state: 'active', detail: `Polling ${sonarTarget.projectKey}:${sonarTarget.branch}.` }
-            : { provider: 'SonarQube', state: 'paused', detail: 'Automatic project polling starts as soon as the registered project setup is saved.' };
+            ? { provider: 'SonarQube', state: 'active', detail: `Checking ${sonarTarget.projectKey} on ${sonarTarget.branch}.` }
+            : { provider: 'SonarQube', state: 'paused', detail: 'Automatic checks start as soon as the registered project setup is saved.' };
     return [gitLab, jenkins, sonar];
   }
 
@@ -1282,7 +1285,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
   private async manageFocusedTerminal(argument: unknown): Promise<void> {
     const terminal = vscode.window.activeTerminal;
     if (!terminal) {
-      void vscode.window.showWarningMessage('Focus the already-running interactive terminal you want Kronos to organize, then try again.');
+      void vscode.window.showWarningMessage('Focus the terminal you want to connect, then try again.');
       return;
     }
     const requestedTicketKey = normalizeTicketKey(
@@ -1301,12 +1304,12 @@ class TerminalFirstRuntime implements vscode.Disposable {
       if (existing) {
         const session = readWorkSession(existing.sessionId);
         if (session) {
-          void vscode.window.showInformationMessage(`${terminal.name} is already managed as ${workSessionEventContext(session).label}.`);
+          void vscode.window.showInformationMessage(`${terminal.name} is already connected to ${workSessionEventContext(session).label}.`);
           return;
         }
       }
       const title = await vscode.window.showInputBox({
-        title: 'Manage Focused Terminal as a Standalone Session',
+        title: 'Connect Focused Terminal',
         prompt: 'Name this session. No Jira ticket will be attached.',
         value: terminal.name || 'Terminal session',
         validateInput: value => value.trim() ? undefined : 'Enter a session name.',
@@ -1317,7 +1320,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
       await this.attachTerminal(session, terminal);
       this.refreshTerminalFirstViews();
       void vscode.window.showInformationMessage(
-        `${terminal.name} is now organized as a standalone session. No ticket was attached and terminal contents were not read.`,
+        `${terminal.name} is now connected as ${title.trim()}. No Jira ticket was added and terminal contents were not read.`,
       );
       return;
     }
@@ -1336,7 +1339,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
     await this.attachTerminal(session, terminal);
     this.refreshTerminalFirstViews();
     void vscode.window.showInformationMessage(
-      `${terminal.name} is now organized under ${ticketKey}. Kronos did not start, read, or control the terminal.`,
+      `${terminal.name} is now connected to ${ticketKey}. Kronos did not start, read, or control the terminal.`,
     );
   }
 
@@ -1455,7 +1458,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
         : 'Submitted Claude';
       void vscode.window.showInformationMessage(
         input.ticketKey
-          ? `${submittedPrefix} for ${input.ticketKey}. When Claude is ready, use Insert [${input.ticketKey}] to add the fetched Jira context.`
+          ? `${submittedPrefix} for ${input.ticketKey}. When Claude is ready, choose Review Jira Context.`
           : input.project
             ? `${submittedPrefix} in ${input.project.displayName || input.project.projectName}. No Jira ticket was attached.`
             : `${submittedPrefix} as a standalone command in a focused terminal. No Jira ticket was attached.`,
@@ -1483,7 +1486,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
       void vscode.window.showErrorMessage(
         commandSubmitted
           ? `The Claude command was submitted, but Kronos could not finish attaching the session: ${detail}`
-          : `${detail} Run Kronos: Setup or Kronos: Doctor to check launch settings.`,
+          : `${detail} Run Kronos: Setup or Kronos: Check Setup to review launch settings.`,
       );
     } finally {
       this.claudeLaunchesInFlight.delete(launchKey);
@@ -1659,7 +1662,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
     });
     if (!isTerminalContextPlacementCurrent(placement, this.currentTerminalContextAttachment(placement))) {
       void vscode.window.showWarningMessage(
-        'The managed terminal attachment changed while context evidence was being fetched. Reopen the action from the intended ticket or session.',
+        'The connected terminal changed while context was loading. Reopen the action from the intended ticket or Session.',
       );
       return;
     }
@@ -1713,7 +1716,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
           const item = addContextBasketItem(request.basketItem);
           this.renderContextBasketPanel();
           const choice = await vscode.window.showInformationMessage(
-            `${item.label} added to the Context Basket. The source artifact remains private and unchanged.`,
+            `${item.label} was added to the Context Basket. The saved source remains private and unchanged.`,
             'Open Basket',
           );
           if (choice === 'Open Basket') { this.openContextBasket(); }
@@ -1741,7 +1744,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
       }
       if (result.kind === 'busy' || result.kind === 'already-placed') { return; }
       if (result.kind === 'target-changed') {
-        void vscode.window.showWarningMessage('The managed terminal attachment changed while this context was being edited. Reopen the composer from the intended ticket or session.');
+        void vscode.window.showWarningMessage('The connected terminal changed while this context was open. Reopen it from the intended ticket or Session.');
         return;
       }
       try {
@@ -1833,7 +1836,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
     if (!picked) { return; }
     const session = selection.workSession || readWorkSession(selection.binding.sessionId);
     if (!session || session.status !== 'active') {
-      void vscode.window.showWarningMessage('The selected managed session is no longer active. Reopen the prompt library from the intended Session or Project.');
+      void vscode.window.showWarningMessage('The selected Session is no longer active. Reopen the prompt library from the intended Session or Project.');
       return;
     }
     const templateContext = this.promptTemplateContext(session);
@@ -1864,7 +1867,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
       bindingId: input.selection.binding.bindingId,
     });
     if (!isTerminalContextPlacementCurrent(placement, this.currentTerminalContextAttachment(placement))) {
-      void vscode.window.showWarningMessage('The managed terminal attachment changed while the prompt library was loading. Reopen it from the intended Session or Project.');
+      void vscode.window.showWarningMessage('The connected terminal changed while the prompt library was loading. Reopen it from the intended Session or Project.');
       return;
     }
     this.promptLibraryPanel?.panel.dispose();
@@ -1929,7 +1932,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
   private async placePromptLibraryArtifact(record: PromptLibraryPanelRecord, editedBody: string): Promise<void> {
     if (record.placement.phase !== 'ready') { return; }
     if (!isTerminalContextPlacementCurrent(record.placement, this.currentTerminalContextAttachment(record.placement))) {
-      void vscode.window.showWarningMessage('The managed terminal attachment changed while this prompt was being edited. Reopen the library from the intended Session or Project.');
+      void vscode.window.showWarningMessage('The connected terminal changed while this prompt was open. Reopen the library from the intended Session or Project.');
       return;
     }
     let artifact: ReturnType<typeof writePromptLibraryArtifact>;
@@ -1963,12 +1966,12 @@ class TerminalFirstRuntime implements vscode.Disposable {
     }
     if (placementResult.kind === 'busy' || placementResult.kind === 'already-placed') { return; }
     if (placementResult.kind === 'target-changed') {
-      void vscode.window.showWarningMessage('The managed terminal attachment changed before prompt placement. The private snapshot was retained, but nothing was inserted.');
+      void vscode.window.showWarningMessage('The connected terminal changed before the prompt was added. The private copy was saved, but nothing was inserted.');
       return;
     }
     const session = record.selection.workSession || readWorkSession(record.selection.binding.sessionId);
     if (!session) {
-      void vscode.window.showErrorMessage('The prompt reference was inserted without submission, but the managed Session disappeared before local audit could be updated.');
+      void vscode.window.showErrorMessage('The prompt reference was inserted without submission, but the Session disappeared before local history could be updated.');
       record.panel.dispose();
       return;
     }
@@ -2047,12 +2050,12 @@ class TerminalFirstRuntime implements vscode.Disposable {
     const directSession = await this.resolveWorkSession(argument, false);
     if (directSession) {
       if (directSession.status !== 'active') {
-        void vscode.window.showWarningMessage('Choose an active managed Session before placing a team prompt.');
+        void vscode.window.showWarningMessage('Choose an active Session before adding a team prompt.');
         return undefined;
       }
       const selected = await this.chooseLiveTerminal(directSession.id);
       if (!selected) {
-        void vscode.window.showWarningMessage(`Focus or reconnect the operator-owned terminal for ${workSessionEventContext(directSession).label} before opening the prompt library.`);
+        void vscode.window.showWarningMessage(`Focus or reconnect the terminal for ${workSessionEventContext(directSession).label} before opening the prompt library.`);
         return undefined;
       }
       selected.terminal.show(false);
@@ -2067,7 +2070,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
     const candidates = listWorkSessions({ status: 'active' })
       .filter(session => this.operatorTerminals.listBindings(session.id).length > 0);
     if (candidates.length === 0) {
-      void vscode.window.showWarningMessage('Start or reconnect an operator-owned Claude Session before opening the prompt library. Kronos never inserts into an unmanaged terminal.');
+      void vscode.window.showWarningMessage('Start Claude or reconnect a Session before opening the prompt library. Kronos only adds prompts to a connected terminal.');
       return undefined;
     }
     const session = candidates.length === 1 ? candidates[0] : (await vscode.window.showQuickPick(candidates.map(candidate => ({
@@ -2075,7 +2078,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
       description: candidate.projectName || (candidate.kind === 'ticket' ? candidate.ticketKey : 'standalone'),
       detail: candidate.title,
       session: candidate,
-    })), { title: 'Choose the managed Session for this prompt', matchOnDescription: true, matchOnDetail: true }))?.session;
+    })), { title: 'Choose a Session for this prompt', matchOnDescription: true, matchOnDetail: true }))?.session;
     if (!session) { return undefined; }
     const selected = await this.chooseLiveTerminal(session.id);
     if (!selected) { return undefined; }
@@ -2124,7 +2127,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
       if (message.command === 'clear') {
         record.focus = message.focus;
         const choice = await vscode.window.showWarningMessage(
-          'Clear every selected Context Basket item? The private source artifacts will be retained.',
+          'Clear every Context Basket item? Saved sources will remain available.',
           { modal: true },
           'Clear Basket',
         );
@@ -2132,7 +2135,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
           try {
             const count = clearContextBasket();
             this.renderContextBasketPanel();
-            void vscode.window.showInformationMessage(`Cleared ${count} Context Basket item${count === 1 ? '' : 's'}. Source artifacts were retained.`);
+            void vscode.window.showInformationMessage(`Cleared ${count} Context Basket item${count === 1 ? '' : 's'}. Saved sources remain available.`);
           } catch (error: unknown) {
             this.showContextBasketError(error, 'Kronos could not clear the Context Basket.');
           }
@@ -2160,7 +2163,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
       try {
         removeContextBasketItem(item.id);
         this.renderContextBasketPanel();
-        void vscode.window.showInformationMessage(`Removed ${item.label} from the basket. Its private source artifact was retained.`);
+        void vscode.window.showInformationMessage(`Removed ${item.label} from the basket. Its saved source remains available.`);
       } catch (error: unknown) {
         this.showContextBasketError(error, 'Kronos could not remove the Context Basket item.');
       }
@@ -2236,18 +2239,18 @@ class TerminalFirstRuntime implements vscode.Disposable {
     try {
       const items = listContextBasketItems();
       if (items.length === 0) {
-        void vscode.window.showWarningMessage('The Context Basket is empty. Add Jira, MR, CI, or local Git evidence first.');
+        void vscode.window.showWarningMessage('The Context Basket is empty. Add Jira, merge request, build, quality, or project changes first.');
         return;
       }
       const session = await this.resolveWorkSession(undefined, true);
       if (!session) { return; }
       if (session.status !== 'active') {
-        void vscode.window.showWarningMessage('Choose an active managed session for Context Basket placement.');
+        void vscode.window.showWarningMessage('Choose an active Session for the Context Basket.');
         return;
       }
       const selected = await this.chooseLiveTerminal(session.id);
       if (!selected) {
-        void vscode.window.showWarningMessage(`Focus or reconnect the operator-owned terminal for ${workSessionEventContext(session).label} first.`);
+        void vscode.window.showWarningMessage(`Focus or reconnect the terminal for ${workSessionEventContext(session).label} first.`);
         return;
       }
       selected.terminal.show(false);
@@ -2267,7 +2270,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
             {
               stage: 'provider-read',
               state: selectedComplete ? 'succeeded' : 'partial',
-              detail: 'Selected source artifacts remain retained and unchanged.',
+              detail: 'Selected sources remain saved and unchanged.',
             },
             { stage: 'snapshot', state: selectedComplete ? 'succeeded' : 'partial' },
           ],
@@ -2284,7 +2287,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
         '',
       );
       if (result.kind === 'target-changed') {
-        void vscode.window.showWarningMessage('The managed terminal attachment changed while the basket was being prepared. Choose the intended session again.');
+        void vscode.window.showWarningMessage('The connected terminal changed while the basket was being prepared. Choose the intended Session again.');
         return;
       }
       if (result.kind !== 'placed') { return; }
@@ -2293,8 +2296,8 @@ class TerminalFirstRuntime implements vscode.Disposable {
         providerRead: {
           state: bundle.complete ? 'succeeded' : 'partial',
           detail: bundle.complete
-            ? 'Every selected source artifact was current and complete.'
-            : 'One or more selected source artifacts retained partial or stale evidence warnings.',
+            ? 'Every selected source was current and complete.'
+            : 'One or more selected sources include partial or older evidence warnings.',
         },
         artifactWrite: {
           state: 'succeeded',
@@ -2356,7 +2359,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
       events = listMonitorEvents({ limit: 500 });
     } catch (error: unknown) {
       this.log('Local evidence search could not read the audit tail.', boundedOperationFailure(error, 'Audit search unavailable.').display);
-      void vscode.window.showWarningMessage('Kronos could not include the local audit tail in this search. Sessions, tickets, projects, providers, and artifacts remain available.');
+      void vscode.window.showWarningMessage('Recent history could not be included. Sessions, tickets, projects, providers, and saved context remain searchable.');
     }
     const entries = buildLocalEvidenceSearchIndex({
       sessions: listWorkSessions({ limit: 200 }),
@@ -2364,7 +2367,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
       events,
     });
     if (entries.length === 0) {
-      void vscode.window.showInformationMessage('Kronos has no local session or evidence metadata to search yet.');
+      void vscode.window.showInformationMessage('There are no Sessions or saved context to search yet.');
       return;
     }
     const pick = await vscode.window.showQuickPick(entries.map(entry => ({
@@ -2373,8 +2376,8 @@ class TerminalFirstRuntime implements vscode.Disposable {
       detail: entry.detail,
       entry,
     })), {
-      title: 'Search Local Sessions and Evidence',
-      placeHolder: 'Search session titles, Jira keys, projects, branches, providers, events, and artifact labels',
+      title: 'Search Kronos',
+      placeHolder: 'Search Sessions, Jira tickets, projects, branches, providers, history, and saved context',
       matchOnDescription: true,
       matchOnDetail: true,
     });
@@ -2426,7 +2429,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
     }
     const candidates = buildHandoffCandidates(session, events);
     if (candidates.length === 0) {
-      void vscode.window.showInformationMessage('This work session has no saved context or audit references to hand off yet.');
+      void vscode.window.showInformationMessage('This Session has no saved context or history to hand off yet.');
       return;
     }
     const selected = await vscode.window.showQuickPick(candidates.map(candidate => ({
@@ -2436,8 +2439,8 @@ class TerminalFirstRuntime implements vscode.Disposable {
       picked: candidate.picked,
       candidate,
     })), {
-      title: `Create Local Handoff — ${workSessionEventContext(session).label}`,
-      placeHolder: 'Choose up to 100 saved context and audit references',
+      title: `Create handoff — ${workSessionEventContext(session).label}`,
+      placeHolder: 'Choose up to 100 saved context and history items',
       canPickMany: true,
       matchOnDescription: true,
       matchOnDetail: true,
@@ -2448,17 +2451,17 @@ class TerminalFirstRuntime implements vscode.Disposable {
       return;
     }
     const title = await vscode.window.showInputBox({
-      title: 'Local Handoff Title',
-      prompt: 'This title is saved only in the private local handoff bundle.',
+      title: 'Handoff title',
+      prompt: 'This title stays in the private local handoff.',
       value: `${session.title} handoff`,
       validateInput: value => value.trim() && value.length <= 200 ? null : 'Enter a title of 200 characters or fewer.',
       ignoreFocusOut: true,
     });
     if (!title) { return; }
     const note = await vscode.window.showInputBox({
-      title: 'Local Handoff Note (Optional)',
-      prompt: 'Add the next decision, open question, or review focus. Credential-shaped text is redacted before save.',
-      placeHolder: 'What should the next operator know?',
+      title: 'Handoff note (optional)',
+      prompt: 'Add the next decision, open question, or review focus. Sensitive-looking values are removed before saving.',
+      placeHolder: 'What should the next person know?',
       validateInput: value => value.length <= 4_000 ? null : 'Use 4,000 characters or fewer.',
       ignoreFocusOut: true,
     });
@@ -2547,7 +2550,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
         key: `jira:${ticketKey}`,
         panelTitle: `${ticketKey} — Compose Jira Context`,
         title: `${ticketKey}: ${jiraContext.summary || ticket.summary}`,
-        subtitle: `${summary}. Review fetched details, edit the focus instruction, then insert one non-submitting line.`,
+        subtitle: `${summary}. Review the details, adjust the focus, then add it to the terminal without pressing Enter.`,
         sourceLabel: jiraContext.completeness.complete ? 'Jira ready' : 'Jira partial',
         reference: buildJiraContextReference(ticketKey, artifact.promptPath),
         promptPath: artifact.promptPath,
@@ -2626,7 +2629,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
     if (requestedProject) {
       project = this.resolveRegisteredProject(argument);
       if (!project) { return; }
-      selection = await this.chooseProjectInsertionTerminal(project, 'MR evidence');
+      selection = await this.chooseProjectInsertionTerminal(project, 'merge request context');
       if (!selection) { return; }
       target = await this.resolveProjectGitLabInsertionTarget(project);
     } else {
@@ -2642,8 +2645,8 @@ class TerminalFirstRuntime implements vscode.Disposable {
     const ownerKey = ticketKey || `project:${project?.projectName}`;
     const ownerLabel = ticketKey || project?.displayName || project?.projectName || 'Project';
 
-    await this.runProgress(`Kronos: Preparing MR-${iid} context...`, async progress => {
-      progress.report({ message: 'Reading MR, discussions, diffs, pipeline, jobs, and tests...' });
+    await this.runProgress(`Kronos: Preparing merge request !${iid}...`, async progress => {
+      progress.report({ message: 'Reading the merge request, discussions, changes, pipeline, jobs, and tests...' });
       let snapshot: Awaited<ReturnType<typeof gitlabRestClient.mergeRequestContext>>;
       try {
         snapshot = await gitlabRestClient.mergeRequestContext({ projectIdOrPath, iid });
@@ -2689,9 +2692,9 @@ class TerminalFirstRuntime implements vscode.Disposable {
       const summary = `${context.notes.length} notes, ${context.discussions.length} discussions, ${context.jobs.length} jobs, ${failedTests} failed tests`;
       this.openContextComposer({
         key: `gitlab:${ownerKey}:${iid}`,
-        panelTitle: `MR-${iid} — Compose GitLab Context`,
-        title: `MR-${iid}: ${context.mergeRequest.title}`,
-        subtitle: `${summary}. Review fetched details, edit the focus instruction, then insert one non-submitting line.`,
+        panelTitle: `Merge request !${iid} — Review context`,
+        title: `Merge request !${iid}: ${context.mergeRequest.title}`,
+        subtitle: `${summary}. Review the details, adjust the focus, then add it to the terminal without pressing Enter.`,
         sourceLabel: context.completeness.complete ? 'GitLab ready' : 'GitLab partial',
         reference: buildGitLabMergeRequestContextReference(iid, artifact.promptPath),
         promptPath: artifact.promptPath,
@@ -2702,7 +2705,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
         basketItem: {
           kind: 'gitlab',
           sourceKey: `gitlab:${ownerKey}:${iid}`,
-          label: `[MR-${iid}] GitLab MR and pipeline context`,
+          label: `[MR-${iid}] GitLab merge request and pipeline context`,
           provenance: `GitLab merge request !${iid} for ${ownerLabel}`,
           promptPath: artifact.promptPath,
           fetchedAt: context.fetchedAt,
@@ -2747,7 +2750,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
               recordWorkSessionContextArtifact(session.id, {
                 id: `gitlab-mr-${iid}`,
                 kind: 'gitlab-merge-request',
-                label: `[MR-${iid}] GitLab MR and pipeline context`,
+                label: `[MR-${iid}] GitLab merge request and pipeline context`,
                 promptPath: artifact.promptPath,
                 fetchedAt: context.fetchedAt,
                 complete: context.completeness.complete,
@@ -2766,7 +2769,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
           if (context.completeness.complete) {
             void vscode.window.showInformationMessage(`${message} Review the terminal line, then press Enter yourself.`);
           } else {
-            void vscode.window.showWarningMessage(`${message} The saved MR context is partial; review its warnings. ${outcome.display}`);
+            void vscode.window.showWarningMessage(`${message} The saved merge request context is partial; review its warnings. ${outcome.display}`);
           }
           return outcome;
         },
@@ -2823,7 +2826,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
       return;
     }
 
-    await this.runProgress(`Kronos: Preparing ${ownerLabel} CI context...`, async progress => {
+    await this.runProgress(`Kronos: Preparing ${ownerLabel} build & quality context...`, async progress => {
       const warnings: string[] = [];
       let jenkins: JenkinsBuildContext | undefined;
       let sonar: SonarBranchContext | undefined;
@@ -2920,10 +2923,10 @@ class TerminalFirstRuntime implements vscode.Disposable {
       const contextLabel = ticketKey ? `CI-${ticketKey}` : `CI for ${ownerLabel}`;
       this.openContextComposer({
         key: `ci:${ownerKey}`,
-        panelTitle: `${ownerLabel} — Compose CI Context`,
-        title: `${ownerLabel}: ${providerSummary || 'CI evidence'}`,
-        subtitle: 'Review the latest build and quality evidence, edit the focus instruction, then insert one non-submitting line.',
-        sourceLabel: context.completeness.complete ? 'CI ready' : 'CI partial',
+        panelTitle: `${ownerLabel} — Review build & quality`,
+        title: `${ownerLabel}: ${providerSummary || 'Build & quality evidence'}`,
+        subtitle: 'Review the latest build and quality details, adjust the focus, then add it to the terminal without pressing Enter.',
+        sourceLabel: context.completeness.complete ? 'Build & quality ready' : 'Build & quality partial',
         reference: contextReference,
         promptPath: artifact.promptPath,
         suggestedFocus: 'Review the Jenkins build, failed tests and stages, SonarQube quality gate, metrics, and unresolved issues before making changes.',
@@ -3011,7 +3014,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
     if (requestedSessionId) {
       try { session = readWorkSession(requestedSessionId); } catch { session = null; }
       if (!session || session.status !== 'active') {
-        void vscode.window.showWarningMessage('Choose an active managed session before inserting Jira context.');
+        void vscode.window.showWarningMessage('Choose an active Session before adding Jira context.');
         return undefined;
       }
     }
@@ -3038,7 +3041,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
       return undefined;
     }
     void vscode.window.showWarningMessage(
-      `Manage an operator-owned terminal before inserting ${ticketKey}. This explicit association prevents insertion into the wrong terminal.`,
+      `Connect a terminal before adding ${ticketKey}. This keeps the context tied to the terminal you chose.`,
     );
     return undefined;
   }
@@ -3058,7 +3061,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
         label: session?.terminals.find(candidate => candidate.id === binding.bindingId)?.name || binding.bindingId,
         description: binding.bindingId,
         binding,
-      })), { title: 'Choose the operator-owned terminal for this action' });
+      })), { title: 'Choose a connected terminal' });
       selected = pick?.binding;
     }
     if (!selected) { return undefined; }
@@ -3190,7 +3193,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
     if (!session) { return; }
     const terminal = vscode.window.activeTerminal;
     if (!terminal) {
-      void vscode.window.showWarningMessage('Focus the intended existing terminal before reattaching it.');
+      void vscode.window.showWarningMessage('Focus the terminal you want to connect, then try again.');
       return;
     }
     if (session.status === 'closed') { session = reopenWorkSession(session.id); }
@@ -3200,7 +3203,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
     }
     await this.attachTerminal(session, terminal);
     this.refreshTerminalFirstViews();
-    void vscode.window.showInformationMessage(`Reattached ${terminal.name} to ${workSessionEventContext(session).label}. Terminal contents were not read.`);
+    void vscode.window.showInformationMessage(`Connected ${terminal.name} to ${workSessionEventContext(session).label}. Terminal contents were not read.`);
   }
 
   private async detachManagedTerminal(argument: unknown): Promise<void> {
@@ -3212,10 +3215,10 @@ class TerminalFirstRuntime implements vscode.Disposable {
       return;
     }
     this.operatorTerminals.detachBinding(session.id, selected.binding.bindingId);
-    detachWorkSessionTerminal(session.id, selected.binding.bindingId, 'Detached explicitly by the operator.');
+    detachWorkSessionTerminal(session.id, selected.binding.bindingId, 'Disconnected explicitly by the operator.');
     this.appendTerminalDetachedEvent(selected.binding, 'operator-detached');
     this.refreshTerminalFirstViews();
-    void vscode.window.showInformationMessage(`Detached ${selected.terminal.name} from ${workSessionEventContext(session).label}. The terminal remains open.`);
+    void vscode.window.showInformationMessage(`Disconnected ${selected.terminal.name} from ${workSessionEventContext(session).label}. The terminal remains open.`);
   }
 
   private async stopManagingSession(argument: unknown): Promise<void> {
@@ -3223,18 +3226,18 @@ class TerminalFirstRuntime implements vscode.Disposable {
     if (!session) { return; }
     const context = workSessionEventContext(session);
     const confirmation = await vscode.window.showWarningMessage(
-      `Stop organizing ${context.label}? Monitoring will stop, but every terminal remains open and untouched.`,
+      `Stop tracking ${context.label} in Kronos? Provider updates will stop, but every terminal will remain open and untouched.`,
       { modal: true },
-      'Stop Managing',
+      'Stop Tracking',
     );
-    if (confirmation !== 'Stop Managing') { return; }
+    if (confirmation !== 'Stop Tracking') { return; }
     this.operatorTerminals.detachSession(session.id);
     closeWorkSession(session.id);
     appendMonitorEvent({
       sessionId: session.id,
       type: 'decision.recorded',
       source: 'operator',
-      summary: `${context.label} work-session management stopped by the operator.`,
+      summary: `${context.label} tracking stopped by the operator.`,
       subject: { kind: 'work-session', id: session.id, ...workSessionTicketMetadata(session) },
       metadata: { monitoringEnabled: false, terminalClosed: false },
     });
@@ -3245,13 +3248,17 @@ class TerminalFirstRuntime implements vscode.Disposable {
     const session = await this.resolveWorkSession(argument, true);
     if (!session) { return; }
     const context = workSessionEventContext(session);
+    if (session.status !== 'closed') {
+      void vscode.window.showInformationMessage(`Stop tracking ${context.label} before removing it from Kronos.`);
+      return;
+    }
     const liveCount = this.operatorTerminals.listBindings(session.id).length;
     const confirmation = await vscode.window.showWarningMessage(
-      `Remove ${context.label} from Kronos? Its local session record and monitoring snapshots will be deleted. ${liveCount > 0 ? `${liveCount} attached terminal${liveCount === 1 ? '' : 's'} will remain open and untouched. ` : ''}Shared audit history and saved context files are retained locally.`,
+      `Remove ${context.label} from Kronos? Its Session entry and saved provider status will be deleted. ${liveCount > 0 ? `${liveCount} connected terminal${liveCount === 1 ? '' : 's'} will remain open and untouched. ` : ''}Session history and saved context will remain on this device.`,
       { modal: true },
-      'Remove Session',
+      'Remove from Kronos',
     );
-    if (confirmation !== 'Remove Session') { return; }
+    if (confirmation !== 'Remove from Kronos') { return; }
     removeWorkSession(session.id);
     this.operatorTerminals.detachSession(session.id);
     try {
@@ -3269,7 +3276,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
       this.log('Session was removed, but its final audit note could not be recorded.', boundedOperationFailure(error, 'Audit write failed.').display);
     }
     this.refreshTerminalFirstViews();
-    void vscode.window.showInformationMessage(`Removed ${context.label} from Sessions. Any terminal remains open and operator-owned.`);
+    void vscode.window.showInformationMessage(`Removed ${context.label} from Kronos. Its terminal remains open.`);
   }
 
   private async openProjectGitStatus(argument: unknown): Promise<void> {
@@ -3338,11 +3345,11 @@ class TerminalFirstRuntime implements vscode.Disposable {
         key: `git:${project.projectName}`,
         panelTitle: `${project.projectName} — Compose Git Context`,
         title: `${project.projectName}: ${evidence.branch || 'working tree'}`,
-        subtitle: `${evidence.changeCount} changed path${evidence.changeCount === 1 ? '' : 's'}. Review the snapshot, edit the focus, then place one non-submitting line in the attached terminal.`,
+        subtitle: `${evidence.changeCount} changed path${evidence.changeCount === 1 ? '' : 's'}. Review the changes, adjust the focus, then add it to the terminal without pressing Enter.`,
         sourceLabel: 'Local Git read-only',
         reference: buildProjectGitContextReference(artifact.contextId, artifact.promptPath),
         promptPath: artifact.promptPath,
-        suggestedFocus: 'Review the current working-tree changes for correctness, missing tests, security risks, and unintended edits before we make or publish an MR.',
+        suggestedFocus: 'Review the current working-tree changes for correctness, missing tests, security risks, and unintended edits before we make or publish a merge request.',
         evidence: [
           { label: 'Branch', detail: evidence.branch || 'unavailable' },
           { label: 'Changed paths', detail: evidence.changes.slice(0, 40).map(change => `${change.staged ? 'staged' : 'working'} ${change.status}: ${change.path}`).join('\n') || 'Clean working tree' },
@@ -3418,7 +3425,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
     const nickname = storedNickname && storedNickname !== project.projectName ? storedNickname : '';
     const value = await vscode.window.showInputBox({
       title: `Set Nickname for ${project.displayName || project.projectName}`,
-      prompt: 'Optional display name only. Leave blank to use the stable project name; links, sessions, provider configuration, and the canonical path stay unchanged.',
+      prompt: 'Optional display name. Leave blank to use the folder name. Links, Sessions, integrations, and the project folder stay unchanged.',
       value: nickname,
       placeHolder: project.projectName,
       validateInput: input => input.trim().length > 200 ? 'Project nickname must be 200 characters or fewer.' : undefined,
@@ -3460,14 +3467,14 @@ class TerminalFirstRuntime implements vscode.Disposable {
         await this.openHttpUrl(`${webBase}/${encodedProjectPath}/-/merge_requests/${discovery.target.iid}`);
       } else {
         void vscode.window.showWarningMessage(
-          `MR !${discovery.target.iid} was found, but GitLab did not return a browser URL and this project has no group/project path for a safe fallback.`,
+          `Merge request !${discovery.target.iid} was found, but GitLab did not return a browser URL and this project has no group/project path for a safe fallback.`,
         );
       }
       return;
     }
     if (discovery.kind === 'ambiguous') {
       void vscode.window.showWarningMessage(
-        `${project.displayName || project.projectName} has ${discovery.candidateCount} possible open merge requests${discovery.sourceBranch ? ` while checking branch ${discovery.sourceBranch}` : ''}. Kronos will not guess or open a stale saved MR.`,
+        `${project.displayName || project.projectName} has ${discovery.candidateCount} possible open merge requests${discovery.sourceBranch ? ` while checking branch ${discovery.sourceBranch}` : ''}. Kronos will not guess or open an older saved merge request.`,
       );
       return;
     }
@@ -3478,8 +3485,8 @@ class TerminalFirstRuntime implements vscode.Disposable {
       return;
     }
     if (discovery.kind === 'failed') {
-      this.log(`Could not verify the current GitLab MR for ${project.projectName}.`, discovery.detail);
-      void vscode.window.showWarningMessage(`${discovery.detail} Kronos will open the prefilled new-MR page instead of trusting a possibly stale saved MR.`);
+      this.log(`Could not verify the current GitLab merge request for ${project.projectName}.`, discovery.detail);
+      void vscode.window.showWarningMessage(`${discovery.detail} Kronos will open a prefilled new merge request page instead of using an older saved result.`);
     }
 
     const config = this.state.state?.projects[project.projectName]?.config || {};
@@ -3487,7 +3494,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
     const branch = readProjectGitBranch(project.projectPath)?.branch;
     if (!projectPath || !branch || branch.startsWith('detached@')) {
       void vscode.window.showWarningMessage(
-        `${project.projectName} needs a GitLab group/project path and a current branch before Kronos can open a prefilled new-MR page.`,
+        `${project.projectName} needs a GitLab group/project path and a current branch before Kronos can open a prefilled new merge request page.`,
       );
       return;
     }
@@ -3506,7 +3513,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
       url.searchParams.set('merge_request[target_branch]', config.default_branch || config.base_branch || 'main');
       await this.openHttpUrl(url.toString());
     } catch (error: unknown) {
-      void vscode.window.showWarningMessage(boundedOperationFailure(error, 'Kronos could not open the GitLab new-MR page.').display);
+      void vscode.window.showWarningMessage(boundedOperationFailure(error, 'Kronos could not open the GitLab new merge request page.').display);
     }
   }
 
@@ -3523,7 +3530,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
       ) : undefined);
     if (!registered) {
       void vscode.window.showWarningMessage(
-        'That Project row is stale or no longer registered. Refresh Projects or use Manage Registered Projects to register it.',
+        'That Project row is stale or no longer registered. Refresh Projects or choose Manage Projects to register it.',
       );
       return undefined;
     }
@@ -3551,7 +3558,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
         label: workSessionEventContext(candidate).label,
         description: candidate.kind === 'ticket' ? candidate.ticketKey : 'standalone',
         session: candidate,
-      })), { title: `Choose the ${project.projectName} session for Git context` });
+      })), { title: `Choose a Session for ${project.displayName || project.projectName}` });
       session = pick?.session;
     }
     if (!session) { return undefined; }
@@ -3566,7 +3573,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
     if (session.kind === 'ticket') { return this.chooseInsertionTerminal(session.ticketKey); }
     const selected = await this.chooseLiveTerminal(session.id);
     if (!selected) {
-      void vscode.window.showWarningMessage(`Focus or reattach the operator-owned terminal for ${session.title} before inserting context.`);
+      void vscode.window.showWarningMessage(`Focus or reconnect the terminal for ${session.title} before adding context.`);
       return undefined;
     }
     return { terminal: selected.terminal, binding: selected.binding, workSession: session };
@@ -3580,18 +3587,18 @@ class TerminalFirstRuntime implements vscode.Disposable {
       : undefined;
     if (projectConfig && configuredProjectPollingEnabled(projectConfig)) {
       void vscode.window.showInformationMessage(
-        `${session.projectName} provider polling belongs to the registered project and remains automatic. Session-level pause/resume does not control it.`,
+        `${session.projectName} checks providers automatically from Projects. Pausing this Session will not stop those updates.`,
       );
       return;
     }
     if (session.ticketKeys.length === 0) {
       void vscode.window.showInformationMessage(
-        'Registered-project provider polling is already automatic and does not require Jira. Session-level pause/resume applies only to legacy ticket monitoring.',
+        'Project provider updates run automatically and do not require a Jira ticket. Pause and resume here apply only to older ticket-linked Sessions.',
       );
       return;
     }
     if (workSessionLifecycle(session, this.operatorTerminals.listBindings(session.id).length).management !== 'active') {
-      void vscode.window.showWarningMessage(`Reattach ${workSessionEventContext(session).label} before enabling monitoring.`);
+      void vscode.window.showWarningMessage(`Connect a terminal to ${workSessionEventContext(session).label} before resuming provider updates.`);
       return;
     }
     setWorkSessionMonitoring(session.id, enabled);
@@ -3599,7 +3606,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
       sessionId: session.id,
       type: 'decision.recorded',
       source: 'operator',
-      summary: `${workSessionEventContext(session).label} monitoring ${enabled ? 'resumed' : 'paused'} by the operator.`,
+      summary: `${workSessionEventContext(session).label} provider updates ${enabled ? 'resumed' : 'paused'} by the operator.`,
       subject: { kind: 'work-session', id: session.id, ...(session.kind === 'ticket' ? { ticketKey: session.ticketKey } : {}) },
       metadata: { monitoringEnabled: enabled },
     });
@@ -3623,8 +3630,8 @@ class TerminalFirstRuntime implements vscode.Disposable {
     let providerUrl = stringProperty(argument, 'providerUrl') || stringProperty(argument, 'url') || providerChoices[0]?.url;
     if (providerChoices.length > 1) {
       const selected = await vscode.window.showQuickPick(providerChoices, {
-        title: 'Choose provider branch or build',
-        placeHolder: 'Open one retained provider target',
+        title: 'Choose a branch or build',
+        placeHolder: 'Choose what to open',
       });
       if (!selected) { return; }
       providerUrl = selected.url;
@@ -3705,7 +3712,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
       this.renderDoctorPanel();
       return;
     }
-    const panel = this.createOperationsPanel('kronosDoctor', 'Kronos — Doctor');
+    const panel = this.createOperationsPanel('kronosDoctor', 'Kronos — Check Setup');
     const record: OperationsPanelRecord = { panel, nonce: createWebviewNonce() };
     this.doctorPanel = record;
     panel.onDidDispose(() => {
@@ -3715,7 +3722,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
       if (isRecord(raw) && raw['command'] === WEBVIEW_READY_COMMAND) { return; }
       const message = normalizeOperationsActionMessage(raw, OPERATIONS_PANEL_ACTIONS);
       if (!message) {
-        void vscode.window.showWarningMessage('Kronos ignored an invalid Doctor request.');
+        void vscode.window.showWarningMessage('Kronos ignored an invalid setup-check request.');
         return;
       }
       await this.executeOperationsPanelAction('doctor', message.command);
@@ -3782,7 +3789,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
     await vscode.window.showTextDocument(document, { preview: false });
     if (result.created) {
       void vscode.window.showWarningMessage(
-        'Created the private Kronos environment template. After entering and saving provider values, you must reload the VS Code window so the extension host picks them up; then run Doctor again.',
+        'Created the private Kronos environment template. After entering and saving provider values, reload the VS Code window so the extension host picks them up; then check setup again.',
       );
     }
   }
@@ -3959,14 +3966,14 @@ class TerminalFirstRuntime implements vscode.Disposable {
       const permissionLabel = claudePermissionModeLabel(normalized.permissionMode);
       if (!availability.available) {
         return {
-          name: 'Claude launch settings',
+          name: 'Claude settings',
           status: 'fail',
           detail: `${availability.executable} was not found on the VS Code extension-host PATH. Your interactive terminal PATH may differ. Configured permission mode: ${permissionLabel}.`,
         };
       }
       if (!vscode.workspace.isTrusted) {
         return {
-          name: 'Claude launch settings',
+          name: 'Claude settings',
           status: 'warn',
           detail: `${availability.executable} is available and launch settings are valid, but explicit launch is disabled until this workspace is trusted. Configured permission mode: ${permissionLabel}.`,
         };
@@ -3974,28 +3981,28 @@ class TerminalFirstRuntime implements vscode.Disposable {
       const branch = normalized.cwd ? readProjectGitBranch(normalized.cwd)?.branch : undefined;
       if (normalized.permissionMode === 'bypassPermissions') {
         return {
-          name: 'Claude launch settings',
+          name: 'Claude settings',
           status: 'warn',
           detail: `${availability.executable} is available; syntax and starting directory are valid. ${permissionLabel} is enabled and every explicit launch will require a modal warning${branch ? `; terminal tabs will show branch ${branch}` : ''}.`,
         };
       }
       if (normalized.permissionMode === 'auto') {
         return {
-          name: 'Claude launch settings',
+          name: 'Claude settings',
           status: 'warn',
           detail: `${availability.executable} is available; syntax and starting directory are valid. Auto permission mode reduces routine prompts and requires a supported Claude CLI, model, and account${branch ? `; terminal tabs will show branch ${branch}` : ''}.`,
         };
       }
       return {
-        name: 'Claude launch settings',
+        name: 'Claude settings',
         status: 'pass',
         detail: `${availability.executable} is available; syntax and starting directory are valid; permission mode ${permissionLabel}${branch ? `; terminal tabs will show branch ${branch}` : ''}.`,
       };
     } catch (error: unknown) {
       return {
-        name: 'Claude launch settings',
+        name: 'Claude settings',
         status: 'fail',
-        detail: boundedOperationFailure(error, 'Claude launch settings are invalid.').display,
+        detail: boundedOperationFailure(error, 'Claude settings are invalid.').display,
       };
     }
   }
@@ -4040,8 +4047,8 @@ class TerminalFirstRuntime implements vscode.Disposable {
     return {
       ...counts,
       detail: counts.sessions === 0
-        ? 'No registered project has a provider target and no eligible legacy ticket Session remains. Configure a registered project to start polling; no Jira link or terminal Session is required.'
-        : `${registeredProjects.length} registered project polling owner${registeredProjects.length === 1 ? '' : 's'} and ${legacySessions.length} legacy ticket fallback${legacySessions.length === 1 ? '' : 's'}; GitLab ${counts.gitlab}, Jenkins ${counts.jenkins}, SonarQube ${counts.sonar}.`,
+        ? 'No project has provider updates configured. Configure a registered project to start automatic checks; no Jira link or terminal Session is required.'
+        : `${registeredProjects.length} registered project${registeredProjects.length === 1 ? '' : 's'} checked automatically${legacySessions.length > 0 ? `; ${legacySessions.length} ticket-linked Session${legacySessions.length === 1 ? '' : 's'} also checked` : ''}. Sources: GitLab ${counts.gitlab}, Jenkins ${counts.jenkins}, SonarQube ${counts.sonar}.`,
     };
   }
 
@@ -4055,7 +4062,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
     if (!allowPick) { return undefined; }
     const entries = Object.entries(this.state.state?.tickets || {});
     if (entries.length === 0) {
-      void vscode.window.showWarningMessage('No Jira work is loaded. Refresh Work or run Kronos: Doctor.');
+      void vscode.window.showWarningMessage('No Jira work is loaded. Refresh Work or run Kronos: Check Setup.');
       return undefined;
     }
     const pick = await vscode.window.showQuickPick(entries.map(([ticketKey, ticket]) => ({
@@ -4063,7 +4070,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
       description: ticket.summary,
       detail: `${ticket.jira_status} • Jira ${ticket.jira_project_key || 'unknown'} • local ${ticket.linked_local_project || 'unlinked'}`,
       ticketKey,
-    })), { title: 'Choose the Jira work item for this terminal action', matchOnDescription: true, matchOnDetail: true });
+    })), { title: 'Choose a Jira ticket', matchOnDescription: true, matchOnDetail: true });
     return pick?.ticketKey;
   }
 
@@ -4093,7 +4100,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
         : `${session.status} • standalone`,
       detail: session.title,
       session,
-    })), { title: 'Choose a managed work session' });
+    })), { title: 'Choose a Session' });
     return pick?.session;
   }
 
@@ -4114,7 +4121,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
 
     if (!configuredProject) {
       void vscode.window.showWarningMessage(
-        `${ticketKey} needs a GitLab project ID or group/project path. Configure the linked project; Kronos will then find the open MR automatically.`,
+        `${ticketKey} needs a GitLab project ID or group/project path. Configure the linked project and Kronos will find its open merge request.`,
       );
       return undefined;
     }
@@ -4132,13 +4139,13 @@ class TerminalFirstRuntime implements vscode.Disposable {
       });
     } catch (error: unknown) {
       const detail = boundedOperationFailure(error, 'GitLab merge-request discovery failed.').display;
-      this.log(`Could not discover a GitLab MR for ${ticketKey}.`, detail);
+      this.log(`Could not find a GitLab merge request for ${ticketKey}.`, detail);
       void vscode.window.showWarningMessage(detail);
       return undefined;
     }
     if (!discovery.match) {
       void vscode.window.showWarningMessage(discovery.ambiguous
-        ? `${ticketKey} has ${discovery.candidateCount} possible open merge requests. Kronos will not guess; use a unique ticket key in the MR title/description or work from its source branch.`
+        ? `${ticketKey} has ${discovery.candidateCount} possible open merge requests. Kronos will not guess; use a unique ticket key in the title or description, or work from its source branch.`
         : `No unique open merge request matches ${ticketKey}${sourceBranch ? ` or branch ${sourceBranch}` : ''} yet. GitLab polling will keep checking automatically.`);
       return undefined;
     }
@@ -4173,12 +4180,12 @@ class TerminalFirstRuntime implements vscode.Disposable {
       return undefined;
     }
     if (discovery.kind === 'failed') {
-      this.log(`Could not discover a GitLab MR for ${project.projectName}.`, discovery.detail);
+      this.log(`Could not find a GitLab merge request for ${project.projectName}.`, discovery.detail);
       void vscode.window.showWarningMessage(discovery.detail);
       return undefined;
     }
     void vscode.window.showWarningMessage(discovery.kind === 'ambiguous'
-      ? `${project.displayName || project.projectName} has ${discovery.candidateCount} open merge requests for ${discovery.sourceBranch || 'the current project'}. Kronos will not guess or insert a stale saved MR.`
+      ? `${project.displayName || project.projectName} has ${discovery.candidateCount} open merge requests for ${discovery.sourceBranch || 'the current project'}. Kronos will not guess or use an older saved merge request.`
       : `No unique open merge request matches ${discovery.sourceBranch ? `branch ${discovery.sourceBranch}` : project.displayName || project.projectName} yet. Project polling will keep checking automatically.`);
     return undefined;
   }
@@ -4418,6 +4425,12 @@ function uniqueProjectDiscoveryRoots(values: readonly string[], limit: number): 
     if (roots.length >= limit) { break; }
   }
   return roots;
+}
+
+function workCompletionLabel(value: 'active' | 'completed' | 'all'): string {
+  if (value === 'completed') { return 'Completed'; }
+  if (value === 'all') { return 'All'; }
+  return 'Active';
 }
 
 function boundedIntegerSetting(value: unknown, fallback: number, minimum: number, maximum: number): number {

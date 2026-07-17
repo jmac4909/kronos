@@ -7,6 +7,7 @@ const root = path.resolve(__dirname, '..');
 const fixtureRoot = path.join(root, 'test-fixtures', 'providers');
 const stateStore = require('../out/services/stateStore.js');
 const jiraWorkCatalog = require('../out/services/jiraWorkCatalog.js');
+const { JiraRestCancelledError, JiraRestClient } = require('../out/services/jiraRestClient.js');
 const gitlabContext = require('../out/services/gitlabMergeRequestContext.js');
 const { GitLabRestClient } = require('../out/services/gitlabRestClient.js');
 const { JenkinsRestClient } = require('../out/services/jenkinsRestClient.js');
@@ -65,6 +66,169 @@ test('sanitized Jira fixture retains rich fields and prior rows after a partial 
   assert.equal(result.retainedFromPrevious, fixture.expected.retainedFromPrevious);
   assert.ok(result.state.tickets[fixture.cachedTicketKey]);
   assert.equal(Object.hasOwn(ticket, 'unexpectedFutureField'), false);
+});
+
+test('Jira ticket context retains recent comments and reports the actual cumulative-byte stop', async () => {
+  const requests = [];
+  const firstCommentPage = JSON.stringify({
+    comments: [{ id: 'latest', body: 'x'.repeat(600) }],
+    total: 2,
+    isLast: false,
+  });
+  const secondCommentPage = JSON.stringify({
+    comments: [{ id: 'older', body: 'y'.repeat(600) }],
+    total: 2,
+    isLast: true,
+  });
+  assert.ok(Buffer.byteLength(firstCommentPage) < 1024);
+  assert.ok(Buffer.byteLength(firstCommentPage) + Buffer.byteLength(secondCommentPage) > 1024);
+  const client = new JiraRestClient({
+    env: {
+      JIRA_BASE_URL: 'https://jira.example',
+      JIRA_EMAIL: 'fixture@example.test',
+      JIRA_API_TOKEN: 'fixture-token',
+    },
+    commentsPerPage: 1,
+    maxCommentPages: 4,
+    maxTotalCommentBytes: 1024,
+    transport: async request => {
+      requests.push(request);
+      const url = new URL(request.url);
+      if (url.pathname.endsWith('/comment')) {
+        return jsonTextResponse(url.searchParams.get('startAt') === '0' ? firstCommentPage : secondCommentPage);
+      }
+      return jsonResponse({ fields: { summary: 'Bounded Jira context', attachment: [] } });
+    },
+  });
+
+  const snapshot = await client.ticketContext(
+    'jira-7',
+    'https://operator:private@jira.example/browse/JIRA-7?token=private#fragment',
+  );
+
+  assert.deepEqual(snapshot.comments.map(comment => comment.id), ['latest']);
+  assert.equal(snapshot.commentTotal, 2);
+  assert.equal(snapshot.commentsComplete, false);
+  assert.equal(snapshot.commentPageCount, 1);
+  assert.equal(snapshot.commentResponseBytes, Buffer.byteLength(firstCommentPage));
+  assert.equal(snapshot.issueUrl, 'https://jira.example/browse/JIRA-7');
+  assert.match(snapshot.warnings.join(' '), /1024-byte cumulative safety limit/i);
+  assert.doesNotMatch(snapshot.warnings.join(' '), /safety limit of 4 pages/i);
+  assert.ok(requests.every(request => request.method === 'GET'));
+  assert.ok(requests.every(request => new URL(request.url).origin === 'https://jira.example'));
+  assert.ok(requests.every(request => request.headers.Authorization === `Basic ${Buffer.from('fixture@example.test:fixture-token').toString('base64')}`));
+});
+
+test('Jira Work search stops a repeated page token without discarding valid rows', async () => {
+  const requests = [];
+  const client = new JiraRestClient({
+    env: {
+      JIRA_BASE_URL: 'https://jira.example',
+      JIRA_EMAIL: 'fixture@example.test',
+      JIRA_API_TOKEN: 'fixture-token',
+      JIRA_JQL: 'project = SAFE ORDER BY updated DESC',
+    },
+    transport: async request => {
+      requests.push(request);
+      const page = requests.length;
+      return jsonResponse({
+        issues: [{ key: `SAFE-${page}`, fields: { summary: `Retained issue ${page}` } }],
+        isLast: false,
+        nextPageToken: 'repeated-token',
+      });
+    },
+  });
+
+  const snapshot = await client.searchWorkList();
+
+  assert.deepEqual(snapshot.issues.map(issue => issue.key), ['SAFE-1', 'SAFE-2']);
+  assert.equal(snapshot.complete, false);
+  assert.equal(snapshot.pageCount, 2);
+  assert.equal(requests.length, 2);
+  assert.equal(new URL(requests[1].url).searchParams.get('nextPageToken'), 'repeated-token');
+  assert.match(snapshot.warnings.join(' '), /repeated a page token/i);
+});
+
+test('Jira attachment reads classify redirect, HTTP, response-limit, and metadata failures', async () => {
+  const attachmentRequests = [];
+  const client = new JiraRestClient({
+    env: {
+      JIRA_BASE_URL: 'https://jira.example',
+      JIRA_EMAIL: 'fixture@example.test',
+      JIRA_API_TOKEN: 'fixture-token',
+    },
+    maxAttachmentBytes: 1024,
+    transport: async request => {
+      const url = new URL(request.url);
+      if (url.pathname.endsWith('/comment')) {
+        return jsonResponse({ comments: [], total: 0, isLast: true });
+      }
+      if (url.pathname.includes('/attachment/content/')) {
+        attachmentRequests.push(request);
+        if (url.pathname.endsWith('/redirect')) {
+          return { statusCode: 302, body: 'redirect', headers: { 'Content-Type': ['application/octet-stream; charset="binary"'] } };
+        }
+        if (url.pathname.endsWith('/oversized')) {
+          return { statusCode: 200, body: Buffer.alloc(1025), headers: {} };
+        }
+        return { statusCode: 503, body: 'busy', headers: {} };
+      }
+      return jsonResponse({
+        fields: {
+          attachment: [
+            { id: 'redirect', size: 8, mimeType: 'application/octet-stream' },
+            { id: 'oversized', size: 100 },
+            { id: 'unavailable', size: 4 },
+            { id: '../unsafe', size: 1 },
+          ],
+        },
+      });
+    },
+  });
+
+  const snapshot = await client.ticketContext('SAFE-8');
+
+  assert.deepEqual(snapshot.attachmentContents.map(item => [item.status, item.reason]), [
+    ['failed', 'redirect-refused'],
+    ['failed', 'response-byte-limit'],
+    ['failed', 'http-503'],
+    ['skipped', 'invalid-id'],
+  ]);
+  assert.equal(snapshot.attachmentFetchCount, 3);
+  assert.equal(snapshot.attachmentResponseBytes, 8 + 1025 + 4);
+  assert.match(snapshot.warnings.join(' '), /0 downloaded, 1 skipped, and 3 failed/i);
+  assert.ok(attachmentRequests.every(request => request.responseType === 'buffer'));
+  assert.ok(attachmentRequests.every(request => new URL(request.url).searchParams.get('redirect') === 'false'));
+});
+
+test('Jira cancellation during attachment transport aborts the context instead of returning partial evidence', async () => {
+  const controller = new AbortController();
+  let attachmentCalls = 0;
+  const client = new JiraRestClient({
+    env: {
+      JIRA_BASE_URL: 'https://jira.example',
+      JIRA_EMAIL: 'fixture@example.test',
+      JIRA_API_TOKEN: 'fixture-token',
+    },
+    transport: async request => {
+      const url = new URL(request.url);
+      if (url.pathname.endsWith('/comment')) {
+        return jsonResponse({ comments: [], total: 0, isLast: true });
+      }
+      if (url.pathname.includes('/attachment/content/')) {
+        attachmentCalls += 1;
+        controller.abort();
+        throw Object.assign(new Error('superseded fixture read'), { name: 'AbortError' });
+      }
+      return jsonResponse({ fields: { attachment: [{ id: 'cancel-me', size: 1 }] } });
+    },
+  });
+
+  await assert.rejects(
+    client.ticketContext('SAFE-9', undefined, { signal: controller.signal }),
+    JiraRestCancelledError,
+  );
+  assert.equal(attachmentCalls, 1);
 });
 
 test('sanitized GitLab fixture normalizes enterprise MR review, pipeline, job, and test evidence', () => {
@@ -127,6 +291,193 @@ test('GitLab enterprise paths retain paginated evidence and explain permission a
   assert.ok(requests.some(request => request.url.includes('/projects/4815/merge_requests/')));
 });
 
+test('GitLab monitoring reads pipeline evidence before optional review history and retains complete paginated results', async () => {
+  const requests = [];
+  const project = encodeURIComponent('group/application');
+  const mergeRequestPath = `/api/v4/projects/${project}/merge_requests/77`;
+  const pipelinePath = '/api/v4/projects/4815/pipelines/9001';
+  const client = new GitLabRestClient({
+    env: { GITLAB_API_BASE_URL: 'https://gitlab.example/api/v4', GITLAB_TOKEN: 'fixture-only' },
+    transport: async request => {
+      requests.push(request);
+      const url = new URL(request.url);
+      if (url.pathname === mergeRequestPath) {
+        return jsonResponse({
+          iid: 77,
+          project_id: 4815,
+          sha: 'abc123',
+          head_pipeline: { id: 9001, project_id: 4815, status: 'failed' },
+        });
+      }
+      if (url.pathname === `${mergeRequestPath}/pipelines`) {
+        return jsonResponse([{ id: 9001, project_id: 4815, sha: 'abc123', status: 'failed' }]);
+      }
+      if (url.pathname === pipelinePath) {
+        return jsonResponse({ id: 9001, project_id: 4815, sha: 'abc123', status: 'failed' });
+      }
+      if (url.pathname === `${pipelinePath}/jobs`) {
+        assert.equal(url.searchParams.get('include_retried'), 'true');
+        return url.searchParams.get('page') === '1'
+          ? jsonResponse([{ id: 31, name: 'verify', status: 'failed', allow_failure: false }], { 'x-next-page': '2' })
+          : jsonResponse([{ id: 32, name: 'package', status: 'success', allow_failure: false }]);
+      }
+      if (url.pathname === `${pipelinePath}/test_report_summary`) {
+        return jsonResponse({ total: { count: 12, success: 10, failed: 2, error: 0, skipped: 0 } });
+      }
+      if (url.pathname === `${mergeRequestPath}/notes`) {
+        return jsonResponse([{ id: 41, body: 'Review note' }]);
+      }
+      if (url.pathname === `${mergeRequestPath}/discussions`) {
+        return jsonResponse([{ id: 'thread-1', notes: [{ id: 42, resolved: false }] }]);
+      }
+      if (url.pathname === `${mergeRequestPath}/approvals`) {
+        return jsonResponse({ approved: false, approvals_required: 1, approvals_left: 1 });
+      }
+      return { statusCode: 404, body: '', headers: {} };
+    },
+  });
+
+  const snapshot = await client.mergeRequestMonitor(
+    { projectIdOrPath: 'group/application', iid: 77 },
+    { includeReview: true },
+  );
+
+  assert.equal(snapshot.pipeline.id, 9001);
+  assert.deepEqual(snapshot.jobs.map(job => job.id), [31, 32]);
+  assert.equal(snapshot.testReportSummary.total.failed, 2);
+  assert.deepEqual(snapshot.notes.map(note => note.id), [41]);
+  assert.deepEqual(snapshot.discussions.map(discussion => discussion.id), ['thread-1']);
+  assert.equal(snapshot.approvals.approvals_left, 1);
+  assert.deepEqual(snapshot.completeness, {
+    notesComplete: true,
+    discussionsComplete: true,
+    approvalsComplete: true,
+    pipelinesComplete: true,
+    jobsComplete: true,
+    testsComplete: true,
+    warnings: [],
+  });
+  assert.ok(snapshot.responseBytes > 0);
+  const requestedPaths = requests.map(request => new URL(request.url).pathname);
+  assert.ok(
+    requestedPaths.indexOf(`${pipelinePath}/test_report_summary`) < requestedPaths.indexOf(`${mergeRequestPath}/notes`),
+    'bounded pipeline evidence must be read before optional review history',
+  );
+  assert.ok(requests.every(request => request.method === 'GET'));
+  assert.ok(requests.every(request => new URL(request.url).origin === 'https://gitlab.example'));
+});
+
+test('GitLab status reads paginate safely and diff reads fall back to the bounded changes endpoint', async () => {
+  const requests = [];
+  const project = encodeURIComponent('group/application');
+  const mergeRequestPath = `/api/v4/projects/${project}/merge_requests/88`;
+  const client = new GitLabRestClient({
+    env: { GITLAB_API_BASE_URL: 'https://gitlab.example/api/v4', GITLAB_TOKEN: 'fixture-only' },
+    transport: async request => {
+      requests.push(request);
+      const url = new URL(request.url);
+      if (url.pathname === mergeRequestPath) {
+        return jsonResponse({ iid: 88, title: 'Bounded provider status' });
+      }
+      if (url.pathname === `${mergeRequestPath}/notes`) {
+        return url.searchParams.get('page') === '1'
+          ? jsonResponse([{ id: 1 }], { 'X-Next-Page': ['2'] })
+          : jsonResponse([{ id: 2 }]);
+      }
+      if (url.pathname === `${mergeRequestPath}/discussions`) {
+        return jsonResponse([{ id: 'discussion-1' }]);
+      }
+      if (url.pathname === `${mergeRequestPath}/approvals`) {
+        return { statusCode: 404, body: '{"private":"not displayed"}', headers: {} };
+      }
+      if (url.pathname === `${mergeRequestPath}/diffs`) {
+        return { statusCode: 404, body: '{"private":"not displayed"}', headers: {} };
+      }
+      if (url.pathname === `${mergeRequestPath}/changes`) {
+        return jsonResponse({ changes: [{ old_path: 'before.ts', new_path: 'after.ts' }] });
+      }
+      return { statusCode: 404, body: '', headers: {} };
+    },
+  });
+
+  const status = await client.mergeRequestStatus({ projectIdOrPath: 'group/application', iid: 88 });
+  assert.deepEqual(status.comments.map(note => note.id), [1, 2]);
+  assert.deepEqual(status.discussions.map(discussion => discussion.id), ['discussion-1']);
+  assert.equal(Object.hasOwn(status, 'approvals'), false);
+
+  const diff = await client.mergeRequestDiff({ projectIdOrPath: 'group/application', iid: 88 });
+  assert.deepEqual(diff.files, [{ old_path: 'before.ts', new_path: 'after.ts' }]);
+  assert.ok(requests.some(request => new URL(request.url).pathname === `${mergeRequestPath}/changes`));
+  assert.ok(requests.every(request => request.method === 'GET'));
+  assert.equal(requests.some(request => request.body), false);
+});
+
+test('GitLab context reads complete MR, diff, pipeline, job, and test evidence through pinned GET requests', async () => {
+  const requests = [];
+  const project = encodeURIComponent('group/application');
+  const mergeRequestPath = `/api/v4/projects/${project}/merge_requests/99`;
+  const pipelinePath = '/api/v4/projects/4815/pipelines/5001';
+  const client = new GitLabRestClient({
+    env: { GITLAB_API_BASE_URL: 'https://gitlab.example/api/v4', GITLAB_TOKEN: 'fixture-only' },
+    transport: async request => {
+      requests.push(request);
+      const url = new URL(request.url);
+      if (url.pathname === mergeRequestPath) {
+        return jsonResponse({
+          iid: 99,
+          project_id: 4815,
+          sha: 'context-sha',
+          head_pipeline: { id: 5001, project_id: 4815, status: 'success' },
+        });
+      }
+      if (url.pathname === `${mergeRequestPath}/notes`) { return jsonResponse([{ id: 1 }]); }
+      if (url.pathname === `${mergeRequestPath}/discussions`) { return jsonResponse([{ id: 'thread-99' }]); }
+      if (url.pathname === `${mergeRequestPath}/approvals`) {
+        return jsonResponse({ approved: true, approvals_required: 1, approvals_left: 0 });
+      }
+      if (url.pathname === `${mergeRequestPath}/diffs`) {
+        return jsonResponse([{ old_path: 'src/old.ts', new_path: 'src/new.ts', diff: '@@ bounded fixture @@' }]);
+      }
+      if (url.pathname === `${mergeRequestPath}/pipelines`) {
+        return jsonResponse([{ id: 5001, project_id: 4815, sha: 'context-sha', status: 'success' }]);
+      }
+      if (url.pathname === pipelinePath) {
+        return jsonResponse({ id: 5001, project_id: 4815, sha: 'context-sha', status: 'success' });
+      }
+      if (url.pathname === `${pipelinePath}/jobs`) {
+        return jsonResponse([{ id: 71, name: 'verify', stage: 'test', status: 'success', allow_failure: false }]);
+      }
+      if (url.pathname === `${pipelinePath}/test_report_summary`) {
+        return jsonResponse({ total: { count: 4, success: 4, failed: 0, error: 0, skipped: 0 } });
+      }
+      if (url.pathname === `${pipelinePath}/test_report`) {
+        return jsonResponse({ total_count: 4, success_count: 4, failed_count: 0, test_suites: [] });
+      }
+      return { statusCode: 404, body: '', headers: {} };
+    },
+  });
+
+  const snapshot = await client.mergeRequestContext({ projectIdOrPath: 'group/application', iid: 99 });
+  assert.equal(snapshot.pipeline.id, 5001);
+  assert.deepEqual(snapshot.jobs.map(job => job.id), [71]);
+  assert.equal(snapshot.testReportSummary.total.count, 4);
+  assert.equal(snapshot.testReport.total_count, 4);
+  assert.deepEqual(snapshot.diffs.map(diff => diff.new_path), ['src/new.ts']);
+  assert.deepEqual(snapshot.completeness, {
+    notesComplete: true,
+    discussionsComplete: true,
+    diffsComplete: true,
+    pipelinesComplete: true,
+    jobsComplete: true,
+    testsComplete: true,
+    warnings: [],
+  });
+  assert.ok(snapshot.responseBytes > 0);
+  assert.ok(requests.every(request => request.method === 'GET'));
+  assert.ok(requests.every(request => new URL(request.url).origin === 'https://gitlab.example'));
+  assert.ok(requests.every(request => request.headers['PRIVATE-TOKEN'] === 'fixture-only'));
+});
+
 test('sanitized Jenkins fixture resolves a multibranch build and treats missing stages as optional', async () => {
   const fixture = readFixture('jenkins-multibranch.json');
   const client = new JenkinsRestClient({
@@ -148,6 +499,112 @@ test('sanitized Jenkins fixture resolves a multibranch build and treats missing 
   assert.equal(context.completeness.stages, fixture.expected.stagesStatus);
   assert.equal(context.completeness.complete, true);
   assert.equal(JSON.stringify(context).includes('flow-definition'), false);
+});
+
+test('Jenkins direct-build context retains causes, artifacts, changes, failed tests, stages, and literal Sonar routing', async () => {
+  const requests = [];
+  const buildUrl = 'https://jenkins.example/job/application/42/';
+  const client = new JenkinsRestClient({
+    env: {
+      JENKINS_URL: 'https://jenkins.example',
+      JENKINS_USER: 'jenkins-user',
+      JENKINS_API_TOKEN: 'fixture-token',
+    },
+    transport: async request => {
+      requests.push(request);
+      const url = new URL(request.url);
+      if (url.pathname === '/job/application/42/api/json') {
+        return jsonResponse({
+          number: 42,
+          result: 'FAILURE',
+          building: false,
+          url: buildUrl,
+          timestamp: 1_721_000_000_000,
+          duration: 45_000,
+          estimatedDuration: 40_000,
+          queueId: 17,
+          fullDisplayName: 'application #42',
+          description: 'Bounded direct-build fixture',
+          actions: [{ causes: [{ shortDescription: 'Started by fixture', userName: 'Fixture User' }] }],
+          artifacts: [{ fileName: 'report.xml', relativePath: 'reports/report.xml' }],
+          changeSet: { items: [{
+            commitId: 'abc123',
+            msg: 'Exercise provider context',
+            timestamp: 1_720_999_000_000,
+            author: { fullName: 'Fixture Author' },
+            affectedPaths: ['src/provider.ts'],
+          }] },
+        });
+      }
+      if (url.pathname === '/job/application/42/testReport/api/json') {
+        return jsonResponse({
+          passCount: 1,
+          failCount: 1,
+          skipCount: 1,
+          totalCount: 3,
+          duration: 2.5,
+          suites: [{ cases: [
+            { className: 'ProviderTest', name: 'passes', status: 'PASSED', duration: 0.5 },
+            { className: 'ProviderTest', name: 'fails safely', status: 'FAILED', duration: 1, errorDetails: 'fixture failure' },
+            { className: 'ProviderTest', name: 'skips', status: 'SKIPPED', duration: 0 },
+          ] }],
+        });
+      }
+      if (url.pathname === '/job/application/42/wfapi/describe') {
+        return jsonResponse({ stages: [
+          { id: '1', name: 'Build', status: 'SUCCESS', startTimeMillis: 10, durationMillis: 20, pauseDurationMillis: 0 },
+          { id: '2', name: 'Verify', status: 'FAILED', startTimeMillis: 30, durationMillis: 40, pauseDurationMillis: 1 },
+        ] });
+      }
+      if (url.pathname === '/job/application/config.xml') {
+        return {
+          statusCode: 200,
+          body: '<flow-definition><sonar.projectKey>application:key</sonar.projectKey><sonar.branch.name>feature/provider</sonar.branch.name></flow-definition>',
+          headers: {},
+        };
+      }
+      return { statusCode: 404, body: '', headers: {} };
+    },
+  });
+
+  const context = await client.buildContext(buildUrl);
+  assert.equal(context.build.number, 42);
+  assert.deepEqual(context.build.causes, [{ shortDescription: 'Started by fixture', userName: 'Fixture User' }]);
+  assert.deepEqual(context.build.artifacts, [{ fileName: 'report.xml', relativePath: 'reports/report.xml' }]);
+  assert.deepEqual(context.build.changes[0].affectedPaths, ['src/provider.ts']);
+  assert.deepEqual(context.tests.failedCases.map(testCase => testCase.name), ['fails safely']);
+  assert.deepEqual(context.stages.map(stage => [stage.name, stage.status]), [['Build', 'SUCCESS'], ['Verify', 'FAILED']]);
+  assert.equal(context.sonarProjectKey, 'application:key');
+  assert.equal(context.sonarBranch, 'feature/provider');
+  assert.deepEqual(context.completeness, {
+    complete: true,
+    buildComplete: true,
+    testReport: 'complete',
+    stages: 'complete',
+    configuration: 'complete',
+    logsIncluded: false,
+    warnings: [],
+  });
+  const expectedAuth = `Basic ${Buffer.from('jenkins-user:fixture-token').toString('base64')}`;
+  assert.ok(requests.every(request => request.method === 'GET'));
+  assert.ok(requests.every(request => request.headers.Authorization === expectedAuth));
+  assert.ok(requests.every(request => new URL(request.url).origin === 'https://jenkins.example'));
+});
+
+test('Jenkins refuses to send configured credentials outside the pinned provider origin', async () => {
+  let transportCalls = 0;
+  const client = new JenkinsRestClient({
+    env: { JENKINS_URL: 'https://jenkins.example', JENKINS_API_TOKEN: 'fixture-token' },
+    transport: async () => {
+      transportCalls += 1;
+      return jsonResponse({});
+    },
+  });
+  await assert.rejects(
+    client.buildStatus('https://other.example/job/application'),
+    /refused to send Jenkins credentials.*outside.*configured/i,
+  );
+  assert.equal(transportCalls, 0);
 });
 
 test('sanitized SonarQube fixture retains branch-qualified gate, measures, and issues', async () => {
@@ -173,12 +630,97 @@ test('sanitized SonarQube fixture retains branch-qualified gate, measures, and i
   assert.equal(dashboard.searchParams.get('branch'), fixture.branch);
 });
 
+test('SonarQube branch context retains complete paginated issues when gate and measure reads fail independently', async () => {
+  const requests = [];
+  const client = new SonarRestClient({
+    env: { SONAR_HOST_URL: 'https://sonar.example', SONAR_TOKEN: 'fixture-value' },
+    issuesPerPage: 1,
+    transport: async request => {
+      requests.push(request);
+      const url = new URL(request.url);
+      if (url.pathname === '/api/qualitygates/project_status') {
+        return { statusCode: 403, body: '{"private":"not displayed"}', headers: {} };
+      }
+      if (url.pathname === '/api/measures/component') {
+        throw Object.assign(new Error('private transport detail'), { code: 'ETIMEDOUT' });
+      }
+      if (url.pathname === '/api/issues/search') {
+        const page = Number(url.searchParams.get('p'));
+        return jsonResponse({
+          paging: { pageIndex: page, pageSize: 1, total: 2 },
+          issues: [{
+            key: `issue-${page}`,
+            rule: 'typescript:S100',
+            severity: page === 1 ? 'MAJOR' : 'CRITICAL',
+            component: 'application:src/provider.ts',
+            project: 'application',
+            line: page,
+            message: `Bounded issue ${page}`,
+            status: 'OPEN',
+            type: 'CODE_SMELL',
+            tags: ['provider'],
+            impacts: [{ softwareQuality: 'MAINTAINABILITY', severity: 'MEDIUM' }],
+            textRange: { startLine: page, endLine: page, startOffset: 0, endOffset: 4 },
+          }],
+        });
+      }
+      return { statusCode: 404, body: '', headers: {} };
+    },
+  });
+
+  const context = await client.branchContext('application', 'feature/provider');
+  assert.equal(context.qualityGate.status, 'UNKNOWN');
+  assert.deepEqual(context.measures, []);
+  assert.deepEqual(context.issues.map(issue => issue.key), ['issue-1', 'issue-2']);
+  assert.deepEqual(context.issues[0].textRange, { startLine: 1, endLine: 1, startOffset: 0, endOffset: 4 });
+  assert.equal(context.completeness.complete, false);
+  assert.equal(context.completeness.qualityGateComplete, false);
+  assert.equal(context.completeness.measuresComplete, false);
+  assert.equal(context.completeness.issuesComplete, true);
+  assert.equal(context.completeness.issuesFetched, 2);
+  assert.equal(context.completeness.issuePages, 2);
+  assert.equal(context.completeness.issuesTotal, 2);
+  assert.ok(context.completeness.issueResponseBytes > 0);
+  assert.match(context.completeness.warnings.join(' '), /HTTP 403/);
+  assert.match(context.completeness.warnings.join(' '), /ETIMEDOUT/);
+  assert.doesNotMatch(context.completeness.warnings.join(' '), /private transport detail|"private"/);
+  assert.equal(requests.filter(request => new URL(request.url).pathname === '/api/issues/search').length, 2);
+  assert.ok(requests.every(request => request.method === 'GET'));
+  assert.ok(requests.every(request => request.headers.Authorization === 'Bearer fixture-value'));
+});
+
+test('SonarQube issue pagination retains prior evidence and stops on a mismatched provider cursor', async () => {
+  const client = new SonarRestClient({
+    env: { SONAR_HOST_URL: 'https://sonar.example', SONAR_TOKEN: 'fixture-value' },
+    issuesPerPage: 1,
+    transport: async request => {
+      const url = new URL(request.url);
+      const requestedPage = Number(url.searchParams.get('p'));
+      return jsonResponse({
+        paging: { pageIndex: 1, pageSize: 1, total: 2 },
+        issues: [{ key: `issue-${requestedPage}`, message: `Issue ${requestedPage}` }],
+      });
+    },
+  });
+
+  const result = await client.issues('application', 'feature/provider');
+  assert.deepEqual(result.issues.map(issue => issue.key), ['issue-1']);
+  assert.equal(result.complete, false);
+  assert.equal(result.pages, 1);
+  assert.equal(result.total, 2);
+  assert.match(result.warnings.join(' '), /returned page index 1/i);
+});
+
 function readFixture(name) {
   return JSON.parse(fs.readFileSync(path.join(fixtureRoot, name), 'utf8'));
 }
 
 function jsonResponse(value, headers = {}) {
   return { statusCode: 200, body: JSON.stringify(value), headers };
+}
+
+function jsonTextResponse(body, headers = {}) {
+  return { statusCode: 200, body, headers };
 }
 
 function escapeRegex(value) {

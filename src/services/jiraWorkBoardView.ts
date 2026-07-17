@@ -5,6 +5,7 @@ import {
   webviewRuntimeScriptUri,
 } from './webviewSecurity';
 import { escapeAttr, escapeHtml, kronosWebviewBaseCss } from './webviewHtml';
+import { formatWebviewDateTime } from './webviewFormat';
 import { isCompletedWorkTicket } from './workTicketFilters';
 import { listLocalProjects } from './projectCatalog';
 import {
@@ -80,6 +81,7 @@ export function buildJiraWorkBoardHtml(input: JiraWorkBoardInput): string {
   const hideCompletedByDefault = input.hideCompletedByDefault !== false;
   const initiallyVisibleCount = hideCompletedByDefault ? tickets.length - completedCount : tickets.length;
   const refreshedAt = safeSingleLine(input.state?.refreshedAt, 100);
+  const refreshedLabel = refreshedAt ? formatWebviewDateTime(refreshedAt, refreshedAt) : '';
   const dataPresentation = workDataPresentation({
     ticketCount: tickets.length,
     refreshedAt,
@@ -100,8 +102,8 @@ export function buildJiraWorkBoardHtml(input: JiraWorkBoardInput): string {
   [hidden] { display: none !important; }
   .jira-board-shell { max-width: none; }
   .jira-board-header { align-items: center; }
-  .jira-board-heading-actions { display: flex; align-items: center; gap: 8px; }
-  .jira-board-filters { display: grid; grid-template-columns: minmax(220px, 2fr) repeat(4, minmax(130px, 1fr)) auto auto; gap: 8px; align-items: end; padding: 12px; border: 1px solid var(--k-border); border-radius: var(--k-radius); background: var(--k-surface); }
+  .jira-board-filters { display: grid; gap: 10px; padding: 12px; border: 1px solid var(--k-border); border-radius: var(--k-radius); background: var(--k-surface); }
+  .jira-board-filter-primary { display: grid; grid-template-columns: minmax(260px, 2fr) minmax(150px, .7fr) auto auto; gap: 8px; align-items: end; }
   .jira-board-filter { display: grid; gap: 4px; min-width: 0; }
   .jira-board-filter label, .jira-board-toggle-label { color: var(--k-muted); font-size: 10px; font-weight: 650; text-transform: uppercase; }
   .jira-board-filter input, .jira-board-filter select { width: 100%; min-height: 30px; padding: 4px 8px; color: var(--k-fg); background: var(--vscode-input-background, var(--k-bg)); border: 1px solid var(--vscode-input-border, var(--k-border)); border-radius: var(--k-radius-sm); font: inherit; }
@@ -109,6 +111,11 @@ export function buildJiraWorkBoardHtml(input: JiraWorkBoardInput): string {
   .jira-board-toggle { display: flex; align-items: center; gap: 7px; min-height: 30px; padding: 0 4px; white-space: nowrap; }
   .jira-board-toggle input { margin: 0; }
   .jira-board-reset { min-height: 30px; }
+  .jira-board-more-filters { border-top: 1px solid var(--k-border); }
+  .jira-board-more-filters > summary { width: max-content; margin-top: 9px; color: var(--k-accent); font-size: 11px; font-weight: 650; cursor: pointer; }
+  .jira-board-more-filters > summary span { margin-left: 5px; color: var(--k-muted); font-weight: 400; }
+  .jira-board-more-filters[open] > summary { margin-bottom: 9px; }
+  .jira-board-more-filter-grid { display: grid; grid-template-columns: repeat(3, minmax(150px, 1fr)); gap: 8px; }
   .jira-board-summary { min-height: 20px; margin: 8px 2px 12px; color: var(--k-muted); font-size: 11px; }
   .jira-data-status { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; padding: 10px 12px; border: 1px solid var(--k-border); border-left: 3px solid var(--k-ok); border-radius: var(--k-radius); background: var(--k-surface); }
   .jira-data-status[data-work-data-state="loading"] { border-left-color: var(--k-info); }
@@ -119,9 +126,10 @@ export function buildJiraWorkBoardHtml(input: JiraWorkBoardInput): string {
   .jira-data-status-title { font-size: 12px; font-weight: 700; }
   .jira-data-status-detail { margin-top: 2px; color: var(--k-muted); font-size: 10px; line-height: 1.4; }
   .jira-data-status-actions { display: flex; flex: 0 0 auto; flex-wrap: wrap; gap: 6px; }
-  .jira-projects { display: grid; gap: 8px; margin-bottom: 12px; padding: 11px 12px; border: 1px solid var(--k-border); border-radius: var(--k-radius); background: var(--k-surface); }
-  .jira-projects-header { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
-  .jira-projects-header h2 { margin: 0; color: var(--k-fg); font-size: 12px; text-transform: none; }
+  .jira-projects { margin-bottom: 12px; padding: 10px 12px; border: 1px solid var(--k-border); border-radius: var(--k-radius); background: var(--k-surface); }
+  .jira-projects > summary { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; color: var(--k-fg); font-size: 12px; font-weight: 650; cursor: pointer; }
+  .jira-projects > summary span { color: var(--k-muted); font-size: 10px; font-weight: 400; }
+  .jira-projects[open] > summary { margin-bottom: 9px; }
   .jira-projects-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 7px; }
   .jira-project { min-width: 0; padding: 8px 9px; border: 1px solid var(--k-border); border-radius: var(--k-radius-sm); background: var(--k-surface-soft); }
   .jira-project-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
@@ -129,7 +137,7 @@ export function buildJiraWorkBoardHtml(input: JiraWorkBoardInput): string {
   .jira-project-branch { color: var(--k-info); font-size: 10px; overflow-wrap: anywhere; }
   .jira-project-path { margin-top: 4px; color: var(--k-muted); font-size: 10px; overflow-wrap: anywhere; }
   .jira-board { display: flex; align-items: flex-start; gap: 10px; min-height: 360px; padding-bottom: 12px; overflow-x: auto; scrollbar-gutter: stable; }
-  .jira-board-column { display: grid; flex: 1 0 280px; min-width: 280px; max-width: 380px; gap: 8px; padding: 9px; border: 1px solid var(--k-border); border-radius: var(--k-radius); background: var(--k-surface-soft); }
+  .jira-board-column { display: grid; flex: 1 0 320px; min-width: 300px; max-width: 520px; gap: 8px; padding: 9px; border: 1px solid var(--k-border); border-radius: var(--k-radius); background: var(--k-surface-soft); }
   .jira-board-column-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 24px; padding: 0 2px; color: var(--k-muted); font-size: 11px; font-weight: 650; text-transform: uppercase; }
   .jira-board-column-count { display: inline-flex; align-items: center; justify-content: center; min-width: 22px; min-height: 20px; padding: 0 6px; border-radius: 999px; color: var(--k-fg); background: var(--k-bg); }
   .jira-board-cards { display: grid; gap: 8px; }
@@ -138,8 +146,7 @@ export function buildJiraWorkBoardHtml(input: JiraWorkBoardInput): string {
   .jira-ticket-card:hover, .jira-ticket-card:focus-within { border-color: var(--k-border-strong); background: var(--k-hover); }
   .jira-ticket-card:focus-visible { outline: 1px solid var(--vscode-focusBorder, var(--k-accent)); outline-offset: 2px; }
   .jira-ticket-heading { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
-  .jira-ticket-heading-actions { display: flex; align-items: center; justify-content: flex-end; flex: 1 1 180px; flex-wrap: wrap; gap: 6px; min-width: 0; }
-  .jira-ticket-heading-actions .kronos-button { min-height: 23px; max-width: 170px; padding: 2px 7px; overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+  .jira-ticket-heading-meta { display: flex; align-items: center; justify-content: flex-end; flex: 1 1 100px; min-width: 0; }
   .jira-ticket-key { color: var(--k-accent); font-size: 11px; font-weight: 700; }
   .jira-ticket-open { margin: 0; padding: 0; border: 0; color: var(--k-accent); background: transparent; font: inherit; cursor: pointer; }
   .jira-ticket-open:hover { text-decoration: underline; }
@@ -152,19 +159,20 @@ export function buildJiraWorkBoardHtml(input: JiraWorkBoardInput): string {
   .jira-ticket-chip.mr { color: var(--k-warn); background: var(--k-warn-bg); border-color: transparent; }
   .jira-ticket-chip.build { color: var(--k-ok); background: var(--k-ok-bg); border-color: transparent; }
   .jira-ticket-actions { padding-top: 2px; border-top: 1px solid var(--k-border); }
-  .jira-ticket-actions .kronos-button { min-height: 25px; padding: 3px 7px; font-size: 10px; }
+  .jira-ticket-actions .kronos-button { flex: 1 1 110px; min-height: 27px; padding: 3px 7px; font-size: 10px; }
   .jira-ticket-actions .primary { font-weight: 700; }
   .jira-board-empty { width: min(520px, 100%); }
-  @media (max-width: 980px) {
-    .jira-board-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  @media (max-width: 860px) {
+    .jira-board-filter-primary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .jira-board-filter.search { grid-column: 1 / -1; }
   }
   @media (max-width: 580px) {
     body { padding: 14px; }
-    .jira-board-filters { grid-template-columns: 1fr; }
+    .jira-board-filter-primary, .jira-board-more-filter-grid { grid-template-columns: 1fr; }
     .jira-board-filter.search { grid-column: auto; }
     .jira-board-column { min-width: 250px; flex-basis: 250px; }
     .jira-data-status { align-items: stretch; flex-direction: column; }
+    .jira-projects > summary { align-items: flex-start; flex-direction: column; gap: 2px; }
   }
 </style>
 ${webviewRuntimeScriptTag(input.nonce, webviewRuntimeScriptUri(input.scriptUri))}
@@ -174,34 +182,38 @@ ${webviewRuntimeScriptTag(input.nonce, webviewRuntimeScriptUri(input.scriptUri))
 <main class="kronos-shell jira-board-shell">
   <header class="kronos-header jira-board-header">
     <div>
-      <h1 class="kronos-title">Jira Work Board</h1>
-      <div class="kronos-subtitle">${tickets.length} ticket${tickets.length === 1 ? '' : 's'}${refreshedAt ? ` · refreshed ${escapeHtml(refreshedAt)}` : ''}. Open a workspace or start Claude for the ticket you choose.</div>
+      <h1 class="kronos-title">Jira work</h1>
+      <div class="kronos-subtitle">${tickets.length} ticket${tickets.length === 1 ? '' : 's'}${refreshedLabel ? ` · Updated ${escapeHtml(refreshedLabel)}` : ''}</div>
     </div>
   </header>
 
   ${buildDataStatusHtml(dataPresentation)}
 
-  <section class="jira-projects" aria-label="Registered local projects">
-    <div class="jira-projects-header"><h2>Local Projects</h2><span class="kronos-subtitle">Branch is read locally from Git HEAD</span></div>
-    ${localProjects.length > 0
-    ? `<div class="jira-projects-grid">${localProjects.map(project => `<div class="jira-project"><div class="jira-project-heading"><span class="jira-project-name">${escapeHtml(project.displayName || project.name)}</span><span class="jira-project-branch">${escapeHtml(project.branch || (project.available ? 'branch unavailable' : 'folder unavailable'))}</span></div><div class="jira-project-path">${escapeHtml(project.path)}</div></div>`).join('')}</div>`
-    : '<div class="kronos-empty">No local projects registered. Open the Projects view and choose Manage Registered Projects; Kronos will offer discovery-folder setup when needed.</div>'}
-  </section>
+  ${localProjects.length > 0
+    ? `<details class="jira-projects"><summary>${localProjects.length} local project${localProjects.length === 1 ? '' : 's'}<span>Show branches and folders</span></summary><div class="jira-projects-grid">${localProjects.map(project => `<div class="jira-project"><div class="jira-project-heading"><span class="jira-project-name">${escapeHtml(project.displayName || project.name)}</span><span class="jira-project-branch">${escapeHtml(project.branch || (project.available ? 'branch unavailable' : 'folder unavailable'))}</span></div><div class="jira-project-path">${escapeHtml(project.path)}</div></div>`).join('')}</div></details>`
+    : ''}
 
   <section class="jira-board-filters" aria-label="Jira board filters">
-    <div class="jira-board-filter search">
-      <label for="jira-board-search">Search</label>
-      <input id="jira-board-search" type="search" placeholder="Key, summary, branch, build, attachment…" autocomplete="off">
+    <div class="jira-board-filter-primary">
+      <div class="jira-board-filter search">
+        <label for="jira-board-search">Search</label>
+        <input id="jira-board-search" type="search" placeholder="Key, summary, branch, build, attachment…" autocomplete="off">
+      </div>
+      ${selectFilter('jira-board-status', 'Status', statuses)}
+      <label class="jira-board-toggle" for="jira-board-hide-done">
+        <input id="jira-board-hide-done" type="checkbox" data-default-checked="${hideCompletedByDefault ? 'true' : 'false'}"${hideCompletedByDefault ? ' checked' : ''}>
+        <span class="jira-board-toggle-label">Hide completed</span>
+      </label>
+      <button id="jira-board-reset" class="kronos-button jira-board-reset" type="button">Reset</button>
     </div>
-    ${selectFilter('jira-board-status', 'Status', statuses)}
-    ${selectFilter('jira-board-jira-project', 'Jira project', jiraProjects)}
-    ${selectFilter('jira-board-local-project', 'Local project', linkedProjectFilters, value => localProjectDisplayNames.get(value) || value)}
-    ${selectFilter('jira-board-label', 'Label', labels)}
-    <label class="jira-board-toggle" for="jira-board-hide-done">
-      <input id="jira-board-hide-done" type="checkbox" data-default-checked="${hideCompletedByDefault ? 'true' : 'false'}"${hideCompletedByDefault ? ' checked' : ''}>
-      <span class="jira-board-toggle-label">Hide completed</span>
-    </label>
-    <button id="jira-board-reset" class="kronos-button jira-board-reset" type="button">Reset</button>
+    <details id="jira-board-more-filters" class="jira-board-more-filters">
+      <summary>More filters <span>Jira project, local project, label</span></summary>
+      <div class="jira-board-more-filter-grid">
+        ${selectFilter('jira-board-jira-project', 'Jira project', jiraProjects)}
+        ${selectFilter('jira-board-local-project', 'Local project', linkedProjectFilters, value => localProjectDisplayNames.get(value) || value)}
+        ${selectFilter('jira-board-label', 'Label', labels)}
+      </div>
+    </details>
   </section>
   <div id="jira-board-filter-summary" class="jira-board-summary" aria-live="polite">${initiallyVisibleCount} of ${tickets.length} shown${hideCompletedByDefault && completedCount > 0 ? ` · ${completedCount} completed hidden` : ''}</div>
 
@@ -219,7 +231,7 @@ function buildDataStatusHtml(presentation: WorkDataPresentation): string {
   const needsRepair = presentation.mode === 'partial' || presentation.mode === 'stale' || presentation.mode === 'error';
   const actions = presentation.mode === 'loading'
     ? ''
-    : `${actionButton('refreshTickets', 'Refresh Jira', '', presentation.mode !== 'ready')}${needsRepair ? actionButton('openDoctor', 'Doctor', '') : ''}`;
+    : `${actionButton('refreshTickets', 'Refresh', '', presentation.mode !== 'ready')}${needsRepair ? actionButton('openDoctor', 'Check setup', '') : ''}`;
   return `<section id="jira-board-data-status" class="jira-data-status" data-work-data-state="${escapeAttr(presentation.mode)}" role="${isError ? 'alert' : 'status'}" aria-live="${isError ? 'assertive' : 'polite'}">
     <div class="jira-data-status-copy"><div class="jira-data-status-title">${escapeHtml(presentation.title)}</div><div class="jira-data-status-detail">${escapeHtml(presentation.detail)}${presentation.refreshedAt ? ` Last Jira result: ${escapeHtml(presentation.refreshedAt)}.` : ''}</div></div>
     <div class="jira-data-status-actions" aria-label="Jira data actions">${actions}</div>
@@ -364,14 +376,14 @@ function buildTicketCardHtml(ticket: BoardTicket): string {
   const attachmentChip = attachmentCount > 0
     ? chip(`${attachmentCount} attachment${attachmentCount === 1 ? '' : 's'}`, '')
     : '';
-  const projectActionLabel = launchProject ? `Change / Unlink Project: ${launchProject}` : '+ Add Project';
+  const projectActionLabel = launchProject ? 'Change project' : 'Choose project';
   return `<article class="jira-ticket-card" data-ticket-card data-ticket="${escapeAttr(ticket.key)}" data-status="${escapeAttr(ticket.statusToken)}" data-jira-project="${escapeAttr(ticket.jiraProjectToken)}" data-local-project="${escapeAttr(ticket.localProjectToken)}" data-labels="${escapeAttr(JSON.stringify(ticket.labelTokens))}" data-search="${escapeAttr(ticket.searchText)}" data-completed="${ticket.completed ? 'true' : 'false'}" data-ticket-type="${typeKind}" tabindex="0" aria-label="Open ${escapeAttr(ticket.key)}: ${escapeAttr(summary)}">
-    <div class="jira-ticket-heading"><button type="button" class="jira-ticket-key jira-ticket-open" data-action="openTicketWorkspace" data-ticket="${escapeAttr(ticket.key)}" aria-label="Open ${escapeAttr(ticket.key)}: ${escapeAttr(summary)}">${escapeHtml(ticket.key)}</button><div class="jira-ticket-heading-actions">${actionButton('chooseTicketProject', projectActionLabel, ticket.key)}<span class="jira-ticket-priority">${escapeHtml(priority || type)}</span></div></div>
+    <div class="jira-ticket-heading"><button type="button" class="jira-ticket-key jira-ticket-open" data-action="openTicketWorkspace" data-ticket="${escapeAttr(ticket.key)}" aria-label="Open ${escapeAttr(ticket.key)}: ${escapeAttr(summary)}">${escapeHtml(ticket.key)}</button><div class="jira-ticket-heading-meta"><span class="jira-ticket-priority">${escapeHtml(priority || type)}</span></div></div>
     <div class="jira-ticket-summary">${escapeHtml(summary)}</div>
     <div class="jira-ticket-meta">${projectChips}${labelChips}${overflowCount > 0 ? chip(`+${overflowCount} more`, '') : ''}${mrChip}${buildChip}${attachmentChip}</div>
     <div class="jira-ticket-actions" aria-label="Actions for ${escapeAttr(ticket.key)}">
       ${actionButton('startClaudeForTicket', 'Start Claude', ticket.key, true)}
-      ${actionButton('openTicketWorkspace', 'Workspace', ticket.key)}
+      ${actionButton('chooseTicketProject', projectActionLabel, ticket.key)}
     </div>
   </article>`;
 }

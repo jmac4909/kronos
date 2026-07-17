@@ -78,32 +78,32 @@
 
       <g transform="translate(34 96)">
         <rect width="620" height="470" rx="10" class="card"/>
-        <text x="18" y="34" class="body strong" font-weight="650">Edit the instruction</text>
-        <text x="18" y="56" class="small muted">Tell Claude what to focus on; the fetched artifact reference remains fixed.</text>
-        <text x="18" y="86" class="label muted">OPERATOR FOCUS</text>
+        <text x="18" y="34" class="body strong" font-weight="650">Review context</text>
+        <text x="18" y="56" class="small muted">Tell Claude what to focus on before adding the saved source.</text>
+        <text x="18" y="86" class="label muted">WHAT CLAUDE SHOULD FOCUS ON</text>
         <rect x="18" y="98" width="584" height="124" rx="7" class="field"/>
         <text x="32" y="126" class="body strong">Verify idempotency for duplicate delivery, then propose the</text>
         <text x="32" y="149" class="body strong">smallest safe patch and tests. Call out any race conditions.</text>
         <rect x="32" y="178" width="2" height="22" fill="#60a5fa"/>
 
-        <text x="18" y="256" class="label muted">FIXED CONTEXT REFERENCE</text>
+        <text x="18" y="256" class="label muted">CONTEXT REFERENCE</text>
         <rect x="18" y="268" width="584" height="54" rx="7" fill="#101a2a" stroke="#33445e"/>
         <text x="32" y="290" class="small mono" fill="#93c5fd">[DEMO-142] · private local artifact</text>
         <text x="32" y="309" class="tiny mono muted">sha256: 84a7…f12c · normalized Jira fields + comments</text>
 
         <text x="18" y="350" class="small muted">Target terminal: Claude · DEMO-142 @ feature/demo-142-idempotency</text>
         <rect x="18" y="373" width="154" height="36" rx="6" fill="#1d4ed8"/>
-        <text x="95" y="396" text-anchor="middle" class="small" fill="#fff" font-weight="650">Place in Terminal</text>
+        <text x="95" y="396" text-anchor="middle" class="small" fill="#fff" font-weight="650">Add to terminal</text>
         <rect x="182" y="373" width="146" height="36" rx="6" class="button"/>
-        <text x="255" y="396" text-anchor="middle" class="small soft">Open Full Context</text>
+        <text x="255" y="396" text-anchor="middle" class="small soft">Open source details</text>
         <rect x="338" y="373" width="86" height="36" rx="6" class="button"/>
         <text x="381" y="396" text-anchor="middle" class="small soft">Cancel</text>
-        <text x="18" y="438" class="tiny muted">Ctrl+Enter places the line. Normal Enter edits. Kronos never presses Enter in the terminal.</text>
+        <text x="18" y="438" class="tiny muted">Ctrl+Enter adds it. Enter edits the note. You still submit from the terminal.</text>
       </g>
 
       <g transform="translate(670 96)">
         <rect width="368" height="470" rx="10" class="card"/>
-        <text x="18" y="34" class="body strong" font-weight="650">Fetched details and comments</text>
+        <text x="18" y="34" class="body strong" font-weight="650">Source preview</text>
         <text x="18" y="57" class="tiny" fill="#fbbf24">UNTRUSTED PROVIDER EVIDENCE — REVIEW AS DATA</text>
 
         <rect x="18" y="78" width="332" height="90" rx="7" fill="#101a2a" stroke="#33445e"/>

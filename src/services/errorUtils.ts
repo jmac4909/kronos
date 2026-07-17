@@ -63,19 +63,19 @@ export function boundedOperationFailure(error: unknown, fallback: string): Opera
 
 const FAILURE_GUIDANCE: Record<OperationFailureKind, { nextAction: string; retryable: boolean }> = {
   configuration: {
-    nextAction: 'Open Setup, complete the missing local configuration, reload the window if credentials changed, then run Doctor.',
+    nextAction: 'Open Setup, complete the missing local configuration, reload the window if credentials changed, then check setup.',
     retryable: false,
   },
   authentication: {
-    nextAction: 'Verify the credential is current in the private provider environment, reload the window, then run Doctor.',
+    nextAction: 'Verify the credential is current in the private provider environment, reload the window, then check setup.',
     retryable: false,
   },
   permission: {
-    nextAction: 'Verify that the configured account has read access to this resource, then retry from Doctor or the original action.',
+    nextAction: 'Verify that the configured account has read access to this resource, then retry from Check Setup or the original action.',
     retryable: false,
   },
   timeout: {
-    nextAction: 'Retry the read; if it repeats, check provider reachability in Doctor. Last-known-good evidence remains retained.',
+    nextAction: 'Retry the read; if it repeats, check provider reachability in Check Setup. Last-known-good evidence remains retained.',
     retryable: true,
   },
   dns: {
@@ -103,7 +103,7 @@ const FAILURE_GUIDANCE: Record<OperationFailureKind, { nextAction: string; retry
     retryable: false,
   },
   malformed_response: {
-    nextAction: 'Run Doctor and verify the provider/version endpoint, then retry the read; the response body was not displayed or trusted.',
+    nextAction: 'Check setup and verify the provider/version endpoint, then retry the read; the response body was not displayed or trusted.',
     retryable: true,
   },
   pagination: {
@@ -111,11 +111,11 @@ const FAILURE_GUIDANCE: Record<OperationFailureKind, { nextAction: string; retry
     retryable: true,
   },
   lease_busy: {
-    nextAction: 'Another Kronos window may be polling; wait for that poll or close the duplicate window, then use Poll Now.',
+    nextAction: 'Another Kronos window may be checking updates; wait for it to finish or close that window, then choose Check Updates.',
     retryable: true,
   },
   local_state: {
-    nextAction: 'Run Doctor and inspect private-state permissions, path safety, and free disk space before retrying.',
+    nextAction: 'Check setup and inspect private-state permissions, path safety, and free disk space before retrying.',
     retryable: false,
   },
   network: {
@@ -123,7 +123,7 @@ const FAILURE_GUIDANCE: Record<OperationFailureKind, { nextAction: string; retry
     retryable: true,
   },
   unavailable: {
-    nextAction: 'Run Doctor for the bounded readiness checks, then retry the original action.',
+    nextAction: 'Check setup, then retry the original action.',
     retryable: true,
   },
 };

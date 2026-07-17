@@ -19,6 +19,7 @@ const webviewSecurity = require('../out/services/webviewSecurity.js');
 const workSessions = require('../out/services/workSessionStore.js');
 const { createOperatorTerminalRegistry } = require('../out/services/operatorTerminalRegistry.js');
 const coveragePolicy = require('./run-code-coverage.js');
+const qualityEvidence = require('./check-quality-evidence.js');
 const { testSuiteFiles } = require('./test-suite-files.js');
 
 const gitEvidenceByPath = new Map();
@@ -78,6 +79,34 @@ test('coverage policy discovers the npm test graph and fails closed on missing o
   assert.ok(testFiles.includes('scripts/run-conditional-unit-tests.js'));
   assert.ok(testFiles.includes('scripts/run-unit-tests.js'));
   assert.equal(testFiles.length, new Set(testFiles).size);
+  for (const coreProviderFile of [
+    'gitlabRestClient.js',
+    'jenkinsRestClient.js',
+    'jiraRestClient.js',
+    'sonarRestClient.js',
+  ]) {
+    assert.ok(
+      coveragePolicy.CRITICAL_FILE_THRESHOLDS[coreProviderFile],
+      `${coreProviderFile} must retain a dedicated core-provider coverage floor`,
+    );
+  }
+  assert.deepEqual(
+    coveragePolicy.CRITICAL_FILE_THRESHOLDS['jiraRestClient.js'],
+    { lines: 79, branches: 78, functions: 88 },
+    'Jira core-read gains must remain protected by the coverage policy',
+  );
+  assert.deepEqual(
+    coveragePolicy.CRITICAL_FILE_THRESHOLDS['terminalFirstExtension.js'],
+    { lines: 77.5, branches: 60, functions: 89.5 },
+    'activation and command-orchestration gains must remain protected by the coverage policy',
+  );
+  assert.equal(qualityEvidence.countNodeTests([
+    "test('top-level case', () => {});",
+    "  await t.test('nested case', async () => {});",
+    "test.skip('declared skipped case', () => {});",
+    "const inert = \"test('not executable')\";",
+    "// test('commented out', () => {});",
+  ].join('\n')), 3, 'quality metrics count executable top-level, nested, and declared test cases');
 
   const report = coveragePolicy.parseCoverageReport([
     '# file | line % | branch % | funcs % | uncovered lines',
@@ -213,7 +242,7 @@ test('managed Sessions tree covers every lifecycle context and loader fallback',
   assert.equal(standaloneAttached.contextValue, 'standalone_session_attached');
   assert.deepEqual(standaloneAttached.liveTerminalBindingIds, ['live-a', 'live-z']);
   assert.equal(standaloneAttached.iconPath.id, 'terminal');
-  assert.match(standaloneAttached.description, /Customer API @ feature\/conditional-coverage/);
+  assert.match(standaloneAttached.description, /^feature\/conditional-coverage/);
 
   const standaloneDetached = new ManagedSessionTreeItem(standalone, [], 300_000);
   assert.equal(standaloneDetached.contextValue, 'standalone_session_detached');
@@ -265,6 +294,8 @@ test('managed Sessions tree covers every lifecycle context and loader fallback',
 
   const empty = await new ManagedSessionTreeProvider(registry, () => []).getChildren();
   assert.equal(empty[0].contextValue, 'managed_session_empty');
+  assert.equal(empty[0].label, 'New Claude session');
+  assert.equal(empty[0].description, 'No Jira ticket required');
   assert.equal(empty[0].command.command, 'kronos.newClaudeSession');
   const warning = t.mock.method(console, 'warn', () => {});
   const secret = ['glpat-', 'conditionalunitfixturevalue'].join('');
@@ -272,7 +303,13 @@ test('managed Sessions tree covers every lifecycle context and loader fallback',
     registry,
     () => { throw new Error(`Authorization: Bearer ${secret}`); },
   ).getChildren();
-  assert.equal(failed[0].contextValue, 'managed_session_empty');
+  assert.equal(failed[0].contextValue, 'managed_session_error');
+  assert.equal(failed[0].label, 'Sessions may be incomplete');
+  assert.equal(failed[0].description, 'Open Check Setup, then refresh');
+  assert.equal(failed[0].iconPath.id, 'warning');
+  assert.equal(failed[0].command.command, 'kronos.doctor');
+  assert.equal(failed[0].command.title, 'Check Setup');
+  assert.doesNotMatch(failed[0].tooltip, new RegExp(secret));
   assert.equal(warning.mock.callCount(), 1);
   assert.equal(warning.mock.calls[0].arguments[0].includes(secret), false);
   assert.match(warning.mock.calls[0].arguments[0], /REDACTED/);
@@ -325,7 +362,14 @@ test('Projects tree covers empty, clean, changed, unavailable, action, and faile
     { ...linked, id: 'ignored-no-ticket', ticketKeys: [] },
     { ...linked, id: 'ignored-other-project', projectName: 'Changed' },
   ];
-  projectMonitoringStore.ensureProjectMonitoringRecord({ name: 'Clean', path: cleanPath });
+  const cleanMonitor = projectMonitoringStore.ensureProjectMonitoringRecord({ name: 'Clean', path: cleanPath });
+  projectMonitoringStore.recordProjectMonitoringResult(cleanMonitor.id, {
+    polled: 0,
+    failures: 1,
+    skipped: 0,
+    transitions: 0,
+    attemptedAt: '2026-07-15T12:00:00.000Z',
+  });
 
   const provider = new ProjectTreeProvider(() => state, () => [linked, ...ignored], () => 120_000);
   const changes = [];
@@ -334,25 +378,29 @@ test('Projects tree covers empty, clean, changed, unavailable, action, and faile
   assert.equal(roots.length, 3);
   const byName = Object.fromEntries(roots.map(item => [item.projectName, item]));
   assert.equal(byName.Clean.label, 'Customer API');
-  assert.match(byName.Clean.description, /^main • clean • /);
+  assert.equal(byName.Clean.description, 'main • clean');
   assert.equal(byName.Clean.iconPath.color.id, 'testing.iconPassed');
-  assert.match(byName.Clean.tooltip, /Automatic project polling: active/);
-  assert.match(byName.Clean.tooltip, /GitLab: automatic project polling active/);
+  assert.doesNotMatch(byName.Clean.description, /Blocked/);
+  assert.match(byName.Clean.tooltip, /Provider updates: Blocked/);
+  assert.match(byName.Clean.tooltip, /Current issue: Provider read failed/);
+  assert.match(byName.Clean.tooltip, /GitLab: ready/);
   assert.equal(byName.Changed.iconPath.color.id, 'gitDecoration.modifiedResourceForeground');
   assert.match(byName.Changed.description, /2 changes · 1 staged · 1 conflict/);
-  assert.match(byName.Changed.tooltip, /Git read note: Diff remained bounded\./);
+  assert.match(byName.Changed.tooltip, /Changes note: Diff remained bounded\./);
   assert.equal(byName.Unavailable.iconPath.color.id, 'problemsWarningIcon.foreground');
-  assert.match(byName.Unavailable.description, /^release\/unavailable • status unavailable • /);
+  assert.equal(byName.Unavailable.description, 'release/unavailable • status unavailable');
+  assert.equal(byName.Clean.command.title, 'View Project Changes');
   assert.equal(provider.getTreeItem(byName.Clean), byName.Clean);
 
   const actions = await provider.getChildren(byName.Clean);
-  assert.equal(actions.length, 9);
+  assert.equal(actions.length, 7);
   assert.equal(actions[0].command.command, 'kronos.newClaudeSession');
   assert.equal(actions[0].command.arguments[0].projectPath, cleanPath);
-  assert.equal(actions[0].description, 'no Jira ticket');
+  assert.equal(actions[0].description, 'in this project');
+  assert.equal(actions[1].label, 'Review changes');
   assert.equal(actions[3].description, undefined);
-  assert.equal(actions[6].command.command, 'kronos.openPromptLibrary');
-  assert.equal(actions[6].description, 'editable; non-submitting');
+  assert.equal(actions[6].command.command, 'kronos.renameLocalProject');
+  assert.equal(actions[6].label, 'Rename project');
   assert.deepEqual(await provider.getChildren(actions[0]), []);
   provider.refresh();
   assert.deepEqual(changes, [undefined]);
@@ -360,6 +408,8 @@ test('Projects tree covers empty, clean, changed, unavailable, action, and faile
 
   const empty = await new ProjectTreeProvider(() => stateStore.emptyWorkCatalog(), () => []).getChildren();
   assert.equal(empty[0].contextValue, 'registered_project_empty');
+  assert.equal(empty[0].label, 'Add projects');
+  assert.equal(empty[0].description, 'Choose local repositories');
   assert.equal(empty[0].command.command, 'kronos.registerWorkspaceProject');
 
   const warning = t.mock.method(console, 'warn', () => {});
@@ -373,12 +423,23 @@ test('Projects tree covers empty, clean, changed, unavailable, action, and faile
     () => { throw new Error(`Authorization: Bearer ${secret}`); },
     () => [],
   ).getChildren();
-  assert.equal(stateFailure[0].contextValue, 'registered_project_empty');
+  assert.equal(stateFailure[0].contextValue, 'registered_project_error');
+  assert.equal(stateFailure[0].label, 'Projects may be incomplete');
+  assert.equal(stateFailure[0].description, 'Open Check Setup, then refresh');
+  assert.equal(stateFailure[0].iconPath.id, 'warning');
+  assert.equal(stateFailure[0].command.command, 'kronos.doctor');
+  assert.equal(stateFailure[0].command.title, 'Check Setup');
+  assert.doesNotMatch(stateFailure[0].tooltip, new RegExp(secret));
   const sessionFailureProvider = new ProjectTreeProvider(
     () => state,
     () => { throw new Error(`Authorization: Bearer ${secret}`); },
   );
-  assert.equal((await sessionFailureProvider.getChildren()).length, 3);
+  const sessionFailure = await sessionFailureProvider.getChildren();
+  assert.equal(sessionFailure.length, 4);
+  assert.equal(sessionFailure[0].contextValue, 'registered_project_error');
+  assert.equal(sessionFailure[0].label, 'Project status may be incomplete');
+  assert.equal(sessionFailure[0].command.command, 'kronos.doctor');
+  assert.deepEqual(sessionFailure.slice(1).map(item => item.projectName).sort(), ['Changed', 'Clean', 'Unavailable']);
   assert.equal(warning.mock.callCount(), 3);
   const warnings = warning.mock.calls.map(call => call.arguments[0]).join(' ');
   assert.equal(warnings.includes(secret), false);

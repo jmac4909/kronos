@@ -49,6 +49,7 @@
     var localProject = document.getElementById('jira-board-local-project');
     var label = document.getElementById('jira-board-label');
     var hideDone = document.getElementById('jira-board-hide-done');
+    var moreFilters = document.getElementById('jira-board-more-filters');
     return {
       query: normalizeToken(search && search.value || '', 500),
       status: normalizeToken(status && status.value || '', 200),
@@ -56,6 +57,7 @@
       localProject: normalizeToken(localProject && localProject.value || '', 200),
       label: normalizeToken(label && label.value || '', 200),
       hideDone: Boolean(hideDone && hideDone.checked),
+      moreFiltersOpen: Boolean(moreFilters && moreFilters.open),
     };
   }
 
@@ -72,6 +74,12 @@
       setControlValue(document, 'jira-board-label', normalizeToken(saved.label || '', 200));
       var hideDone = document.getElementById('jira-board-hide-done');
       if (hideDone && typeof saved.hideDone === 'boolean') { hideDone.checked = saved.hideDone; }
+      var moreFilters = document.getElementById('jira-board-more-filters');
+      if (moreFilters) {
+        moreFilters.open = typeof saved.moreFiltersOpen === 'boolean'
+          ? saved.moreFiltersOpen
+          : Boolean(saved.jiraProject || saved.localProject || saved.label);
+      }
       return true;
     } catch (error) {
       return false;
@@ -222,6 +230,11 @@
       });
     });
 
+    var moreFilters = document.getElementById('jira-board-more-filters');
+    if (moreFilters) {
+      moreFilters.addEventListener('toggle', function() { persistFilters(document, vscodeApi); });
+    }
+
     var reset = document.getElementById('jira-board-reset');
     if (reset) {
       reset.addEventListener('click', function() {
@@ -232,6 +245,7 @@
         setControlValue(document, 'jira-board-label', '');
         var hideDone = document.getElementById('jira-board-hide-done');
         if (hideDone) { hideDone.checked = hideDone.getAttribute('data-default-checked') !== 'false'; }
+        if (moreFilters) { moreFilters.open = false; }
         persistFilters(document, vscodeApi);
         applyFilters(document);
       });

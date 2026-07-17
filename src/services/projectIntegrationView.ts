@@ -31,17 +31,17 @@ export function buildProjectIntegrationPanelHtml(input: ProjectIntegrationPanelI
   </div>`).join('');
   const projectCards = input.projects.slice(0, 200).map(project => `<section class="integration-card" data-project-card data-project-name="${escapeAttr(project.name)}">
     <header>
-      <div><h2>${escapeHtml(project.displayName || project.name)}</h2><div class="project-identity">Stable project: ${escapeHtml(project.name)}</div><div class="project-path">${escapeHtml(project.path)}</div></div>
+      <div><h2>${escapeHtml(project.displayName || project.name)}</h2>${project.displayName && project.displayName !== project.name ? `<div class="project-identity">Project ID: ${escapeHtml(project.name)}</div>` : ''}<div class="project-path">${escapeHtml(project.path)}</div></div>
       <span class="kronos-pill info">${escapeHtml(project.branch || 'branch unavailable')}</span>
     </header>
     <div class="field-grid">
-      ${formField('Project nickname (optional)', 'nickname', project.nickname || '', 'Customer API', 'Shown throughout Kronos so similar local folders are easy to distinguish. Blank uses the stable project name; links, paths, sessions, and provider mappings never change.', true, 200)}
+      ${formField('Display name (optional)', 'nickname', project.nickname || '', 'Customer API', 'A friendly name shown in Kronos. Leave blank to use the repository name.', false, 200)}
       ${formField('GitLab project ID or path', 'gitlabProject', project.gitlabProject || '', '12345 or group/project', 'Used to read merge requests, review discussions, pipelines, jobs, and test reports.')}
       ${formField('Jenkins job URL', 'jenkinsUrl', project.jenkinsUrl || '', 'https://jenkins.example/job/team/job/service/', 'Use the job URL Kronos should poll for builds, stages, and tests.')}
       ${formField('SonarQube project key', 'sonarProjectKey', project.sonarProjectKey || '', 'team:service', 'The component key used for quality gates, measures, and issues.')}
       ${formField('Default monitoring branch', 'defaultBranch', project.defaultBranch || project.branch || '', 'main', 'Used by SonarQube until a linked merge request supplies its source branch.')}
-      ${formField('Active branch profile', 'activeBranchProfile', project.activeBranchProfile || '', 'release/2026.07', 'Optional exact fallback profile. A linked MR branch selects its own exact profile first.')}
-      ${formTextarea('Jenkins / SonarQube branch profiles', 'branchProfiles', project.branchProfiles || '', 'branch | Jenkins job URL | SonarQube key | SonarQube branch', 'One explicit profile per line, up to 20. Blank provider columns are allowed, but each line must configure Jenkins, SonarQube, or both. Profiles route reads only; they never switch Git branches.')}
+      ${formField('Fallback branch profile (optional)', 'activeBranchProfile', project.activeBranchProfile || '', 'release/2026.07', 'Used only when no merge request branch matches a saved override.')}
+      ${formTextarea('Branch overrides (optional)', 'branchProfiles', project.branchProfiles || '', 'branch | Jenkins job URL | SonarQube key | SonarQube branch', 'Add one branch per line, up to 20. Each line must configure Jenkins, SonarQube, or both. These overrides only route reads; they never switch Git branches.')}
     </div>
   </section>`).join('');
   const script = [
@@ -52,7 +52,7 @@ export function buildProjectIntegrationPanelHtml(input: ProjectIntegrationPanelI
   return `<!DOCTYPE html>
 <html><head><style>
 ${kronosWebviewBaseCss()}
-.integration-shell { max-width: 1120px; }
+.integration-shell { max-width: 1320px; }
 .integration-header { align-items: center; }
 .readiness-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; margin-bottom: 16px; }
 .provider-readiness { display: grid; grid-template-columns: 10px minmax(0, 1fr); gap: 9px; padding: 11px 12px; border: 1px solid var(--k-border); border-radius: var(--k-radius); background: var(--k-surface-soft); }
@@ -65,7 +65,7 @@ ${kronosWebviewBaseCss()}
 .integration-card > header { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; margin-bottom: 14px; }
 .integration-card h2 { margin: 0; font-size: 15px; }
 .project-identity, .project-path { margin-top: 3px; color: var(--k-muted); font-size: 11px; word-break: break-all; }
-.field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.field-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .form-field label { display: block; margin-bottom: 5px; font-size: 11px; font-weight: 650; }
 .form-field input { width: 100%; }
 .form-field textarea { width: 100%; min-height: 112px; resize: vertical; font-family: var(--vscode-editor-font-family, monospace); }
@@ -73,23 +73,24 @@ ${kronosWebviewBaseCss()}
 .field-help { margin-top: 4px; color: var(--k-muted); font-size: 10px; line-height: 1.35; }
 .integration-actions { position: sticky; bottom: 0; z-index: 2; margin-top: 16px; padding: 12px; border: 1px solid var(--k-border); border-radius: var(--k-radius); background: color-mix(in srgb, var(--k-bg) 92%, transparent); backdrop-filter: blur(8px); }
 .privacy-copy { margin-left: auto; color: var(--k-muted); font-size: 11px; }
+@media (max-width: 1100px) { .field-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 760px) { .readiness-grid, .field-grid { grid-template-columns: 1fr; } .privacy-copy { width: 100%; margin-left: 0; } }
 </style></head>
 <body><main class="kronos-shell integration-shell">
   <header class="kronos-header integration-header">
     <div>
-      <h1 class="kronos-title">Project Integration Setup</h1>
-      <div class="kronos-subtitle">Give local projects recognizable nicknames and map them to the identifiers Kronos needs for read-only MR, pipeline, Jenkins, and SonarQube polling.</div>
+      <h1 class="kronos-title">Project integrations</h1>
+      <div class="kronos-subtitle">Connect each local project to its read-only GitLab, Jenkins, and SonarQube sources.</div>
     </div>
-    <span class="kronos-pill info">Local config only</span>
+    <span class="kronos-pill info">Local settings</span>
   </header>
   <section class="readiness-grid">${readiness}</section>
-  <div class="message warn">Provider credentials stay in the private Kronos environment file. This form saves only the local nickname, project identifiers, job URLs, explicit branch routing profiles, and default branch; it never switches Git, tests, changes, or posts to a provider.</div>
+  <div class="message warn">Credentials remain in the private Kronos environment file. Saving here only changes local read targets and branch routing; it never switches branches, runs tests, changes code, or posts to a provider.</div>
   <section class="integration-list">${projectCards || '<div class="kronos-empty">No registered local projects are available to configure.</div>'}</section>
   <div class="kronos-action-row integration-actions">
-    <button type="button" class="kronos-button primary" data-action="save">Save Project Setup</button>
-    <button type="button" class="kronos-button" data-action="cancel">Not Now</button>
-    <span class="privacy-copy">Blank fields clear that optional nickname or integration. Ctrl+Enter saves.</span>
+    <button type="button" class="kronos-button primary" data-action="save">Save changes</button>
+    <button type="button" class="kronos-button" data-action="cancel">Cancel</button>
+    <span class="privacy-copy">Leaving a field blank removes that optional setting. Ctrl+Enter saves.</span>
   </div>
 </main>
 ${script}

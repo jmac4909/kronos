@@ -83,6 +83,84 @@ test('GitLab pipeline transition matrix covers every declared pipeline, job, and
   }
 });
 
+test('GitLab pipeline normalization keeps complete evidence across partial reads and ignores non-blocking job noise', () => {
+  const complete = pipelines.normalizeGitLabPipelineDigest({
+    mr: {
+      sha: 'abc123',
+      head_pipeline: { id: 70, project_id: 4815, status: 'running' },
+    },
+    pipeline: {
+      id: 70,
+      project_id: 4815,
+      status: { text: 'Failed' },
+      web_url: 'https://user:password@gitlab.example/group/app/-/pipelines/70?token=secret#trace',
+    },
+    pipelines: [{ id: 70, project_id: 4815, ref: 'feature/APP-70', sha: 'abc123' }],
+    jobs: [
+      { id: 1, name: 'verify', stage: 'test', status: 'failed', retried: true },
+      { id: 2, name: 'verify', stage: 'test', status: 'success' },
+      { id: 3, name: 'optional', stage: 'test', status: 'failed', allow_failure: 'true' },
+      { id: 4, name: 'blocking', stage: 'test', status: 'failed', web_url: 'https://gitlab.example/jobs/4?trace=secret' },
+      null,
+      { id: 0, name: 'invalid', status: 'failed' },
+    ],
+    testReportSummary: { available: false },
+    testReport: {
+      test_suites: [
+        { total_count: '7', success_count: '5', failed_count: '1', error_count: '1', skipped_count: '0' },
+        { totalCount: 3, successCount: 3, failedCount: 0, errorCount: 0, skippedCount: 0 },
+        null,
+      ],
+    },
+    fetchedAt: '2026-07-16T12:00:00.000Z',
+    completeness: { jobsComplete: true, testsComplete: true },
+  });
+  assert.ok(complete);
+  assert.equal(complete.status, 'failed');
+  assert.equal(complete.projectIdOrPath, '4815');
+  assert.equal(complete.ref, 'feature/APP-70');
+  assert.equal(complete.url, 'https://gitlab.example/group/app/-/pipelines/70');
+  assert.deepEqual(complete.failedJobs, [{
+    id: 4,
+    name: 'blocking',
+    status: 'failed',
+    stage: 'test',
+    url: 'https://gitlab.example/jobs/4',
+  }]);
+  assert.deepEqual(complete.tests, { available: true, total: 10, failed: 1, error: 1, skipped: 0 });
+
+  const partial = pipelines.normalizeGitLabPipelineDigest({
+    pipeline: { id: 70, project_id: 4815, status: 'success' },
+    jobs: [],
+    fetchedAt: '2026-07-16T12:01:00.000Z',
+    completeness: { jobsComplete: false, testsComplete: false },
+  });
+  assert.ok(partial);
+  const merged = pipelines.mergeGitLabPipelineDigest(complete, partial);
+  assert.ok(merged);
+  assert.equal(merged.status, 'success');
+  assert.equal(merged.jobsComplete, true);
+  assert.deepEqual(merged.failedJobs, complete.failedJobs);
+  assert.equal(merged.testsComplete, true);
+  assert.deepEqual(merged.tests, complete.tests);
+  assert.deepEqual(
+    pipelines.compareGitLabPipelineDigests(complete, merged).map(transition => transition.kind),
+    ['pipeline_recovered'],
+    'retained component evidence must not fabricate job or test recovery transitions',
+  );
+
+  const differentProject = pipelines.normalizeGitLabPipelineDigest({
+    pipeline: { id: 70, project_id: 9000, status: 'success' },
+    jobs: [],
+    fetchedAt: '2026-07-16T12:02:00.000Z',
+    completeness: { jobsComplete: false, testsComplete: false },
+  });
+  assert.ok(differentProject);
+  assert.deepEqual(pipelines.mergeGitLabPipelineDigest(complete, differentProject), differentProject);
+  assert.equal(pipelines.normalizeStoredGitLabPipelineDigest(null), null);
+  assert.equal(pipelines.mergeGitLabPipelineDigest(complete, null), null);
+});
+
 test('Jenkins and SonarQube transition matrices cover every declared CI transition', () => {
   const jenkinsCases = [
     ['jenkins_new_build', jenkinsDigest({ buildNumber: 11 }), jenkinsDigest({ buildNumber: 12 })],
@@ -599,9 +677,8 @@ test('Attention rows expose project, provider, subject, observed time, changed t
   assert.equal(presented.observedAt, session.monitoring.lastAttemptAt);
   assert.equal(presented.changedAt, event.at);
   assert.equal(presented.why, 'MATRIX-1 MR !77 has requested changes.');
-  for (const visible of ['Application', 'GitLab', 'MR !77', 'warning', 'observed', 'changed']) {
-    assert.match(presented.description, new RegExp(visible.replace(/[!]/g, '\\$&'), 'i'));
-  }
+  assert.match(presented.description, /^GitLab • Needs review • /);
+  assert.doesNotMatch(presented.description, /Application|MR !77|observed|changed/i);
 });
 
 test('Attention headlines explain delivery impact instead of internal provider transitions', () => {
@@ -787,7 +864,7 @@ test('Attention Jenkins builds and SonarQube branches are validated and latest-f
 test('Attention action language is read-only or local and explains clear versus audit history', () => {
   const manifest = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
   const commands = new Map(manifest.contributes.commands.map(command => [command.command, command.title]));
-  assert.equal(commands.get('kronos.acknowledgeAttention'), 'Kronos: Clear Attention Item (Audit Retained)');
+  assert.equal(commands.get('kronos.acknowledgeAttention'), 'Kronos: Clear from Attention');
   const menus = manifest.contributes.menus['view/item/context'].filter(menu => String(menu.when).includes('attention_'));
   assert.ok(menus.some(menu => menu.command === 'kronos.openWorkSessionAudit'));
   assert.ok(menus.some(menu => menu.command === 'kronos.openProvider' && menu.when === 'viewItem =~ /^attention_provider/'));

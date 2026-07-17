@@ -158,9 +158,15 @@ test('basket messages and HTML expose only bounded explicit actions', () => {
     nonce: 'basket-test-nonce',
     scriptUri: 'vscode-resource://kronos/media/kronos-context-basket.js',
   });
-  assert.match(html, /Place Basket in Terminal/);
+  assert.match(html, /Add to terminal/);
   assert.match(html, /data-entry-id="basket-/);
   assert.match(html, /Nothing refreshes or submits automatically/);
+  assert.match(html, /Refresh source/);
+  assert.match(html, /<details class="basket-source-details"><summary>Source details<\/summary>/);
+  assert.match(html, /kronos-pill info">Jira<\/span>/);
+  assert.match(html, /Saved /);
+  assert.doesNotMatch(html, /Saved 2026-07-15T11:00:00\.000Z/);
+  assert.doesNotMatch(html, /class="kronos-stat"/);
   assert.doesNotMatch(html, /must be dropped/);
 });
 

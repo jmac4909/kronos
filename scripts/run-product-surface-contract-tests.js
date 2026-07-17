@@ -75,15 +75,13 @@ test('discovery, setup, and project management each retain one canonical UI home
 
 test('registered project actions start ticket-free Claude before read-only and provider actions', () => {
   assert.deepEqual(registeredProjectActionInventory(), [
-    { label: 'Start Claude in project', icon: 'terminal', command: 'kronos.newClaudeSession', description: 'no Jira ticket' },
-    { label: 'View Git status and diff', icon: 'diff', command: 'kronos.openProjectGitStatus', description: 'read-only' },
-    { label: 'Insert working diff in context', icon: 'symbol-keyword', command: 'kronos.insertProjectGitContext', description: 'non-submitting' },
-    { label: 'Open merge request page', icon: 'git-merge', command: 'kronos.openProjectMergeRequest' },
-    { label: 'Insert MR evidence', icon: 'git-merge', command: 'kronos.insertProjectGitLabContext' },
-    { label: 'Insert Jenkins / Sonar evidence', icon: 'beaker', command: 'kronos.insertProjectCiContext' },
-    { label: 'Open team prompt library', icon: 'library', command: 'kronos.openPromptLibrary', description: 'editable; non-submitting' },
-    { label: 'Configure provider polling', icon: 'settings-gear', command: 'kronos.configureProjectIntegrations' },
-    { label: 'Set project nickname', icon: 'edit', command: 'kronos.renameLocalProject', description: 'optional; identity and links stay unchanged' },
+    { label: 'Start Claude', icon: 'terminal', command: 'kronos.newClaudeSession', description: 'in this project' },
+    { label: 'Review changes', icon: 'symbol-keyword', command: 'kronos.insertProjectGitContext' },
+    { label: 'Open merge request', icon: 'git-merge', command: 'kronos.openProjectMergeRequest' },
+    { label: 'Review merge request', icon: 'git-merge', command: 'kronos.insertProjectGitLabContext' },
+    { label: 'Review build & quality', icon: 'beaker', command: 'kronos.insertProjectCiContext' },
+    { label: 'Configure integrations', icon: 'settings-gear', command: 'kronos.configureProjectIntegrations' },
+    { label: 'Rename project', icon: 'edit', command: 'kronos.renameLocalProject' },
   ]);
   const commands = registeredProjectActionInventory().map(action => action.command);
   assert.equal(commands.includes('kronos.startClaudeForTicket'), false);
@@ -95,6 +93,68 @@ test('registered project actions start ticket-free Claude before read-only and p
     .sort((left, right) => left.group.localeCompare(right.group))
     .map(item => item.command);
   assert.deepEqual(projectInline, ['kronos.newClaudeSession', 'kronos.insertProjectGitContext']);
+});
+
+test('row context menus contain only actions scoped to the selected row', () => {
+  const itemMenus = manifest.contributes.menus['view/item/context'];
+  const ticketCommands = itemMenus
+    .filter(item => item.when === 'viewItem == work_ticket')
+    .map(item => item.command);
+  assert.deepEqual(ticketCommands, [
+    'kronos.openTicketWorkspace',
+    'kronos.startClaudeForTicket',
+    'kronos.chooseTicketProject',
+    'kronos.insertJiraContext',
+    'kronos.insertGitLabContext',
+    'kronos.insertCiContext',
+  ]);
+  assert.equal(ticketCommands.includes('kronos.manageActiveTerminal'), false);
+  assert.equal(ticketCommands.includes('kronos.openPromptLibrary'), false);
+
+  const projectCommands = itemMenus
+    .filter(item => item.when === 'viewItem == registered_project')
+    .map(item => item.command);
+  assert.equal(projectCommands.includes('kronos.openPromptLibrary'), false);
+  assert.deepEqual(
+    projectCommands,
+    registeredProjectActionInventory().map(action => action.command),
+  );
+  const commandsById = new Map(manifest.contributes.commands.map(command => [command.command, command]));
+  for (const menu of itemMenus) {
+    const shortTitle = commandsById.get(menu.command)?.shortTitle;
+    assert.equal(typeof shortTitle, 'string', `${menu.command} needs a concise menu label`);
+    assert.doesNotMatch(shortTitle, /^Kronos:/, `${menu.command} repeats the product name in a row menu`);
+    assert.ok(shortTitle.length <= 28, `${menu.command} has an overly long row-menu label`);
+  }
+  assert.equal(commandsById.get('kronos.reattachWorkSessionTerminal').shortTitle, 'Connect Focused Terminal');
+  assert.equal(commandsById.get('kronos.detachWorkSessionTerminal').shortTitle, 'Disconnect Terminal');
+  assert.equal(commandsById.get('kronos.acknowledgeAttention').shortTitle, 'Clear from Attention');
+  assert.equal(commandsById.get('kronos.insertJiraContext').shortTitle, 'Review Jira Context');
+  assert.equal(commandsById.get('kronos.insertGitLabContext').shortTitle, 'Review Merge Request');
+  assert.equal(commandsById.get('kronos.insertCiContext').shortTitle, 'Review Build & Quality');
+  assert.equal(commandsById.get('kronos.insertProjectGitContext').shortTitle, 'Review Changes');
+  assert.equal(commandsById.get('kronos.searchLocalEvidence').shortTitle, 'Search');
+  assert.equal(commandsById.get('kronos.pollManagedWorkSessions').shortTitle, 'Check Updates');
+  assert.equal(commandsById.get('kronos.pauseWorkSessionMonitoring').shortTitle, 'Pause Updates');
+  assert.equal(commandsById.get('kronos.resumeWorkSessionMonitoring').shortTitle, 'Resume Updates');
+  assert.equal(commandsById.get('kronos.closeWorkSession').shortTitle, 'Stop Tracking');
+  assert.equal(commandsById.get('kronos.removeWorkSession').shortTitle, 'Remove from Kronos');
+  const removeSessionMenu = itemMenus.find(item => item.command === 'kronos.removeWorkSession');
+  assert.equal(removeSessionMenu.when, 'viewItem == work_session_closed || viewItem == standalone_session_closed');
+  assert.doesNotMatch(
+    [...commandsById.values()].map(command => command.shortTitle || '').join('\n'),
+    /\bMR Context\b|Working Changes|Build Context/,
+  );
+  assert.doesNotMatch(
+    [...commandsById.values()].map(command => command.title).join('\n'),
+    /Poll Managed|Local Sessions and Evidence|Private Local Handoff|Guided Settings|Audit Retained|Working Changes/,
+  );
+
+  const attentionInline = itemMenus
+    .filter(item => item.group.startsWith('inline@') && String(item.when).includes('attention_'))
+    .sort((left, right) => left.group.localeCompare(right.group));
+  assert.equal(attentionInline.find(item => item.command === 'kronos.openProvider').group, 'inline@1');
+  assert.equal(attentionInline.find(item => item.command === 'kronos.acknowledgeAttention').group, 'inline@2');
 });
 
 test('Attention group identity is local-project-only and collision-safe for unassigned work', () => {
@@ -232,6 +292,7 @@ test('Jira board keeps filtering and launch controls while ticket workspace owns
   for (const action of ['manageActiveTerminal', 'insertJiraContext', 'insertGitLabContext', 'insertCiContext']) {
     assert.doesNotMatch(board, new RegExp(`data-action="${action}"`));
   }
+  assert.match(board, /\.jira-board-column \{[^}]*max-width: 520px/);
 
   const workspace = buildTicketWorkspaceHtml({
     ticketKey: 'ABC-123',
@@ -247,11 +308,14 @@ test('Jira board keeps filtering and launch controls while ticket workspace owns
       available: true,
     },
   });
-  assert.ok(workspace.indexOf('workspace-action-label">Terminal') < workspace.indexOf('workspace-action-label">Context'));
+  assert.ok(workspace.indexOf('workspace-action-label">Start or connect') < workspace.indexOf('workspace-action-label">Add context'));
   assert.deepEqual(extractActions(workspace), [
-    'chooseTicketProject', 'startClaudeForTicket', 'manageActiveTerminal',
+    'startClaudeForTicket', 'manageActiveTerminal', 'chooseTicketProject',
     'insertJiraContext', 'insertGitLabContext', 'insertCiContext', 'openPromptLibrary',
   ]);
+  assert.match(workspace, />Start Claude<[^]*>Connect focused terminal<[^]*>Change project</);
+  assert.match(workspace, />Jira ticket<[^]*>Merge request<[^]*>Build &amp; quality<[^]*>Team prompt</);
+  assert.doesNotMatch(workspace, /Terminal-first ticket workspace|Manage Focused Terminal|Insert \[|Provider Bindings|content-addressed artifact/);
   assert.match(workspace, /Kronos Extension/);
   assert.match(workspace, /feature\/contracts/);
   assert.doesNotMatch(workspace, /data-action="refreshTickets"/);
@@ -265,12 +329,17 @@ test('non-Jira ticket workspaces omit Jira insertion without weakening terminal 
     actionScriptUri: 'vscode-resource://kronos/media/kronos-action-panel.js',
   });
   assert.deepEqual(extractActions(workspace), [
-    'chooseTicketProject', 'startClaudeForTicket', 'manageActiveTerminal',
+    'startClaudeForTicket', 'manageActiveTerminal', 'chooseTicketProject',
     'insertGitLabContext', 'insertCiContext', 'openPromptLibrary',
   ]);
-  assert.match(workspace, /attach one you already own/);
-  assert.match(workspace, /never press Enter/);
+  assert.match(workspace, /connect the terminal you already own/);
+  assert.match(workspace, /Nothing starts or submits automatically/);
   assert.doesNotMatch(workspace, /data-action="insertJiraContext"/);
+  assert.doesNotMatch(workspace, /No linked merge request|No linked build/);
+  assert.doesNotMatch(workspace, /Provider updates|Saved context|Connected sources/);
+  assert.match(workspace, /class="workspace-grid single kronos-section"/);
+  assert.match(workspace, />Merge request</);
+  assert.match(workspace, />Build &amp; quality</);
 });
 
 test('Setup and Doctor preserve guided navigation and hide repair controls from healthy checks', () => {
@@ -281,7 +350,7 @@ test('Setup and Doctor preserve guided navigation and hide repair controls from 
   };
   const setup = buildSetupPanelHtml({
     steps: [{
-      title: 'Project discovery folders',
+      title: 'Project folders',
       detail: 'Choose the roots that contain local repositories.',
       status: 'warn',
       action: 'chooseDiscoveryFolders',
@@ -308,6 +377,8 @@ test('Setup and Doctor preserve guided navigation and hide repair controls from 
   assert.ok(doctor.indexOf('<h2>Blocked</h2>') < doctor.indexOf('<h2>Review</h2>'));
   assert.ok(doctor.indexOf('<h2>Review</h2>') < doctor.indexOf('<h2>Healthy</h2>'));
   assert.doesNotMatch(doctor, /Repair Healthy|data-action="mustNotRender"/);
+  assert.match(doctor, /\.doctor-list \{[^}]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
+  assert.match(doctor, /@media \(max-width: 980px\)/);
   assert.match(doctor, /never launches Claude, runs a repair, executes a project command, or displays credential values/);
 });
 

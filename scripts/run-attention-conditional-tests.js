@@ -235,7 +235,7 @@ test('Attention tree groups newest project state, preserves nicknames, and redac
   assert.deepEqual(groups.map(group => group.label), ['Unassigned project', 'Customer API']);
   assert.equal(groups[1].id, 'attention-group:project:Application');
   assert.equal(groups[1].projectName, 'Application');
-  assert.match(groups[1].tooltip, /Stable project identity: Application/);
+  assert.doesNotMatch(groups[1].tooltip, /Stable project identity|work session|provider transition/i);
   const rows = provider.getChildren(groups[1]);
   assert.equal(rows.length, 1);
   assert.equal(rows[0].command.command, 'kronos.openProvider');
@@ -252,6 +252,9 @@ test('Attention tree groups newest project state, preserves nicknames, and redac
   }).getChildren();
   assert.equal(empty[0].contextValue, 'attention_empty');
   assert.equal(empty[0].iconPath.id, 'check');
+  assert.equal(empty[0].description, 'all provider updates are clear');
+  assert.doesNotMatch(empty[0].tooltip, /provider-health|local-monitoring|transition/i);
+  assert.match(empty[0].tooltip, /Clear an item after review/);
 
   const defaultDisplayName = new attentionTree.AttentionTreeProvider({
     loadMonitorEvents: () => [events[0]],
@@ -270,8 +273,14 @@ test('Attention tree groups newest project state, preserves nicknames, and redac
     loadWorkSessions: () => { throw new Error(`Authorization: Bearer ${secret}`); },
     loadRegisteredProjects: () => { throw new Error(`Authorization: Bearer ${secret}`); },
   }).getChildren();
-  assert.equal(failedEvents[0].contextValue, 'attention_empty');
-  assert.equal(failedCorrelations[0].contextValue, 'attention_empty');
+  for (const failed of [failedEvents[0], failedCorrelations[0]]) {
+    assert.equal(failed.label, 'Attention may be incomplete');
+    assert.equal(failed.contextValue, 'attention_error');
+    assert.equal(failed.iconPath.id, 'warning');
+    assert.equal(failed.command.command, 'kronos.doctor');
+    assert.equal(failed.command.title, 'Check Setup');
+    assert.match(failed.tooltip, /could not load all saved provider updates/i);
+  }
   assert.equal(warning.mock.callCount(), 3);
   const warnings = warning.mock.calls.map(call => call.arguments[0]).join(' ');
   assert.equal(warnings.includes(secret), false);
@@ -319,7 +328,7 @@ test('Attention rows exhaust primary actions, provider choices, tooltips, and ge
   assert.deepEqual(row.command.arguments[0].providerChoices, choices);
   assert.equal(row.command.arguments[0].projectName, 'Application');
   assert.equal(row.command.arguments[0].projectPath, '/workspace/application');
-  assert.match(row.tooltip, /open MR returns after the next successful poll/);
+  assert.match(row.tooltip, /open merge request returns after the next successful check/);
   assert.match(row.tooltip, /Pipeline: 412/);
   assert.match(row.tooltip, /Failed jobs: 0/);
   assert.equal(row.iconPath.id, 'git-pull-request');
@@ -344,7 +353,7 @@ test('Attention rows exhaust primary actions, provider choices, tooltips, and ge
     assert.equal(generic.iconPath.id, icon, transitionKind);
     assert.equal(generic.iconPath.color.id, color, transitionKind);
     assert.equal(generic.command.command, 'kronos.doctor');
-    assert.match(generic.tooltip, /row stays cleared until a real state transition/);
+    assert.match(generic.tooltip, /item stays cleared until its state changes/);
   }
 
   assert.throws(() => new attentionTree.AttentionGroupTreeItem([]), /require at least one event/);
@@ -355,7 +364,7 @@ test('Attention rows exhaust primary actions, provider choices, tooltips, and ge
     providerUrl: undefined,
     providerChoices: [],
   }]);
-  assert.match(invalidTimeGroup.description, /newest invalid-time/);
+  assert.match(invalidTimeGroup.description, /1 item • invalid-time/);
 });
 
 function transitionEvent(id, sessionId, at, source, transitionKind, overrides = {}) {

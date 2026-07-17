@@ -260,9 +260,9 @@ test('poll notice distinguishes another-window lease ownership from missing prov
     leaseUnavailable: false,
   });
   assert.equal(lease.kind, 'lease-unavailable');
-  assert.match(lease.message, /Another Kronos window.*no duplicate read/i);
+  assert.match(lease.message, /already being checked in another VS Code window/i);
   assert.equal(configuration.kind, 'missing-configuration');
-  assert.match(configuration.message, /2 project or legacy session targets missing provider configuration/);
+  assert.match(configuration.message, /2 projects need setup/);
   assert.doesNotMatch(configuration.message, /lease/);
 });
 
@@ -277,7 +277,7 @@ test('poll notice reports complete and failed outcomes with accurate singular gr
   });
   assert.deepEqual(complete, {
     kind: 'complete',
-    message: 'Read 1 provider context; recorded 1 new attention item; 0 failed; 0 skipped; 0 project or legacy session targets missing provider configuration.',
+    message: 'Checked 1 provider source: 1 new Attention item, 0 problems, 0 skipped, 0 projects need setup.',
     warning: false,
   });
 
@@ -292,8 +292,8 @@ test('poll notice reports complete and failed outcomes with accurate singular gr
   });
   assert.equal(failed.kind, 'failed');
   assert.equal(failed.warning, true);
-  assert.match(failed.message, /Read 2 provider contexts/);
-  assert.match(failed.message, /1 failed; 1 skipped/);
+  assert.match(failed.message, /Checked 2 provider sources/);
+  assert.match(failed.message, /1 problem, 1 skipped/);
 });
 
 test('GitLab partial-read diagnostics enumerate only incomplete monitor facets', () => {

@@ -27,12 +27,13 @@ export type ManagedSessionContextValue =
 
 type WorkSessionLoader = () => WorkSessionRecord[];
 type ProjectDisplayNameLoader = (projectName: string) => string | undefined;
-type SessionTreeElement = ManagedSessionTreeItem | ManagedSessionMessageTreeItem;
+type SessionTreeElement = ManagedSessionTreeItem | ManagedSessionTreeMessageItem;
 
 /** Operator-owned terminal sessions stay independent from registered project inventory. */
 export class ManagedSessionTreeProvider implements vscode.TreeDataProvider<SessionTreeElement>, vscode.Disposable {
   private readonly changeEmitter = new vscode.EventEmitter<SessionTreeElement | undefined>();
   readonly onDidChangeTreeData = this.changeEmitter.event;
+  private loadWarning = false;
 
   constructor(
     private readonly operatorTerminals: OperatorTerminalRegistry<vscode.Terminal>,
@@ -45,7 +46,9 @@ export class ManagedSessionTreeProvider implements vscode.TreeDataProvider<Sessi
 
   async getChildren(element?: SessionTreeElement): Promise<SessionTreeElement[]> {
     if (element) { return []; }
+    this.loadWarning = false;
     const sessions = this.safeLoadWorkSessions().sort((left, right) => sessionInventorySortOrder(left, right));
+    if (this.loadWarning) { return [new ManagedSessionTreeMessageItem('warning')]; }
     return sessions.length > 0
       ? sessions.map(session => new ManagedSessionTreeItem(
         session,
@@ -53,7 +56,7 @@ export class ManagedSessionTreeProvider implements vscode.TreeDataProvider<Sessi
         this.pollIntervalMs(),
         session.projectName ? this.loadProjectDisplayName(session.projectName) : undefined,
       ))
-      : [new ManagedSessionMessageTreeItem()];
+      : [new ManagedSessionTreeMessageItem('empty')];
   }
 
   refresh(): void { this.changeEmitter.fire(undefined); }
@@ -62,6 +65,7 @@ export class ManagedSessionTreeProvider implements vscode.TreeDataProvider<Sessi
   private safeLoadWorkSessions(): WorkSessionRecord[] {
     try { return this.loadWorkSessions(); }
     catch (error: unknown) {
+      this.loadWarning = true;
       console.warn(`Kronos managed-session refresh failed: ${boundedOperationFailure(error, 'Managed session state could not be read.').display}`);
       return [];
     }
@@ -127,16 +131,21 @@ export function managedSessionContextValue(
   return attached ? 'work_session_attached' : 'work_session_detached';
 }
 
-class ManagedSessionMessageTreeItem extends vscode.TreeItem {
-  constructor() {
-    super('New Claude session', vscode.TreeItemCollapsibleState.None);
+class ManagedSessionTreeMessageItem extends vscode.TreeItem {
+  constructor(kind: 'empty' | 'warning') {
+    super(kind === 'warning' ? 'Sessions may be incomplete' : 'New Claude session', vscode.TreeItemCollapsibleState.None);
+    if (kind === 'warning') {
+      this.contextValue = 'managed_session_error';
+      this.description = 'Open Check Setup, then refresh';
+      this.tooltip = 'Kronos could not load saved Sessions. Select to open Check Setup.';
+      this.iconPath = new vscode.ThemeIcon('warning', new vscode.ThemeColor('list.warningForeground'));
+      this.command = { command: 'kronos.doctor', title: 'Check Setup' };
+      return;
+    }
     this.contextValue = 'managed_session_empty';
-    this.description = 'no Jira ticket required';
+    this.description = 'No Jira ticket required';
     this.iconPath = new vscode.ThemeIcon('add');
-    this.command = {
-      command: 'kronos.newClaudeSession',
-      title: 'New Claude Session',
-    };
+    this.command = { command: 'kronos.newClaudeSession', title: 'New Claude Session' };
   }
 }
 

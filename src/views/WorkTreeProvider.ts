@@ -87,12 +87,18 @@ export class WorkTreeProvider implements vscode.TreeDataProvider<WorkTreeItem>, 
           || (normalized.completion === undefined && completionPreferences.hideCompletedByDefault !== false))
         && allTickets.every(([, ticket]) => isCompletedWorkTicket(ticket, completionPreferences.additionalDoneStatuses))) {
         return [...statusItems, new WorkTreeMessageItem(
-          'No active tickets — change filters to show completed work.',
+          'No active tickets',
           'filter',
           'kronos.filterWork',
+          'Use Filter to show completed work',
         )];
       }
-      return [...statusItems, new WorkTreeMessageItem('No tickets match your search.', 'search')];
+      return [...statusItems, new WorkTreeMessageItem(
+        'No matching tickets',
+        'search',
+        'kronos.filterWork',
+        'Change the current filters',
+      )];
     }
     return [...statusItems, ...visibleTickets.map(([ticketKey, ticket]) => new WorkTicketTreeItem(
       ticketKey,
@@ -171,16 +177,11 @@ export class WorkTicketTreeItem extends vscode.TreeItem {
     const summary = safeSingleLine(ticket.summary, 400) || 'Untitled ticket';
     super(`${key} — ${summary}`, vscode.TreeItemCollapsibleState.None);
 
-    const jiraProject = safeSingleLine(ticket.jira_project_key, 120);
     const localProjectName = safeSingleLine(localProject?.displayName || localProject?.name || ticket.linked_local_project, 120);
     const facts = [
       safeSingleLine(ticket.jira_status, 120),
       safeSingleLine(ticket.priority, 80),
-      jiraProject ? `Jira ${jiraProject}` : '',
-      localProjectName ? `project ${localProjectName}` : 'no local project',
-      localProject?.branch ? `branch ${localProject.branch}` : '',
-      ticket.mr ? `MR !${ticket.mr.iid} ${safeSingleLine(ticket.mr.state, 40)}` : '',
-      ticket.build ? `build #${ticket.build.number} ${safeSingleLine(ticket.build.status, 80)}` : '',
+      localProjectName,
     ].filter(Boolean);
     this.description = facts.join(' • ');
     this.tooltip = buildWorkTicketTooltip(key, summary, ticket, localProject);
@@ -191,7 +192,7 @@ export class WorkTicketTreeItem extends vscode.TreeItem {
     );
     this.command = {
       command: 'kronos.openTicketWorkspace',
-      title: 'Open Terminal Workspace',
+      title: 'Open Ticket',
       arguments: [this],
     };
   }
@@ -214,18 +215,18 @@ function buildWorkTicketTooltip(
 ): string {
   const lines = [
     `${key}: ${summary}`,
-    `Jira status: ${safeSingleLine(ticket.jira_status, 160) || 'unknown'}`,
-    `Jira project: ${safeSingleLine(ticket.jira_project_key, 120) || 'unknown'}`,
-    `Type: ${safeSingleLine(ticket.type, 120) || 'unknown'}`,
-    `Priority: ${safeSingleLine(ticket.priority, 120) || 'unknown'}`,
-    `Local project: ${safeSingleLine(localProject?.displayName || localProject?.name || ticket.linked_local_project, 200) || 'not linked'}`,
+    `Jira status: ${safeSingleLine(ticket.jira_status, 160) || 'Unknown'}`,
+    `Jira project: ${safeSingleLine(ticket.jira_project_key, 120) || 'Unknown'}`,
+    `Type: ${safeSingleLine(ticket.type, 120) || 'Unknown'}`,
+    `Priority: ${safeSingleLine(ticket.priority, 120) || 'Unknown'}`,
+    `Local project: ${safeSingleLine(localProject?.displayName || localProject?.name || ticket.linked_local_project, 200) || 'Not linked'}`,
   ];
   if (localProject) {
     lines.push(`Launch directory: ${localProject.path}`);
     lines.push(`Git branch: ${localProject.branch || 'unavailable'}`);
   }
   if (ticket.mr) {
-    lines.push(`MR !${ticket.mr.iid}: ${safeSingleLine(ticket.mr.state, 80)} / ${safeSingleLine(ticket.mr.review_status, 120)}`);
+    lines.push(`Merge request !${ticket.mr.iid}: ${safeSingleLine(ticket.mr.state, 80)} / ${safeSingleLine(ticket.mr.review_status, 120)}`);
   }
   if (ticket.build) {
     lines.push(`Build #${ticket.build.number}: ${safeSingleLine(ticket.build.status, 120)}`);
@@ -258,8 +259,14 @@ class WorkTreeMessageItem extends vscode.TreeItem {
     this.contextValue = 'work_message';
     if (description) { this.description = description; }
     if (tooltip) { this.tooltip = tooltip; }
-    if (command) { this.command = { command, title: command === 'kronos.doctor' ? 'Open Kronos Doctor' : 'Refresh Jira Tickets' }; }
+    if (command) { this.command = { command, title: workMessageCommandTitle(command) }; }
   }
+}
+
+function workMessageCommandTitle(command: string): string {
+  if (command === 'kronos.doctor') { return 'Check Setup'; }
+  if (command === 'kronos.filterWork') { return 'Filter Work'; }
+  return 'Refresh Jira';
 }
 
 function workDataStatusItem(presentation: WorkDataPresentation): WorkTreeMessageItem {

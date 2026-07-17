@@ -315,14 +315,20 @@ test('Work tree directly covers project-rich rows, sorting, filters, empty state
     assert.equal(active[0].ticketKey, 'APP-1');
     assert.equal(provider.getTreeItem(active[0]), active[0]);
     assert.equal(active[0].iconPath.id, 'bug');
-    assert.match(active[0].description, /project Customer API.*branch feature\/work-tree.*MR !77 opened.*build #41 FAILURE/);
+    assert.equal(active[0].description, 'In Progress • High • Customer API');
     assert.match(active[0].tooltip, /Launch directory:.*work-tree-project/);
+    assert.match(active[0].tooltip, /Merge request !77: opened \/ changes_requested/);
+    assert.match(active[0].tooltip, /Build #41: FAILURE/);
     assert.match(active[0].tooltip, /A multi-line operator-visible description/);
 
     provider.setFilter({ completion: 'all' });
     assert.deepEqual(provider.getChildren().map(item => item.ticketKey), ['APP-1', 'APP-2']);
     provider.setSearchQuery('no-such-ticket');
-    assert.equal(provider.getChildren().at(-1).label, 'No tickets match your search.');
+    const noMatches = provider.getChildren().at(-1);
+    assert.equal(noMatches.label, 'No matching tickets');
+    assert.equal(noMatches.description, 'Change the current filters');
+    assert.equal(noMatches.command.command, 'kronos.filterWork');
+    assert.equal(noMatches.command.title, 'Filter Work');
     provider.clearFilter();
     assert.equal(provider.defaultCompletion(), 'active');
     assert.deepEqual(provider.getFilter(), {});
@@ -337,8 +343,11 @@ test('Work tree directly covers project-rich rows, sorting, filters, empty state
       ...stateSource.state,
       tickets: { 'APP-2': stateSource.state.tickets['APP-2'] },
     };
-    assert.equal(provider.getChildren().at(-1).label, 'No active tickets — change filters to show completed work.');
-    assert.equal(provider.getChildren().at(-1).command.command, 'kronos.filterWork');
+    const noActive = provider.getChildren().at(-1);
+    assert.equal(noActive.label, 'No active tickets');
+    assert.equal(noActive.description, 'Use Filter to show completed work');
+    assert.equal(noActive.command.command, 'kronos.filterWork');
+    assert.equal(noActive.command.title, 'Filter Work');
 
     stateSource.state = null;
     stateSource.loadIssues = [new Error('fixture')];
@@ -364,8 +373,30 @@ test('Work tree directly covers project-rich rows, sorting, filters, empty state
 
   const open = new WorkTicketTreeItem('APP-3', ticket('Open ticket'));
   const closed = new WorkTicketTreeItem('APP-4', { ...ticket('Closed ticket'), jira_status_category: 'done' });
+  const sparse = new WorkTicketTreeItem('', {
+    ...ticket(''),
+    summary: '',
+    type: 'Defect',
+    priority: '',
+    jira_status: '',
+    jira_project_key: '',
+  });
+  const namedProject = new WorkTicketTreeItem('APP-5', ticket('Named project'), {
+    name: 'application',
+    displayName: '',
+    path: '/workspace/application',
+    branch: undefined,
+    detached: false,
+    available: true,
+  });
   assert.equal(open.iconPath.id, 'issue-opened');
   assert.equal(closed.iconPath.id, 'issue-closed');
+  assert.equal(sparse.label, 'Ticket — Untitled ticket');
+  assert.equal(sparse.description, '');
+  assert.equal(sparse.iconPath.id, 'bug');
+  assert.match(sparse.tooltip, /Jira status: Unknown[^]*Jira project: Unknown[^]*Priority: Unknown[^]*Local project: Not linked/);
+  assert.equal(namedProject.description, 'In Progress • Medium • application');
+  assert.match(namedProject.tooltip, /Git branch: unavailable/);
 });
 
 test('Jira rich text and recursive values preserve visible evidence while redacting unsafe content', () => {

@@ -174,7 +174,7 @@
         { "file": "scripts/run-project-catalog-tests.js", "test": "project Git presentation distinguishes unavailable, clean, staged, untracked, conflicted, and bounded states" },
         { "file": "scripts/run-project-catalog-tests.js", "test": "project integration presentation exposes readiness without provider identifiers or credentials" },
         { "file": "scripts/run-unit-tests.js", "test": "extension activation registers the bounded surface and explicit launch commands create the right session kinds" },
-        { "file": "scripts/run-jira-work-board-tests.js", "test": "board lists registered local project paths and current Git branches" },
+        { "file": "scripts/run-jira-work-board-tests.js", "test": "board keeps registered project paths and current branches in a compact disclosure" },
         { "file": "scripts/run-product-surface-contract-tests.js", "test": "registered project actions start ticket-free Claude before read-only and provider actions" },
         { "file": "scripts/run-product-surface-contract-tests.js", "test": "discovery, setup, and project management each retain one canonical UI home" },
         { "file": "scripts/run-feature-journey-tests.js", "test": "explicit project journey keeps one stable identity across Work, Projects, Sessions, and Attention" },
@@ -1045,7 +1045,7 @@
       "requirements": ["G08-case-06:f5e6f718"],
       "automated": [
         { "file": "scripts/run-jira-work-board-tests.js", "test": "board builder exposes useful Jira filters and only bounded terminal-first actions" },
-        { "file": "scripts/run-jira-work-board-tests.js", "test": "board lists registered local project paths and current Git branches" }
+        { "file": "scripts/run-jira-work-board-tests.js", "test": "board keeps registered project paths and current branches in a compact disclosure" }
       ]
     },
     {
@@ -1324,7 +1324,7 @@
       "requirements": ["G12-goal:a9bc048c"],
       "automated": [
         { "file": "scripts/run-provider-readiness-tests.js", "test": "guided readiness distinguishes first-run, partial, fully ready, and live permission states" },
-        { "file": "scripts/run-unit-tests.js", "test": "Setup and Doctor render bounded operation dashboards with allowlisted actions" },
+        { "file": "scripts/run-unit-tests.js", "test": "Setup and Check Setup render bounded operation dashboards with allowlisted actions" },
         { "file": "scripts/run-unit-tests.js", "test": "extension activation registers the bounded surface and explicit launch commands create the right session kinds" }
       ],
       "humanGates": ["real-vscode"]
@@ -1358,7 +1358,7 @@
     {
       "requirements": ["G12-case-05:dfb4b2a1"],
       "automated": [
-        { "file": "scripts/run-unit-tests.js", "test": "Setup and Doctor render bounded operation dashboards with allowlisted actions" },
+        { "file": "scripts/run-unit-tests.js", "test": "Setup and Check Setup render bounded operation dashboards with allowlisted actions" },
         { "file": "scripts/run-provider-readiness-tests.js", "test": "guided readiness distinguishes first-run, partial, fully ready, and live permission states" },
         { "file": "scripts/run-provider-health-visibility-tests.js", "test": "provider diagnostics retain current live failures and partial reads until their own recovery" }
       ]
@@ -1372,7 +1372,7 @@
     {
       "requirements": ["G12-case-07:ed542607"],
       "automated": [
-        { "file": "scripts/run-unit-tests.js", "test": "Setup and Doctor render bounded operation dashboards with allowlisted actions" }
+        { "file": "scripts/run-unit-tests.js", "test": "Setup and Check Setup render bounded operation dashboards with allowlisted actions" }
       ],
       "humanGates": ["windows-native"]
     },
@@ -1395,7 +1395,7 @@
       "requirements": ["G12-evidence-03:9efe4443"],
       "automated": [
         { "file": "scripts/run-provider-readiness-tests.js", "test": "one readiness snapshot feeds Setup and Doctor and gives every non-ready row an action" },
-        { "file": "scripts/run-unit-tests.js", "test": "Setup and Doctor render bounded operation dashboards with allowlisted actions" }
+        { "file": "scripts/run-unit-tests.js", "test": "Setup and Check Setup render bounded operation dashboards with allowlisted actions" }
       ]
     },
     {
@@ -1485,7 +1485,7 @@
         { "file": "scripts/run-work-orchestration-tests.js", "test": "scheduled Work refreshes coalesce behind one in-flight read" },
         { "file": "scripts/run-provider-binding-reconciliation-tests.js", "test": "one provider binding reconciliation owner feeds Work, Sessions, Projects, Attention, polling, and context insertion" },
         { "file": "scripts/run-attention-transition-matrix-tests.js", "test": "Attention projection rebuilds after restart without stale-row resurrection" },
-        { "file": "scripts/run-unit-tests.js", "test": "Setup and Doctor render bounded operation dashboards with allowlisted actions" }
+        { "file": "scripts/run-unit-tests.js", "test": "Setup and Check Setup render bounded operation dashboards with allowlisted actions" }
       ],
       "checks": ["runtime-responsibility-graph", "runtime-coverage-policy"]
     },

@@ -78,23 +78,23 @@ ${operationsPanelCss()}
 <body><main class="kronos-shell operations-shell">
   <header class="kronos-header operations-header">
     <div>
-      <h1 class="kronos-title">Kronos Setup</h1>
-      <div class="kronos-subtitle">Configure Claude terminals, local projects, Jira work, and read-only provider monitoring.</div>
+      <h1 class="kronos-title">Setup</h1>
+      <div class="kronos-subtitle">Connect Claude terminals, local projects, Jira, and read-only provider updates.</div>
     </div>
     <span class="kronos-pill ${escapeClass(tone)}">${tone === 'pass' ? 'Ready' : tone === 'warn' ? 'Review' : 'Blocked'}</span>
   </header>
   <div class="kronos-action-row operations-actions">
-    ${operationsActionButton('openDoctor', 'Run Doctor', true)}
+    ${operationsActionButton('openDoctor', 'Check setup', true)}
     ${operationsActionButton('refreshPanel', 'Refresh')}
   </div>
   <section class="operations-hero ${escapeClass(tone)}">
     <div class="kronos-section-title">Setup status</div>
     <strong>${escapeHtml(headline)}</strong>
-    <p>Nothing starts automatically. Every Claude terminal remains interactive and operator-owned.</p>
+    <p>Nothing starts automatically. You stay in control of every Claude terminal.</p>
   </section>
   <section class="setup-grid">${steps}</section>
   <details class="provider-guide">
-    <summary>Private provider environment guide</summary>
+    <summary>Provider setup details</summary>
     <div class="provider-guide-body">
       <p>Kronos reads provider configuration from <code>${escapeHtml(input.runtime.providerEnvPath)}</code>. Existing extension-host environment values take precedence. Credential values are never shown here.</p>
       <ul>
@@ -103,7 +103,7 @@ ${operationsPanelCss()}
         <li>Jenkins: <code>JENKINS_URL</code>, optional username/API token, and optional Jenkins-only <code>JENKINS_TLS_REJECT_UNAUTHORIZED=false</code> for a locally trusted corporate endpoint</li>
         <li>SonarQube: <code>SONAR_HOST_URL</code> or <code>SONAR_URL</code>, plus <code>SONAR_TOKEN</code></li>
       </ul>
-      <p>After changing the private environment file, reload the VS Code window and run Doctor again.</p>
+      <p>After changing the private environment file, reload the VS Code window and check setup again.</p>
     </div>
   </details>
   ${operationsRuntimeGuide(input.runtime)}
@@ -147,8 +147,8 @@ ${operationsPanelCss()}
 .doctor-stat.pass strong { color: var(--k-ok); }
 .doctor-stat.warn strong { color: var(--k-warn); }
 .doctor-stat.fail strong { color: var(--k-danger); }
-.doctor-list { display: grid; gap: 8px; }
-.doctor-check { display: grid; grid-template-columns: 78px minmax(0, 1fr); gap: 12px; align-items: start; padding: 13px 14px; border: 1px solid var(--k-border); border-left: 3px solid var(--k-border); border-radius: var(--k-radius); background: var(--k-surface); }
+.doctor-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; align-items: stretch; }
+.doctor-check { display: grid; height: 100%; grid-template-columns: 78px minmax(0, 1fr); gap: 12px; align-items: start; padding: 13px 14px; border: 1px solid var(--k-border); border-left: 3px solid var(--k-border); border-radius: var(--k-radius); background: var(--k-surface); }
 .doctor-check.pass { border-left-color: var(--k-ok); }
 .doctor-check.warn { border-left-color: var(--k-warn); }
 .doctor-check.fail { border-left-color: var(--k-danger); }
@@ -156,6 +156,9 @@ ${operationsPanelCss()}
 .doctor-detail { color: var(--k-muted); font-size: 12px; line-height: 1.45; word-break: break-word; }
 .doctor-action { margin-top: 9px; }
 .privacy-note { margin: 15px 0 0; color: var(--k-muted); font-size: 12px; }
+@media (max-width: 980px) {
+  .doctor-list { grid-template-columns: 1fr; }
+}
 @media (max-width: 620px) {
   .doctor-summary { grid-template-columns: 1fr; }
   .doctor-check { grid-template-columns: 1fr; }
@@ -164,31 +167,31 @@ ${operationsPanelCss()}
 <body><main class="kronos-shell operations-shell">
   <header class="kronos-header operations-header">
     <div>
-      <h1 class="kronos-title">Kronos Doctor</h1>
-      <div class="kronos-subtitle">Local readiness for Jira work, projects, provider reads, private state, and explicit Claude launch.</div>
+      <h1 class="kronos-title">Check setup</h1>
+      <div class="kronos-subtitle">Check that projects, Jira, providers, private storage, and Claude are ready.</div>
     </div>
     <span class="kronos-pill ${escapeClass(tone)}">${escapeHtml(headline)}</span>
   </header>
   <div class="kronos-action-row operations-actions">
-    ${operationsActionButton('refreshPanel', 'Run Checks Again', true)}
-    ${operationsActionButton('openSetup', 'Guided Setup')}
+    ${operationsActionButton('refreshPanel', 'Check again', true)}
+    ${operationsActionButton('openSetup', 'Open setup')}
   </div>
-  <section class="doctor-summary" aria-label="Doctor check totals">
+  <section class="doctor-summary" aria-label="Setup check totals">
     <div class="doctor-stat pass"><strong>${summary.pass}</strong><span>Ready</span></div>
     <div class="doctor-stat warn"><strong>${summary.warn}</strong><span>Review</span></div>
     <div class="doctor-stat fail"><strong>${summary.fail}</strong><span>Blocked</span></div>
   </section>
   <section class="doctor-list">${rows}</section>
   ${operationsRuntimeGuide(input.runtime)}
-  <p class="privacy-note">Doctor never launches Claude, runs a repair, executes a project command, or displays credential values.</p>
+  <p class="privacy-note">This check never launches Claude, runs a repair, executes a project command, or displays credential values.</p>
 </main>
-${operationsActionScript(input.nonce, input.actionScriptUri, 'Kronos Doctor')}
+${operationsActionScript(input.nonce, input.actionScriptUri, 'Kronos Check Setup')}
 </body></html>`;
 }
 
 function operationsPanelCss(): string {
   return `${kronosWebviewBaseCss()}
-  .operations-shell { max-width: 1080px; }
+  .operations-shell { max-width: 1280px; }
   .operations-header { align-items: center; }
   .operations-actions { margin: 0 0 16px; }
   .operations-hero { margin: 0 0 16px; padding: 15px 17px; border: 1px solid var(--k-border); border-left: 3px solid var(--k-border); border-radius: var(--k-radius); background: linear-gradient(135deg, var(--k-surface-soft), var(--k-surface)); }
@@ -211,7 +214,7 @@ function operationsPanelCss(): string {
 
 function operationsRuntimeGuide(input: OperationsRuntimeGuide): string {
   return `<details class="runtime-guide">
-    <summary>Runtime paths and reload behavior</summary>
+    <summary>Advanced paths and reloads</summary>
     <div class="runtime-guide-body">
       <p>Extension host: ${escapeHtml(input.platformLabel)}. Private state root: <code>${escapeHtml(input.privateStatePath)}</code>. Provider environment file: <code>${escapeHtml(input.providerEnvPath)}</code>.</p>
       <p><code>KRONOS_DIR</code> selects the private state root and <code>KRONOS_ENV_FILE</code> selects the provider file. Set either before starting VS Code. On Windows PowerShell, set <code>$env:KRONOS_DIR = 'C:\\path\\to\\kronos-state'</code> before starting <code>code</code>; on macOS/Linux, export the variable before starting <code>code</code>.</p>

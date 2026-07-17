@@ -116,10 +116,10 @@ test('Sessions present project, branch, Jira contexts, attachment, monitoring, a
   assert.equal(presentation.label, 'Customer API: Interactive investigation');
   assert.equal(
     presentation.description,
-    'Customer API @ feature/session-inventory • no Jira context • 1 terminal attached',
+    'feature/session-inventory • 1 terminal connected',
   );
   assert.match(presentation.tooltip, /Project: Customer API/);
-  assert.match(presentation.tooltip, /Stable project identity: Application/);
+  assert.doesNotMatch(presentation.tooltip, /Stable project identity|^Work session:|^(?:Management|Terminal|Monitoring) lifecycle:/im);
 
   session = workSessions.addWorkSessionTicketContext(session.id, 'JIRA-301', options);
   session = workSessions.addWorkSessionTicketContext(session.id, 'JIRA-302', options);
@@ -138,12 +138,12 @@ test('Sessions present project, branch, Jira contexts, attachment, monitoring, a
   );
   assert.equal(
     presentation.description,
-    'Application @ feature/session-inventory • 2 Jira contexts • 1 terminal attached • poll partial',
+    'feature/session-inventory • 2 Jira tickets • 1 terminal connected • Needs review',
   );
-  assert.match(presentation.tooltip, /Ticket contexts: JIRA-301, JIRA-302/);
-  assert.match(presentation.tooltip, /Monitoring lifecycle: running/);
-  assert.match(presentation.tooltip, /Monitoring result: GitLab succeeded; Jenkins needs operator review\./);
-  assert.match(presentation.tooltip, /Primary action: Open Terminal\./);
+  assert.match(presentation.tooltip, /Jira tickets: JIRA-301, JIRA-302/);
+  assert.match(presentation.tooltip, /Provider updates: Needs review/);
+  assert.match(presentation.tooltip, /Last result: GitLab succeeded; Jenkins needs operator review\./);
+  assert.match(presentation.tooltip, /Select to open the terminal\./);
   assert.doesNotMatch(presentation.tooltip, /Operator terminal metadata only/);
 });
 
@@ -165,7 +165,7 @@ test('Sessions never present detached, closed, stopped, paused, or removed-proje
   session = workSessions.setWorkSessionMonitoring(session.id, false, undefined, options);
   assert.match(
     sessionInventory.sessionInventoryPresentation(session, 1, 300_000, 'main').description,
-    /1 terminal attached • poll paused$/,
+    /1 terminal connected • Checks paused$/,
   );
 
   session = workSessions.detachWorkSessionTerminal(
@@ -176,7 +176,7 @@ test('Sessions never present detached, closed, stopped, paused, or removed-proje
   );
   assert.match(
     sessionInventory.sessionInventoryPresentation(session, 0, 300_000, 'main').description,
-    /terminal detached • poll paused$/,
+    /terminal disconnected • Checks paused$/,
   );
   session = workSessions.markWorkSessionTerminalClosed(
     session.id,
@@ -188,7 +188,7 @@ test('Sessions never present detached, closed, stopped, paused, or removed-proje
   session = workSessions.closeWorkSession(session.id, options);
   const stopped = sessionInventory.sessionInventoryPresentation(session, 0, 300_000);
   assert.equal(stopped.label, 'JIRA-303: Lifecycle presentation');
-  assert.equal(stopped.description, '1 Jira context • terminal closed • management stopped');
+  assert.equal(stopped.description, '1 Jira ticket • terminal closed • tracking stopped');
 
   const newerActive = workSessions.createStandaloneWorkSession({ title: 'New active session' }, {
     ...options,
@@ -215,22 +215,22 @@ test('Sessions action language keeps Open Terminal, reconnect, detach, monitorin
     remove: titles['kronos.removeWorkSession'],
   }, {
     open: 'Kronos: Open Session Terminal',
-    reconnect: 'Kronos: Reconnect Focused Terminal to Session',
-    detach: 'Kronos: Detach Terminal',
-    pause: 'Kronos: Pause Work Session Monitoring',
-    resume: 'Kronos: Resume Work Session Monitoring',
-    poll: 'Kronos: Poll Managed Providers',
-    audit: 'Kronos: Open Work Session Audit',
-    stop: 'Kronos: Stop Managing Work Session',
+    reconnect: 'Kronos: Connect Focused Terminal to Session',
+    detach: 'Kronos: Disconnect Terminal',
+    pause: 'Kronos: Pause Provider Updates',
+    resume: 'Kronos: Resume Provider Updates',
+    poll: 'Kronos: Check Provider Updates',
+    audit: 'Kronos: View Session History',
+    stop: 'Kronos: Stop Tracking Session',
     remove: 'Kronos: Remove Session from Kronos',
   });
   assert.equal(new Set(Object.values(titles).filter(title => title.includes('Session') || title.includes('Monitoring'))).size > 1, true);
   const viewSource = fs.readFileSync(path.join(__dirname, '..', 'src', 'views', 'ManagedSessionTreeProvider.ts'), 'utf8');
   assert.match(viewSource, /this\.command = \{ command: 'kronos\.focusWorkSessionTerminal', title: 'Open Session Terminal'/);
   const runtimeSource = fs.readFileSync(path.join(__dirname, '..', 'src', 'terminalFirstExtension.ts'), 'utf8');
-  assert.match(runtimeSource, /local session record and monitoring snapshots will be deleted/);
+  assert.match(runtimeSource, /Session entry and saved provider status will be deleted/);
   assert.match(runtimeSource, /terminal.*remain open and untouched/);
-  assert.match(runtimeSource, /Shared audit history and saved context files are retained locally/);
+  assert.match(runtimeSource, /Session history and saved context will remain on this device/);
 });
 
 test('terminal titles capture ticket and observed branch once at launch within the VS Code name bound', () => {

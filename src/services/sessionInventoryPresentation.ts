@@ -1,4 +1,5 @@
 import type { WorkSessionRecord } from './workSessionStore';
+import { formatDateTimeLabel } from './dateLabels';
 import { workSessionLifecycle } from './workSessionLifecycle';
 import {
   providerMonitoringHealthSummary,
@@ -22,7 +23,7 @@ export function sessionInventoryPresentation(
   const projectLabel = normalizedProjectLabel(session, projectDisplayName);
   return {
     label: sessionInventoryLabel(session, projectLabel),
-    description: sessionInventoryDescription(session, liveCount, pollIntervalMs, observedBranch, projectLabel),
+    description: sessionInventoryDescription(session, liveCount, pollIntervalMs, observedBranch),
     tooltip: sessionInventoryTooltip(session, liveCount, pollIntervalMs, observedBranch, projectLabel),
   };
 }
@@ -44,31 +45,25 @@ function sessionInventoryDescription(
   liveCount: number,
   pollIntervalMs: number,
   observedBranch?: string,
-  projectDisplayName?: string,
 ): string {
   const lifecycle = workSessionLifecycle(session, liveCount);
   const segments: string[] = [];
-  if (session.projectName) {
-    const projectLabel = normalizedProjectLabel(session, projectDisplayName);
-    segments.push(observedBranch ? `${projectLabel} @ ${observedBranch}` : projectLabel);
-  } else if (observedBranch) {
-    segments.push(`project @ ${observedBranch}`);
+  if (observedBranch) { segments.push(observedBranch); }
+  if (session.ticketKeys.length > 0) {
+    segments.push(`${session.ticketKeys.length} Jira ticket${session.ticketKeys.length === 1 ? '' : 's'}`);
   }
-  segments.push(session.ticketKeys.length > 0
-    ? `${session.ticketKeys.length} Jira context${session.ticketKeys.length === 1 ? '' : 's'}`
-    : 'no Jira context');
   segments.push(lifecycle.terminal === 'attached'
-    ? `${liveCount} terminal${liveCount === 1 ? '' : 's'} attached`
+    ? `${liveCount} terminal${liveCount === 1 ? '' : 's'} connected`
     : lifecycle.terminal === 'closed' ? 'terminal closed'
-      : lifecycle.terminal === 'none' ? 'no terminal attached'
-        : 'terminal detached');
+      : lifecycle.terminal === 'none' ? 'no terminal'
+        : 'terminal disconnected');
   if (lifecycle.management === 'stopped') {
-    segments.push('management stopped');
+    segments.push('tracking stopped');
   } else if (session.ticketKeys.length > 0) {
     const health = sessionProviderMonitoringHealth(session, pollIntervalMs);
     segments.push(lifecycle.monitoring === 'running'
       ? providerMonitoringHealthSummary(health)
-      : lifecycle.monitoring === 'paused' ? 'poll paused' : 'poll unavailable');
+      : lifecycle.monitoring === 'paused' ? 'Checks paused' : 'Checks unavailable');
   }
   return segments.join(' • ');
 }
@@ -81,52 +76,45 @@ function sessionInventoryTooltip(
   projectDisplayName?: string,
 ): string {
   const lifecycle = workSessionLifecycle(session, liveCount);
-  const terminalCounts = { attached: 0, detached: 0, closed: 0 };
-  for (const terminal of session.terminals) { terminalCounts[terminal.status] += 1; }
   const providerBindings = session.providerBindings.length > 0
     ? boundedListSummary(
-      session.providerBindings.map(binding => `${binding.provider} ${binding.resource} ${binding.subjectId}`),
+      session.providerBindings.map(binding => providerBindingLabel(binding.provider, binding.resource, binding.subjectId)),
       12,
     )
-    : 'none yet; configured providers are discovered automatically';
+    : 'None yet';
   const completeArtifacts = session.artifacts.filter(artifact => artifact.complete).length;
   const health = sessionProviderMonitoringHealth(session, pollIntervalMs);
   const lines = [
-    `Work session: ${session.id}`,
-    `Ticket contexts: ${session.ticketKeys.length > 0 ? boundedListSummary(session.ticketKeys, 20) : 'none'}`,
     `Title: ${session.title}`,
-    `Management lifecycle: ${lifecycle.management}`,
-    `Terminal lifecycle: ${lifecycle.terminal}`,
-    `Monitoring lifecycle: ${lifecycle.monitoring}`,
-    'Primary action: Open Terminal.',
-    'Reconnect choices appear only when the recorded terminal is no longer attached.',
-    'Terminal ownership: operator',
-    `Live terminal bindings: ${liveCount}`,
-    `Durable terminal history: ${terminalCounts.attached} attached, ${terminalCounts.detached} detached, ${terminalCounts.closed} closed`,
-    `Provider bindings: ${providerBindings}`,
-    `Context artifacts: ${completeArtifacts} complete, ${session.artifacts.length - completeArtifacts} partial`,
-    `Automatic provider polling: ${session.monitoring.enabled ? 'enabled' : 'paused'}`,
-    `Monitoring state: ${session.monitoring.lastState || 'not yet polled'}`,
-    `Monitoring result: ${session.monitoring.lastSummary || 'none'}`,
-    `Monitoring failures: ${session.monitoring.lastFailureCount ?? 0}`,
-    `Monitoring skipped: ${session.monitoring.lastSkippedCount ?? 0}`,
-    `Last monitoring attempt: ${session.monitoring.lastAttemptAt || 'never'}`,
-    `Last successful poll: ${health.lastSuccessfulAt || 'never'}`,
-    `Last meaningful provider change: ${health.lastMeaningfulChangeAt || 'never'}`,
-    `Next scheduled poll: ${health.nextScheduledAt || 'not scheduled'}`,
-    `Current normalized error: ${health.currentError || 'none'}`,
-    `Suppressed unchanged polls since last change: ${health.suppressedUnchangedCount}`,
-    `Created: ${session.createdAt}`,
-    `Updated: ${session.updatedAt}`,
+    `Jira tickets: ${session.ticketKeys.length > 0 ? boundedListSummary(session.ticketKeys, 20) : 'None'}`,
+    `Terminal: ${terminalStateLabel(lifecycle.terminal, liveCount)}`,
+    `Saved context: ${completeArtifacts} complete, ${session.artifacts.length - completeArtifacts} partial`,
+    `Connected sources: ${providerBindings}`,
+    ...(session.ticketKeys.length > 0 ? [
+      `Provider updates: ${lifecycle.monitoring === 'running'
+        ? providerMonitoringHealthSummary(health)
+        : lifecycle.monitoring === 'paused' ? 'Paused' : 'Unavailable'}`,
+      ...(session.monitoring.lastSummary ? [`Last result: ${session.monitoring.lastSummary}`] : []),
+      ...(session.monitoring.lastFailureCount ? [`Problems: ${session.monitoring.lastFailureCount}`] : []),
+      ...(session.monitoring.lastSkippedCount ? [`Skipped sources: ${session.monitoring.lastSkippedCount}`] : []),
+      `Last checked: ${formatDateTimeLabel(session.monitoring.lastAttemptAt, 'Never')}`,
+      `Last successful check: ${formatDateTimeLabel(health.lastSuccessfulAt, 'Never')}`,
+      `Last provider change: ${formatDateTimeLabel(health.lastMeaningfulChangeAt, 'Never')}`,
+      `Next check: ${formatDateTimeLabel(health.nextScheduledAt, 'Not scheduled')}`,
+      ...(health.currentError ? [`Current issue: ${humanState(health.currentError)}`] : []),
+    ] : []),
+    `Created: ${formatDateTimeLabel(session.createdAt, 'Unknown')}`,
+    `Updated: ${formatDateTimeLabel(session.updatedAt, 'Unknown')}`,
+    lifecycle.terminal === 'attached' ? 'Select to open the terminal.' : 'Select to reconnect the terminal.',
+    'Right-click for context, history, and session actions.',
   ];
   if (session.projectName) {
     const projectLabel = normalizedProjectLabel(session, projectDisplayName);
-    lines.splice(4, 0, `Project: ${projectLabel}`);
-    if (projectLabel !== session.projectName) { lines.splice(5, 0, `Stable project identity: ${session.projectName}`); }
+    lines.splice(1, 0, `Project: ${projectLabel}`);
   }
-  if (session.projectPath) { lines.splice(5, 0, `Project path: ${session.projectPath}`); }
-  if (observedBranch) { lines.splice(6, 0, `Git branch: ${observedBranch}`); }
-  if (session.closedAt) { lines.push(`Closed: ${session.closedAt}`); }
+  if (session.projectPath) { lines.splice(session.projectName ? 2 : 1, 0, `Folder: ${session.projectPath}`); }
+  if (observedBranch) { lines.splice(session.projectName ? 3 : 2, 0, `Branch: ${observedBranch}`); }
+  if (session.closedAt) { lines.push(`Closed: ${formatDateTimeLabel(session.closedAt, 'Unknown')}`); }
   return lines.join('\n');
 }
 
@@ -141,4 +129,23 @@ function boundedListSummary(values: readonly string[], limit: number): string {
   const visible = values.slice(0, limit).join(', ');
   const remaining = values.length - Math.min(values.length, limit);
   return remaining > 0 ? `${visible}, +${remaining} more` : visible;
+}
+
+function terminalStateLabel(state: ReturnType<typeof workSessionLifecycle>['terminal'], liveCount: number): string {
+  if (state === 'attached') { return liveCount === 1 ? 'Connected' : `${liveCount} connected`; }
+  if (state === 'closed') { return 'Closed'; }
+  if (state === 'none') { return 'Not connected'; }
+  return 'Disconnected';
+}
+
+function providerBindingLabel(provider: string, resource: string, subjectId: string): string {
+  const providerLabel = { jira: 'Jira', gitlab: 'GitLab', jenkins: 'Jenkins', sonar: 'SonarQube' }[provider] || provider;
+  const resourceLabel = humanState(resource);
+  const identifier = resource === 'merge-request' && /^[1-9][0-9]*$/.test(subjectId) ? `!${subjectId}` : subjectId;
+  return `${providerLabel} ${resourceLabel}${identifier ? ` ${identifier}` : ''}`;
+}
+
+function humanState(value: string): string {
+  const normalized = value.replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim();
+  return normalized ? `${normalized.charAt(0).toLocaleUpperCase()}${normalized.slice(1)}` : 'Unknown';
 }

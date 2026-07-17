@@ -542,30 +542,68 @@ test('work-session audit renders complete local evidence and sorts supplied even
     },
   ];
   const markdown = buildWorkSessionAuditMarkdown(session, events);
-  assert.match(markdown, /^# Customer \\#API managed work session/m);
+  assert.match(markdown, /^# Customer \\#API Session history/m);
   assert.match(markdown, /Review \\\*unsafe\\\* \\\[formatting\\\]/);
-  assert.ok(markdown.includes('- Kind: ticket-linked (AUDIT\\-7)'));
-  assert.match(markdown, /Operator terminals currently recorded as attached: 1/);
-  assert.match(markdown, /Providers: gitlab/);
-  assert.ok(markdown.includes('- Jira \\[context\\] (partial, fetched 2026\\-07\\-15T11:55:00\\.000Z)'));
+  assert.ok(markdown.includes('- Type: Jira\-linked (AUDIT\\-7)'));
+  assert.match(markdown, /Connected terminals: 1/);
+  assert.match(markdown, /Providers: GitLab/);
+  assert.ok(markdown.includes('- Jira \\[context\\] (Needs review, saved 2026\\-07\\-15T11:55:00\\.000Z)'));
   assert.match(markdown, /Content SHA-256: `a{64}`/);
   assert.match(markdown, /Warning: Comments \\\*partial\\\*/);
   assert.ok(markdown.indexOf('Newest \\[summary\\] continued') < markdown.indexOf('Older \\*summary\\*'));
-  assert.match(markdown, /ticket `AUDIT-7`/);
-  assert.match(markdown, /State: running → failed/);
+  assert.match(markdown, /Ticket `AUDIT-7`/);
+  assert.match(markdown, /Status: Running → Failed/);
   assert.match(markdown, /eventˋnew\.json`/);
   assert.deepEqual(events.map(event => event.id), ['event-older', 'event-newer']);
+
+  const labelEvents = [
+    ['session.created', 'kronos', 'Session created'],
+    ['terminal.attached', 'operator', 'Terminal connected'],
+    ['terminal.detached', 'operator', 'Terminal disconnected'],
+    ['provider.baseline', 'jenkins', 'Provider baseline'],
+    ['notification.shown', 'sonar', 'Notification shown'],
+    ['notification.acknowledged', 'operator', 'Notification cleared'],
+    ['decision.recorded', 'jira', 'Decision recorded'],
+  ].map(([type, source, expectedLabel], index) => ({
+    schemaVersion: 1,
+    id: `event-label-${index}`,
+    at: `2026-07-15T11:5${index}:30.000Z`,
+    sessionId: session.id,
+    type,
+    source,
+    summary: `${expectedLabel} summary`,
+    ...(index === 3 ? {
+      subject: { kind: 'project_branch', id: 'main' },
+      before: { state: 'waiting_for_build' },
+    } : {}),
+    ...(index === 4 ? { after: { state: 'quality_gate_failed' } } : {}),
+  }));
+  const labelsMarkdown = buildWorkSessionAuditMarkdown(session, labelEvents);
+  for (const expected of [
+    'Kronos · Session created',
+    'You · Terminal connected',
+    'You · Terminal disconnected',
+    'Jenkins · Provider baseline',
+    'SonarQube · Notification shown',
+    'You · Notification cleared',
+    'Jira · Decision recorded',
+    'Project branch `main`',
+    'Status: Waiting for build → Unknown',
+    'Status: Unknown → Quality gate failed',
+  ]) {
+    assert.ok(labelsMarkdown.includes(expected), expected);
+  }
 
   const empty = workSessions.createStandaloneWorkSession({ title: 'Empty audit' }, {
     kronosDir: path.join(tempRoot, 'empty-work-session-audit'),
   });
   const emptyMarkdown = buildWorkSessionAuditMarkdown(empty, []);
-  assert.match(emptyMarkdown, /^# Empty audit managed session/m);
-  assert.match(emptyMarkdown, /Kind: standalone/);
-  assert.match(emptyMarkdown, /Ticket contexts: none/);
-  assert.match(emptyMarkdown, /Providers: none/);
-  assert.match(emptyMarkdown, /No audit events have been recorded/);
-  assert.doesNotMatch(emptyMarkdown, /## Context artifacts/);
+  assert.match(emptyMarkdown, /^# Empty audit history/m);
+  assert.match(emptyMarkdown, /Type: Standalone/);
+  assert.match(emptyMarkdown, /Jira tickets: None/);
+  assert.match(emptyMarkdown, /Providers: None/);
+  assert.match(emptyMarkdown, /No history yet/);
+  assert.doesNotMatch(emptyMarkdown, /## Saved context/);
 });
 
 test('registered-project monitoring owners refresh identity, reject stale bindings, and isolate returned state', () => {

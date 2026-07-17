@@ -2050,6 +2050,11 @@ test('GitLab target reconciliation gives one deterministic identity to polling a
 test('provider observations update the durable Work catalog without losing Jira metadata', () => {
   const initial = stateStore.emptyWorkCatalog();
   initial.tickets['JIRA-123'] = fixtureTicket();
+  assert.equal(
+    projectCatalog.projectTicketProviderState(initial, 'JIRA-999', { build: { number: 1, status: 'SUCCESS' } }),
+    initial,
+    'provider observations for a ticket outside the loaded catalog are ignored',
+  );
   const next = projectCatalog.projectTicketProviderState(initial, 'JIRA-123', {
     mr: {
       iid: 77,
@@ -2076,6 +2081,16 @@ test('registered project identity reconciles old Session labels and terminal sub
   const project = projectCatalog.registeredLocalProjectForDirectory(state, terminalDirectory);
   assert.equal(project.name, 'CanonicalNested', 'the most-specific registered folder owns a nested terminal cwd');
   assert.equal(project.path, nestedProjectRoot);
+  assert.equal(
+    projectCatalog.registeredLocalProjectForDirectory(state, nestedProjectRoot).name,
+    'CanonicalNested',
+    'a project folder owns a terminal started at its exact root',
+  );
+  assert.equal(
+    projectCatalog.registeredLocalProjectForDirectory(state, path.join(tempRoot, 'outside-projects')),
+    undefined,
+    'a terminal outside every registered folder stays unassigned',
+  );
   assert.equal(projectCatalog.matchesLocalProject({
     projectName: 'Old Workspace Label',
     projectPath: path.join(nestedProjectRoot, '.'),
@@ -2089,6 +2104,7 @@ test('registered project identity reconciles old Session labels and terminal sub
     projectCatalog.localProjectReferenceKey({ projectPath: nestedProjectRoot }),
     'legacy polling groups equivalent path spellings under one owner',
   );
+  assert.equal(projectCatalog.localProjectReferenceKey({}), undefined, 'an unassigned Session has no project grouping key');
 });
 
 test('legacy ~/.claude/kronos state migrates once without helper scripts', t => {
@@ -2700,7 +2716,7 @@ test('Work data status distinguishes empty, loading, partial, stale, error, and 
     warningCount: 1,
   } });
   assert.equal(partial.mode, 'partial');
-  assert.match(partial.detail, /2 prior tickets were retained/);
+  assert.match(partial.detail, /2 earlier tickets remain visible/);
   assert.equal(present({ nowMs: Date.parse('2026-07-14T12:20:01.000Z') }).mode, 'stale');
   const failed = present({ refreshStatus: {
     phase: 'error',
@@ -3614,7 +3630,7 @@ test('ticket workspace exposes explicit Claude launch, project branch, terminal 
   for (const action of ['startClaudeForTicket', 'manageActiveTerminal', 'chooseTicketProject', 'insertJiraContext', 'insertGitLabContext', 'insertCiContext', 'openPromptLibrary']) {
     assert.match(html, new RegExp(`data-action="${action}"`));
   }
-  assert.match(html, /Change \/ Unlink Project: fixture/);
+  assert.match(html, /data-action="chooseTicketProject" data-ticket="JIRA-123">Change project<\/button>/);
   for (const forbidden of [
     'startWork',
     'dispatch',
@@ -3629,11 +3645,16 @@ test('ticket workspace exposes explicit Claude launch, project branch, terminal 
   ]) {
     assert.doesNotMatch(html, new RegExp(forbidden, 'i'));
   }
-  assert.match(html, /Terminal-first ticket workspace/);
-  assert.ok(html.indexOf('Project: fixture') < html.indexOf('Start Claude for Ticket'));
+  assert.doesNotMatch(html, /Terminal-first ticket workspace/);
+  assert.ok(html.indexOf('>Start Claude</button>') < html.indexOf('>Connect focused terminal</button>'));
+  assert.match(html, />Jira ticket<[^]*>Merge request[^<]*<[^]*>Build &amp; quality<[^]*>Team prompt/);
+  assert.match(html, />Local project<\/span><strong>fixture<\/strong>/);
+  assert.match(html, />Review<\/span><strong>Pending review<\/strong>/);
+  assert.doesNotMatch(html, />Source<\/span><strong>jira<\/strong>|pending_review|>0 artifacts</);
+  assert.match(html, />Project<\/span><strong>fixture<\/strong>/);
   assert.match(html, /feature\/terminal-first-context/);
   assert.match(html, /\/workspace\/fixture/);
-  assert.match(html, /Automatic Provider Monitoring/);
+  assert.match(html, /Provider updates/);
   assert.match(html, /GitLab/);
   assert.match(html, /Jenkins/);
   assert.match(html, /SonarQube/);
@@ -3666,10 +3687,14 @@ test('ticket workspace exposes explicit Claude launch, project branch, terminal 
       monitoring: { enabled: true },
     },
   });
-  assert.match(locallyConnected, /Insert \[MR-88\]/);
+  assert.match(locallyConnected, />Merge request !88<\/button>/);
   assert.match(locallyConnected, /Merge Request !88/);
-  assert.match(locallyConnected, /pending_review/);
-  assert.match(locallyConnected, /Open MR/);
+  assert.match(locallyConnected, />Review<\/span><strong>Pending review<\/strong>/);
+  assert.doesNotMatch(locallyConnected, /pending_review/);
+  assert.match(locallyConnected, /Open merge request/);
+  assert.match(locallyConnected, /<summary>Connected sources <span class="workspace-detail-count">1<\/span><\/summary>/);
+  assert.match(locallyConnected, /<strong>GitLab<\/strong> · Merge request !88/);
+  assert.doesNotMatch(locallyConnected, /Provider Bindings|content-addressed artifact/);
 });
 
 test('ticket workspace messages retain only the allowed command and ticket', () => {
@@ -3686,7 +3711,7 @@ test('ticket workspace messages retain only the allowed command and ticket', () 
   assert.equal(normalizeActionPanelMessage({ command: 'insertJiraContext', ticket: '__proto__' }, new Set(['insertJiraContext'])), null);
 });
 
-test('Setup and Doctor render bounded operation dashboards with allowlisted actions', () => {
+test('Setup and Check Setup render bounded operation dashboards with allowlisted actions', () => {
   const runtime = {
     platformLabel: 'Windows',
     privateStatePath: 'C:\\fixture\\<kronos>',
@@ -3711,14 +3736,14 @@ test('Setup and Doctor render bounded operation dashboards with allowlisted acti
     nonce: 'setup-nonce',
     actionScriptUri: 'vscode-webview://fixture/kronos-action-panel.js',
   });
-  assert.match(setup, /Kronos Setup/);
+  assert.match(setup, /<h1 class="kronos-title">Setup<\/h1>/);
   assert.match(setup, /data-action="openDoctor"/);
   assert.match(setup, /data-action="openClaudeSettings"/);
   assert.match(setup, /Healthy provider status/);
-  assert.doesNotMatch(setup, /Review Private Config/);
+  assert.doesNotMatch(setup, /Open Provider Config/);
   assert.match(setup, /Claude &lt;terminal&gt;/);
   assert.match(setup, /C:\\fixture\\&lt;kronos&gt;\\\.env/);
-  assert.match(setup, /Runtime paths and reload behavior/);
+  assert.match(setup, /Advanced paths and reloads/);
   assert.match(setup, /Developer: Reload Window/);
   assert.match(setup, /\$env:KRONOS_DIR/);
   assert.doesNotMatch(setup, /Advanced VS Code Settings/);
@@ -3732,21 +3757,21 @@ test('Setup and Doctor render bounded operation dashboards with allowlisted acti
         status: 'fail',
         detail: 'repair this',
         action: 'openProviderEnvironment',
-        actionLabel: 'Repair Private Config',
+        actionLabel: 'Fix Provider Config',
       },
       {
         name: 'Review check',
         status: 'warn',
         detail: 'optional configuration',
         action: 'pollProvidersNow',
-        actionLabel: 'Poll Now',
+        actionLabel: 'Check Now',
       },
     ],
     runtime,
     nonce: 'doctor-nonce',
     actionScriptUri: 'vscode-webview://fixture/kronos-action-panel.js',
   });
-  assert.match(doctor, /Kronos Doctor/);
+  assert.match(doctor, /<h1 class="kronos-title">Check setup<\/h1>/);
   assert.match(doctor, /<strong>1<\/strong><span>Ready<\/span>/);
   assert.match(doctor, /<strong>1<\/strong><span>Review<\/span>/);
   assert.match(doctor, /<strong>1<\/strong><span>Blocked<\/span>/);
@@ -3755,7 +3780,7 @@ test('Setup and Doctor render bounded operation dashboards with allowlisted acti
   assert.match(doctor, /data-action="openProviderEnvironment"/);
   assert.match(doctor, /data-action="pollProvidersNow"/);
   assert.match(doctor, /C:\\fixture\\&lt;kronos&gt;/);
-  assert.match(doctor, /Guided Setup/);
+  assert.match(doctor, /Open setup/);
   assert.doesNotMatch(doctor, /Advanced Settings/);
 
   assert.deepEqual(
@@ -3776,8 +3801,10 @@ test('Setup and Doctor render bounded operation dashboards with allowlisted acti
     nonce: 'composer-nonce',
     scriptUri: 'vscode-webview://fixture/kronos-context-composer.js',
   });
-  assert.match(composer, /Place in Terminal/);
+  assert.match(composer, /Add to terminal/);
   assert.match(composer, /Ctrl\+Enter/);
+  assert.match(composer, /What Claude should focus on/);
+  assert.match(composer, /Open source details/);
   assert.match(composer, /&lt;unsafe title&gt;/);
   assert.match(composer, /&lt;script&gt;not markup&lt;\/script&gt;/);
   assert.doesNotMatch(composer, /<script>not markup<\/script>/);
@@ -3793,12 +3820,12 @@ test('Setup and Doctor render bounded operation dashboards with allowlisted acti
     nonce: 'project-nonce',
     scriptUri: 'vscode-webview://fixture/kronos-project-integration.js',
   });
-  assert.match(projectSetup, /Project Integration Setup/);
+  assert.match(projectSetup, /Project integrations/);
   assert.match(projectSetup, /GitLab project ID or path/);
   assert.match(projectSetup, /SonarQube project key/);
   assert.match(projectSetup, /Customer &lt;API&gt;/);
-  assert.match(projectSetup, /Stable project: App &lt;one&gt;/);
-  assert.match(projectSetup, /Project nickname \(optional\)/);
+  assert.match(projectSetup, /Project ID: App &lt;one&gt;/);
+  assert.match(projectSetup, /Display name \(optional\)/);
   assert.deepEqual(normalizeProjectIntegrationMessage({
     command: 'save',
     projects: [{
@@ -3926,7 +3953,7 @@ test('project Git evidence reads only the bounded VS Code Git model', async () =
   }
 });
 
-test('extension activation registers the bounded surface and explicit launch commands create the right session kinds', async () => {
+test('extension activation registers the bounded surface and explicit launch commands create the right session kinds', async t => {
   const Module = require('node:module');
   const originalLoad = Module._load;
   const registeredViews = [];
@@ -3955,11 +3982,13 @@ test('extension activation registers the bounded surface and explicit launch com
   let lastWarningMessage;
   const warningMessages = [];
   const warningMessageCalls = [];
+  const informationMessages = [];
   const errorMessages = [];
   let failNextTerminalCreation = false;
   let deferNextProcessId = false;
   let resolveDeferredProcessId;
   let closeTerminalHandler;
+  let configurationChangeHandler;
   class EventEmitter {
     constructor() {
       this.listeners = [];
@@ -4004,7 +4033,7 @@ test('extension activation registers the bounded surface and explicit launch com
         warningMessageResult = undefined;
         return Promise.resolve(result);
       },
-      showInformationMessage() { return Promise.resolve(undefined); },
+      showInformationMessage(message) { informationMessages.push(message); return Promise.resolve(undefined); },
       showErrorMessage(message) { errorMessages.push(message); return Promise.resolve(undefined); },
       showTextDocument(document, options) {
         shownTextDocuments.push({ document, options });
@@ -4097,7 +4126,7 @@ test('extension activation registers the bounded surface and explicit launch com
           },
         };
       },
-      onDidChangeConfiguration() { return disposable(); },
+      onDidChangeConfiguration(handler) { configurationChangeHandler = handler; return disposable(); },
       openTextDocument(options) {
         const document = { ...options };
         openedTextDocuments.push(document);
@@ -4199,7 +4228,7 @@ test('extension activation registers the bounded surface and explicit launch com
     assert.deepEqual(registeredCommands, expectedCommands);
     assert.equal(
       manifest.contributes.commands.find(command => command.command === 'kronos.settings').title,
-      'Kronos: Guided Settings',
+      'Kronos: Settings',
     );
     const sessionItems = await registeredTreeProviders.get('kronosSessions').getChildren();
     assert.equal(sessionItems.some(item => item.label === 'Projects'), false, 'Sessions must not contain a nested Projects section');
@@ -4208,22 +4237,20 @@ test('extension activation registers the bounded surface and explicit launch com
     assert.equal(projectItems[0].label, 'fixture');
     assert.equal(projectItems[0].projectName, 'fixture');
     assert.equal(projectItems[0].projectPath, tempRoot);
-    assert.equal(projectItems[0].description, 'feature/runtime-project • 1 change • poll idle');
+    assert.equal(projectItems[0].description, 'feature/runtime-project • 1 change');
     assert.equal(projectItems[0].contextValue, 'registered_project');
-    assert.match(projectItems[0].tooltip, /Git status: 1 total, 0 staged, 1 modified/);
-    assert.match(projectItems[0].tooltip, /Last meaningful provider change: never/);
-    assert.match(projectItems[0].tooltip, /Suppressed unchanged polls since last change: 0/);
+    assert.match(projectItems[0].tooltip, /Changes: 1 total, 0 staged, 1 modified/);
+    assert.match(projectItems[0].tooltip, /Last provider change: Never/);
+    assert.doesNotMatch(projectItems[0].tooltip, /Stable identity|normalized error|Suppressed unchanged|Git source:/i);
     const projectActions = await registeredTreeProviders.get('kronosProjects').getChildren(projectItems[0]);
     assert.deepEqual(projectActions.map(item => item.label), [
-      'Start Claude in project',
-      'View Git status and diff',
-      'Insert working diff in context',
-      'Open merge request page',
-      'Insert MR evidence',
-      'Insert Jenkins / Sonar evidence',
-      'Open team prompt library',
-      'Configure provider polling',
-      'Set project nickname',
+      'Start Claude',
+      'Review changes',
+      'Open merge request',
+      'Review merge request',
+      'Review build & quality',
+      'Configure integrations',
+      'Rename project',
     ]);
     const panelsBeforeUnmanagedProjectContext = createdWebviewPanels.length;
     await commandHandlers.get('kronos.insertProjectGitContext')({ projectName: 'fixture', projectPath: tempRoot });
@@ -4231,7 +4258,7 @@ test('extension activation registers the bounded surface and explicit launch com
     await commandHandlers.get('kronos.insertProjectGitLabContext')({
       target: { projectName: 'fixture', projectPath: path.join(tempRoot, 'stale-tree-path') },
     });
-    assert.match(lastWarningMessage, /start a Claude session.*before inserting MR evidence.*No Jira ticket is required/i);
+    assert.match(lastWarningMessage, /start a Claude session.*before inserting merge request context.*No Jira ticket is required/i);
     await commandHandlers.get('kronos.insertProjectCiContext')({ projectName: 'fixture', projectPath: tempRoot });
     assert.match(lastWarningMessage, /start a Claude session.*before inserting Jenkins.*No Jira ticket is required/i);
     assert.equal(
@@ -4262,6 +4289,149 @@ test('extension activation registers the bounded surface and explicit launch com
     workProvider.setFilter({ completion: 'completed' });
     await commandHandlers.get('kronos.clearWorkFilter')();
     assert.deepEqual(workProvider.getFilter(), {});
+
+    await t.test('registered Work filtering routes every operator-visible facet into one composed filter', async () => {
+      const chooseNestedFilter = async (filterId, chooseValue) => {
+        singlePickHandler = items => {
+          singlePickHandler = nestedItems => {
+            const value = chooseValue(nestedItems);
+            assert.ok(value, `${filterId} nested choice must exist`);
+            return value;
+          };
+          return items.find(item => item.id === filterId);
+        };
+        await commandHandlers.get('kronos.filterWork')();
+      };
+
+      workProvider.setFilter({ query: 'unchanged' });
+      singlePickHandler = items => {
+        assert.deepEqual(items.map(item => item.label), [
+          '$(search) Search',
+          '$(issue-opened) Work state',
+          '$(list-filter) Jira status',
+          '$(issues) Jira project',
+          '$(repo) Local project',
+          '$(tag) Label',
+          '$(clear-all) Clear all filters',
+        ]);
+        assert.deepEqual(items.map(item => item.description), [
+          'unchanged',
+          'Active',
+          'Any active status',
+          'All Jira projects',
+          'All local projects',
+          'All labels',
+          'Show the default Work view',
+        ]);
+        return undefined;
+      };
+      await commandHandlers.get('kronos.filterWork')();
+      assert.deepEqual(workProvider.getFilter(), { query: 'unchanged' }, 'canceling the first picker preserves filters');
+
+      inputBoxResult = 'provider evidence';
+      singlePickHandler = items => items.find(item => item.id === 'query');
+      await commandHandlers.get('kronos.filterWork')();
+      assert.deepEqual(workProvider.getFilter(), { query: 'provider evidence' });
+
+      await chooseNestedFilter('completion', items => items.find(item => item.value === 'completed'));
+      assert.deepEqual(workProvider.getFilter(), { query: 'provider evidence', completion: 'completed' });
+
+      await chooseNestedFilter('status', items => items.find(item => item.value === 'In Progress'));
+      assert.deepEqual(workProvider.getFilter(), {
+        query: 'provider evidence',
+        completion: 'all',
+        jiraStatus: 'In Progress',
+      });
+      await chooseNestedFilter('status', items => items.find(item => item.value === ''));
+      assert.deepEqual(workProvider.getFilter(), { query: 'provider evidence', completion: 'active' });
+
+      await chooseNestedFilter('jiraProject', items => items.find(item => item.value === 'JIRA'));
+      assert.deepEqual(workProvider.getFilter(), {
+        query: 'provider evidence',
+        completion: 'active',
+        jiraProject: 'JIRA',
+      });
+      await chooseNestedFilter('jiraProject', items => items.find(item => item.value === ''));
+      assert.deepEqual(workProvider.getFilter(), { query: 'provider evidence', completion: 'active' });
+
+      await chooseNestedFilter('localProject', items => items.find(item => item.value === 'fixture'));
+      assert.deepEqual(workProvider.getFilter(), {
+        query: 'provider evidence',
+        completion: 'active',
+        localProject: 'fixture',
+      });
+      await chooseNestedFilter('localProject', items => items.find(item => item.value === ''));
+      assert.deepEqual(workProvider.getFilter(), { query: 'provider evidence', completion: 'active' });
+
+      await chooseNestedFilter('label', items => items.find(item => item.value === 'terminal-first'));
+      assert.deepEqual(workProvider.getFilter(), {
+        query: 'provider evidence',
+        completion: 'active',
+        label: 'terminal-first',
+      });
+      await chooseNestedFilter('label', items => items.find(item => item.value === ''));
+      assert.deepEqual(workProvider.getFilter(), { query: 'provider evidence', completion: 'active' });
+
+      singlePickHandler = items => {
+        singlePickHandler = () => undefined;
+        return items.find(item => item.id === 'localProject');
+      };
+      await commandHandlers.get('kronos.filterWork')();
+      assert.deepEqual(
+        workProvider.getFilter(),
+        { query: 'provider evidence', completion: 'active' },
+        'canceling a nested picker preserves the composed filter',
+      );
+      await commandHandlers.get('kronos.clearWorkFilter')();
+      assert.deepEqual(workProvider.getFilter(), {});
+    });
+
+    await t.test('runtime configuration changes restart polling and rerender Work settings', () => {
+      assert.equal(typeof configurationChangeHandler, 'function');
+      const changes = [];
+      const changeDisposable = workProvider.onDidChangeTreeData(value => changes.push(value));
+      const checkedKeys = [];
+      configurationValues.set('refreshIntervalSec', 17.9);
+      configurationValues.set('managedProviderPollIntervalSec', 18.9);
+      configurationValues.set('hideCompletedJiraWork', false);
+      configurationValues.set('completedJiraStatuses', [' Done ', 'DONE', 7, '']);
+      configurationChangeHandler({
+        affectsConfiguration(key) {
+          checkedKeys.push(key);
+          return new Set([
+            'kronos.refreshIntervalSec',
+            'kronos.managedProviderPollIntervalSec',
+            'kronos.hideCompletedJiraWork',
+            'kronos.completedJiraStatuses',
+            'kronos',
+          ]).has(key);
+        },
+      });
+      assert.deepEqual(checkedKeys, [
+        'kronos.refreshIntervalSec',
+        'kronos.hideCompletedJiraWork',
+        'kronos',
+      ], 'short-circuit checks still route each affected setting group once');
+      assert.ok(changes.length > 0, 'Work refreshes when visibility settings change');
+      assert.match(jiraBoardPanel.webview.html, /Jira Work Board/);
+
+      configurationValues.set('completedJiraStatuses', 'invalid-provider-value');
+      assert.doesNotThrow(() => configurationChangeHandler({
+        affectsConfiguration: key => key === 'kronos.completedJiraStatuses',
+      }), 'malformed configuration falls back without breaking the active Work view');
+      assert.doesNotThrow(() => configurationChangeHandler({
+        affectsConfiguration: key => key === 'kronos.managedProviderPollIntervalSec',
+      }), 'provider-only interval changes restart the timers independently');
+      changeDisposable.dispose();
+      for (const key of [
+        'refreshIntervalSec',
+        'managedProviderPollIntervalSec',
+        'hideCompletedJiraWork',
+        'completedJiraStatuses',
+      ]) {
+        configurationValues.delete(key);
+      }
+    });
 
     const failureSession = workSessions.createOrGetWorkSessionByTicket({
       ticketKey: 'JIRA-654',
@@ -4322,7 +4492,7 @@ test('extension activation registers the bounded surface and explicit launch com
     );
     assert.equal(retainedFailureItems[0].iconPath.id, 'server-process');
     assert.equal(retainedFailureItems[0].iconPath.color.id, 'charts.yellow');
-    assert.match(retainedFailureItems[0].description, /Jenkins.*partial/);
+    assert.match(retainedFailureItems[0].description, /Jenkins.*Incomplete/);
     assert.deepEqual(
       retainedFailureItems[0].providerChoices.map(choice => choice.label),
       ['Jenkins build 32', 'Jenkins build 31'],
@@ -4504,17 +4674,17 @@ test('extension activation registers the bounded surface and explicit launch com
     await commandHandlers.get('kronos.renameLocalProject')({
       target: { projectName: 'fixture', projectPath: path.join(tempRoot, 'stale-tree-path') },
     });
-    assert.match(lastInputBoxOptions.prompt, /Optional display name only/);
+    assert.match(lastInputBoxOptions.prompt, /Optional display name.*project folder stay unchanged/);
     assert.equal(stateStore.readStateFileWithIssues().state.projects.fixture.display_name, 'Fixture API');
     const attentionGroup = attentionProvider.getChildren().find(item => item.label === 'Fixture API');
     assert.equal(attentionGroup.label, 'Fixture API', 'Attention uses the project nickname for presentation');
     assert.equal(attentionGroup.projectName, 'fixture');
-    assert.match(attentionGroup.tooltip, /Stable project identity: fixture/);
-    assert.match(attentionGroup.tooltip, /Jira contexts are optional row-level actions and never define an Attention group/);
+    assert.doesNotMatch(attentionGroup.tooltip, /Stable project identity|work session|provider transition/i);
+    assert.match(attentionGroup.tooltip, /2 current items/);
     const namedSessionItem = (await registeredTreeProviders.get('kronosSessions').getChildren())
       .find(item => item.workSessionId === attentionSession.id);
     assert.match(namedSessionItem.label, /^Fixture API:/, 'Sessions use the current nickname without rewriting session identity');
-    assert.match(namedSessionItem.tooltip, /Stable project identity: fixture/);
+    assert.doesNotMatch(namedSessionItem.tooltip, /Stable project identity|^Work session:|^(?:Management|Terminal|Monitoring) lifecycle:/im);
     const groupedProjectItems = attentionProvider.getChildren(attentionGroup);
     assert.equal(groupedProjectItems.length, 2, 'provider transitions from separate sessions share one project group');
     const attentionItem = groupedProjectItems.find(item => item.eventId === 'attention-branch-picker-event');
@@ -4522,8 +4692,10 @@ test('extension activation registers the bounded surface and explicit launch com
     assert.equal(attentionItem.contextValue, 'attention_provider_project_ticket_ci');
     assert.equal(attentionItem.iconPath.id, 'shield');
     assert.equal(attentionItem.iconPath.color.id, 'charts.red');
-    assert.match(attentionItem.description, /fixture • SonarQube • Quality gate feature\/one • failure • observed .* • changed /);
-    assert.match(attentionItem.tooltip, /Why attention: JIRA-321 SonarQube quality gate failed for feature\/one\./);
+    assert.match(attentionItem.description, /SonarQube • Failed • /);
+    assert.doesNotMatch(attentionItem.description, /fixture|Quality gate|observed|changed/i);
+    assert.match(attentionItem.tooltip, /JIRA-321 SonarQube quality gate failed for feature\/one\./);
+    assert.doesNotMatch(attentionItem.tooltip, /Event:|Work session:|Transition:|Provider URL:/);
     singlePickHandler = items => items.find(item => item.label === 'feature/two');
     await commandHandlers.get('kronos.openProvider')(attentionItem);
     assert.deepEqual(lastSinglePickItems.map(item => item.label), ['feature/two', 'feature/one']);
@@ -4537,7 +4709,7 @@ test('extension activation registers the bounded surface and explicit launch com
     assert.equal(missingUrlItem.contextValue, 'attention_repair_project_ticket_gitlab');
     assert.equal(missingUrlItem.iconPath.id, 'git-pull-request');
     assert.equal(missingUrlItem.iconPath.color.id, 'charts.green');
-    assert.match(missingUrlItem.description, /GitLab.*information/);
+    assert.match(missingUrlItem.description, /GitLab.*Update/);
     assert.equal(missingUrlItem.command.command, 'kronos.configureProjectIntegrations');
     assert.equal(missingUrlItem.command.arguments[0].projectName, 'fixture');
     await commandHandlers.get(missingUrlItem.command.command)(missingUrlItem.command.arguments[0]);
@@ -4548,10 +4720,10 @@ test('extension activation registers the bounded surface and explicit launch com
     await commandHandlers.get('kronos.setup')();
     const setupPanel = createdWebviewPanels.find(panel => panel.viewType === 'kronosSetup');
     assert.ok(setupPanel);
-    assert.match(setupPanel.webview.html, /Kronos Setup/);
+    assert.match(setupPanel.webview.html, /<h1 class="kronos-title">Setup<\/h1>/);
     assert.match(setupPanel.webview.html, /Choose Folders/);
-    assert.match(setupPanel.webview.html, /Private provider environment guide/);
-    assert.match(setupPanel.webview.html, /1 registered project polling owner and 0 legacy ticket fallbacks/);
+    assert.match(setupPanel.webview.html, /Provider setup details/);
+    assert.match(setupPanel.webview.html, /1 registered project checked automatically\. Sources: GitLab 1, Jenkins 0, SonarQube 1/);
     assert.doesNotMatch(setupPanel.webview.html, /polling starts after.*explicit Jira context/i);
     await commandHandlers.get('kronos.setup')();
     assert.equal(createdWebviewPanels.filter(panel => panel.viewType === 'kronosSetup').length, 1);
@@ -4559,8 +4731,8 @@ test('extension activation registers the bounded surface and explicit launch com
     await setupPanel.receive({ command: 'openDoctor' });
     const doctorPanel = createdWebviewPanels.find(panel => panel.viewType === 'kronosDoctor');
     assert.ok(doctorPanel);
-    assert.match(doctorPanel.webview.html, /Kronos Doctor/);
-    assert.match(doctorPanel.webview.html, /Claude launch settings/);
+    assert.match(doctorPanel.webview.html, /<h1 class="kronos-title">Check setup<\/h1>/);
+    assert.match(doctorPanel.webview.html, /Claude settings/);
     assert.doesNotMatch(doctorPanel.webview.html, />Choose Folders<\/button>/);
     await commandHandlers.get('kronos.doctor')();
     assert.equal(createdWebviewPanels.filter(panel => panel.viewType === 'kronosDoctor').length, 1);
@@ -4577,7 +4749,7 @@ test('extension activation registers the bounded surface and explicit launch com
     assert.equal(shownTextDocuments.at(-1).document.fsPath, providerEnvPath);
     assert.ok(fs.existsSync(providerEnvPath));
     assert.ok(warningMessages.some(message =>
-      /must reload the VS Code window so the extension host picks them up/i.test(message)
+      /reload the VS Code window so the extension host picks them up/i.test(message)
     ));
     const setupRevealCount = setupPanel.revealCalls.length;
     await commandHandlers.get('kronos.settings')();
@@ -4899,12 +5071,12 @@ test('extension activation registers the bounded surface and explicit launch com
     vscode.window.activeTerminal = createdTerminals[1].terminal;
     await commandHandlers.get('kronos.openWorkSessionAudit')({ workSessionId: ticketSession.id });
     assert.match(openedTextDocuments.at(-1).content, /JIRA\\-123/);
-    assert.match(openedTextDocuments.at(-1).content, /does not collect operator terminal input or output/);
+    assert.match(openedTextDocuments.at(-1).content, /never reads terminal input or output/);
     await commandHandlers.get('kronos.insertJiraContext')({ ticketKey: 'JIRA-123' });
     const composerPanel = createdWebviewPanels.find(panel => panel.viewType === 'kronosContextComposer');
     assert.ok(composerPanel, 'Jira insertion must open the editable context composer');
-    assert.match(composerPanel.webview.html, /Fetched details and comments/);
-    assert.match(composerPanel.webview.html, /Place in Terminal/);
+    assert.match(composerPanel.webview.html, /Source preview/);
+    assert.match(composerPanel.webview.html, /Add to terminal/);
     assert.equal(createdTerminals[1].actions.length, 2, 'opening the composer must not write to the terminal');
     const errorsBeforeJiraBasketAdd = errorMessages.length;
     await composerPanel.receive({ command: 'addToBasket' });
@@ -5054,7 +5226,7 @@ test('extension activation registers the bounded surface and explicit launch com
         'a terminal detached during context fetch must cancel the stale composer',
       );
       assert.equal(racedTerminalRecord.actions.length, writesBeforeFetchRace);
-      assert.ok(warningMessages.some(message => /changed while context evidence was being fetched/i.test(message)));
+      assert.ok(warningMessages.some(message => /connected terminal changed while context was loading/i.test(message)));
     } finally {
       jiraRestModule.jiraRestClient.ticketContext = originalProviderMethods.jiraTicketContext;
       if (previousJiraContextEnv.baseUrl === undefined) { delete process.env.JIRA_BASE_URL; }
@@ -5254,6 +5426,18 @@ test('extension activation registers the bounded surface and explicit launch com
       .find(panel => panel.viewType === 'kronosContextComposer');
     assert.ok(providerComposer, 'direct MR insertion must open an editable context composer');
     assert.match(providerComposer.webview.html, /Provider command fixture MR/);
+    await t.test('context composer accepts only bounded messages and opens only its retained artifact', async () => {
+      const warningCount = warningMessages.length;
+      await providerComposer.receive({ command: '__kronosWebviewReady' });
+      assert.equal(warningMessages.length, warningCount, 'the shared ready handshake is inert');
+      await providerComposer.receive({ command: 'executeProviderCommand', focus: 'unsafe' });
+      assert.match(warningMessages.at(-1), /ignored an invalid context-composer request/i);
+      const shownCount = shownTextDocuments.length;
+      await providerComposer.receive({ command: 'openArtifact' });
+      assert.equal(shownTextDocuments.length, shownCount + 1);
+      assert.match(shownTextDocuments.at(-1).document.fsPath, /gitlab-context[/\\]JIRA-123[/\\]MR-88/);
+      assert.equal(shownTextDocuments.at(-1).options.preview, true);
+    });
     const errorsBeforeGitLabBasketAdd = errorMessages.length;
     await providerComposer.receive({ command: 'addToBasket' });
     assert.deepEqual(errorMessages.slice(errorsBeforeGitLabBasketAdd), [], 'fresh GitLab prompt evidence must pass basket integrity validation');
@@ -5327,9 +5511,9 @@ test('extension activation registers the bounded surface and explicit launch com
     const basketPanel = createdWebviewPanels.slice(basketPanelStart)
       .find(panel => panel.viewType === 'kronosContextBasket');
     assert.ok(basketPanel, 'the Context Basket command must open its interactive webview');
-    assert.match(basketPanel.webview.html, /Context Basket/);
+    assert.match(basketPanel.webview.html, /Context basket/);
     assert.match(basketPanel.webview.html, /Jira context/);
-    assert.match(basketPanel.webview.html, /GitLab MR and pipeline context/);
+    assert.match(basketPanel.webview.html, /GitLab merge request and pipeline context/);
     assert.match(basketPanel.webview.html, /Jenkins and SonarQube context/);
     await commandHandlers.get('kronos.openContextBasket')();
     assert.equal(
@@ -5338,6 +5522,22 @@ test('extension activation registers the bounded surface and explicit launch com
       'reopening the Context Basket must reveal the existing panel instead of duplicating it',
     );
     assert.deepEqual(basketPanel.revealCalls, [vscode.ViewColumn.One]);
+    await t.test('Context Basket webview rejects unbounded requests and retains sources on canceled actions', async () => {
+      const warningCount = warningMessages.length;
+      await basketPanel.receive({ command: '__kronosWebviewReady' });
+      assert.equal(warningMessages.length, warningCount, 'the shared ready handshake is inert');
+      await basketPanel.receive({ command: 'remove', entryId: '../outside', focus: '' });
+      assert.match(warningMessages.at(-1), /ignored an invalid Context Basket request/i);
+
+      const itemCount = contextBasketStore.listContextBasketItems().length;
+      await basketPanel.receive({ command: 'remove', entryId: 'missing-entry', focus: 'retain focus' });
+      assert.match(warningMessages.at(-1), /no longer selected/i);
+      assert.equal(contextBasketStore.listContextBasketItems().length, itemCount);
+
+      warningMessageResult = undefined;
+      await basketPanel.receive({ command: 'clear', focus: 'keep selected sources' });
+      assert.equal(contextBasketStore.listContextBasketItems().length, itemCount, 'canceling clear retains every source');
+    });
     const basketWritesBefore = reconnectedActions.length;
     singlePickHandler = items => items.find(item => item.session?.id === ticketSession.id);
     await basketPanel.receive({ command: 'insert', focus: 'Compare the selected Jira, MR, CI, and Git evidence.' });
@@ -5391,7 +5591,7 @@ test('extension activation registers the bounded surface and explicit launch com
 
     const shownBeforeHandoff = shownTextDocuments.length;
     multiPickHandler = items => items.slice(0, 2);
-    inputBoxHandler = options => options.title === 'Local Handoff Title'
+    inputBoxHandler = options => options.title === 'Handoff title'
       ? 'JIRA-123 review handoff'
       : 'Confirm the newest MR and CI evidence before changing code.';
     await commandHandlers.get('kronos.createLocalHandoff')({ workSessionId: ticketSession.id });
@@ -5404,7 +5604,7 @@ test('extension activation registers the bounded surface and explicit launch com
     assert.match(handoffMarkdown, /JIRA\\-123 review handoff/);
     assert.match(handoffMarkdown, /Confirm the newest MR and CI evidence before changing code\./);
     assert.match(handoffMarkdown, /does not post to Jira, GitLab, Jenkins, or SonarQube/);
-    basketPanel.dispose();
+    await basketPanel.receive({ command: 'close' });
 
     await commandHandlers.get('kronos.pollManagedWorkSessions')();
     const manuallyPolledSession = workSessions.getWorkSessionByTicket('JIRA-123');
@@ -5436,7 +5636,11 @@ test('extension activation registers the bounded surface and explicit launch com
     assert.equal(workSessions.getWorkSessionByTicket('JIRA-123').terminals.at(-1).status, 'attached');
     assert.equal(reconnectedActions.length, reconnectActionsBeforeDetach, 'reattaching must not write to the terminal');
 
-    warningMessageResult = 'Stop Managing';
+    await commandHandlers.get('kronos.removeWorkSession')({ workSessionId: ticketSession.id });
+    assert.ok(workSessions.getWorkSessionByTicket('JIRA-123'), 'an active Session cannot be removed from the command palette');
+    assert.match(informationMessages.at(-1), /Stop tracking .* before removing it from Kronos/);
+
+    warningMessageResult = 'Stop Tracking';
     await commandHandlers.get('kronos.closeWorkSession')({ workSessionId: racedSession.id });
     assert.equal(workSessions.getWorkSessionByTicket('JIRA-456').status, 'closed');
     assert.ok(createdTerminals.some(item => item.terminal.name.includes('JIRA-456')), 'stopping management leaves its terminal object intact');
@@ -5445,7 +5649,7 @@ test('extension activation registers the bounded surface and explicit launch com
     await commandHandlers.get('kronos.startClaudeForTicket')({ ticketKey: 'JIRA-999' });
     const failedSession = workSessions.getWorkSessionByTicket('JIRA-999');
     assert.equal(failedSession.status, 'closed', 'a new session must be compensated when launch fails before submission');
-    warningMessageResult = 'Remove Session';
+    warningMessageResult = 'Remove from Kronos';
     await commandHandlers.get('kronos.removeWorkSession')({ workSessionId: failedSession.id });
     assert.equal(workSessions.getWorkSessionByTicket('JIRA-999'), null, 'removing an old session deletes its local session record');
 
@@ -5507,8 +5711,8 @@ test('extension activation registers the bounded surface and explicit launch com
       });
       await partialRefresh;
       const partialWorkItems = workProvider.getChildren();
-      assert.equal(partialWorkItems[0].label, 'Partial Jira result');
-      assert.match(partialWorkItems[0].description, /4 prior tickets were retained/);
+      assert.equal(partialWorkItems[0].label, 'Jira refresh incomplete');
+      assert.match(partialWorkItems[0].description, /4 earlier tickets remain visible/);
       assert.equal(partialWorkItems.filter(item => item.ticketKey).length, 5);
       assert.match(jiraBoardPanel.webview.html, /data-work-data-state="partial"/);
 

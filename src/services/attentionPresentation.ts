@@ -151,14 +151,22 @@ export function attentionEventPresentation(
     changedAt,
     why: headline,
     description: [
-      project,
       provider,
-      subject,
-      severity,
-      `observed ${displayAttentionTimestamp(observedAt)}`,
-      `changed ${displayAttentionTimestamp(changedAt)}`,
+      attentionSeverityLabel(severity),
+      displayAttentionTimestamp(changedAt),
     ].join(' • '),
   };
+}
+
+export function attentionSeverityLabel(severity: AttentionSeverity): string {
+  return {
+    information: 'Update',
+    warning: 'Needs review',
+    failure: 'Failed',
+    recovery: 'Recovered',
+    partial: 'Incomplete',
+    blocked: 'Blocked',
+  }[severity];
 }
 
 /** Converts internal transition vocabulary into the delivery impact an operator cares about. */

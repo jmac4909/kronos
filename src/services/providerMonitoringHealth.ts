@@ -60,10 +60,13 @@ export function projectProviderMonitoringHealth(
 }
 
 export function providerMonitoringHealthSummary(health: ProviderMonitoringHealth): string {
-  const quiet = health.suppressedUnchangedCount > 0
-    ? ` • quiet ${health.suppressedUnchangedCount}`
-    : '';
-  return `poll ${health.state}${quiet}`;
+  return {
+    healthy: 'Up to date',
+    partial: 'Needs review',
+    blocked: 'Blocked',
+    idle: 'Waiting for first check',
+    paused: 'Paused',
+  }[health.state];
 }
 
 function nextPollAt(lastAttemptAt: string | undefined, pollIntervalMs: number): string | undefined {

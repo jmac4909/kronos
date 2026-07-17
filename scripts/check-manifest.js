@@ -161,10 +161,13 @@ function checkIdentity() {
     fail('displayName must be exactly "Kronos — Terminal Work Companion".');
   }
   const description = String(manifest.description || '');
-  for (const term of ['terminal-first', 'reads', 'inserts', 'monitors', 'audits']) {
-    if (!description.toLowerCase().includes(term)) {
-      fail(`description must identify the product as terminal-first and say that it ${term}.`);
+  for (const term of ['Jira work', 'Claude terminals', 'project changes', 'merge requests', 'builds', 'quality checks']) {
+    if (!description.toLowerCase().includes(term.toLowerCase())) {
+      fail(`description must explain the ${term} product surface.`);
     }
+  }
+  if (!/never submit terminal input automatically/i.test(description)) {
+    fail('description must explain that actions never submit terminal input automatically.');
   }
 }
 
@@ -237,6 +240,14 @@ function checkSettings() {
   const properties = configuration.properties;
   const settingIds = properties && typeof properties === 'object' ? Object.keys(properties) : [];
   checkExactOrderedValues('configuration settings', settingIds, EXPECTED_SETTINGS);
+  const settingsCopy = settingIds.flatMap(id => {
+    const setting = properties?.[id];
+    return [setting?.description, ...(Array.isArray(setting?.enumDescriptions) ? setting.enumDescriptions : [])]
+      .filter(value => typeof value === 'string');
+  }).join('\n');
+  if (/\bbounded\b|schemaVersion|live polling|permission-policy|monitored work session|manifest files?/i.test(settingsCopy)) {
+    fail('configuration descriptions must use concise product language instead of internal implementation terms.');
+  }
 
   for (const id of EXPECTED_SETTINGS.slice(0, 2)) {
     const setting = properties?.[id];
@@ -349,10 +360,11 @@ function checkWorkspaceTrustBoundary() {
   }
   const description = String(untrusted?.description || '');
   const requiredClaims = [
-    [/reads provider context/i, 'reads provider context'],
-    [/non-submitting references/i, 'inserts only non-submitting references'],
-    [/Claude launch is disabled in untrusted workspaces/i, 'disables Claude launch in untrusted workspaces'],
-    [/never .*executes workspace code|never .*runs project commands/i, 'never executes workspace or project commands'],
+    [/read configured provider data/i, 'reads configured provider data'],
+    [/save local context/i, 'saves local context'],
+    [/requires an explicit action and never presses Enter/i, 'adds context only after an explicit action and never presses Enter'],
+    [/(?:Claude launch is disabled in untrusted workspaces|In untrusted workspaces, Claude launch is disabled)/i, 'disables Claude launch in untrusted workspaces'],
+    [/never .*runs project commands/i, 'never runs project commands'],
     [/never .*changes Git/i, 'never changes Git'],
   ];
   for (const [pattern, claim] of requiredClaims) {

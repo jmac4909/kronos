@@ -62,7 +62,9 @@ test('provider readiness is shared, secret-free, and distinguishes missing from 
     SONAR_TOKEN: secret,
   });
   assert.deepEqual(Object.values(ready).map(item => item.state), ['ready', 'ready', 'ready', 'ready']);
+  assert.deepEqual(Object.values(ready).map(item => item.name), ['Jira', 'GitLab', 'Jenkins', 'SonarQube']);
   assert.doesNotMatch(JSON.stringify(ready), new RegExp(secret));
+  assert.doesNotMatch(JSON.stringify(ready), /\bREST\b|bounded|live polling/i);
   assert.match(ready.jira.detail, /Credential presence: present/);
 
   const invalid = providerReadiness.providerReadiness({
@@ -102,7 +104,7 @@ test('one readiness snapshot feeds Setup and Doctor and gives every non-ready ro
       status: 'fail',
       detail: 'The latest live read was refused because read permission is unavailable.',
       action: 'openProviderEnvironment',
-      actionLabel: 'Repair Private Config',
+      actionLabel: 'Fix Provider Config',
       problemCount: 1,
       observedAt: '2026-07-14T12:00:00.000Z',
     }],
@@ -153,7 +155,7 @@ test('one readiness snapshot feeds Setup and Doctor and gives every non-ready ro
       status: 'fail',
       detail: 'The latest live read was refused because read permission is unavailable.',
       action: 'openProviderEnvironment',
-      actionLabel: 'Repair Private Config',
+      actionLabel: 'Fix Provider Config',
       problemCount: 1,
       observedAt: '2026-07-14T12:00:00.000Z',
     }],
@@ -163,7 +165,7 @@ test('one readiness snapshot feeds Setup and Doctor and gives every non-ready ro
   const gitlab = liveFailureSnapshot.find(item => item.id === 'provider-gitlab');
   assert.equal(gitlab.status, 'fail');
   assert.equal(gitlab.action, 'openProviderEnvironment');
-  assert.match(gitlab.detail, /Current live result:.*read permission is unavailable/);
+  assert.match(gitlab.detail, /Latest check:.*read permission is unavailable/);
 });
 
 test('guided readiness distinguishes first-run, partial, fully ready, and live permission states', () => {
@@ -221,7 +223,7 @@ test('guided readiness distinguishes first-run, partial, fully ready, and live p
       status: 'fail',
       detail: 'Permission unavailable for the configured read endpoint.',
       action: 'openProviderEnvironment',
-      actionLabel: 'Repair Private Config',
+      actionLabel: 'Fix Provider Config',
       problemCount: 1,
     }],
   }));

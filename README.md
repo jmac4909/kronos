@@ -12,7 +12,7 @@
   <img alt="TypeScript strict" src="https://img.shields.io/badge/TypeScript-strict-3178C6">
   <img alt="VS Code 1.85 or newer" src="https://img.shields.io/badge/VS%20Code-%5E1.85-23A8F2">
   <img alt="Zero third-party runtime dependencies" src="https://img.shields.io/badge/runtime%20dependencies-0-22C55E">
-  <img alt="281 automated local tests" src="https://img.shields.io/badge/test%20suite-281%20local-22C55E">
+  <img alt="299 automated local tests" src="https://img.shields.io/badge/test%20suite-299%20local-22C55E">
   <img alt="Preview status" src="https://img.shields.io/badge/status-preview-F59E0B">
 </p>
 
@@ -40,12 +40,12 @@ Kronos solves a narrow enterprise-development problem: the evidence needed for a
 
 1. Register a local project and save whichever GitLab, Jenkins, or SonarQube targets it uses; project-owned polling begins immediately and continues on the configured interval.
 2. Optionally link a Jira ticket when you want ticket context or ticket-scoped provider projection.
-3. Attach a terminal you already own, choose **Start Claude in project** without Jira, or choose **Start Claude for Ticket**.
+3. Attach a terminal you already own, choose **Start Claude** on a project without Jira, or choose **Start Claude for Ticket**.
 4. Fetch bounded Jira, GitLab, Jenkins, or SonarQube evidence.
 5. Review the normalized evidence as untrusted data and edit the operator focus.
 6. Optionally open the **Team Prompt Library**, choose a shared workflow instruction, and edit its fully rendered text.
 7. Place one source or prompt immediately, or add several evidence sources to **Context Basket** and edit one combined focus.
-8. Choose **Place in Terminal**. Kronos inserts one reference with execution disabled.
+8. Choose **Add to terminal**. Kronos inserts one reference with execution disabled.
 9. Decide whether to press Enter yourself; later provider changes appear in project-level **Attention** and the private audit.
 
 ![Kronos two-step context review and post-insertion terminal sequence, using synthetic data](docs/assets/kronos-context-composer.png)
@@ -111,8 +111,8 @@ The installed extension uses the VS Code API and Node built-ins only. It has **z
 | Manifest-covered settings | 13 |
 | Reachable runtime modules checked for cycles/dead exports | 88 |
 | Third-party runtime dependencies | 0 |
-| Automated Node/DOM/board tests | 281 |
-| Built-in runtime coverage | 84.72% lines / 76.32% branches / 88.64% functions |
+| Automated Node/DOM/board tests | 299 |
+| Built-in runtime coverage | 86.42% lines / 77.45% branches / 89.57% functions |
 
 Automated gates also cover the runtime graph, security boundary, context governance, activation surface, provider transitions, private state, credential redaction, and packaged extension contents.
 
@@ -165,7 +165,7 @@ Kronos reads provider credentials from the extension process environment and, wh
 | Jenkins | `JENKINS_URL` | `JENKINS_USER` / `JENKINS_USERNAME`, `JENKINS_API_TOKEN` / `JENKINS_TOKEN`, narrowly scoped `JENKINS_TLS_REJECT_UNAUTHORIZED=false` for a locally trusted corporate endpoint |
 | SonarQube | `SONAR_HOST_URL` or `SONAR_URL`, `SONAR_TOKEN` | project and branch bindings configured per local project |
 
-Use **Kronos: Setup** for guided configuration and **Kronos: Doctor** for readiness checks. They share one readiness snapshot, expose one bounded action per row, and never display credential values. **Open Private Config** creates a private comment-only template when needed. After entering and saving values in a newly created or edited provider environment file, run **Developer: Reload Window** so the extension host loads them, then run Doctor again. Once a registered project has a GitLab ID/path, Jenkins URL, SonarQube key, or branch profile, it becomes the durable polling owner immediately—no Jira link and no terminal Session are required—and Setup/Doctor report that project owner directly. GitLab polling follows the registered repository's observed branch to a newly opened MR, and can bind the project's sole unambiguous open MR when no branch or Jira context identifies one. **Poll Now** verifies that project-owned monitoring without mutating a provider. Project MR browser/insertion actions repeat bounded live discovery instead of trusting an older binding; project-owned Attention rows can open the same editable MR/CI composers. Insertion still requires an explicit operator-owned project terminal, but it does not require adding Jira context.
+Use **Kronos: Setup** for guided configuration and **Kronos: Check Setup** for readiness checks. They share one readiness snapshot, expose one clear action per row, and never display credential values. **Open Provider Config** creates a private comment-only template when needed. After entering and saving values in a newly created or edited provider environment file, run **Developer: Reload Window** so the extension host loads them, then check setup again. Once a registered project has a GitLab ID/path, Jenkins URL, SonarQube key, or branch profile, automatic provider checks begin immediately—no Jira link and no terminal Session are required. GitLab follows the registered repository's current branch to a newly opened merge request and can use the project's sole unambiguous open merge request when no branch or Jira context identifies one. **Check Updates** runs those read-only checks on demand. Project merge request and build/quality actions refresh live context instead of trusting an older result. Adding context still requires a connected project terminal, but it does not require adding Jira context.
 
 ### Team Prompt Library
 
@@ -206,7 +206,7 @@ npm run feedback:ready
 npm run publish:verify
 ```
 
-`npm test` begins with a public-surface gate that rejects tracked local-state directories, machine-specific home paths, employer identifiers, private-key material, and high-confidence token shapes. The remaining checks enforce the manifest allowlist, reachable runtime graph, explicit-launch boundary, context governance, strict TypeScript compilation, unit behavior, cross-view product contracts, provider fixtures, large synthetic scale/accessibility behavior, exact dependency-free VSIX file surface, dependency-free webviews, and Node's built-in line/function/branch coverage floors. The coverage pass derives its 27-runner inventory from the actual `npm test` graph, fails closed when a runner or report row disappears, and retains tighter per-file floors for Jira normalization/pruning, Work state/presentation, exact terminal insertion and Claude launch, project and provider monitoring, Context Basket, local handoff, local evidence search, date normalization, GitLab pipeline snapshots, the monitor-event ledger and audit view, webview CSP/bootstrap security, provider-read health, Attention, Sessions, and Projects. `npm run package` repeats the public, manifest, graph, security, governance, roadmap, claim, compile, and exact-surface gates before creating a VSIX; extra or missing files fail closed. The checked [verification matrix](docs/verification-matrix.json) maps roadmap goals to named tests and keeps real VS Code, operator-terminal, Windows, multi-window, and live-provider gates explicit. README engineering metrics are derived from the manifest, source tree, dependencies, and test declarations on every run.
+`npm test` begins with a public-surface gate that rejects tracked local-state directories, machine-specific home paths, employer identifiers, private-key material, and high-confidence token shapes. The remaining checks enforce the manifest allowlist, reachable runtime graph, explicit-launch boundary, context governance, strict TypeScript compilation, unit behavior, cross-view product contracts, provider fixtures, large synthetic scale/accessibility behavior, exact dependency-free VSIX file surface, dependency-free webviews, and Node's built-in line/function/branch coverage floors. The coverage pass derives its 27-runner inventory from the actual `npm test` graph, fails closed when a runner or report row disappears, and retains tighter per-file floors for all four provider REST clients, Jira normalization/pruning, Work state/presentation, exact terminal insertion and Claude launch, project and provider monitoring, Context Basket, local handoff, local evidence search, date normalization, GitLab pipeline transition normalization, the monitor-event ledger and audit view, webview CSP/bootstrap security, provider-read health, Attention, Sessions, and Projects. `npm run package` repeats the public, manifest, graph, security, governance, roadmap, claim, compile, and exact-surface gates before creating a VSIX; extra or missing files fail closed. The checked [verification matrix](docs/verification-matrix.json) maps roadmap goals to named tests and keeps real VS Code, operator-terminal, Windows, multi-window, and live-provider gates explicit. README engineering metrics are derived from the manifest, source tree, dependencies, and test declarations on every run.
 
 For the interactive pass, use [HUMAN_FEEDBACK_CHECKLIST.md](HUMAN_FEEDBACK_CHECKLIST.md). Real-provider, terminal-focus, and Windows feedback remain explicit human gates; see the [completion audit](docs/terminal-first-completion-audit.md).
 

@@ -75,7 +75,7 @@ test('2000 supplied audit events render only the newest 500 inside the checked b
   assert.match(markdown, /Bounded transition 1500 detail/);
   assert.doesNotMatch(markdown, /Bounded transition 1499 detail/);
   assert.doesNotMatch(markdown, /Bounded transition 0 detail/);
-  assert.match(markdown, /Showing the newest 500 of 2000 supplied events/);
+  assert.match(markdown, /Showing the newest 500 of 2000 history items/);
   assert.equal(events[0].id, 'event-0', 'audit rendering must not reorder caller-owned input');
   assert.equal(events.at(-1).id, 'event-1999');
 });
@@ -143,7 +143,8 @@ test('large artifact previews render summaries without copying provider payloads
   assert.ok(Buffer.byteLength(composer, 'utf8') < 256 * 1024, 'composer copied too much provider evidence');
   assert.equal((composer.match(/class="evidence-item"/g) || []).length, 20);
   assert.equal((composer.match(/class="message warn"/g) || []).length, 20);
-  assert.match(composer, /Open Full Context/);
+  assert.match(composer, /Open source details/);
+  assert.match(composer, /<details class="composer-reference-details"><summary>Context reference<\/summary>/);
   assert.doesNotMatch(composer, /DO-NOT-RENDER-TAIL/);
 
   const session = scaleRichSession(0);
@@ -164,8 +165,9 @@ test('large artifact previews render summaries without copying provider payloads
     liveTerminalCount: 1,
   });
   assert.equal((workspace.match(/class="artifact"/g) || []).length, 6);
-  assert.equal((workspace.match(/<li><strong>gitlab<\/strong>/g) || []).length, 12);
-  assert.match(workspace, /Showing the newest 12 of 64 local bindings/);
+  assert.equal((workspace.match(/<li><strong>GitLab<\/strong>/g) || []).length, 12);
+  assert.match(workspace, /<summary>Connected sources <span class="workspace-detail-count">64<\/span><\/summary>/);
+  assert.match(workspace, /Showing 12 of 64 connected sources/);
 });
 
 test('scale budget documents every bounded collection and supersession rule', () => {
@@ -178,7 +180,7 @@ test('scale budget documents every bounded collection and supersession rule', ()
     '| Project discovery |',
     '| Work sessions |',
     '| Attention ledger |',
-    '| Session audit |',
+    '| Session history |',
     '| Local Git |',
     '| Context composer |',
     '| GitLab |',

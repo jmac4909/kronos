@@ -67,7 +67,18 @@ test('board builder exposes useful Jira filters and only bounded terminal-first 
   assert.doesNotMatch(html, /not a jira key/i);
   assert.match(html, /kronos-webview-runtime\.js/);
   assert.match(html, /kronos-jira-work-board\.js/);
-  assert.match(html, /jira-ticket-heading-actions[^]*data-action="chooseTicketProject"[^]*\+ Add Project/);
+  const headingMeta = html.match(/<div class="jira-ticket-heading-meta">[^]*?<\/div>/g) || [];
+  assert.equal(headingMeta.length, 3);
+  assert.ok(headingMeta.every(meta => !meta.includes('data-action=')));
+  assert.match(html, /id="jira-board-more-filters" class="jira-board-more-filters">/);
+  assert.ok(html.indexOf('jira-board-filter-primary') < html.indexOf('jira-board-more-filters'));
+  const cardActions = html.match(/<div class="jira-ticket-actions"[^]*?<\/div>/g) || [];
+  assert.equal(cardActions.length, 3);
+  for (const actions of cardActions) {
+    assert.match(actions, />Start Claude<[^]*>Choose project</);
+    assert.doesNotMatch(actions, />Open ticket</);
+    assert.equal((actions.match(/data-action=/g) || []).length, 2);
+  }
 
   assert.deepEqual(JIRA_WORK_BOARD_ACTIONS, [
     'refreshTickets',
@@ -164,7 +175,7 @@ test('board action and focus contract covers every declared action exactly once'
   assert.match(html, /tabindex="0" aria-label="Open KRONOS-1:/);
   assert.match(html, /data-action="startClaudeForTicket"[^>]+aria-label="Start Claude for KRONOS-1"/);
   assert.ok(html.indexOf('aria-label="Jira board filters"') < html.indexOf('aria-label="Jira tickets by status"'));
-  assert.ok(html.indexOf('data-action="chooseTicketProject"') < html.indexOf('data-action="startClaudeForTicket"'));
+  assert.ok(html.indexOf('data-action="startClaudeForTicket"') < html.indexOf('data-action="chooseTicketProject"'));
 });
 
 test('completed status detection supports common names and explicit team statuses', () => {
@@ -212,7 +223,7 @@ test('board renders distinct current, empty, loading, partial, stale, and error 
     phase: 'partial',
     retainedFromPrevious: 2,
     warningCount: 1,
-  } }), /data-work-data-state="partial"[^]*2 prior tickets were retained/);
+  } }), /data-work-data-state="partial"[^]*2 earlier tickets remain visible/);
   assert.match(build({ nowMs: Date.parse('2026-07-14T02:20:01.000Z') }), /data-work-data-state="stale"/);
   const errorHtml = build({ refreshStatus: {
     phase: 'error',
@@ -225,7 +236,7 @@ test('board renders distinct current, empty, loading, partial, stale, and error 
   assert.match(errorHtml, /data-action="openDoctor"/);
 });
 
-test('board lists registered local project paths and current Git branches', () => {
+test('board keeps registered project paths and current branches in a compact disclosure', () => {
   const projectRoot = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'kronos-board-project-')));
   try {
     fs.mkdirSync(path.join(projectRoot, '.git'));
@@ -238,13 +249,14 @@ test('board lists registered local project paths and current Git branches', () =
       nonce: 'abcdef1234567890',
       scriptUri: 'vscode-resource://kronos/media/kronos-jira-work-board.js',
     });
-    assert.match(html, /Local Projects/);
+    assert.match(html, /<details class="jira-projects"><summary>1 local project<span>Show branches and folders<\/span><\/summary>/);
+    assert.doesNotMatch(html, /<details class="jira-projects" open/);
     assert.match(html, /feature\/board-projects/);
     assert.match(html, new RegExp(projectRoot.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
     assert.match(html, /data-action="chooseTicketProject"/);
     assert.match(html, /Jira: KRONOS/);
     assert.match(html, /Project: Kronos Extension/);
-    assert.match(html, /Change \/ Unlink Project: Kronos Extension/);
+    assert.match(html, /aria-label="Change project for KRONOS-1">Change project<\/button>/);
     assert.match(html, /<option value="kronos">Kronos Extension<\/option>/);
     assert.match(html, /data-ticket-card[^>]+tabindex="0"[^>]+aria-label="Open KRONOS-1/);
   } finally {
@@ -321,6 +333,7 @@ test('board filters survive a webview HTML rerender through VS Code webview stat
   first.jiraProject.value = 'kronos';
   first.localProject.value = 'api';
   first.hideDone.checked = false;
+  first.moreFilters.open = true;
   assert.equal(boardRuntime.persistFilters(first.document, vscodeApi), true);
 
   const rerendered = createDomHarness('complete');
@@ -329,6 +342,15 @@ test('board filters survive a webview HTML rerender through VS Code webview stat
   assert.equal(rerendered.jiraProject.value, 'kronos');
   assert.equal(rerendered.localProject.value, 'api');
   assert.equal(rerendered.hideDone.checked, false);
+  assert.equal(rerendered.moreFilters.open, true);
+});
+
+test('older saved advanced filters reopen their disclosure without new state metadata', () => {
+  const harness = createDomHarness('complete');
+  const vscodeApi = { getState() { return { jiraWorkBoardFilters: { localProject: 'api' } }; } };
+  assert.equal(boardRuntime.restoreFilters(harness.document, vscodeApi), true);
+  assert.equal(harness.localProject.value, 'api');
+  assert.equal(harness.moreFilters.open, true);
 });
 
 test('board filters Jira namespaces independently from explicit local projects', () => {
@@ -419,8 +441,10 @@ test('board reset returns to the configured completed-work default', () => {
   harness.hideDone.setAttribute('data-default-checked', 'false');
   assert.equal(boardRuntime.initialize(harness.document, { postMessage() {} }), true);
   harness.hideDone.checked = true;
+  harness.moreFilters.open = true;
   harness.reset.dispatch('click', {});
   assert.equal(harness.hideDone.checked, false);
+  assert.equal(harness.moreFilters.open, false);
 });
 
 test('board boot waits for DOMContentLoaded before attaching handlers', () => {
@@ -478,6 +502,8 @@ function createDomHarness(readyState) {
   const hideDone = control('');
   hideDone.checked = true;
   const reset = element();
+  const moreFilters = element();
+  moreFilters.open = false;
   const dataStatus = element();
   const summary = element();
   const noMatches = element();
@@ -492,6 +518,7 @@ function createDomHarness(readyState) {
     ['jira-board-label', label],
     ['jira-board-hide-done', hideDone],
     ['jira-board-reset', reset],
+    ['jira-board-more-filters', moreFilters],
     ['jira-board-filter-summary', summary],
     ['jira-board-no-matches', noMatches],
   ]);
@@ -517,6 +544,7 @@ function createDomHarness(readyState) {
     jiraProject,
     label,
     localProject,
+    moreFilters,
     openCard,
     openColumn,
     reset,

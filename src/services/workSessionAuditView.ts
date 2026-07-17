@@ -10,38 +10,38 @@ export function buildWorkSessionAuditMarkdown(
   const providers = [...new Set(session.providerBindings.map(binding => binding.provider))];
   const attachedTerminals = session.terminals.filter(terminal => terminal.status === 'attached').length;
   const heading = session.kind === 'ticket'
-    ? `${session.projectName || session.ticketKey} managed work session`
-    : `${session.title} managed session`;
+    ? `${session.projectName || session.ticketKey} Session history`
+    : `${session.title} history`;
   const lines = [
     `# ${markdownText(heading)}`,
     '',
     markdownText(session.title),
     '',
-    '> Kronos records session metadata, provider transitions, and context artifact references. It does not collect operator terminal input or output.',
+    '> Kronos records Session details, provider updates, and saved context. It never reads terminal input or output.',
     '',
     '## Current state',
     '',
-    `- Session: \`${inlineCode(session.id)}\``,
-    `- Kind: ${session.kind === 'ticket' ? `ticket-linked (${markdownText(session.ticketKey)})` : 'standalone'}`,
-    `- Ticket contexts: ${session.ticketKeys.length > 0 ? session.ticketKeys.map(markdownText).join(', ') : 'none'}`,
-    `- Status: ${markdownText(session.status)}`,
-    `- Operator terminals currently recorded as attached: ${attachedTerminals}`,
-    `- Monitoring: ${session.monitoring.enabled ? 'enabled' : 'disabled'}`,
-    `- Monitoring readiness: ${markdownText(session.monitoring.lastState || 'not yet polled')}`,
-    `- Last monitoring result: ${markdownText(session.monitoring.lastSummary || 'none')}`,
-    `- Last monitoring attempt: ${markdownText(session.monitoring.lastAttemptAt || 'never')}`,
-    `- Last provider poll: ${markdownText(session.monitoring.lastPolledAt || 'not yet polled')}`,
-    `- Providers: ${providers.length > 0 ? providers.map(markdownText).join(', ') : 'none'}`,
-    `- Context artifacts: ${session.artifacts.length}`,
+    `- Session ID: \`${inlineCode(session.id)}\``,
+    `- Type: ${session.kind === 'ticket' ? `Jira-linked (${markdownText(session.ticketKey)})` : 'Standalone'}`,
+    `- Jira tickets: ${session.ticketKeys.length > 0 ? session.ticketKeys.map(markdownText).join(', ') : 'None'}`,
+    `- Status: ${markdownText(displayLabel(session.status))}`,
+    `- Connected terminals: ${attachedTerminals}`,
+    `- Provider updates: ${session.monitoring.enabled ? 'On' : 'Off'}`,
+    `- Latest update state: ${markdownText(displayLabel(session.monitoring.lastState || 'not checked yet'))}`,
+    `- Latest result: ${markdownText(session.monitoring.lastSummary || 'None')}`,
+    `- Last checked: ${markdownText(session.monitoring.lastAttemptAt || 'Never')}`,
+    `- Last successful check: ${markdownText(session.monitoring.lastPolledAt || 'Not yet')}`,
+    `- Providers: ${providers.length > 0 ? providers.map(providerSourceLabel).map(markdownText).join(', ') : 'None'}`,
+    `- Saved context: ${session.artifacts.length}`,
     `- Updated: ${markdownText(session.updatedAt)}`,
   ];
 
   if (session.artifacts.length > 0) {
-    lines.push('', '## Context artifacts', '');
+    lines.push('', '## Saved context', '');
     for (const artifact of session.artifacts) {
-      const completeness = artifact.complete ? 'complete' : 'partial';
-      lines.push(`- ${markdownText(artifact.label)} (${completeness}, fetched ${markdownText(artifact.fetchedAt)})`);
-      lines.push(`  - Prompt file: \`${inlineCode(artifact.promptPath)}\``);
+      const completeness = artifact.complete ? 'Complete' : 'Needs review';
+      lines.push(`- ${markdownText(artifact.label)} (${completeness}, saved ${markdownText(artifact.fetchedAt)})`);
+      lines.push(`  - Saved file: \`${inlineCode(artifact.promptPath)}\``);
       if (artifact.contentSha256) {
         lines.push(`  - Content SHA-256: \`${artifact.contentSha256}\``);
       }
@@ -51,33 +51,63 @@ export function buildWorkSessionAuditMarkdown(
     }
   }
 
-  lines.push('', '## Timeline', '');
+  lines.push('', '## History', '');
   const boundedEvents = [...events]
     .sort((left, right) => right.at.localeCompare(left.at))
     .slice(0, MAX_TIMELINE_EVENTS);
   if (boundedEvents.length === 0) {
-    lines.push('_No audit events have been recorded for this session._');
+    lines.push('_No history yet._');
   } else {
     for (const event of boundedEvents) {
       const subject = event.subject
-        ? ` — ${markdownText(event.subject.kind)} \`${inlineCode(event.subject.id)}\``
+        ? ` — ${markdownText(displayLabel(event.subject.kind))} \`${inlineCode(event.subject.id)}\``
         : '';
-      lines.push(`- **${markdownText(event.at)}** · ${markdownText(event.source)} · ${markdownText(event.type)}${subject}`);
+      lines.push(`- **${markdownText(event.at)}** · ${markdownText(providerSourceLabel(event.source))} · ${markdownText(eventTypeLabel(event.type))}${subject}`);
       lines.push(`  - ${markdownText(event.summary)}`);
       if (event.before?.state || event.after?.state) {
-        lines.push(`  - State: ${markdownText(event.before?.state || 'unknown')} → ${markdownText(event.after?.state || 'unknown')}`);
+        lines.push(`  - Status: ${markdownText(displayLabel(event.before?.state || 'unknown'))} → ${markdownText(displayLabel(event.after?.state || 'unknown'))}`);
       }
       if (event.artifactPath) {
-        lines.push(`  - Artifact: \`${inlineCode(event.artifactPath)}\``);
+        lines.push(`  - Saved file: \`${inlineCode(event.artifactPath)}\``);
       }
     }
   }
 
   if (events.length > boundedEvents.length) {
-    lines.push('', `_Showing the newest ${boundedEvents.length} of ${events.length} supplied events._`);
+    lines.push('', `_Showing the newest ${boundedEvents.length} of ${events.length} history items._`);
   }
   lines.push('');
   return lines.join('\n');
+}
+
+function providerSourceLabel(value: string): string {
+  return {
+    jira: 'Jira',
+    gitlab: 'GitLab',
+    jenkins: 'Jenkins',
+    sonar: 'SonarQube',
+    kronos: 'Kronos',
+    operator: 'You',
+  }[value] || displayLabel(value);
+}
+
+function eventTypeLabel(value: MonitorEvent['type']): string {
+  return {
+    'session.created': 'Session created',
+    'terminal.attached': 'Terminal connected',
+    'terminal.detached': 'Terminal disconnected',
+    'context.inserted': 'Context added',
+    'provider.transition': 'Provider update',
+    'provider.baseline': 'Provider baseline',
+    'notification.shown': 'Notification shown',
+    'notification.acknowledged': 'Notification cleared',
+    'decision.recorded': 'Decision recorded',
+  }[value];
+}
+
+function displayLabel(value: string): string {
+  const label = String(value).replace(/[._-]+/g, ' ').replace(/\s+/g, ' ').trim();
+  return label ? `${label.charAt(0).toUpperCase()}${label.slice(1)}` : 'Unknown';
 }
 
 function markdownText(value: string): string {

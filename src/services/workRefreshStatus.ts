@@ -63,7 +63,7 @@ export function workDataPresentation(input: WorkDataPresentationInput): WorkData
       title: 'Refreshing Jira work…',
       detail: ticketCount > 0
         ? `Showing ${ticketCount} last-known ticket${ticketCount === 1 ? '' : 's'} until the refresh finishes.`
-        : 'Waiting for the first bounded Jira result.',
+        : 'Waiting for the first Jira result.',
       ...(refreshedAt ? { refreshedAt } : {}),
       ticketCount,
     };
@@ -74,16 +74,16 @@ export function workDataPresentation(input: WorkDataPresentationInput): WorkData
     const warnings = Math.max(boundedCount(status.warningCount), loadIssueCount);
     const facts = [
       retained > 0
-        ? `${retained} prior ticket${retained === 1 ? ' was' : 's were'} retained.`
+        ? `${retained} earlier ticket${retained === 1 ? ' remains' : 's remain'} visible.`
         : '',
       warnings > 0
-        ? `${warnings} bounded read warning${warnings === 1 ? '' : 's'} need review.`
+        ? `${warnings} refresh warning${warnings === 1 ? '' : 's'} need review.`
         : '',
       ticketCount > 0 ? `Showing ${ticketCount} available ticket${ticketCount === 1 ? '' : 's'}.` : '',
     ].filter(Boolean);
     return {
       mode: ticketCount > 0 ? 'partial' : 'error',
-      title: ticketCount > 0 ? 'Partial Jira result' : 'Jira data unavailable',
+      title: ticketCount > 0 ? 'Jira refresh incomplete' : 'Jira data unavailable',
       detail: facts.join(' ') || 'The Jira read did not return a complete result.',
       ...(refreshedAt ? { refreshedAt } : {}),
       ticketCount,
@@ -106,7 +106,7 @@ export function workDataPresentation(input: WorkDataPresentationInput): WorkData
       title: refreshedAt ? 'No Jira tickets returned' : 'No Jira tickets loaded',
       detail: refreshedAt
         ? 'The last complete Jira refresh returned no matching work.'
-        : 'Run a Jira refresh after completing setup in Kronos Doctor.',
+        : 'Run a Jira refresh after completing Kronos Setup.',
       ...(refreshedAt ? { refreshedAt } : {}),
       ticketCount,
     };

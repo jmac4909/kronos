@@ -13,24 +13,26 @@ const providerContractPath = path.join(root, 'docs', 'provider-contract-matrix.m
 const scaleAccessibilityPath = path.join(root, 'docs', 'scale-accessibility-budget.md');
 const roadmapPath = path.join(root, 'docs', 'extension-improvement-goals.md');
 
-const matrix = readJson(matrixPath, 'verification matrix');
-const manifest = readJson(packagePath, 'package manifest');
-const checklist = readText(checklistPath, 'human feedback checklist');
-const readme = readText(readmePath, 'README');
-const ownership = readText(ownershipPath, 'state ownership document');
-const providerContract = readText(providerContractPath, 'provider contract matrix');
-const scaleAccessibility = readText(scaleAccessibilityPath, 'scale and accessibility budget');
-const roadmap = readText(roadmapPath, 'extension improvement roadmap');
+function main() {
+  const matrix = readJson(matrixPath, 'verification matrix');
+  const manifest = readJson(packagePath, 'package manifest');
+  const checklist = readText(checklistPath, 'human feedback checklist');
+  const readme = readText(readmePath, 'README');
+  const ownership = readText(ownershipPath, 'state ownership document');
+  const providerContract = readText(providerContractPath, 'provider contract matrix');
+  const scaleAccessibility = readText(scaleAccessibilityPath, 'scale and accessibility budget');
+  const roadmap = readText(roadmapPath, 'extension improvement roadmap');
 
-checkVerificationMatrix(matrix, checklist, roadmap);
-checkReadmeMetrics(manifest, readme);
-checkArchitectureEvidence(ownership, providerContract, scaleAccessibility);
+  checkVerificationMatrix(matrix, checklist, roadmap);
+  checkReadmeMetrics(manifest, readme);
+  checkArchitectureEvidence(ownership, providerContract, scaleAccessibility);
 
-if (failures.length > 0) {
-  console.error(`Kronos quality evidence failed (${failures.length} problem${failures.length === 1 ? '' : 's'}):`);
-  for (const failure of failures) { console.error(`- ${failure}`); }
-  process.exitCode = 1;
-} else {
+  if (failures.length > 0) {
+    console.error(`Kronos quality evidence failed (${failures.length} problem${failures.length === 1 ? '' : 's'}):`);
+    for (const failure of failures) { console.error(`- ${failure}`); }
+    process.exitCode = 1;
+    return;
+  }
   const evidenceCount = matrix.featureGroups.reduce((total, group) => total + group.automated.length, 0);
   console.log(
     `Kronos quality evidence OK (${matrix.featureGroups.length} feature groups, ${evidenceCount} checked automated references, ${matrix.humanGates.length} explicit human gates).`,
@@ -156,7 +158,7 @@ function checkArchitectureEvidence(ownershipSource, providerContractSource, scal
 }
 
 function countNodeTests(source) {
-  return (source.match(/(?:^|\n)test\s*\(/g) || []).length;
+  return (source.match(/(?:^|\n)\s*(?:await\s+)?(?:test|t\.test)(?:\.(?:skip|todo|only))?\s*\(/g) || []).length;
 }
 
 function listFiles(directory, extension) {
@@ -190,3 +192,7 @@ function readText(filePath, label) {
 
 function escapeRegex(value) { return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 function fail(message) { failures.push(message); }
+
+if (require.main === module) { main(); }
+
+module.exports = { countNodeTests };

@@ -15,38 +15,24 @@ export interface RegisteredProjectActionPresentation {
 
 const REGISTERED_PROJECT_ACTIONS: readonly RegisteredProjectActionPresentation[] = Object.freeze([
   Object.freeze({
-    label: 'Start Claude in project',
+    label: 'Start Claude',
     icon: 'terminal',
     command: 'kronos.newClaudeSession',
-    description: 'no Jira ticket',
+    description: 'in this project',
   }),
   Object.freeze({
-    label: 'View Git status and diff',
-    icon: 'diff',
-    command: 'kronos.openProjectGitStatus',
-    description: 'read-only',
-  }),
-  Object.freeze({
-    label: 'Insert working diff in context',
+    label: 'Review changes',
     icon: 'symbol-keyword',
     command: 'kronos.insertProjectGitContext',
-    description: 'non-submitting',
   }),
-  Object.freeze({ label: 'Open merge request page', icon: 'git-merge', command: 'kronos.openProjectMergeRequest' }),
-  Object.freeze({ label: 'Insert MR evidence', icon: 'git-merge', command: 'kronos.insertProjectGitLabContext' }),
-  Object.freeze({ label: 'Insert Jenkins / Sonar evidence', icon: 'beaker', command: 'kronos.insertProjectCiContext' }),
+  Object.freeze({ label: 'Open merge request', icon: 'git-merge', command: 'kronos.openProjectMergeRequest' }),
+  Object.freeze({ label: 'Review merge request', icon: 'git-merge', command: 'kronos.insertProjectGitLabContext' }),
+  Object.freeze({ label: 'Review build & quality', icon: 'beaker', command: 'kronos.insertProjectCiContext' }),
+  Object.freeze({ label: 'Configure integrations', icon: 'settings-gear', command: 'kronos.configureProjectIntegrations' }),
   Object.freeze({
-    label: 'Open team prompt library',
-    icon: 'library',
-    command: 'kronos.openPromptLibrary',
-    description: 'editable; non-submitting',
-  }),
-  Object.freeze({ label: 'Configure provider polling', icon: 'settings-gear', command: 'kronos.configureProjectIntegrations' }),
-  Object.freeze({
-    label: 'Set project nickname',
+    label: 'Rename project',
     icon: 'edit',
     command: 'kronos.renameLocalProject',
-    description: 'optional; identity and links stay unchanged',
   }),
 ]);
 
@@ -71,7 +57,7 @@ export function projectIntegrationStatusLines(
 }
 
 function providerStatus(name: string, targetConfigured: boolean, credentialsReady: boolean): string {
-  if (!targetConfigured) { return `${name}: project setup needed`; }
-  if (!credentialsReady) { return `${name}: target saved, credentials need Doctor`; }
-  return `${name}: automatic project polling active`;
+  if (!targetConfigured) { return `${name}: add project`; }
+  if (!credentialsReady) { return `${name}: credentials needed`; }
+  return `${name}: ready`;
 }

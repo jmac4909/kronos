@@ -45,19 +45,19 @@ function jiraReadiness(env: NodeJS.ProcessEnv): ProviderReadiness {
   if (missing.length > 0) {
     return missingReadiness(
       'jira',
-      'Jira REST',
+      'Jira',
       token ? 'present' : 'missing',
       `Missing ${missing.join(', ')}. Credential values are not shown.`,
     );
   }
   if (!normalizeJiraBaseUrl(baseUrl) || !isJiraRestConfigured(env)) {
-    return invalidReadiness('jira', 'Jira REST', 'The configured Jira URL or credential shape is invalid.');
+    return invalidReadiness('jira', 'Jira', 'The configured Jira URL or credential shape is invalid.');
   }
   return readyReadiness(
     'jira',
-    'Jira REST',
+    'Jira',
     'present',
-    'Configuration is present for bounded Jira reads; live refresh verifies authentication and permission.',
+    'Configuration is ready. Refresh Jira to verify access.',
   );
 }
 
@@ -76,19 +76,19 @@ function gitLabReadiness(env: NodeJS.ProcessEnv): ProviderReadiness {
   if (missing.length > 0) {
     return missingReadiness(
       'gitlab',
-      'GitLab REST',
+      'GitLab',
       token ? 'present' : 'missing',
       `Missing ${missing.join(' and ')}. Credential values are not shown.`,
     );
   }
   if (!normalizeGitLabApiBaseUrl(baseUrl) || !isGitLabRestConfigured(env)) {
-    return invalidReadiness('gitlab', 'GitLab REST', 'The configured GitLab URL or credential shape is invalid.');
+    return invalidReadiness('gitlab', 'GitLab', 'The configured GitLab URL or credential shape is invalid.');
   }
   return readyReadiness(
     'gitlab',
-    'GitLab REST',
+    'GitLab',
     'present',
-    'Configuration is present for bounded merge-request and pipeline reads; live polling verifies access.',
+    'Configuration is ready for merge request and pipeline updates. Check Updates verifies access.',
   );
 }
 
@@ -99,29 +99,29 @@ function jenkinsReadiness(env: NodeJS.ProcessEnv): ProviderReadiness {
   if (!baseUrl) {
     return missingReadiness(
       'jenkins',
-      'Jenkins REST',
+      'Jenkins',
       username || token ? 'invalid-needs-test' : 'missing',
       'Missing JENKINS_URL. Credentials are optional only when the server permits anonymous reads.',
     );
   }
   if (!normalizeJenkinsBaseUrl(baseUrl) || !isJenkinsRestConfigured(env)) {
-    return invalidReadiness('jenkins', 'Jenkins REST', 'The configured Jenkins URL is invalid.');
+    return invalidReadiness('jenkins', 'Jenkins', 'The configured Jenkins URL is invalid.');
   }
   if (Boolean(username) !== Boolean(token)) {
     return invalidReadiness(
       'jenkins',
-      'Jenkins REST',
+      'Jenkins',
       'Only one Jenkins credential field is present; add the matching username or token, or clear both for anonymous reads.',
     );
   }
   const credentialPresence: CredentialPresence = username && token ? 'present' : 'missing';
   return readyReadiness(
     'jenkins',
-    'Jenkins REST',
+    'Jenkins',
     credentialPresence,
     credentialPresence === 'present'
-      ? 'URL and credential fields are present; live polling verifies authentication and permission.'
-      : 'URL is present; credentials are missing and live polling must verify that anonymous reads are allowed.',
+      ? 'Configuration is ready for build updates. Check Updates verifies access.'
+      : 'The URL is ready. Check Updates verifies whether anonymous reads are allowed.',
   );
 }
 
@@ -135,19 +135,19 @@ function sonarReadiness(env: NodeJS.ProcessEnv): ProviderReadiness {
   if (missing.length > 0) {
     return missingReadiness(
       'sonar',
-      'SonarQube REST',
+      'SonarQube',
       token ? 'present' : 'missing',
       `Missing ${missing.join(' and ')}. Credential values are not shown.`,
     );
   }
   if (!normalizeSonarBaseUrl(baseUrl) || !isSonarRestConfigured(env)) {
-    return invalidReadiness('sonar', 'SonarQube REST', 'The configured SonarQube URL or credential shape is invalid.');
+    return invalidReadiness('sonar', 'SonarQube', 'The configured SonarQube URL or credential shape is invalid.');
   }
   return readyReadiness(
     'sonar',
-    'SonarQube REST',
+    'SonarQube',
     'present',
-    'Configuration is present for bounded quality reads; live polling verifies authentication and permission.',
+    'Configuration is ready for quality updates. Check Updates verifies access.',
   );
 }
 
@@ -164,7 +164,7 @@ function readyReadiness(
     credentialPresence,
     configured: true,
     detail: `${detail} Credential presence: ${credentialPresence}.`,
-    nextAction: 'Run Doctor or Poll Now to verify live provider access.',
+    nextAction: 'Check setup or choose Check Now to verify live provider access.',
   };
 }
 
@@ -181,7 +181,7 @@ function missingReadiness(
     credentialPresence,
     configured: false,
     detail: `${detail} Credential presence: ${credentialPresence}.`,
-    nextAction: 'Open the private provider configuration, complete this provider, reload it, then run Doctor.',
+    nextAction: 'Open the private provider configuration, complete this provider, reload it, then check setup.',
   };
 }
 
@@ -193,7 +193,7 @@ function invalidReadiness(id: ProviderReadinessId, name: string, detail: string)
     credentialPresence: 'invalid-needs-test',
     configured: false,
     detail: `${detail} Credential presence: invalid-needs-test; values are not shown.`,
-    nextAction: 'Open the private provider configuration, correct this provider, reload it, then run Doctor.',
+    nextAction: 'Open the private provider configuration, correct this provider, reload it, then check setup.',
   };
 }
 

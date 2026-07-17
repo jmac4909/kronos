@@ -133,11 +133,11 @@ export function managedProviderPollNotice(result: ManagedProviderPollResult): Ma
   if (result.leaseUnavailable && result.polled === 0) {
     return {
       kind: 'lease-unavailable',
-      message: 'Another Kronos window owns the provider-monitoring lease; no duplicate read was started. Wait for that poll or close the duplicate window, then use Poll Now.',
+      message: 'Provider updates are already being checked in another VS Code window. Wait for it to finish, or close that window and choose Check Updates again.',
       warning: false,
     };
   }
-  const message = `Read ${result.polled} provider context${result.polled === 1 ? '' : 's'}; recorded ${result.transitions} new attention item${result.transitions === 1 ? '' : 's'}; ${result.failures} failed; ${result.skipped} skipped; ${result.unconfigured} project or legacy session target${result.unconfigured === 1 ? '' : 's'} missing provider configuration.`;
+  const message = `Checked ${result.polled} provider source${result.polled === 1 ? '' : 's'}: ${result.transitions} new Attention item${result.transitions === 1 ? '' : 's'}, ${result.failures} problem${result.failures === 1 ? '' : 's'}, ${result.skipped} skipped, ${result.unconfigured} project${result.unconfigured === 1 ? '' : 's'} need setup.`;
   if (result.unconfigured > 0) { return { kind: 'missing-configuration', message, warning: true }; }
   if (result.failures > 0 || result.leaseUnavailable) { return { kind: 'failed', message, warning: true }; }
   return { kind: 'complete', message, warning: false };
