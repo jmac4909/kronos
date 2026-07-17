@@ -486,30 +486,48 @@ test('project discovery honors configured roots, depth, limits, and workspace fo
   assert.equal(limited.truncated, true);
 });
 
-test('project discovery canonicalizes root aliases and skips symbolic child repositories', t => {
+test('project discovery canonicalizes linked roots, accepts linked repositories, and does not traverse linked trees', t => {
   const discoveryRoot = path.join(tempRoot, 'canonical-discovery-root');
   const repository = path.join(discoveryRoot, 'service');
   const externalRepository = path.join(tempRoot, 'external-repository');
+  const externalContainer = path.join(tempRoot, 'external-container');
+  const nestedExternalRepository = path.join(externalContainer, 'nested-service');
   fs.mkdirSync(path.join(repository, '.git'), { recursive: true });
   fs.mkdirSync(path.join(externalRepository, '.git'), { recursive: true });
+  fs.mkdirSync(path.join(nestedExternalRepository, '.git'), { recursive: true });
   fs.writeFileSync(path.join(repository, '.git', 'HEAD'), 'ref: refs/heads/feature/canonical\n');
   fs.writeFileSync(path.join(externalRepository, '.git', 'HEAD'), 'ref: refs/heads/main\n');
+  fs.writeFileSync(path.join(nestedExternalRepository, '.git', 'HEAD'), 'ref: refs/heads/feature/nested-link\n');
   const rootAlias = path.join(tempRoot, 'canonical-discovery-alias');
-  if (!createSymlinkOrSkip(t, discoveryRoot, rootAlias, 'dir')) { return; }
-  if (!createSymlinkOrSkip(t, externalRepository, path.join(discoveryRoot, 'linked-external'), 'dir')) { return; }
+  const directoryLinkType = process.platform === 'win32' ? 'junction' : 'dir';
+  if (!createSymlinkOrSkip(t, discoveryRoot, rootAlias, directoryLinkType)) { return; }
+  if (!createSymlinkOrSkip(t, externalRepository, path.join(discoveryRoot, 'linked-external'), directoryLinkType)) { return; }
+  if (!createSymlinkOrSkip(t, externalContainer, path.join(discoveryRoot, 'linked-container'), directoryLinkType)) { return; }
 
   const discovered = projectDiscovery.discoverLocalProjects({
     workspaceFolders: [{ name: 'Workspace Alias', path: path.join(rootAlias, 'service') }],
     roots: [discoveryRoot, rootAlias],
-    depth: 2,
+    depth: 3,
     limit: 100,
   });
-  assert.deepEqual(discovered.projects, [{
+  assert.deepEqual(discovered.projects.find(project => project.source === 'workspace'), {
     name: 'Workspace Alias',
     path: fs.realpathSync.native(repository),
     source: 'workspace',
     branch: 'feature/canonical',
-  }]);
+  });
+  assert.deepEqual(discovered.projects.find(project => project.path === fs.realpathSync.native(externalRepository)), {
+    name: 'external-repository',
+    path: fs.realpathSync.native(externalRepository),
+    source: 'configured-root',
+    branch: 'main',
+  });
+  assert.equal(
+    discovered.projects.some(project => project.path === fs.realpathSync.native(nestedExternalRepository)),
+    false,
+    'a linked non-repository container must not expand the discovery boundary',
+  );
+  assert.equal(discovered.projects.length, 2);
 });
 
 test('project discovery recognizes real Git worktrees and rejects malformed Git marker files', () => {

@@ -165,7 +165,7 @@
       "automated": [
         { "file": "scripts/run-core-behavior-tests.js", "test": "TerminalFirstState project mutations preserve explicit identities and watcher refreshes" },
         { "file": "scripts/run-project-catalog-tests.js", "test": "project discovery honors configured roots, depth, limits, and workspace folders" },
-        { "file": "scripts/run-project-catalog-tests.js", "test": "project discovery canonicalizes root aliases and skips symbolic child repositories" },
+        { "file": "scripts/run-project-catalog-tests.js", "test": "project discovery canonicalizes linked roots, accepts linked repositories, and does not traverse linked trees" },
         { "file": "scripts/run-project-catalog-tests.js", "test": "project discovery recognizes real Git worktrees and rejects malformed Git marker files" },
         { "file": "scripts/run-project-catalog-tests.js", "test": "project nickname sets and clears while registration identity stays canonical by path" },
         { "file": "scripts/run-project-catalog-tests.js", "test": "duplicate discovered names receive stable unique identities and duplicate real paths collapse" },
@@ -1119,7 +1119,7 @@
       "automated": [
         { "file": "scripts/run-project-catalog-tests.js", "test": "duplicate discovered names receive stable unique identities and duplicate real paths collapse" },
         { "file": "scripts/run-project-catalog-tests.js", "test": "project discovery honors configured roots, depth, limits, and workspace folders" },
-        { "file": "scripts/run-project-catalog-tests.js", "test": "project discovery canonicalizes root aliases and skips symbolic child repositories" },
+        { "file": "scripts/run-project-catalog-tests.js", "test": "project discovery canonicalizes linked roots, accepts linked repositories, and does not traverse linked trees" },
         { "file": "scripts/run-project-catalog-tests.js", "test": "project discovery recognizes real Git worktrees and rejects malformed Git marker files" },
         { "file": "scripts/run-project-catalog-tests.js", "test": "missing registered folders remain visible until an authoritative uncheck removes them" },
         { "file": "scripts/run-project-catalog-tests.js", "test": "Git worktree pointers are bounded and symbolic Git metadata is ignored" },

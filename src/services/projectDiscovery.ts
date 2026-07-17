@@ -94,8 +94,30 @@ export function discoverLocalProjects(options: ProjectDiscoveryOptions): Project
         truncated = true;
       }
       for (const entry of entries.slice(0, MAX_ENTRIES_PER_DIRECTORY)) {
-        if (!entry.isDirectory() || entry.isSymbolicLink() || IGNORED_DIRECTORY_NAMES.has(entry.name)) { continue; }
+        if (IGNORED_DIRECTORY_NAMES.has(entry.name)) { continue; }
         const child = path.join(current.directory, entry.name);
+        if (entry.isSymbolicLink()) {
+          // Windows directory junctions and OneDrive-backed reparse points may
+          // be reported as symbolic links. A directly linked repository is a
+          // useful registration candidate after canonicalization, but an
+          // arbitrary linked directory tree is never traversed implicitly.
+          const linkedDirectory = normalizeDirectory(child);
+          const linkedGit = linkedDirectory ? readProjectGitBranch(linkedDirectory) : undefined;
+          if (linkedDirectory && linkedGit && !workspacePaths.has(pathKey(linkedDirectory))) {
+            retainProject(projects, {
+              name: path.basename(linkedDirectory) || entry.name,
+              path: linkedDirectory,
+              source: 'configured-root',
+              branch: linkedGit.branch,
+            }, limit);
+            if (projects.size >= limit) {
+              truncated = true;
+              break;
+            }
+          }
+          continue;
+        }
+        if (!entry.isDirectory()) { continue; }
         const key = pathKey(child);
         if (queued.has(key)) { continue; }
         queue.push({ directory: child, level: current.level + 1 });
