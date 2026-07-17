@@ -4,11 +4,13 @@ const { spawnSync } = require('node:child_process');
 const { testSuiteFiles } = require('./test-suite-files.js');
 
 const root = path.resolve(__dirname, '..');
-const COVERAGE_THRESHOLDS = Object.freeze({ lines: 86.4, branches: 77.4, functions: 89.5 });
+const COVERAGE_THRESHOLDS = Object.freeze({ lines: 87.3, branches: 78.4, functions: 90.2 });
 const CRITICAL_FILE_THRESHOLDS = Object.freeze({
+  'ciMonitorStore.js': Object.freeze({ lines: 94, branches: 83.5, functions: 82 }),
   'contextBasketStore.js': Object.freeze({ lines: 90, branches: 78, functions: 93 }),
   'dateValues.js': Object.freeze({ lines: 100, branches: 100, functions: 100 }),
   'gitlabPipelineMonitorStore.js': Object.freeze({ lines: 92, branches: 69, functions: 76 }),
+  'gitlabMergeRequestContext.js': Object.freeze({ lines: 87.5, branches: 83, functions: 92 }),
   'gitlabRestClient.js': Object.freeze({ lines: 82, branches: 69, functions: 87 }),
   'jenkinsRestClient.js': Object.freeze({ lines: 73, branches: 60, functions: 89 }),
   'jiraTicketContext.js': Object.freeze({ lines: 85, branches: 85, functions: 94 }),
@@ -29,6 +31,7 @@ const CRITICAL_FILE_THRESHOLDS = Object.freeze({
   'terminalFirstExtension.js': Object.freeze({ lines: 77.5, branches: 60, functions: 89.5 }),
   'projectCatalog.js': Object.freeze({ lines: 92, branches: 82, functions: 93 }),
   'projectDiscovery.js': Object.freeze({ lines: 85, branches: 66, functions: 80 }),
+  'projectGitPresentation.js': Object.freeze({ lines: 100, branches: 85, functions: 100 }),
   'pipelineTransitions.js': Object.freeze({ lines: 95, branches: 88, functions: 88 }),
   'providerReadHealth.js': Object.freeze({ lines: 94, branches: 88, functions: 78 }),
   'sonarRestClient.js': Object.freeze({ lines: 77, branches: 65, functions: 90 }),
@@ -37,6 +40,7 @@ const CRITICAL_FILE_THRESHOLDS = Object.freeze({
   'ManagedSessionTreeProvider.js': Object.freeze({ lines: 95, branches: 87, functions: 76 }),
   'ProjectTreeProvider.js': Object.freeze({ lines: 96, branches: 80, functions: 82 }),
   'WorkTreeProvider.js': Object.freeze({ lines: 95, branches: 83, functions: 76 }),
+  'vscodeGitReadService.js': Object.freeze({ lines: 95, branches: 65, functions: 80 }),
 });
 const MINIMUM_NODE_VERSION = Object.freeze({ major: 22, minor: 5 });
 

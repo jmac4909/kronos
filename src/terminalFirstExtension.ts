@@ -59,6 +59,10 @@ import {
   type TerminalContextPlacement,
 } from './services/terminalContextInsertion';
 import { readProjectGitEvidence, renderProjectGitEvidence } from './services/vscodeGitReadService';
+import {
+  PROJECT_GIT_STATE_ACTIONS,
+  buildProjectGitStatePanelHtml,
+} from './services/projectGitPresentation';
 import { writeProjectGitContextArtifact } from './services/projectGitContextStore';
 import {
   createOperatorTerminalRegistry,
@@ -329,6 +333,12 @@ interface ProjectIntegrationPanelRecord {
   projectNames: Set<string>;
 }
 
+interface ProjectGitPanelRecord {
+  panel: vscode.WebviewPanel;
+  nonce: string;
+  project: RegisteredProjectCommandTarget;
+}
+
 interface TerminalSelection {
   terminal: vscode.Terminal;
   binding: OperatorTerminalBinding;
@@ -404,6 +414,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
   private setupPanel: OperationsPanelRecord | undefined;
   private doctorPanel: OperationsPanelRecord | undefined;
   private projectIntegrationPanel: ProjectIntegrationPanelRecord | undefined;
+  private projectGitPanel: ProjectGitPanelRecord | undefined;
   private readonly monitor: ManagedProviderMonitor;
   private refreshTimer: NodeJS.Timeout | undefined;
   private providerTimer: NodeJS.Timeout | undefined;
@@ -477,6 +488,8 @@ class TerminalFirstRuntime implements vscode.Disposable {
     this.promptLibraryPanel = undefined;
     this.projectIntegrationPanel?.panel.dispose();
     this.projectIntegrationPanel = undefined;
+    this.projectGitPanel?.panel.dispose();
+    this.projectGitPanel = undefined;
     for (const disposable of this.disposables.splice(0)) { disposable.dispose(); }
     this.operatorTerminals.clear();
     this.workTree.dispose();
@@ -3289,16 +3302,67 @@ class TerminalFirstRuntime implements vscode.Disposable {
   private async openProjectGitStatus(argument: unknown): Promise<void> {
     const project = this.resolveRegisteredProject(argument);
     if (!project) { return; }
-    await this.runProgress(`Kronos: Reading ${project.projectName} Git status...`, async progress => {
-      progress.report({ message: 'Reading the VS Code built-in Git model without changing the repository...' });
-      const evidence = await readProjectGitEvidence(project.projectPath, { openRepositoryIfNeeded: true });
-      const document = await vscode.workspace.openTextDocument({
-        language: 'markdown',
-        content: renderProjectGitEvidence(project.projectName, evidence),
-      });
-      await vscode.window.showTextDocument(document, { preview: true });
+    const existing = this.projectGitPanel;
+    if (existing && existing.project.projectName === project.projectName
+      && existing.project.projectPath === project.projectPath) {
+      existing.panel.reveal(vscode.ViewColumn.One);
+      await this.refreshProjectGitPanel(existing, false);
+      return;
+    }
+    existing?.panel.dispose();
+    const panel = vscode.window.createWebviewPanel(
+      'kronosProjectGitState',
+      `${project.displayName || project.projectName} — Git state`,
+      vscode.ViewColumn.One,
+      {
+        enableScripts: true,
+        enableCommandUris: false,
+        localResourceRoots: [vscode.Uri.joinPath(this.context.extensionUri, 'media')],
+      },
+    );
+    panel.iconPath = vscode.Uri.joinPath(this.context.extensionUri, 'media', 'kronos-icon.svg');
+    const record: ProjectGitPanelRecord = { panel, nonce: createWebviewNonce(), project };
+    this.projectGitPanel = record;
+    panel.onDidDispose(() => {
+      if (this.projectGitPanel?.panel === panel) { this.projectGitPanel = undefined; }
+    });
+    panel.webview.onDidReceiveMessage(async raw => {
+      if (isRecord(raw) && raw['command'] === WEBVIEW_READY_COMMAND) { return; }
+      const message = normalizeOperationsActionMessage(raw, PROJECT_GIT_STATE_ACTIONS);
+      if (!message) {
+        void vscode.window.showWarningMessage('Kronos ignored an invalid project Git-state request.');
+        return;
+      }
+      if (message.command === 'close') {
+        panel.dispose();
+        return;
+      }
+      if (message.command === 'openSourceControl') {
+        await vscode.commands.executeCommand('workbench.view.scm');
+        return;
+      }
+      await this.refreshProjectGitPanel(record, true);
+    });
+    await this.refreshProjectGitPanel(record, true);
+  }
+
+  private async refreshProjectGitPanel(record: ProjectGitPanelRecord, notifyUnavailable: boolean): Promise<void> {
+    await this.runProgress(`Kronos: Reading ${record.project.projectName} Git state...`, async progress => {
+      progress.report({ message: 'Reading branches and working-tree state without changing the repository...' });
+      const evidence = await readProjectGitEvidence(record.project.projectPath, { openRepositoryIfNeeded: true });
+      if (this.projectGitPanel !== record) { return; }
+      const actionScriptUri = record.panel.webview.asWebviewUri(
+        vscode.Uri.joinPath(this.context.extensionUri, 'media', WEBVIEW_ACTION_PANEL_SCRIPT),
+      ).toString();
+      record.panel.webview.html = withWebviewCsp(buildProjectGitStatePanelHtml({
+        projectName: record.project.projectName,
+        ...(record.project.displayName ? { displayName: record.project.displayName } : {}),
+        evidence,
+        nonce: record.nonce,
+        actionScriptUri,
+      }), webviewScriptCspOptions(record.panel.webview.cspSource, record.nonce));
       this.projectTree.refresh();
-      if (!evidence.available) {
+      if (notifyUnavailable && !evidence.available) {
         void vscode.window.showWarningMessage(evidence.warning || 'VS Code Git status is unavailable for this project.');
       }
     });

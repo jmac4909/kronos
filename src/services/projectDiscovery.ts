@@ -38,22 +38,27 @@ export function discoverLocalProjects(options: ProjectDiscoveryOptions): Project
   const warnings: string[] = [];
   const projects = new Map<string, DiscoveredProject>();
   const workspacePaths = new Set<string>();
+  const queue: Array<{ directory: string; level: number }> = [];
+  const queued = new Set<string>();
   for (const folder of (options.workspaceFolders || []).slice(0, MAX_ROOTS)) {
     const candidate = normalizeDirectory(folder.path);
     if (!candidate) {
       warnings.push(`Workspace folder is unavailable: ${safeSingleLine(folder.path, 1_000) || '(empty path)'}`);
       continue;
     }
-    workspacePaths.add(pathKey(candidate));
+    const key = pathKey(candidate);
+    workspacePaths.add(key);
     retainProject(projects, {
       name: safeSingleLine(folder.name, 200) || path.basename(candidate),
       path: candidate,
       source: 'workspace',
     }, limit);
+    if (!queued.has(key)) {
+      queue.push({ directory: candidate, level: 0 });
+      queued.add(key);
+    }
   }
 
-  const queue: Array<{ directory: string; level: number }> = [];
-  const queued = new Set<string>();
   for (const rootValue of (options.roots || []).slice(0, MAX_ROOTS)) {
     const expanded = expandHome(rootValue);
     const root = normalizeDirectory(expanded);
@@ -84,7 +89,6 @@ export function discoverLocalProjects(options: ProjectDiscoveryOptions): Project
           branch: git.branch,
         }, limit);
       }
-      continue;
     }
     if (current.level >= depth) { continue; }
     try {

@@ -142,6 +142,7 @@
         { "file": "scripts/run-persistence-recovery-tests.js", "test": "lease renewal and release refuse an identity replacement without deleting its owner" },
         { "file": "scripts/run-persistence-recovery-tests.js", "test": "malformed, partial, oversized, future, and symbolic lease state fails closed" },
         { "file": "scripts/run-persistence-recovery-tests.js", "test": "catalog, session, and monitor readers reject incomplete or unsupported private JSON" },
+        { "file": "scripts/run-persistence-recovery-tests.js", "test": "CI monitor snapshots round-trip one normalized provider state and fail closed on unsafe storage" },
         { "file": "scripts/run-persistence-recovery-tests.js", "test": "work-session mutations preserve one identity across replacement, close, and reopen decisions" },
         { "file": "scripts/run-persistence-recovery-tests.js", "test": "work-session storage rejects mismatched identities and unsafe removal entries" },
         { "file": "scripts/run-persistence-recovery-tests.js", "test": "work-session provider, artifact, and monitoring projections cover every operator-visible state" },
@@ -165,6 +166,7 @@
       "automated": [
         { "file": "scripts/run-core-behavior-tests.js", "test": "TerminalFirstState project mutations preserve explicit identities and watcher refreshes" },
         { "file": "scripts/run-project-catalog-tests.js", "test": "project discovery honors configured roots, depth, limits, and workspace folders" },
+        { "file": "scripts/run-project-catalog-tests.js", "test": "project discovery finds and independently registers a Git repository nested inside another repository" },
         { "file": "scripts/run-project-catalog-tests.js", "test": "project discovery canonicalizes linked roots, accepts linked repositories, and does not traverse linked trees" },
         { "file": "scripts/run-project-catalog-tests.js", "test": "project discovery recognizes real Git worktrees and rejects malformed Git marker files" },
         { "file": "scripts/run-project-catalog-tests.js", "test": "project nickname sets and clears while registration identity stays canonical by path" },
@@ -172,6 +174,7 @@
         { "file": "scripts/run-project-catalog-tests.js", "test": "missing registered folders remain visible until an authoritative uncheck removes them" },
         { "file": "scripts/run-unit-tests.js", "test": "project Git evidence reads only the bounded VS Code Git model" },
         { "file": "scripts/run-project-catalog-tests.js", "test": "project Git presentation distinguishes unavailable, clean, staged, untracked, conflicted, and bounded states" },
+        { "file": "scripts/run-project-catalog-tests.js", "test": "project Git state panel makes branches and dirty state scannable without exposing a checkout action" },
         { "file": "scripts/run-project-catalog-tests.js", "test": "project integration presentation exposes readiness without provider identifiers or credentials" },
         { "file": "scripts/run-unit-tests.js", "test": "extension activation registers the bounded surface and explicit launch commands create the right session kinds" },
         { "file": "scripts/run-jira-work-board-tests.js", "test": "board keeps registered project paths and current branches in a compact disclosure" },
@@ -219,6 +222,8 @@
         { "file": "scripts/run-unit-tests.js", "test": "GitLab discovery falls back to ticket key and refuses ambiguous matches" },
         { "file": "scripts/run-provider-contract-tests.js", "test": "sanitized Jira fixture retains rich fields and prior rows after a partial page read" },
         { "file": "scripts/run-provider-contract-tests.js", "test": "sanitized GitLab fixture normalizes enterprise MR review, pipeline, job, and test evidence" },
+        { "file": "scripts/run-provider-contract-tests.js", "test": "GitLab context normalization retains rich optional evidence and reports malformed provider fields" },
+        { "file": "scripts/run-provider-contract-tests.js", "test": "GitLab normalized context enforces the global byte budget without dropping its safety warning" },
         { "file": "scripts/run-provider-contract-tests.js", "test": "sanitized Jenkins fixture resolves a multibranch build and treats missing stages as optional" },
         { "file": "scripts/run-provider-contract-tests.js", "test": "sanitized SonarQube fixture retains branch-qualified gate, measures, and issues" }
       ],
@@ -1098,7 +1103,8 @@
     {
       "requirements": ["G09-case-02:e19f09a2"],
       "automated": [
-        { "file": "scripts/run-project-catalog-tests.js", "test": "project discovery honors configured roots, depth, limits, and workspace folders" }
+        { "file": "scripts/run-project-catalog-tests.js", "test": "project discovery honors configured roots, depth, limits, and workspace folders" },
+        { "file": "scripts/run-project-catalog-tests.js", "test": "project discovery finds and independently registers a Git repository nested inside another repository" }
       ]
     },
     {
@@ -1119,6 +1125,7 @@
       "automated": [
         { "file": "scripts/run-project-catalog-tests.js", "test": "duplicate discovered names receive stable unique identities and duplicate real paths collapse" },
         { "file": "scripts/run-project-catalog-tests.js", "test": "project discovery honors configured roots, depth, limits, and workspace folders" },
+        { "file": "scripts/run-project-catalog-tests.js", "test": "project discovery finds and independently registers a Git repository nested inside another repository" },
         { "file": "scripts/run-project-catalog-tests.js", "test": "project discovery canonicalizes linked roots, accepts linked repositories, and does not traverse linked trees" },
         { "file": "scripts/run-project-catalog-tests.js", "test": "project discovery recognizes real Git worktrees and rejects malformed Git marker files" },
         { "file": "scripts/run-project-catalog-tests.js", "test": "missing registered folders remain visible until an authoritative uncheck removes them" },
@@ -1130,6 +1137,7 @@
       "requirements": ["G09-case-06:dfe7076c"],
       "automated": [
         { "file": "scripts/run-project-catalog-tests.js", "test": "project Git presentation distinguishes unavailable, clean, staged, untracked, conflicted, and bounded states" },
+        { "file": "scripts/run-project-catalog-tests.js", "test": "project Git state panel makes branches and dirty state scannable without exposing a checkout action" },
         { "file": "scripts/run-unit-tests.js", "test": "project Git evidence reads only the bounded VS Code Git model" }
       ]
     },

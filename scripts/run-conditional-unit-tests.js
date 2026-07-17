@@ -100,6 +100,26 @@ test('coverage policy discovers the npm test graph and fails closed on missing o
     { lines: 77.5, branches: 60, functions: 89.5 },
     'activation and command-orchestration gains must remain protected by the coverage policy',
   );
+  assert.deepEqual(
+    coveragePolicy.CRITICAL_FILE_THRESHOLDS['ciMonitorStore.js'],
+    { lines: 94, branches: 83.5, functions: 82 },
+    'CI snapshot persistence gains must remain protected by the coverage policy',
+  );
+  assert.deepEqual(
+    coveragePolicy.CRITICAL_FILE_THRESHOLDS['gitlabMergeRequestContext.js'],
+    { lines: 87.5, branches: 83, functions: 92 },
+    'GitLab evidence normalization gains must remain protected by the coverage policy',
+  );
+  assert.deepEqual(
+    coveragePolicy.CRITICAL_FILE_THRESHOLDS['projectGitPresentation.js'],
+    { lines: 100, branches: 85, functions: 100 },
+    'the Git-state dashboard must retain direct presentation coverage',
+  );
+  assert.deepEqual(
+    coveragePolicy.CRITICAL_FILE_THRESHOLDS['vscodeGitReadService.js'],
+    { lines: 95, branches: 65, functions: 80 },
+    'bounded VS Code Git-model evidence must retain direct coverage',
+  );
   assert.equal(qualityEvidence.countNodeTests([
     "test('top-level case', () => {});",
     "  await t.test('nested case', async () => {});",
@@ -391,19 +411,22 @@ test('Projects tree covers empty, clean, changed, unavailable, action, and faile
   assert.match(byName.Changed.tooltip, /Changes note: Diff remained bounded\./);
   assert.equal(byName.Unavailable.iconPath.color.id, 'problemsWarningIcon.foreground');
   assert.equal(byName.Unavailable.description, 'release/unavailable • status unavailable');
-  assert.equal(byName.Clean.command.title, 'View Project Changes');
+  assert.equal(byName.Clean.command.title, 'Git State & Branches');
   assert.equal(provider.getTreeItem(byName.Clean), byName.Clean);
 
   const actions = await provider.getChildren(byName.Clean);
-  assert.equal(actions.length, 7);
+  assert.equal(actions.length, 8);
   assert.equal(actions[0].command.command, 'kronos.newClaudeSession');
   assert.equal(actions[0].command.arguments[0].projectPath, cleanPath);
   assert.equal(actions[0].description, 'in this project');
-  assert.equal(actions[1].label, 'Review local changes');
-  assert.equal(actions[1].description, 'for terminal context');
-  assert.equal(actions[3].description, 'for terminal context');
-  assert.equal(actions[6].command.command, 'kronos.renameLocalProject');
-  assert.equal(actions[6].label, 'Rename project');
+  assert.equal(actions[1].label, 'Git state & branches');
+  assert.equal(actions[1].command.command, 'kronos.openProjectGitStatus');
+  assert.equal(actions[1].description, 'inspect and switch in Source Control');
+  assert.equal(actions[2].label, 'Review local changes');
+  assert.equal(actions[2].description, 'for terminal context');
+  assert.equal(actions[4].description, 'for terminal context');
+  assert.equal(actions[7].command.command, 'kronos.renameLocalProject');
+  assert.equal(actions[7].label, 'Rename project');
   assert.deepEqual(await provider.getChildren(actions[0]), []);
   provider.refresh();
   assert.deepEqual(changes, [undefined]);

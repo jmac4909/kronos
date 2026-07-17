@@ -456,6 +456,101 @@ test('project Git presentation distinguishes unavailable, clean, staged, untrack
   });
 });
 
+test('project Git state panel makes branches and dirty state scannable without exposing a checkout action', () => {
+  const html = projectGitPresentation.buildProjectGitStatePanelHtml({
+    projectName: 'Application<script>',
+    displayName: 'Customer <API>',
+    evidence: {
+      projectPath: '/fixture/customer-api',
+      branch: 'feature/panel',
+      detached: false,
+      upstream: 'origin/feature/panel',
+      ahead: 3,
+      behind: 1,
+      branches: [
+        { name: 'feature/panel', kind: 'local', current: true },
+        { name: 'main', kind: 'local', current: false },
+        { name: 'origin/main', kind: 'remote', current: false },
+        { name: 'origin/<unsafe>', kind: 'remote', current: false },
+      ],
+      branchCount: 4,
+      branchesTruncated: false,
+      changes: [
+        { path: 'src/panel.ts', status: 'modified', staged: false },
+        { path: 'src/staged.ts', status: 'index modified', staged: true },
+      ],
+      changeCount: 2,
+      diff: '+safe\n</pre><script>unsafe()</script>',
+      diffTruncated: false,
+      available: true,
+      warning: 'Read warning <unsafe>',
+    },
+    nonce: 'git-state-nonce',
+    actionScriptUri: 'vscode-webview://fixture/kronos-action-panel.js',
+  });
+  assert.deepEqual([...projectGitPresentation.PROJECT_GIT_STATE_ACTIONS], [
+    'refresh',
+    'openSourceControl',
+    'close',
+  ]);
+  assert.match(html, /Customer &lt;API&gt; Git state/);
+  assert.match(html, /feature\/panel/);
+  assert.match(html, /origin\/feature\/panel/);
+  assert.match(html, /3 ahead · 1 behind/);
+  assert.match(html, /origin\/&lt;unsafe&gt;/);
+  assert.match(html, /src\/staged\.ts/);
+  assert.match(html, /data-action="openSourceControl"/);
+  assert.match(html, /Open Source Control to switch/);
+  assert.match(html, /Kronos keeps Git read-only/);
+  assert.match(html, /&lt;\/pre&gt;&lt;script&gt;unsafe\(\)&lt;\/script&gt;/);
+  assert.doesNotMatch(html, /data-action="checkout"|git\.checkout|<script>unsafe\(\)<\/script>/);
+
+  const cleanHtml = projectGitPresentation.buildProjectGitStatePanelHtml({
+    projectName: 'Clean project',
+    evidence: {
+      projectPath: '/fixture/clean',
+      branch: 'main',
+      detached: false,
+      branches: [{ name: 'main', kind: 'local', current: true }],
+      branchCount: 1,
+      branchesTruncated: true,
+      changes: [],
+      changeCount: 0,
+      diff: '',
+      diffTruncated: false,
+      available: true,
+    },
+    nonce: 'clean-git-state-nonce',
+    actionScriptUri: 'vscode-webview://fixture/kronos-action-panel.js',
+  });
+  assert.match(cleanHtml, /Clean project Git state/);
+  assert.match(cleanHtml, /Clean working tree/);
+  assert.match(cleanHtml, /No upstream/);
+  assert.match(cleanHtml, /Branches · list truncated/);
+  assert.match(cleanHtml, /None reported by VS Code/);
+  assert.doesNotMatch(cleanHtml, /Diff against HEAD/);
+
+  const unavailableHtml = projectGitPresentation.buildProjectGitStatePanelHtml({
+    projectName: 'Detached project',
+    evidence: {
+      projectPath: '/fixture/detached',
+      detached: true,
+      branches: [],
+      branchCount: 0,
+      branchesTruncated: false,
+      changes: [],
+      changeCount: 0,
+      diff: '',
+      diffTruncated: false,
+      available: false,
+    },
+    nonce: 'unavailable-git-state-nonce',
+    actionScriptUri: 'vscode-webview://fixture/kronos-action-panel.js',
+  });
+  assert.match(unavailableHtml, /Detached HEAD/);
+  assert.match(unavailableHtml, /Git status is not available yet/);
+});
+
 test('project discovery honors configured roots, depth, limits, and workspace folders', () => {
   const discoveryRoot = path.join(tempRoot, 'project-discovery');
   const direct = path.join(discoveryRoot, 'direct-project');
@@ -484,6 +579,53 @@ test('project discovery honors configured roots, depth, limits, and workspace fo
   const limited = projectDiscovery.discoverLocalProjects({ roots: [discoveryRoot], depth: 2, limit: 1 });
   assert.equal(limited.projects.length, 1);
   assert.equal(limited.truncated, true);
+});
+
+test('project discovery finds and independently registers a Git repository nested inside another repository', () => {
+  const outerRepository = path.join(tempRoot, 'nested-repository', 'outer-project');
+  const innerRepository = path.join(outerRepository, 'inner-project');
+  for (const [directory, branch] of [[outerRepository, 'feature/outer'], [innerRepository, 'feature/inner']]) {
+    fs.mkdirSync(path.join(directory, '.git'), { recursive: true });
+    fs.writeFileSync(path.join(directory, '.git', 'HEAD'), `ref: refs/heads/${branch}\n`);
+  }
+
+  const fromWorkspace = projectDiscovery.discoverLocalProjects({
+    workspaceFolders: [{ name: 'Outer Workspace', path: outerRepository }],
+    roots: [],
+    depth: 1,
+    limit: 100,
+  });
+  assert.deepEqual(fromWorkspace.projects.map(project => ({
+    name: project.name,
+    path: project.path,
+    branch: project.branch,
+  })), [{
+    name: 'inner-project',
+    path: fs.realpathSync.native(innerRepository),
+    branch: 'feature/inner',
+  }, {
+    name: 'Outer Workspace',
+    path: fs.realpathSync.native(outerRepository),
+    branch: 'feature/outer',
+  }]);
+
+  const fromConfiguredRoot = projectDiscovery.discoverLocalProjects({
+    roots: [outerRepository],
+    depth: 1,
+    limit: 100,
+  });
+  assert.deepEqual(
+    new Set(fromConfiguredRoot.projects.map(project => project.path)),
+    new Set([fs.realpathSync.native(outerRepository), fs.realpathSync.native(innerRepository)]),
+  );
+
+  const plan = projectCatalog.planLocalProjectRegistrations(stateStore.emptyWorkCatalog(), fromWorkspace.projects);
+  const registered = projectCatalog.replaceRegisteredLocalProjects(stateStore.emptyWorkCatalog(), plan);
+  assert.deepEqual(
+    new Set(projectCatalog.listLocalProjects(registered).map(project => project.path)),
+    new Set([fs.realpathSync.native(outerRepository), fs.realpathSync.native(innerRepository)]),
+    'the outer and inner repositories remain separate registration identities',
+  );
 });
 
 test('project discovery canonicalizes linked roots, accepts linked repositories, and does not traverse linked trees', t => {

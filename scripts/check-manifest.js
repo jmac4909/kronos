@@ -115,6 +115,7 @@ const ALLOWED_CODICONS = new Set([
   'folder-opened',
   'folder-library',
   'export',
+  'git-branch',
   'git-merge',
   'history',
   'layout',

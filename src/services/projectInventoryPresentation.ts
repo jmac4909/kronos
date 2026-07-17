@@ -21,6 +21,12 @@ const REGISTERED_PROJECT_ACTIONS: readonly RegisteredProjectActionPresentation[]
     description: 'in this project',
   }),
   Object.freeze({
+    label: 'Git state & branches',
+    icon: 'git-branch',
+    command: 'kronos.openProjectGitStatus',
+    description: 'inspect and switch in Source Control',
+  }),
+  Object.freeze({
     label: 'Review local changes',
     icon: 'symbol-keyword',
     command: 'kronos.insertProjectGitContext',

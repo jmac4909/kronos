@@ -9,9 +9,22 @@ export interface ProjectGitChange {
   staged: boolean;
 }
 
+export interface ProjectGitBranchRef {
+  name: string;
+  kind: 'local' | 'remote';
+  current: boolean;
+}
+
 export interface ProjectGitEvidence {
   projectPath: string;
   branch?: string;
+  detached: boolean;
+  upstream?: string;
+  ahead?: number;
+  behind?: number;
+  branches: ProjectGitBranchRef[];
+  branchCount: number;
+  branchesTruncated: boolean;
   changes: ProjectGitChange[];
   changeCount: number;
   diff: string;
@@ -25,10 +38,25 @@ interface GitChangeLike {
   status: number;
 }
 
+interface GitRefLike {
+  type?: number;
+  name?: string;
+  remote?: string;
+}
+
+interface GitHeadLike {
+  name?: string;
+  commit?: string;
+  upstream?: { name?: string; remote?: string };
+  ahead?: number;
+  behind?: number;
+}
+
 interface GitRepositoryLike {
   rootUri: vscode.Uri;
   state: {
-    HEAD?: { name?: string };
+    HEAD?: GitHeadLike;
+    refs?: GitRefLike[];
     mergeChanges: GitChangeLike[];
     indexChanges: GitChangeLike[];
     workingTreeChanges: GitChangeLike[];
@@ -50,6 +78,7 @@ interface GitExtensionLike {
 
 const MAX_CHANGES = 500;
 const MAX_DIFF_CHARS = 512 * 1024;
+const MAX_BRANCHES = 200;
 
 /** Reads only VS Code's built-in Git model. No Git command or mutation is issued by Kronos. */
 export async function readProjectGitEvidence(
@@ -57,10 +86,18 @@ export async function readProjectGitEvidence(
   options: { includeDiff?: boolean; openRepositoryIfNeeded?: boolean } = {},
 ): Promise<ProjectGitEvidence> {
   const projectPath = path.resolve(projectPathValue);
-  const fallbackBranch = readProjectGitBranch(projectPath)?.branch;
+  const fallback = readProjectGitBranch(projectPath);
+  const fallbackBranch = fallback?.branch;
+  const fallbackBranches: ProjectGitBranchRef[] = fallbackBranch && !fallback?.detached
+    ? [{ name: fallbackBranch, kind: 'local', current: true }]
+    : [];
   const base: ProjectGitEvidence = {
     projectPath,
     ...(fallbackBranch ? { branch: fallbackBranch } : {}),
+    detached: Boolean(fallback?.detached),
+    branches: fallbackBranches,
+    branchCount: fallbackBranches.length,
+    branchesTruncated: false,
     changes: [],
     changeCount: 0,
     diff: '',
@@ -94,14 +131,14 @@ export async function readProjectGitEvidence(
       staged: group.staged,
     }));
     let diff = '';
-    let warning: string | undefined;
+    const warnings: string[] = [];
     if (options.includeDiff !== false) {
       try { diff = await repository.diffWithHEAD(); }
       catch (error: unknown) {
-        warning = boundedOperationFailure(
+        warnings.push(boundedOperationFailure(
           error,
           'Git status is available, but the diff could not be read.',
-        ).display;
+        ).display);
       }
     }
     let diffTruncated = false;
@@ -109,21 +146,35 @@ export async function readProjectGitEvidence(
       diff = `${diff.slice(0, MAX_DIFF_CHARS)}\n\n[Diff truncated by Kronos at ${MAX_DIFF_CHARS} characters.]\n`;
       diffTruncated = true;
     }
-    const branch = repository.state.HEAD?.name || fallbackBranch;
+    const head = repository.state.HEAD;
+    const branch = head?.name || fallbackBranch;
+    const allBranches = projectGitBranches(repository.state.refs, branch);
+    const branchesTruncated = allBranches.length > MAX_BRANCHES;
+    if (allChanges.length > MAX_CHANGES) {
+      warnings.push(`Only the first ${MAX_CHANGES} changed paths are shown.`);
+    }
+    if (branchesTruncated) {
+      warnings.push(`Only the first ${MAX_BRANCHES} branches are shown.`);
+    }
+    const upstream = projectGitUpstream(head?.upstream);
+    const ahead = boundedNonNegativeInteger(head?.ahead);
+    const behind = boundedNonNegativeInteger(head?.behind);
     return {
       projectPath,
       ...(branch ? { branch } : {}),
+      detached: Boolean(head && !head.name) || (!head && Boolean(fallback?.detached)),
+      ...(upstream ? { upstream } : {}),
+      ...(ahead !== undefined ? { ahead } : {}),
+      ...(behind !== undefined ? { behind } : {}),
+      branches: allBranches.slice(0, MAX_BRANCHES),
+      branchCount: allBranches.length,
+      branchesTruncated,
       changes,
       changeCount: allChanges.length,
       diff,
       diffTruncated,
       available: true,
-      ...((warning || allChanges.length > MAX_CHANGES) ? {
-        warning: [
-          warning,
-          ...(allChanges.length > MAX_CHANGES ? [`Only the first ${MAX_CHANGES} changed paths are shown.`] : []),
-        ].filter(Boolean).join(' '),
-      } : {}),
+      ...(warnings.length > 0 ? { warning: warnings.join(' ') } : {}),
     };
   } catch (error: unknown) {
     return {
@@ -139,6 +190,9 @@ export function renderProjectGitEvidence(projectName: string, evidence: ProjectG
     '',
     `- Path: ${evidence.projectPath}`,
     `- Branch: ${evidence.branch || 'unavailable'}`,
+    `- Upstream: ${evidence.upstream || 'unavailable'}`,
+    `- Branches: ${evidence.branchCount}${evidence.branchesTruncated ? ' (list truncated)' : ''}`,
+    `- Sync: ${evidence.ahead ?? 0} ahead / ${evidence.behind ?? 0} behind`,
     `- Changes: ${evidence.changeCount}`,
     `- Source: ${evidence.available ? 'VS Code built-in Git model (read-only)' : 'Git status unavailable'}`,
     ...(evidence.warning ? [`- Warning: ${evidence.warning}`] : []),
@@ -157,6 +211,37 @@ export function renderProjectGitEvidence(projectName: string, evidence: ProjectG
     '',
   ];
   return lines.join('\n');
+}
+
+function projectGitBranches(refs: GitRefLike[] | undefined, currentBranch: string | undefined): ProjectGitBranchRef[] {
+  const branches = new Map<string, ProjectGitBranchRef>();
+  for (const ref of Array.isArray(refs) ? refs : []) {
+    const name = singleLine(ref?.name || '', 500);
+    if (!name || ref?.type === 2 || (ref?.type !== undefined && ref.type !== 0 && ref.type !== 1)) { continue; }
+    const kind: ProjectGitBranchRef['kind'] = ref.type === 1 || Boolean(ref.remote) ? 'remote' : 'local';
+    const key = `${kind}:${name}`;
+    branches.set(key, { name, kind, current: kind === 'local' && name === currentBranch });
+  }
+  if (currentBranch && !currentBranch.startsWith('detached@')) {
+    const key = `local:${currentBranch}`;
+    branches.set(key, { name: currentBranch, kind: 'local', current: true });
+  }
+  return [...branches.values()].sort((left, right) => {
+    if (left.current !== right.current) { return left.current ? -1 : 1; }
+    if (left.kind !== right.kind) { return left.kind === 'local' ? -1 : 1; }
+    return left.name.localeCompare(right.name);
+  });
+}
+
+function projectGitUpstream(value: GitHeadLike['upstream']): string | undefined {
+  const name = singleLine(value?.name || '', 500);
+  const remote = singleLine(value?.remote || '', 200);
+  if (!name) { return undefined; }
+  return remote && !name.startsWith(`${remote}/`) ? `${remote}/${name}` : name;
+}
+
+function boundedNonNegativeInteger(value: number | undefined): number | undefined {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : undefined;
 }
 
 function relativeChangePath(projectPath: string, filePath: string): string {

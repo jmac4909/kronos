@@ -255,9 +255,9 @@
       },
       {
         "command": "kronos.openProjectGitStatus",
-        "title": "Kronos: View Project Changes",
-        "shortTitle": "View Local Changes",
-        "icon": "$(open-preview)"
+        "title": "Kronos: Git State and Branches",
+        "shortTitle": "Git State & Branches",
+        "icon": "$(git-branch)"
       },
       {
         "command": "kronos.insertProjectGitContext",
@@ -540,6 +540,11 @@
           "command": "kronos.newClaudeSession",
           "when": "viewItem == registered_project",
           "group": "inline@1"
+        },
+        {
+          "command": "kronos.openProjectGitStatus",
+          "when": "viewItem == registered_project",
+          "group": "navigation@1"
         },
         {
           "command": "kronos.insertProjectGitContext",

@@ -1,7 +1,11 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { CiMonitorDigest, normalizeCiMonitorDigest } from './ciTransitions';
-import { readPrivateTextFileIfPresent, writePrivateTextFileAtomically } from './privateFilePrimitives';
+import {
+  assertSafeDirectoryPath,
+  readPrivateTextFileIfPresent,
+  writePrivateTextFileAtomically,
+} from './privateFilePrimitives';
 import { WorkSessionStoreOptions, workSessionDirectory } from './workSessionStore';
 
 const DIRECTORY_MODE = 0o700;
@@ -24,7 +28,7 @@ export function readCiMonitorSnapshot(
   const directoryPath = path.dirname(filePath);
   const directoryStat = lstatIfPresent(directoryPath);
   if (!directoryStat) { return null; }
-  assertSafeDirectory(directoryPath, directoryStat);
+  assertSafeDirectoryPath(directoryPath, 'CI monitor snapshot');
   assertPrivateMode(directoryPath, directoryStat, DIRECTORY_MODE, 'directory');
 
   let parsed: unknown;
@@ -63,7 +67,7 @@ export function writeCiMonitorSnapshot(
   if (!directoryStat) {
     throw new Error(`CI monitor work session directory does not exist: ${directoryPath}`);
   }
-  assertSafeDirectory(directoryPath, directoryStat);
+  assertSafeDirectoryPath(directoryPath, 'CI monitor snapshot');
   setPrivateDirectoryMode(directoryPath);
 
   const serialized = `${JSON.stringify(normalized, null, 2)}\n`;
@@ -88,15 +92,6 @@ function lstatIfPresent(filePath: string): fs.Stats | null {
   } catch (error: unknown) {
     if (errorCode(error) === 'ENOENT') { return null; }
     throw error;
-  }
-}
-
-function assertSafeDirectory(directoryPath: string, stat: fs.Stats): void {
-  if (!stat.isDirectory() || stat.isSymbolicLink()) {
-    throw new Error(`CI monitor directory is not a safe directory: ${directoryPath}`);
-  }
-  if (fs.realpathSync(directoryPath) !== path.resolve(directoryPath)) {
-    throw new Error(`CI monitor directory path contains a symbolic link: ${directoryPath}`);
   }
 }
 

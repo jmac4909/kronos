@@ -156,9 +156,9 @@ class RegisteredProjectTreeItem extends vscode.TreeItem implements RegisteredPro
       `Next check: ${formatDateTimeLabel(monitoringHealth.nextScheduledAt, 'Not scheduled')}`,
       ...(monitoringHealth.currentError ? [`Current issue: ${humanState(monitoringHealth.currentError)}`] : []),
       ...(evidence.warning ? [`Changes note: ${evidence.warning}`] : []),
-      'Select to view changes. Expand or right-click for project actions.',
+      'Select to inspect Git state and branches. Branch switching opens VS Code Source Control.',
     ].join('\n');
-    this.command = { command: 'kronos.openProjectGitStatus', title: 'View Project Changes', arguments: [target] };
+    this.command = { command: 'kronos.openProjectGitStatus', title: 'Git State & Branches', arguments: [target] };
   }
 }
 

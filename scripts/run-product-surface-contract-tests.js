@@ -76,6 +76,7 @@ test('discovery, setup, and project management each retain one canonical UI home
 test('registered project actions start ticket-free Claude before read-only and provider actions', () => {
   assert.deepEqual(registeredProjectActionInventory(), [
     { label: 'Start Claude', icon: 'terminal', command: 'kronos.newClaudeSession', description: 'in this project' },
+    { label: 'Git state & branches', icon: 'git-branch', command: 'kronos.openProjectGitStatus', description: 'inspect and switch in Source Control' },
     { label: 'Review local changes', icon: 'symbol-keyword', command: 'kronos.insertProjectGitContext', description: 'for terminal context' },
     { label: 'Open merge request', icon: 'git-merge', command: 'kronos.openProjectMergeRequest', description: 'in GitLab' },
     { label: 'Review merge request', icon: 'git-merge', command: 'kronos.insertProjectGitLabContext', description: 'for terminal context' },
@@ -143,7 +144,7 @@ test('row context menus contain only actions scoped to the selected row', () => 
   assert.equal(commandsById.get('kronos.insertJiraContext').shortTitle, 'Review Jira Ticket');
   assert.equal(commandsById.get('kronos.insertGitLabContext').shortTitle, 'Review Merge Request');
   assert.equal(commandsById.get('kronos.insertCiContext').shortTitle, 'Review Build & Quality');
-  assert.equal(commandsById.get('kronos.openProjectGitStatus').shortTitle, 'View Local Changes');
+  assert.equal(commandsById.get('kronos.openProjectGitStatus').shortTitle, 'Git State & Branches');
   assert.equal(commandsById.get('kronos.insertProjectGitContext').shortTitle, 'Review Local Changes');
   assert.equal(commandsById.get('kronos.searchLocalEvidence').shortTitle, 'Search');
   assert.equal(commandsById.get('kronos.pollManagedWorkSessions').shortTitle, 'Check Updates');

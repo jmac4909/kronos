@@ -16,6 +16,8 @@ const workSessions = require('../out/services/workSessionStore.js');
 const projectMonitoringStore = require('../out/services/projectMonitoringStore.js');
 const gitLabMonitorStore = require('../out/services/gitlabMergeRequestMonitorStore.js');
 const gitLabRestModule = require('../out/services/gitlabRestClient.js');
+const ciMonitorStore = require('../out/services/ciMonitorStore.js');
+const ciTransitions = require('../out/services/ciTransitions.js');
 const { buildWorkSessionAuditMarkdown } = require('../out/services/workSessionAuditView.js');
 const { ManagedProviderMonitor } = require('../out/services/managedProviderMonitor.js');
 
@@ -218,6 +220,101 @@ test('catalog, session, and monitor readers reject incomplete or unsupported pri
   const readStatusPath = gitLabMonitorStore.gitLabMergeRequestReadStatusPath(monitorSession.id, snapshotOptions);
   fs.writeFileSync(readStatusPath, '{"schemaVersion":99}\n', { mode: 0o600 });
   assert.equal(gitLabMonitorStore.readGitLabMergeRequestReadStatus(monitorSession.id, snapshotOptions), null);
+});
+
+test('CI monitor snapshots round-trip one normalized provider state and fail closed on unsafe storage', t => {
+  const options = { kronosDir: path.join(tempRoot, 'ci-monitor-snapshots') };
+  const missingSessionId = 'missing-ci-session';
+  assert.equal(ciMonitorStore.readCiMonitorSnapshot(missingSessionId, options), null);
+  assert.throws(
+    () => ciMonitorStore.writeCiMonitorSnapshot(missingSessionId, {}, options),
+    /snapshot is invalid/i,
+  );
+
+  const session = workSessions.createStandaloneWorkSession({ title: 'CI monitor fixture' }, options);
+  const digest = ciTransitions.buildCiMonitorDigest({
+    jenkins: {
+      provider: 'jenkins',
+      jobOrBuildUrl: 'https://jenkins.example/job/application/',
+      build: {
+        number: 42,
+        status: 'SUCCESS',
+        building: false,
+        url: 'https://jenkins.example/job/application/42/',
+      },
+      tests: { complete: true, failCount: 0 },
+      stages: [{ name: 'verify', status: 'SUCCESS' }],
+      completeness: { testReport: 'complete', stages: 'complete' },
+    },
+  });
+  assert.ok(digest);
+  assert.throws(
+    () => ciMonitorStore.writeCiMonitorSnapshot(missingSessionId, digest, options),
+    /work session directory does not exist/i,
+  );
+  assert.equal(ciMonitorStore.readCiMonitorSnapshot(session.id, options), null);
+  const snapshotPath = ciMonitorStore.writeCiMonitorSnapshot(session.id, digest, options);
+  assert.equal(snapshotPath, ciMonitorStore.ciMonitorSnapshotPath(session.id, options));
+  assert.deepEqual(ciMonitorStore.readCiMonitorSnapshot(session.id, options), digest);
+  if (process.platform !== 'win32') {
+    assert.equal(fs.statSync(snapshotPath).mode & 0o777, 0o600);
+    assert.equal(fs.statSync(path.dirname(snapshotPath)).mode & 0o777, 0o700);
+    fs.chmodSync(path.dirname(snapshotPath), 0o755);
+    assert.throws(
+      () => ciMonitorStore.readCiMonitorSnapshot(session.id, options),
+      /directory does not have private permissions/i,
+    );
+    ciMonitorStore.writeCiMonitorSnapshot(session.id, digest, options);
+    assert.equal(fs.statSync(path.dirname(snapshotPath)).mode & 0o777, 0o700);
+  }
+
+  assert.throws(
+    () => ciMonitorStore.writeCiMonitorSnapshot(session.id, { ...digest, jenkins: { provider: 'jenkins' } }, options),
+    /snapshot is invalid/i,
+  );
+  assert.deepEqual(
+    ciMonitorStore.readCiMonitorSnapshot(session.id, options),
+    digest,
+    'a rejected digest must not replace the last known-good monitor state',
+  );
+  for (const invalidId of ['', 'unsafe/session', `x${'y'.repeat(180)}`]) {
+    assert.throws(() => ciMonitorStore.ciMonitorSnapshotPath(invalidId, options), /session id is missing or invalid/i);
+  }
+
+  fs.writeFileSync(snapshotPath, '{"schemaVersion":', { mode: 0o600 });
+  assert.throws(
+    () => ciMonitorStore.readCiMonitorSnapshot(session.id, options),
+    /contains invalid JSON/i,
+  );
+  fs.writeFileSync(snapshotPath, '{"schemaVersion":99}\n', { mode: 0o600 });
+  assert.throws(
+    () => ciMonitorStore.readCiMonitorSnapshot(session.id, options),
+    /invalid or unsupported structure/i,
+  );
+
+  const outside = path.join(tempRoot, 'ci-monitor-outside');
+  const linkedOptions = { kronosDir: path.join(tempRoot, 'ci-monitor-linked') };
+  const linkedDirectory = path.dirname(ciMonitorStore.ciMonitorSnapshotPath('linked-session', linkedOptions));
+  fs.mkdirSync(path.dirname(linkedDirectory), { recursive: true, mode: 0o700 });
+  fs.mkdirSync(outside, { mode: 0o700 });
+  try {
+    fs.symlinkSync(outside, linkedDirectory, process.platform === 'win32' ? 'junction' : 'dir');
+  } catch (error) {
+    if (['EPERM', 'EACCES', 'ENOTSUP'].includes(error?.code)) {
+      t.skip(`Symbolic links are unavailable on this host: ${error.code}`);
+      return;
+    }
+    throw error;
+  }
+  assert.throws(
+    () => ciMonitorStore.readCiMonitorSnapshot('linked-session', linkedOptions),
+    /not a safe directory|contains a symbolic link/i,
+  );
+  assert.throws(
+    () => ciMonitorStore.writeCiMonitorSnapshot('linked-session', digest, linkedOptions),
+    /not a safe directory|contains a symbolic link/i,
+  );
+  assert.equal(fs.existsSync(path.join(outside, 'ci-monitor.json')), false);
 });
 
 test('work-session mutations preserve one identity across replacement, close, and reopen decisions', () => {

@@ -3898,7 +3898,20 @@ test('project Git evidence reads only the bounded VS Code Git model', async () =
   const repository = {
     rootUri: { fsPath: projectPath },
     state: {
-      HEAD: { name: 'feature/git-evidence' },
+      HEAD: {
+        name: 'feature/git-evidence',
+        upstream: { remote: 'origin', name: 'feature/git-evidence' },
+        ahead: 2,
+        behind: 1,
+      },
+      refs: [
+        { type: 0, name: 'main' },
+        { type: 0, name: 'feature/git-evidence' },
+        { type: 1, name: 'origin/main', remote: 'origin' },
+        { type: 2, name: 'v1.0.0' },
+        { type: 3, name: 'ignored/unknown-ref' },
+        { type: 0, name: '' },
+      ],
       mergeChanges: [],
       indexChanges: [changes[0]],
       workingTreeChanges: changes.slice(2),
@@ -3921,7 +3934,7 @@ test('project Git evidence reads only the bounded VS Code Git model', async () =
               assert.equal(version, 1);
               return {
                 get repositories() { return repositoryVisible ? [repository] : []; },
-                getRepository() { return repositoryVisible ? repository : null; },
+                getRepository() { return null; },
                 async openRepository() {
                   openRepositoryCalls += 1;
                   repositoryVisible = true;
@@ -3947,6 +3960,17 @@ test('project Git evidence reads only the bounded VS Code Git model', async () =
     assert.equal(openRepositoryCalls, 0, 'an already-known repository is never reopened');
     assert.equal(evidence.available, true);
     assert.equal(evidence.branch, 'feature/git-evidence');
+    assert.equal(evidence.detached, false);
+    assert.equal(evidence.upstream, 'origin/feature/git-evidence');
+    assert.equal(evidence.ahead, 2);
+    assert.equal(evidence.behind, 1);
+    assert.equal(evidence.branchCount, 3);
+    assert.equal(evidence.branchesTruncated, false);
+    assert.deepEqual(evidence.branches, [
+      { name: 'feature/git-evidence', kind: 'local', current: true },
+      { name: 'main', kind: 'local', current: false },
+      { name: 'origin/main', kind: 'remote', current: false },
+    ]);
     assert.equal(evidence.changeCount, 502);
     assert.equal(evidence.changes.length, 500);
     assert.deepEqual(evidence.changes.slice(0, 2), [
@@ -3959,6 +3983,8 @@ test('project Git evidence reads only the bounded VS Code Git model', async () =
     const rendered = gitEvidence.renderProjectGitEvidence('Fixture', evidence);
     assert.match(rendered, /VS Code built-in Git model \(read-only\)/);
     assert.match(rendered, /Branch: feature\/git-evidence/);
+    assert.match(rendered, /Upstream: origin\/feature\/git-evidence/);
+    assert.match(rendered, /Sync: 2 ahead \/ 1 behind/);
     const credential = ['github_pat_', 'projectgitfailurefixture'].join('');
     diffFailure = new Error(`Git diff failed with token=${credential}`);
     const failedDiffEvidence = await gitEvidence.readProjectGitEvidence(projectPath);
@@ -3977,6 +4003,67 @@ test('project Git evidence reads only the bounded VS Code Git model', async () =
     assert.equal(loadedEvidence.branch, 'feature/git-evidence');
     assert.equal(loadedEvidence.changeCount, 502);
     assert.equal(loadedEvidence.diff, '', 'the Projects tree status read does not load the full diff');
+    repository.state.refs = Array.from({ length: 205 }, (_, index) => ({ type: 0, name: `branch-${index}` }));
+    const boundedBranches = await gitEvidence.readProjectGitEvidence(projectPath, { includeDiff: false });
+    assert.equal(boundedBranches.branchCount, 206);
+    assert.equal(boundedBranches.branches.length, 200);
+    assert.equal(boundedBranches.branchesTruncated, true);
+    assert.equal(boundedBranches.branches[0].name, 'feature/git-evidence');
+    assert.match(boundedBranches.warning, /first 200 branches/);
+
+    repository.state.HEAD = {
+      commit: '0123456789abcdef',
+      upstream: { remote: 'origin', name: '' },
+      ahead: -1,
+      behind: 1.5,
+    };
+    repository.state.refs = [
+      { name: 'z-local' },
+      { name: 'origin/dev', remote: 'origin' },
+      { type: 2, name: 'ignored-tag' },
+    ];
+    repository.state.indexChanges = [];
+    repository.state.workingTreeChanges = [];
+    repository.state.untrackedChanges = [];
+    repository.state.mergeChanges = [{ uri: { fsPath: path.join(tempRoot, 'outside.ts') }, status: 99 }];
+    const detachedEvidence = await gitEvidence.readProjectGitEvidence(projectPath, { includeDiff: false });
+    assert.equal(detachedEvidence.detached, true);
+    assert.equal(detachedEvidence.branch, undefined);
+    assert.equal(detachedEvidence.upstream, undefined);
+    assert.equal(detachedEvidence.ahead, undefined);
+    assert.equal(detachedEvidence.behind, undefined);
+    assert.deepEqual(detachedEvidence.branches, [
+      { name: 'z-local', kind: 'local', current: false },
+      { name: 'origin/dev', kind: 'remote', current: false },
+    ]);
+    assert.deepEqual(detachedEvidence.changes.at(-1), {
+      path: 'outside.ts',
+      status: 'status 99',
+      staged: false,
+    });
+
+    repositoryVisible = false;
+    const unopenedEvidence = await gitEvidence.readProjectGitEvidence(projectPath, { includeDiff: false });
+    assert.equal(unopenedEvidence.available, false);
+    assert.match(unopenedEvidence.warning, /not open in VS Code/i);
+
+    const originalGetExtension = vscode.extensions.getExtension;
+    vscode.extensions.getExtension = () => undefined;
+    const missingExtension = await gitEvidence.readProjectGitEvidence(projectPath);
+    assert.match(missingExtension.warning, /extension is unavailable/i);
+    vscode.extensions.getExtension = () => ({
+      isActive: false,
+      async activate() { return { enabled: false }; },
+    });
+    const disabledExtension = await gitEvidence.readProjectGitEvidence(projectPath);
+    assert.match(disabledExtension.warning, /extension is disabled/i);
+    vscode.extensions.getExtension = () => ({
+      isActive: false,
+      async activate() { throw new Error('activation fixture failure'); },
+    });
+    const failedExtension = await gitEvidence.readProjectGitEvidence(projectPath);
+    assert.match(failedExtension.warning, /activation fixture failure.*unavailable/i);
+    vscode.extensions.getExtension = originalGetExtension;
   } finally {
     delete require.cache[servicePath];
   }
@@ -4180,7 +4267,17 @@ test('extension activation registers the bounded surface and explicit launch com
         const repository = {
           rootUri: { fsPath: tempRoot },
           state: {
-            HEAD: { name: 'feature/runtime-project' },
+            HEAD: {
+              name: 'feature/runtime-project',
+              upstream: { remote: 'origin', name: 'feature/runtime-project' },
+              ahead: 1,
+              behind: 2,
+            },
+            refs: [
+              { type: 0, name: 'main' },
+              { type: 0, name: 'feature/runtime-project' },
+              { type: 1, name: 'origin/main', remote: 'origin' },
+            ],
             mergeChanges: [],
             indexChanges: [],
             workingTreeChanges: [{ uri: { fsPath: path.join(tempRoot, 'src', 'changed.ts') }, status: 5 }],
@@ -4276,6 +4373,7 @@ test('extension activation registers the bounded surface and explicit launch com
     const projectActions = await registeredTreeProviders.get('kronosProjects').getChildren(projectItems[0]);
     assert.deepEqual(projectActions.map(item => item.label), [
       'Start Claude',
+      'Git state & branches',
       'Review local changes',
       'Open merge request',
       'Review merge request',
@@ -5288,12 +5386,32 @@ test('extension activation registers the bounded surface and explicit launch com
       'a terminal closed during PID resolution must never be attached afterward',
     );
 
+    const textDocumentsBeforeGitState = openedTextDocuments.length;
+    const panelsBeforeGitState = createdWebviewPanels.length;
     await commandHandlers.get('kronos.openProjectGitStatus')({ projectName: 'fixture', projectPath: tempRoot });
     assert.equal(gitRepositoryOpenCalls, 0, 'known repositories are not reopened by the status action');
-    assert.match(openedTextDocuments.at(-1).content, /Branch: feature\/runtime-project/);
-    assert.ok(openedTextDocuments.at(-1).content.includes(`working modified: ${path.join('src', 'changed.ts')}`));
-    assert.match(openedTextDocuments.at(-1).content, /-old\n\+new/);
-    assert.equal(shownTextDocuments.at(-1).options.preview, true);
+    assert.equal(openedTextDocuments.length, textDocumentsBeforeGitState, 'Git state uses the dedicated panel instead of a disposable editor');
+    const gitStatePanel = createdWebviewPanels.slice(panelsBeforeGitState)
+      .find(panel => panel.viewType === 'kronosProjectGitState');
+    assert.ok(gitStatePanel, 'project Git state must open its dedicated branch dashboard');
+    assert.match(gitStatePanel.webview.html, /feature\/runtime-project/);
+    assert.match(gitStatePanel.webview.html, /origin\/feature\/runtime-project/);
+    assert.match(gitStatePanel.webview.html, /1 ahead · 2 behind/);
+    assert.ok(gitStatePanel.webview.html.includes(path.join('src', 'changed.ts')));
+    assert.match(gitStatePanel.webview.html, /-old\n\+new/);
+    assert.match(gitStatePanel.webview.html, /Open Source Control to switch/);
+    assert.match(gitStatePanel.webview.html, /Kronos keeps Git read-only/);
+    await commandHandlers.get('kronos.openProjectGitStatus')({ projectName: 'fixture', projectPath: tempRoot });
+    assert.equal(createdWebviewPanels.filter(panel => panel.viewType === 'kronosProjectGitState').length, 1);
+    assert.deepEqual(gitStatePanel.revealCalls, [vscode.ViewColumn.One]);
+    await gitStatePanel.receive({ command: 'openSourceControl', branch: 'malicious-ignored-branch' });
+    assert.deepEqual(executedCommands.at(-1), ['workbench.view.scm']);
+    assert.equal(executedCommands.some(command => /^git\./.test(command[0])), false, 'Kronos never invokes checkout or another Git command');
+    await gitStatePanel.receive({ command: 'checkout', branch: 'main' });
+    assert.match(warningMessages.at(-1), /invalid project Git-state request/i);
+    await gitStatePanel.receive({ command: 'refresh' });
+    assert.match(gitStatePanel.webview.html, /feature\/runtime-project/);
+    await gitStatePanel.receive({ command: 'close' });
 
     vscode.window.activeTerminal = reconnectedTerminal;
     const panelCountBeforeGitContext = createdWebviewPanels.length;
