@@ -3647,7 +3647,7 @@ test('ticket workspace exposes explicit Claude launch, project branch, terminal 
   }
   assert.doesNotMatch(html, /Terminal-first ticket workspace/);
   assert.ok(html.indexOf('>Start Claude</button>') < html.indexOf('>Connect focused terminal</button>'));
-  assert.match(html, />Jira ticket<[^]*>Merge request[^<]*<[^]*>Build &amp; quality<[^]*>Team prompt/);
+  assert.match(html, />Review Jira ticket<[^]*>Review merge request[^<]*<[^]*>Review build &amp; quality<[^]*>Add team prompt/);
   assert.match(html, />Local project<\/span><strong>fixture<\/strong>/);
   assert.match(html, />Review<\/span><strong>Pending review<\/strong>/);
   assert.doesNotMatch(html, />Source<\/span><strong>jira<\/strong>|pending_review|>0 artifacts</);
@@ -3686,8 +3686,20 @@ test('ticket workspace exposes explicit Claude launch, project branch, terminal 
       artifacts: [],
       monitoring: { enabled: true },
     },
+    liveTerminalCount: 1,
   });
-  assert.match(locallyConnected, />Merge request !88<\/button>/);
+  assert.deepEqual(
+    [...locallyConnected.matchAll(/data-action="([A-Za-z][A-Za-z0-9]*)"/g)].map(match => match[1]).slice(0, 3),
+    [
+    'focusWorkSessionTerminal',
+    'startClaudeForTicket',
+    'chooseTicketProject',
+    ],
+  );
+  assert.match(locallyConnected, /class="kronos-button primary" data-action="focusWorkSessionTerminal"/);
+  assert.match(locallyConnected, />Open terminal<\/button>[^]*>Start another Claude<\/button>/);
+  assert.doesNotMatch(locallyConnected, /data-action="manageActiveTerminal"/);
+  assert.match(locallyConnected, />Review merge request !88<\/button>/);
   assert.match(locallyConnected, /Merge Request !88/);
   assert.match(locallyConnected, />Review<\/span><strong>Pending review<\/strong>/);
   assert.doesNotMatch(locallyConnected, /pending_review/);
@@ -3737,6 +3749,8 @@ test('Setup and Check Setup render bounded operation dashboards with allowlisted
     actionScriptUri: 'vscode-webview://fixture/kronos-action-panel.js',
   });
   assert.match(setup, /<h1 class="kronos-title">Setup<\/h1>/);
+  assert.match(setup, /Setup ready/);
+  assert.doesNotMatch(setup, /operations-hero|Setup status/);
   assert.match(setup, /data-action="openDoctor"/);
   assert.match(setup, /data-action="openClaudeSettings"/);
   assert.match(setup, /Healthy provider status/);
@@ -3800,11 +3814,14 @@ test('Setup and Check Setup render bounded operation dashboards with allowlisted
     warnings: ['Partial <warning>'],
     nonce: 'composer-nonce',
     scriptUri: 'vscode-webview://fixture/kronos-context-composer.js',
+    canAddToBasket: true,
   });
   assert.match(composer, /Add to terminal/);
   assert.match(composer, /Ctrl\+Enter/);
   assert.match(composer, /What Claude should focus on/);
   assert.match(composer, /Open source details/);
+  assert.match(composer, /data-action="addToBasket"/);
+  assert.ok(composer.indexOf('data-action="addToBasket"') < composer.indexOf('data-action="openArtifact"'));
   assert.match(composer, /&lt;unsafe title&gt;/);
   assert.match(composer, /&lt;script&gt;not markup&lt;\/script&gt;/);
   assert.doesNotMatch(composer, /<script>not markup<\/script>/);
@@ -3815,7 +3832,16 @@ test('Setup and Check Setup render bounded operation dashboards with allowlisted
   assert.equal(normalizeContextComposerMessage({ command: 'insertDraft', focus: 'x'.repeat(4_001) }), null);
 
   const projectSetup = buildProjectIntegrationPanelHtml({
-    projects: [{ name: 'App <one>', displayName: 'Customer <API>', nickname: 'Customer <API>', path: '/repos/app', branch: 'main', gitlabProject: 'group/app' }],
+    projects: [{
+      name: 'App <one>',
+      displayName: 'Customer <API>',
+      nickname: 'Customer <API>',
+      path: '/repos/app',
+      branch: 'main',
+      gitlabProject: 'group/app',
+      branchProfiles: 'release | https://jenkins.example/job/app/release | app:key | release',
+      activeBranchProfile: 'release',
+    }],
     providerReadiness: [{ name: 'GitLab', ready: true, detail: 'Ready' }],
     nonce: 'project-nonce',
     scriptUri: 'vscode-webview://fixture/kronos-project-integration.js',
@@ -3826,6 +3852,9 @@ test('Setup and Check Setup render bounded operation dashboards with allowlisted
   assert.match(projectSetup, /Customer &lt;API&gt;/);
   assert.match(projectSetup, /Project ID: App &lt;one&gt;/);
   assert.match(projectSetup, /Display name \(optional\)/);
+  assert.match(projectSetup, /<details class="branch-routing" open>/);
+  assert.match(projectSetup, /Fallback profile/);
+  assert.match(projectSetup, /Branch overrides/);
   assert.deepEqual(normalizeProjectIntegrationMessage({
     command: 'save',
     projects: [{
@@ -3977,6 +4006,7 @@ test('extension activation registers the bounded surface and explicit launch com
   let singlePickHandler;
   let lastMultiPickItems = [];
   let lastSinglePickItems = [];
+  let lastSinglePickOptions;
   const openedExternalUrls = [];
   let warningMessageResult;
   let lastWarningMessage;
@@ -4079,6 +4109,7 @@ test('extension activation registers the bounded surface and explicit launch com
       showQuickPick(items, options) {
         if (!options?.canPickMany) {
           lastSinglePickItems = items;
+          lastSinglePickOptions = options;
           const handler = singlePickHandler;
           singlePickHandler = undefined;
           return Promise.resolve(handler ? handler(items) : undefined);
@@ -4245,7 +4276,7 @@ test('extension activation registers the bounded surface and explicit launch com
     const projectActions = await registeredTreeProviders.get('kronosProjects').getChildren(projectItems[0]);
     assert.deepEqual(projectActions.map(item => item.label), [
       'Start Claude',
-      'Review changes',
+      'Review local changes',
       'Open merge request',
       'Review merge request',
       'Review build & quality',
@@ -4859,11 +4890,16 @@ test('extension activation registers the bounded surface and explicit launch com
     const promptPanelStart = createdWebviewPanels.length;
     const promptWritesBefore = createdTerminals[0].actions.length;
     await commandHandlers.get('kronos.openPromptLibrary')(projectItems[0]);
+    assert.equal(lastSinglePickOptions.title, 'Choose a team prompt');
+    assert.equal(lastSinglePickOptions.placeHolder, 'Search by title, library, description, tag, or suggested context');
+    assert.equal(lastSinglePickItems[0].description, 'Fixture Team • Local file');
     const promptPanel = createdWebviewPanels.slice(promptPanelStart)
       .find(panel => panel.viewType === 'kronosPromptLibrary');
     assert.ok(promptPanel, 'a configured team prompt opens the dedicated editable composer');
     assert.match(promptPanel.webview.html, /Review Project/);
     assert.match(promptPanel.webview.html, /Review Fixture API on feature\/runtime-project/);
+    assert.match(promptPanel.webview.html, /Local file •/);
+    assert.match(promptPanel.webview.html, /Library settings/);
     assert.equal(createdTerminals[0].actions.length, promptWritesBefore, 'opening a team prompt must not write to the terminal');
     await promptPanel.receive({
       command: 'insertPrompt',

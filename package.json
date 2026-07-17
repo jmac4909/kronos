@@ -153,8 +153,8 @@
       },
       {
         "command": "kronos.insertJiraContext",
-        "title": "Kronos: Review Jira Context",
-        "shortTitle": "Review Jira Context",
+        "title": "Kronos: Review Jira Ticket",
+        "shortTitle": "Review Jira Ticket",
         "icon": "$(symbol-keyword)"
       },
       {
@@ -256,13 +256,13 @@
       {
         "command": "kronos.openProjectGitStatus",
         "title": "Kronos: View Project Changes",
-        "shortTitle": "View Changes",
+        "shortTitle": "View Local Changes",
         "icon": "$(open-preview)"
       },
       {
         "command": "kronos.insertProjectGitContext",
-        "title": "Kronos: Review Project Changes",
-        "shortTitle": "Review Changes",
+        "title": "Kronos: Review Local Changes",
+        "shortTitle": "Review Local Changes",
         "icon": "$(symbol-keyword)"
       },
       {
@@ -459,12 +459,12 @@
         {
           "command": "kronos.openTicketWorkspace",
           "when": "viewItem == work_ticket",
-          "group": "inline@1"
+          "group": "navigation@1"
         },
         {
           "command": "kronos.startClaudeForTicket",
           "when": "viewItem == work_ticket",
-          "group": "inline@2"
+          "group": "inline@1"
         },
         {
           "command": "kronos.chooseTicketProject",
@@ -544,7 +544,7 @@
         {
           "command": "kronos.insertProjectGitContext",
           "when": "viewItem == registered_project",
-          "group": "inline@2"
+          "group": "context@0"
         },
         {
           "command": "kronos.openProjectMergeRequest",
@@ -579,7 +579,7 @@
         {
           "command": "kronos.acknowledgeAttention",
           "when": "viewItem =~ /^attention_(provider|repair)/",
-          "group": "inline@2"
+          "group": "management@1"
         },
         {
           "command": "kronos.openTicketWorkspace",

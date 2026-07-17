@@ -116,9 +116,11 @@ test('Sessions present project, branch, Jira contexts, attachment, monitoring, a
   assert.equal(presentation.label, 'Customer API: Interactive investigation');
   assert.equal(
     presentation.description,
-    'feature/session-inventory • 1 terminal connected',
+    'Connected',
   );
   assert.match(presentation.tooltip, /Project: Customer API/);
+  assert.match(presentation.tooltip, /Branch: feature\/session-inventory/);
+  assert.match(presentation.tooltip, /Jira tickets: None/);
   assert.doesNotMatch(presentation.tooltip, /Stable project identity|^Work session:|^(?:Management|Terminal|Monitoring) lifecycle:/im);
 
   session = workSessions.addWorkSessionTicketContext(session.id, 'JIRA-301', options);
@@ -138,12 +140,13 @@ test('Sessions present project, branch, Jira contexts, attachment, monitoring, a
   );
   assert.equal(
     presentation.description,
-    'feature/session-inventory • 2 Jira tickets • 1 terminal connected • Needs review',
+    'Connected • Needs review',
   );
   assert.match(presentation.tooltip, /Jira tickets: JIRA-301, JIRA-302/);
   assert.match(presentation.tooltip, /Provider updates: Needs review/);
   assert.match(presentation.tooltip, /Last result: GitLab succeeded; Jenkins needs operator review\./);
   assert.match(presentation.tooltip, /Select to open the terminal\./);
+  assert.match(presentation.tooltip, /Right-click for context, history, and connection actions\./);
   assert.doesNotMatch(presentation.tooltip, /Operator terminal metadata only/);
 });
 
@@ -165,7 +168,7 @@ test('Sessions never present detached, closed, stopped, paused, or removed-proje
   session = workSessions.setWorkSessionMonitoring(session.id, false, undefined, options);
   assert.match(
     sessionInventory.sessionInventoryPresentation(session, 1, 300_000, 'main').description,
-    /1 terminal connected • Checks paused$/,
+    /^Connected • Checks paused$/,
   );
 
   session = workSessions.detachWorkSessionTerminal(
@@ -174,10 +177,9 @@ test('Sessions never present detached, closed, stopped, paused, or removed-proje
     'operator detached',
     options,
   );
-  assert.match(
-    sessionInventory.sessionInventoryPresentation(session, 0, 300_000, 'main').description,
-    /terminal disconnected • Checks paused$/,
-  );
+  const detached = sessionInventory.sessionInventoryPresentation(session, 0, 300_000, 'main');
+  assert.match(detached.description, /^Reconnect needed • Checks paused$/);
+  assert.match(detached.tooltip, /Right-click for history and tracking actions\./);
   session = workSessions.markWorkSessionTerminalClosed(
     session.id,
     'terminal-lifecycle-presentation',
@@ -188,7 +190,11 @@ test('Sessions never present detached, closed, stopped, paused, or removed-proje
   session = workSessions.closeWorkSession(session.id, options);
   const stopped = sessionInventory.sessionInventoryPresentation(session, 0, 300_000);
   assert.equal(stopped.label, 'JIRA-303: Lifecycle presentation');
-  assert.equal(stopped.description, '1 Jira ticket • terminal closed • tracking stopped');
+  assert.equal(stopped.description, 'Tracking stopped');
+  assert.match(stopped.tooltip, /Terminal: Closed/);
+  assert.match(stopped.tooltip, /Tracking: Stopped/);
+  assert.match(stopped.tooltip, /Select to reconnect the terminal and resume tracking/);
+  assert.match(stopped.tooltip, /Right-click to view history or remove the Session from Kronos\./);
 
   const newerActive = workSessions.createStandaloneWorkSession({ title: 'New active session' }, {
     ...options,

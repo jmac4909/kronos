@@ -105,6 +105,9 @@ test('maximum project and session collections render bounded summaries within lo
   assert.ok(projectElapsedMs < 2_000, `200-project setup took ${projectElapsedMs.toFixed(1)} ms`);
   assert.ok(Buffer.byteLength(projectHtml, 'utf8') < 8 * 1024 * 1024, 'project setup HTML exceeded 8 MiB');
   assert.equal((projectHtml.match(/data-project-card/g) || []).length, 200);
+  assert.equal((projectHtml.match(/<details class="branch-routing" open>/g) || []).length, 200);
+  assert.match(projectHtml, /grid-template-columns: minmax\(220px, \.7fr\) minmax\(0, 1\.3fr\)/);
+  assert.match(projectHtml, /\.readiness-grid, \.field-grid, \.branch-routing-grid \{ grid-template-columns: 1fr; \}/);
   assert.doesNotMatch(projectHtml, /data-project-name="Project-200"/);
 
   const sessions = Array.from({ length: 200 }, (_, index) => scaleRichSession(index));
@@ -145,6 +148,7 @@ test('large artifact previews render summaries without copying provider payloads
   assert.equal((composer.match(/class="message warn"/g) || []).length, 20);
   assert.match(composer, /Open source details/);
   assert.match(composer, /<details class="composer-reference-details"><summary>Context reference<\/summary>/);
+  assert.match(composer, /max-height: min\(68vh, 720px\)/);
   assert.doesNotMatch(composer, /DO-NOT-RENDER-TAIL/);
 
   const session = scaleRichSession(0);

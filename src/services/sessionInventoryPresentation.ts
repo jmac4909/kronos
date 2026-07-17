@@ -23,7 +23,7 @@ export function sessionInventoryPresentation(
   const projectLabel = normalizedProjectLabel(session, projectDisplayName);
   return {
     label: sessionInventoryLabel(session, projectLabel),
-    description: sessionInventoryDescription(session, liveCount, pollIntervalMs, observedBranch),
+    description: sessionInventoryDescription(session, liveCount, pollIntervalMs),
     tooltip: sessionInventoryTooltip(session, liveCount, pollIntervalMs, observedBranch, projectLabel),
   };
 }
@@ -44,22 +44,15 @@ function sessionInventoryDescription(
   session: WorkSessionRecord,
   liveCount: number,
   pollIntervalMs: number,
-  observedBranch?: string,
 ): string {
   const lifecycle = workSessionLifecycle(session, liveCount);
-  const segments: string[] = [];
-  if (observedBranch) { segments.push(observedBranch); }
-  if (session.ticketKeys.length > 0) {
-    segments.push(`${session.ticketKeys.length} Jira ticket${session.ticketKeys.length === 1 ? '' : 's'}`);
-  }
-  segments.push(lifecycle.terminal === 'attached'
-    ? `${liveCount} terminal${liveCount === 1 ? '' : 's'} connected`
-    : lifecycle.terminal === 'closed' ? 'terminal closed'
-      : lifecycle.terminal === 'none' ? 'no terminal'
-        : 'terminal disconnected');
   if (lifecycle.management === 'stopped') {
-    segments.push('tracking stopped');
-  } else if (session.ticketKeys.length > 0) {
+    return 'Tracking stopped';
+  }
+  const segments = [lifecycle.terminal === 'attached'
+    ? liveCount === 1 ? 'Connected' : `${liveCount} terminals connected`
+    : 'Reconnect needed'];
+  if (session.ticketKeys.length > 0) {
     const health = sessionProviderMonitoringHealth(session, pollIntervalMs);
     segments.push(lifecycle.monitoring === 'running'
       ? providerMonitoringHealthSummary(health)
@@ -88,6 +81,7 @@ function sessionInventoryTooltip(
     `Title: ${session.title}`,
     `Jira tickets: ${session.ticketKeys.length > 0 ? boundedListSummary(session.ticketKeys, 20) : 'None'}`,
     `Terminal: ${terminalStateLabel(lifecycle.terminal, liveCount)}`,
+    ...(lifecycle.management === 'stopped' ? ['Tracking: Stopped'] : []),
     `Saved context: ${completeArtifacts} complete, ${session.artifacts.length - completeArtifacts} partial`,
     `Connected sources: ${providerBindings}`,
     ...(session.ticketKeys.length > 0 ? [
@@ -105,8 +99,16 @@ function sessionInventoryTooltip(
     ] : []),
     `Created: ${formatDateTimeLabel(session.createdAt, 'Unknown')}`,
     `Updated: ${formatDateTimeLabel(session.updatedAt, 'Unknown')}`,
-    lifecycle.terminal === 'attached' ? 'Select to open the terminal.' : 'Select to reconnect the terminal.',
-    'Right-click for context, history, and session actions.',
+    lifecycle.terminal === 'attached'
+      ? 'Select to open the terminal.'
+      : lifecycle.management === 'stopped'
+        ? 'Select to reconnect the terminal and resume tracking.'
+        : 'Select to reconnect the terminal.',
+    lifecycle.management === 'stopped'
+      ? 'Right-click to view history or remove the Session from Kronos.'
+      : lifecycle.terminal === 'attached'
+        ? 'Right-click for context, history, and connection actions.'
+        : 'Right-click for history and tracking actions.',
   ];
   if (session.projectName) {
     const projectLabel = normalizedProjectLabel(session, projectDisplayName);

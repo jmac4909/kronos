@@ -30,15 +30,26 @@ export function buildTicketWorkspaceHtml(input: TicketWorkspaceViewInput): strin
     mr: effectiveTicketMergeRequest(input.ticket, input.workSession, null),
   };
   const summary = singleLine(ticket.summary, 1_000) || 'Untitled ticket';
-  const workspaceSubtitle = input.localProject
-    ? 'Start Claude or connect the terminal you already own.'
-    : 'Choose a project, then start Claude or connect the terminal you already own.';
   const workSession = input.workSession || undefined;
   const liveTerminalCount = resolveLiveTerminalCount(workSession, input.liveTerminalCount);
+  const terminalConnected = workSession?.status === 'active' && liveTerminalCount > 0;
+  const workspaceSubtitle = terminalConnected
+    ? 'Open the connected terminal or review context before adding it.'
+    : workSession
+      ? 'Reconnect your terminal or start another Claude session.'
+      : input.localProject
+        ? 'Start Claude or connect a terminal you already own.'
+        : 'Choose a project, then start Claude or connect a terminal you already own.';
   const mrIid = connectedMergeRequestIid(ticket, workSession);
   const terminalActions = [
-    ticketWorkspaceActionButton('startClaudeForTicket', 'Start Claude', { ticket: ticketKey, primary: true }),
-    ticketWorkspaceActionButton('manageActiveTerminal', 'Connect focused terminal', { ticket: ticketKey }),
+    ...(terminalConnected
+      ? [ticketWorkspaceActionButton('focusWorkSessionTerminal', 'Open terminal', { ticket: ticketKey, primary: true })]
+      : workSession
+        ? [ticketWorkspaceActionButton('manageActiveTerminal', 'Connect focused terminal', { ticket: ticketKey, primary: true })]
+        : [ticketWorkspaceActionButton('startClaudeForTicket', 'Start Claude', { ticket: ticketKey, primary: true })]),
+    ...(!terminalConnected && !workSession
+      ? [ticketWorkspaceActionButton('manageActiveTerminal', 'Connect focused terminal', { ticket: ticketKey })]
+      : [ticketWorkspaceActionButton('startClaudeForTicket', 'Start another Claude', { ticket: ticketKey })]),
     ticketWorkspaceActionButton(
       'chooseTicketProject',
       input.localProject ? 'Change project' : 'Choose project',
@@ -47,15 +58,15 @@ export function buildTicketWorkspaceHtml(input: TicketWorkspaceViewInput): strin
   ];
   const contextActions = [
     ...(ticket.source === 'jira'
-      ? [ticketWorkspaceActionButton('insertJiraContext', 'Jira ticket', { ticket: ticketKey })]
+      ? [ticketWorkspaceActionButton('insertJiraContext', 'Review Jira ticket', { ticket: ticketKey })]
       : []),
     ticketWorkspaceActionButton(
       'insertGitLabContext',
-      mrIid !== undefined ? `Merge request !${mrIid}` : 'Merge request',
+      mrIid !== undefined ? `Review merge request !${mrIid}` : 'Review merge request',
       { ticket: ticketKey },
     ),
-    ticketWorkspaceActionButton('insertCiContext', 'Build & quality', { ticket: ticketKey }),
-    ticketWorkspaceActionButton('openPromptLibrary', 'Team prompt', { ticket: ticketKey }),
+    ticketWorkspaceActionButton('insertCiContext', 'Review build & quality', { ticket: ticketKey }),
+    ticketWorkspaceActionButton('openPromptLibrary', 'Add team prompt', { ticket: ticketKey }),
   ];
   const mainSections = [
     buildTicketSummary(ticket, input.localProject),
@@ -128,11 +139,11 @@ ${ticketWorkspaceActionScript(input.nonce, input.actionScriptUri)}
   <section class="kronos-card terminal-workspace">
     <h2>Work on this ticket</h2>
     <div class="workspace-action-groups">
-      <div class="workspace-action-group"><span class="workspace-action-label">Start or connect</span><div class="workspace-actions">${terminalActions.join('')}</div></div>
+      <div class="workspace-action-group"><span class="workspace-action-label">Terminal</span><div class="workspace-actions">${terminalActions.join('')}</div></div>
       <div class="workspace-action-group"><span class="workspace-action-label">Add context</span><div class="workspace-actions">${contextActions.join('')}</div></div>
     </div>
     ${buildTerminalWorkspaceFacts(workSession, liveTerminalCount, input.localProject)}
-    <p class="workspace-safety">Nothing starts or submits automatically. Context buttons open a review step before anything is added to the terminal.</p>
+    <p class="workspace-safety">Actions run only when selected. Context opens for review and is never submitted automatically.</p>
     ${buildProviderLinks(ticket, workSession)}
   </section>
 
@@ -295,7 +306,7 @@ function terminalAttachmentState(
   liveTerminalCount: number,
 ): { label: string; tone: string } {
   if (!workSession) { return { label: 'Ready to connect', tone: 'unmanaged' }; }
-  if (workSession.status === 'closed') { return { label: 'Session closed', tone: 'closed' }; }
+  if (workSession.status === 'closed') { return { label: 'Tracking stopped', tone: 'closed' }; }
   if (liveTerminalCount > 0) {
     return {
       label: liveTerminalCount === 1 ? 'Connected' : `${liveTerminalCount} connected`,

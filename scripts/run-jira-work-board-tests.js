@@ -90,7 +90,7 @@ test('board builder exposes useful Jira filters and only bounded terminal-first 
   for (const action of JIRA_WORK_BOARD_ACTIONS.filter(action => action !== 'openDoctor')) {
     assert.match(html, new RegExp(`data-action="${action}"`));
   }
-  for (const workspaceOnlyAction of ['manageActiveTerminal', 'insertJiraContext', 'insertGitLabContext', 'insertCiContext']) {
+  for (const workspaceOnlyAction of ['focusWorkSessionTerminal', 'manageActiveTerminal', 'insertJiraContext', 'insertGitLabContext', 'insertCiContext']) {
     assert.doesNotMatch(html, new RegExp(`data-action="${workspaceOnlyAction}"`));
   }
   for (const forbidden of ['addToQueue', 'removeFromQueue', 'dispatch', 'runCenter', 'linkProject', 'triggerBuild']) {
@@ -137,11 +137,15 @@ test('board terminology and dense-card rendering keep Jira namespaces separate f
     scriptUri: 'vscode-resource://kronos/media/kronos-jira-work-board.js',
   });
   assert.match(html, /jira-ticket-summary[^}]+overflow-wrap: anywhere/);
+  assert.match(html, /id="jira-board-reset"[^>]*>Clear filters<\/button>/);
   assert.match(html, /-webkit-line-clamp: 4/);
   assert.match(html, /jira-ticket-chip[^}]+max-width: 100%/);
-  assert.match(html, />\+26 more<\/span>/);
-  assert.match(html, /Jira: PLATFORM/);
+  assert.match(html, />\+28 labels<\/span>/);
+  assert.doesNotMatch(html, /Jira: PLATFORM/);
   assert.match(html, /Project: Kronos/);
+  const denseCardMeta = html.match(/data-ticket="KRONOS-80"[^]*?<div class="jira-ticket-meta">([^]*?)<\/div>/)?.[1] || '';
+  assert.equal((denseCardMeta.match(/class="jira-ticket-chip/g) || []).length, 6);
+  assert.doesNotMatch(denseCardMeta, /attachment/i);
   assert.match(html, /data-search="[^"]*2026-07-15t09:30:00.000z/);
   assert.match(html, /data-search="[^"]*provider-analysis.msg[^"]*application\/vnd.ms-outlook/);
   assert.match(html, /data-search="[^"]*72[^"]*cache maintainer[^"]*feature\/cache-refresh[^"]*release\/2026-07[^"]*901[^"]*unstable/);
@@ -254,7 +258,7 @@ test('board keeps registered project paths and current branches in a compact dis
     assert.match(html, /feature\/board-projects/);
     assert.match(html, new RegExp(projectRoot.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
     assert.match(html, /data-action="chooseTicketProject"/);
-    assert.match(html, /Jira: KRONOS/);
+    assert.doesNotMatch(html, /Jira: KRONOS/);
     assert.match(html, /Project: Kronos Extension/);
     assert.match(html, /aria-label="Change project for KRONOS-1">Change project<\/button>/);
     assert.match(html, /<option value="kronos">Kronos Extension<\/option>/);

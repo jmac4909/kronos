@@ -178,10 +178,10 @@ export class WorkTicketTreeItem extends vscode.TreeItem {
     super(`${key} — ${summary}`, vscode.TreeItemCollapsibleState.None);
 
     const localProjectName = safeSingleLine(localProject?.displayName || localProject?.name || ticket.linked_local_project, 120);
+    const priority = safeSingleLine(ticket.priority, 80);
     const facts = [
       safeSingleLine(ticket.jira_status, 120),
-      safeSingleLine(ticket.priority, 80),
-      localProjectName,
+      localProjectName || priority,
     ].filter(Boolean);
     this.description = facts.join(' • ');
     this.tooltip = buildWorkTicketTooltip(key, summary, ticket, localProject);
@@ -233,6 +233,7 @@ function buildWorkTicketTooltip(
   }
   const description = safeSingleLine(ticket.description, 300);
   if (description) { lines.push(description); }
+  lines.push('Select to open the ticket workspace. Right-click for ticket actions.');
   return lines.join('\n');
 }
 

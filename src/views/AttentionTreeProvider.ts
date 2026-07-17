@@ -296,7 +296,6 @@ export class AttentionMessageTreeItem extends vscode.TreeItem {
       return;
     }
     this.contextValue = 'attention_empty';
-    this.description = 'all provider updates are clear';
     this.tooltip = 'Merge request, build, quality, and provider problems appear here. Clear an item after review; its Session history remains available.';
     this.iconPath = new vscode.ThemeIcon('check', new vscode.ThemeColor('testing.iconPassed'));
   }
@@ -330,6 +329,7 @@ function eventTooltip(entry: AttentionEntry): string {
     `Observed: ${formatDateTimeLabel(presentation.observedAt, 'Unknown')}`,
     `Last changed: ${formatDateTimeLabel(presentation.changedAt, 'Unknown')}`,
     `Select to ${primaryAction}.`,
+    'Right-click for available context, history, and Clear from Attention.',
     `After clearing: ${event.source === 'gitlab' && event.subject?.kind === 'merge-request' ? 'an open merge request returns after the next successful check; merged or closed requests stay cleared' : 'the item stays cleared until its state changes'}`,
   ];
   for (const [key, label] of METADATA_TOOLTIP_FIELDS) {

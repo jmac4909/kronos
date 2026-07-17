@@ -390,6 +390,9 @@ test('project integration values round-trip, clear, and default to the observed 
   assert.match(html, /Leaving a field blank removes that optional setting/);
   assert.match(html, /Save changes/);
   assert.match(html, /grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)/);
+  assert.match(html, /<details class="branch-routing">/);
+  assert.match(html, /Branch routing <span>Optional Jenkins and SonarQube overrides<\/span>/);
+  assert.doesNotMatch(html, /<details class="branch-routing" open>/);
   assert.doesNotMatch(html, /Connect registered folders/);
 });
 

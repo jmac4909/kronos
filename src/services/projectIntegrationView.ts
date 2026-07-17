@@ -29,7 +29,9 @@ export function buildProjectIntegrationPanelHtml(input: ProjectIntegrationPanelI
     <span class="status-dot" aria-hidden="true"></span>
     <div><strong>${escapeHtml(provider.name)}</strong><span>${escapeHtml(provider.detail)}</span></div>
   </div>`).join('');
-  const projectCards = input.projects.slice(0, 200).map(project => `<section class="integration-card" data-project-card data-project-name="${escapeAttr(project.name)}">
+  const projectCards = input.projects.slice(0, 200).map(project => {
+    const branchRoutingOpen = Boolean(project.branchProfiles?.trim() || project.activeBranchProfile?.trim());
+    return `<section class="integration-card" data-project-card data-project-name="${escapeAttr(project.name)}">
     <header>
       <div><h2>${escapeHtml(project.displayName || project.name)}</h2>${project.displayName && project.displayName !== project.name ? `<div class="project-identity">Project ID: ${escapeHtml(project.name)}</div>` : ''}<div class="project-path">${escapeHtml(project.path)}</div></div>
       <span class="kronos-pill info">${escapeHtml(project.branch || 'branch unavailable')}</span>
@@ -40,10 +42,16 @@ export function buildProjectIntegrationPanelHtml(input: ProjectIntegrationPanelI
       ${formField('Jenkins job URL', 'jenkinsUrl', project.jenkinsUrl || '', 'https://jenkins.example/job/team/job/service/', 'Use the job URL Kronos should poll for builds, stages, and tests.')}
       ${formField('SonarQube project key', 'sonarProjectKey', project.sonarProjectKey || '', 'team:service', 'The component key used for quality gates, measures, and issues.')}
       ${formField('Default monitoring branch', 'defaultBranch', project.defaultBranch || project.branch || '', 'main', 'Used by SonarQube until a linked merge request supplies its source branch.')}
-      ${formField('Fallback branch profile (optional)', 'activeBranchProfile', project.activeBranchProfile || '', 'release/2026.07', 'Used only when no merge request branch matches a saved override.')}
-      ${formTextarea('Branch overrides (optional)', 'branchProfiles', project.branchProfiles || '', 'branch | Jenkins job URL | SonarQube key | SonarQube branch', 'Add one branch per line, up to 20. Each line must configure Jenkins, SonarQube, or both. These overrides only route reads; they never switch Git branches.')}
     </div>
-  </section>`).join('');
+    <details class="branch-routing"${branchRoutingOpen ? ' open' : ''}>
+      <summary>Branch routing <span>Optional Jenkins and SonarQube overrides</span></summary>
+      <div class="branch-routing-grid">
+        ${formField('Fallback profile', 'activeBranchProfile', project.activeBranchProfile || '', 'release/2026.07', 'Used only when no merge request branch matches a saved override.')}
+        ${formTextarea('Branch overrides', 'branchProfiles', project.branchProfiles || '', 'branch | Jenkins job URL | SonarQube key | SonarQube branch', 'Add one branch per line, up to 20. Each line must configure Jenkins, SonarQube, or both. These overrides only route reads; they never switch Git branches.', false)}
+      </div>
+    </details>
+  </section>`;
+  }).join('');
   const script = [
     webviewRuntimeScriptTag(input.nonce, webviewRuntimeScriptUri(input.scriptUri)),
     `<script nonce="${escapeAttr(input.nonce)}" id="kronos-project-integration-script" src="${escapeAttr(input.scriptUri)}" data-kronos-script-kind="project-integration" data-kronos-ready-command="__kronosWebviewReady"></script>`,
@@ -71,10 +79,15 @@ ${kronosWebviewBaseCss()}
 .form-field textarea { width: 100%; min-height: 112px; resize: vertical; font-family: var(--vscode-editor-font-family, monospace); }
 .form-field.wide { grid-column: 1 / -1; }
 .field-help { margin-top: 4px; color: var(--k-muted); font-size: 10px; line-height: 1.35; }
+.branch-routing { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--k-border); }
+.branch-routing > summary { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; cursor: pointer; font-size: 12px; font-weight: 650; }
+.branch-routing > summary::marker { color: var(--k-muted); }
+.branch-routing > summary span { color: var(--k-muted); font-size: 11px; font-weight: 400; text-align: right; }
+.branch-routing-grid { display: grid; grid-template-columns: minmax(220px, .7fr) minmax(0, 1.3fr); gap: 12px; align-items: start; padding-top: 12px; }
 .integration-actions { position: sticky; bottom: 0; z-index: 2; margin-top: 16px; padding: 12px; border: 1px solid var(--k-border); border-radius: var(--k-radius); background: color-mix(in srgb, var(--k-bg) 92%, transparent); backdrop-filter: blur(8px); }
 .privacy-copy { margin-left: auto; color: var(--k-muted); font-size: 11px; }
 @media (max-width: 1100px) { .field-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 760px) { .readiness-grid, .field-grid { grid-template-columns: 1fr; } .privacy-copy { width: 100%; margin-left: 0; } }
+@media (max-width: 760px) { .readiness-grid, .field-grid, .branch-routing-grid { grid-template-columns: 1fr; } .branch-routing > summary { align-items: flex-start; flex-direction: column; gap: 3px; } .branch-routing > summary span { text-align: left; } .privacy-copy { width: 100%; margin-left: 0; } }
 </style></head>
 <body><main class="kronos-shell integration-shell">
   <header class="kronos-header integration-header">
@@ -114,8 +127,8 @@ function formField(
   </div>`;
 }
 
-function formTextarea(label: string, field: string, value: string, placeholder: string, help: string): string {
-  return `<div class="form-field wide">
+function formTextarea(label: string, field: string, value: string, placeholder: string, help: string, wide = true): string {
+  return `<div class="form-field${wide ? ' wide' : ''}">
     <label>${escapeHtml(label)}
       <textarea class="kronos-input" data-field="${escapeAttr(field)}" maxlength="20000" placeholder="${escapeAttr(placeholder)}" spellcheck="false">${escapeHtml(value)}</textarea>
     </label>

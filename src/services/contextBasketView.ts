@@ -60,8 +60,8 @@ ${kronosWebviewBaseCss()}
 <section class="kronos-panel basket-editor">
   <label class="kronos-section-title" for="basket-focus">What Claude should focus on</label>
   <textarea id="basket-focus" class="kronos-input" maxlength="4000" autofocus>${escapeHtml(input.focus || 'Review the selected Jira, merge request, local Git, build, and quality evidence together before making changes.')}</textarea>
-  <div class="kronos-action-row" style="margin-top:10px"><button class="kronos-button primary" type="button" data-action="insert">Add to terminal</button><button class="kronos-button" type="button" data-action="clear"${input.items.length === 0 ? ' disabled' : ''}>Clear all</button><button class="kronos-button" type="button" data-action="close">Close</button></div>
-  <div class="kronos-subtitle">Nothing refreshes or submits automatically. Refresh source opens a new review first.</div>
+  <div class="kronos-action-row" style="margin-top:10px"><button class="kronos-button primary" type="button" data-action="insert">Add to terminal</button><button class="kronos-button" type="button" data-action="close">Close</button><button class="kronos-button" type="button" data-action="clear"${input.items.length === 0 ? ' disabled' : ''}>Clear basket</button></div>
+  <div class="kronos-subtitle">Actions run only when selected. Refresh source opens a new review, and terminal placement never submits.</div>
 </section>
 <section id="basket-items" class="basket-list" aria-label="Selected context evidence">${rows || '<div class="kronos-empty">The basket is empty. Review Jira, merge request, build, quality, or project changes and choose Add to basket.</div>'}</section>
 </main>${script}</body></html>`;

@@ -207,6 +207,7 @@ import {
   loadPromptLibraries,
   renderPromptTemplate,
   type PromptLibraryPrompt,
+  type PromptLibrarySourceKind,
   type PromptTemplateContext,
 } from './services/promptLibrary';
 import { writePromptLibraryArtifact } from './services/promptLibraryArtifactStore';
@@ -229,6 +230,7 @@ import {
 const TICKET_WORKSPACE_ACTIONS = new Set([
   'startClaudeForTicket',
   'manageActiveTerminal',
+  'focusWorkSessionTerminal',
   'chooseTicketProject',
   'insertJiraContext',
   'insertGitLabContext',
@@ -254,6 +256,11 @@ const OPERATIONS_PANEL_ACTIONS = new Set([
 const CLAUDE_LAUNCH_COOLDOWN_MS = 1_000;
 const CLAUDE_BYPASS_CONFIRM_ACTION = 'Launch Without Permission Prompts';
 const CLAUDE_SETTINGS_ACTION = 'Open Claude Settings';
+const PROMPT_LIBRARY_SOURCE_KIND_LABELS: Readonly<Record<PromptLibrarySourceKind, string>> = Object.freeze({
+  local: 'Local file',
+  remote: 'Remote',
+  cache: 'Cached copy',
+});
 
 interface TicketPanelRecord {
   panel: vscode.WebviewPanel;
@@ -1458,7 +1465,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
         : 'Submitted Claude';
       void vscode.window.showInformationMessage(
         input.ticketKey
-          ? `${submittedPrefix} for ${input.ticketKey}. When Claude is ready, choose Review Jira Context.`
+          ? `${submittedPrefix} for ${input.ticketKey}. When Claude is ready, choose Review Jira Ticket.`
           : input.project
             ? `${submittedPrefix} in ${input.project.displayName || input.project.projectName}. No Jira ticket was attached.`
             : `${submittedPrefix} as a standalone command in a focused terminal. No Jira ticket was attached.`,
@@ -1820,7 +1827,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
     }
     const picked = await vscode.window.showQuickPick(result.prompts.map(prompt => ({
       label: `$(library) ${prompt.title}`,
-      description: `${prompt.libraryName} • ${prompt.sourceKind}`,
+      description: `${prompt.libraryName} • ${promptLibrarySourceKindLabel(prompt.sourceKind)}`,
       detail: [
         prompt.description,
         prompt.tags.length > 0 ? `Tags: ${prompt.tags.join(', ')}` : '',
@@ -1828,8 +1835,8 @@ class TerminalFirstRuntime implements vscode.Disposable {
       ].filter(Boolean).join(' • '),
       prompt,
     })), {
-      title: 'Choose a Team Prompt',
-      placeHolder: 'Search titles, libraries, descriptions, tags, and context recipes',
+      title: 'Choose a team prompt',
+      placeHolder: 'Search by title, library, description, tag, or suggested context',
       matchOnDescription: true,
       matchOnDetail: true,
     });
@@ -1917,7 +1924,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
       title: input.prompt.title,
       description: input.prompt.description,
       libraryName: input.prompt.libraryName,
-      sourceLabel: `${input.prompt.sourceKind} • ${input.prompt.sourceLocation}`,
+      sourceLabel: `${promptLibrarySourceKindLabel(input.prompt.sourceKind)} • ${input.prompt.sourceLocation}`,
       terminalName: input.selection.terminal.name,
       body: input.body,
       tags: input.prompt.tags,
@@ -4431,6 +4438,10 @@ function workCompletionLabel(value: 'active' | 'completed' | 'all'): string {
   if (value === 'completed') { return 'Completed'; }
   if (value === 'all') { return 'All'; }
   return 'Active';
+}
+
+function promptLibrarySourceKindLabel(sourceKind: PromptLibrarySourceKind): string {
+  return PROMPT_LIBRARY_SOURCE_KIND_LABELS[sourceKind];
 }
 
 function boundedIntegerSetting(value: unknown, fallback: number, minimum: number, maximum: number): number {

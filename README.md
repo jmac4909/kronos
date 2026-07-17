@@ -112,7 +112,7 @@ The installed extension uses the VS Code API and Node built-ins only. It has **z
 | Reachable runtime modules checked for cycles/dead exports | 88 |
 | Third-party runtime dependencies | 0 |
 | Automated Node/DOM/board tests | 299 |
-| Built-in runtime coverage | 86.42% lines / 77.45% branches / 89.57% functions |
+| Built-in runtime coverage | 86.51% lines / 77.70% branches / 89.63% functions |
 
 Automated gates also cover the runtime graph, security boundary, context governance, activation surface, provider transitions, private state, credential redaction, and packaged extension contents.
 

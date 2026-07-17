@@ -40,40 +40,45 @@ export function buildPromptLibraryComposerHtml(input: PromptLibraryComposerInput
 
   return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><style>
 ${kronosWebviewBaseCss()}
-.prompt-shell { max-width: 1280px; }
+.prompt-shell { max-width: 1440px; }
 .prompt-header { align-items: center; }
-.prompt-layout { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(300px, .55fr); gap: 14px; align-items: start; }
+.prompt-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, .34fr); gap: 16px; align-items: start; }
 .prompt-card { padding: 16px; border: 1px solid var(--k-border); border-radius: var(--k-radius); background: var(--k-surface); }
-.prompt-body { width: 100%; min-height: 420px; resize: vertical; padding: 11px; border: 1px solid var(--k-border); border-radius: var(--k-radius-sm); color: var(--k-fg); background: var(--vscode-input-background, var(--k-bg)); font: 13px/1.5 var(--vscode-editor-font-family, monospace); }
+.prompt-editor { min-width: 0; }
+.prompt-body { width: 100%; min-height: clamp(380px, 58vh, 720px); max-height: min(72vh, 840px); resize: vertical; padding: 11px; border: 1px solid var(--k-border); border-radius: var(--k-radius-sm); color: var(--k-fg); background: var(--vscode-input-background, var(--k-bg)); font: 13px/1.5 var(--vscode-editor-font-family, monospace); }
 .prompt-body:focus { border-color: var(--vscode-focusBorder, var(--k-accent)); outline: none; }
-.prompt-meta { display: grid; gap: 12px; }
+.prompt-target { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; margin-top: 10px; padding: 9px 10px; border-radius: var(--k-radius-sm); background: var(--k-surface-soft); }
+.prompt-target span { color: var(--k-muted); font-size: 11px; }
+.prompt-target strong { min-width: 0; overflow-wrap: anywhere; text-align: right; font-size: 12px; }
+.prompt-meta { position: sticky; top: 14px; display: grid; gap: 12px; max-height: calc(100vh - 28px); overflow: auto; }
 .prompt-meta h2 { margin: 0 0 5px; font-size: 13px; }
 .prompt-meta p, .prompt-meta li { color: var(--k-muted); font-size: 11px; line-height: 1.45; overflow-wrap: anywhere; }
 .prompt-meta ul { margin: 5px 0 0; padding-left: 20px; }
 .prompt-tags { display: flex; flex-wrap: wrap; gap: 5px; }
 .prompt-actions { margin-top: 12px; }
+.prompt-settings { margin-top: 9px; }
 .prompt-details { border-top: 1px solid var(--k-border); padding-top: 10px; }
 .prompt-details summary { cursor: pointer; font-size: 12px; font-weight: 650; }
 .prompt-details section { margin-top: 10px; }
-@media (max-width: 900px) { .prompt-layout { grid-template-columns: 1fr; } }
+@media (max-width: 900px) { .prompt-layout { grid-template-columns: 1fr; } .prompt-meta { position: static; max-height: none; overflow: visible; } }
 </style></head><body><main class="kronos-shell prompt-shell">
 <header class="kronos-header prompt-header"><div><h1 class="kronos-title">${escapeHtml(title)}</h1><div class="kronos-subtitle">${escapeHtml(description || 'Review and edit this shared instruction before adding it to your terminal.')}</div></div><span class="kronos-pill info">Team prompt</span></header>
 ${warnings}
 <div class="prompt-layout">
-  <section class="prompt-card">
+  <section class="prompt-card prompt-editor">
     <label class="kronos-section-title" for="prompt-body">Prompt</label>
     <p class="kronos-subtitle">Edit the instruction below. Kronos saves a private snapshot and adds its reference without submitting it.</p>
     <textarea id="prompt-body" class="prompt-body" maxlength="20000" spellcheck="true" autofocus>${escapeHtml(body)}</textarea>
-    <div class="kronos-muted">Target terminal: ${escapeHtml(terminalName)}</div>
-    <div class="kronos-action-row prompt-actions"><button type="button" class="kronos-button primary" data-action="insertPrompt">Add to terminal</button><button type="button" class="kronos-button" data-action="openSettings">Manage library</button><button type="button" class="kronos-button" data-action="cancel">Cancel</button></div>
+    <div class="prompt-target"><span>Target terminal</span><strong>${escapeHtml(terminalName)}</strong></div>
+    <div class="kronos-action-row prompt-actions"><button type="button" class="kronos-button primary" data-action="insertPrompt">Add to terminal</button><button type="button" class="kronos-button" data-action="cancel">Cancel</button></div>
     <div class="kronos-subtitle">Ctrl+Enter (Cmd+Enter on macOS) adds it. Enter edits the prompt. You still submit from the terminal.</div>
   </section>
   <aside class="prompt-card prompt-meta">
-    <section><h2>Library</h2><p>${escapeHtml(libraryName)}<br>${escapeHtml(sourceLabel)}</p></section>
+    <section><h2>Library</h2><p>${escapeHtml(libraryName)}<br>${escapeHtml(sourceLabel)}</p><button type="button" class="kronos-button prompt-settings" data-action="openSettings">Library settings</button></section>
     <section><h2>Tags</h2><div class="prompt-tags">${tags || '<span class="kronos-muted">None</span>'}</div></section>
-    <details class="prompt-details"><summary>Context suggestions</summary><section>${context ? `<ul>${context}</ul>` : '<p>None. Add Jira, merge request, build, quality, Git, or basket context separately when useful.</p>'}</section></details>
-    <details class="prompt-details"><summary>Filled variables</summary><section>${variables ? `<ul>${variables}</ul>` : '<p>No session placeholders were used.</p>'}</section></details>
-    <details class="prompt-details"><summary>Safety and behavior</summary><section><p>Library content stays inert until you review it here. It cannot launch Claude, execute a command, submit input, or update Git or a provider.</p></section></details>
+    <details class="prompt-details"><summary>Suggested context</summary><section>${context ? `<ul>${context}</ul>` : '<p>None. Add Jira, merge request, build, quality, Git, or basket context separately when useful.</p>'}</section></details>
+    <details class="prompt-details"><summary>Filled placeholders</summary><section>${variables ? `<ul>${variables}</ul>` : '<p>No session details were added to this prompt.</p>'}</section></details>
+    <details class="prompt-details"><summary>What happens next</summary><section><p>Kronos saves a private reviewed copy and adds only its reference to the terminal. It does not press Enter, launch Claude, run commands, or change Git or provider state.</p></section></details>
   </aside>
 </div></main>${script}</body></html>`;
 }

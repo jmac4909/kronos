@@ -240,6 +240,7 @@ test('Attention tree groups newest project state, preserves nicknames, and redac
   assert.equal(rows.length, 1);
   assert.equal(rows[0].command.command, 'kronos.openProvider');
   assert.equal(rows[0].providerUrl, 'https://gitlab.example/group/application/-/merge_requests/77');
+  assert.match(rows[0].tooltip, /Right-click for available context, history, and Clear from Attention\./);
   assert.equal(provider.getTreeItem(rows[0]), rows[0]);
   assert.deepEqual(provider.getChildren(rows[0]), []);
   provider.refresh();
@@ -252,7 +253,7 @@ test('Attention tree groups newest project state, preserves nicknames, and redac
   }).getChildren();
   assert.equal(empty[0].contextValue, 'attention_empty');
   assert.equal(empty[0].iconPath.id, 'check');
-  assert.equal(empty[0].description, 'all provider updates are clear');
+  assert.equal(empty[0].description, undefined);
   assert.doesNotMatch(empty[0].tooltip, /provider-health|local-monitoring|transition/i);
   assert.match(empty[0].tooltip, /Clear an item after review/);
 

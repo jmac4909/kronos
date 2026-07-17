@@ -107,7 +107,7 @@
       <rect x="743" y="224" width="13" height="13" rx="2" fill="#0c1423" stroke="#3a4a63"/>
       <text x="766" y="237" class="small soft">Hide completed</text>
       <rect x="930" y="218" width="90" height="30" rx="5" class="button"/>
-      <text x="975" y="238" text-anchor="middle" class="small soft">Reset</text>
+      <text x="975" y="238" text-anchor="middle" class="small soft">Clear filters</text>
 
       <text x="36" y="284" class="tiny muted">3 of 3 shown</text>
 

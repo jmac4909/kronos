@@ -204,7 +204,7 @@ ${webviewRuntimeScriptTag(input.nonce, webviewRuntimeScriptUri(input.scriptUri))
         <input id="jira-board-hide-done" type="checkbox" data-default-checked="${hideCompletedByDefault ? 'true' : 'false'}"${hideCompletedByDefault ? ' checked' : ''}>
         <span class="jira-board-toggle-label">Hide completed</span>
       </label>
-      <button id="jira-board-reset" class="kronos-button jira-board-reset" type="button">Reset</button>
+      <button id="jira-board-reset" class="kronos-button jira-board-reset" type="button">Clear filters</button>
     </div>
     <details id="jira-board-more-filters" class="jira-board-more-filters">
       <summary>More filters <span>Jira project, local project, label</span></summary>
@@ -358,29 +358,21 @@ function buildTicketCardHtml(ticket: BoardTicket): string {
   const priority = safeSingleLine(value.priority, 120);
   const type = safeSingleLine(value.type, 120) || 'Issue';
   const typeKind = /bug|defect/i.test(type) ? 'bug' : 'issue';
-  const jiraProject = ticket.jiraProject;
   const launchProject = ticket.localProjectDisplayName;
-  const projectChips = [
-    jiraProject ? chip(`Jira: ${jiraProject}`, 'project') : '',
-    launchProject ? chip(`Project: ${launchProject}`, 'project') : '',
-  ].join('');
-  const labelChips = ticket.labels.slice(0, 4).map(label => chip(label, '')).join('');
-  const overflowCount = Math.max(0, ticket.labels.length - 4);
+  const projectChip = launchProject ? chip(`Project: ${launchProject}`, 'project') : '';
+  const labelChips = ticket.labels.slice(0, 2).map(label => chip(label, '')).join('');
+  const overflowCount = Math.max(0, ticket.labels.length - 2);
   const mrChip = value.mr
     ? chip(`MR !${value.mr.iid} · ${safeSingleLine(value.mr.review_status, 100) || value.mr.state}`, 'mr')
     : '';
   const buildChip = value.build
     ? chip(`Build #${value.build.number} · ${safeSingleLine(value.build.status, 100) || 'unknown'}`, 'build')
     : '';
-  const attachmentCount = value.attachments?.length || 0;
-  const attachmentChip = attachmentCount > 0
-    ? chip(`${attachmentCount} attachment${attachmentCount === 1 ? '' : 's'}`, '')
-    : '';
   const projectActionLabel = launchProject ? 'Change project' : 'Choose project';
   return `<article class="jira-ticket-card" data-ticket-card data-ticket="${escapeAttr(ticket.key)}" data-status="${escapeAttr(ticket.statusToken)}" data-jira-project="${escapeAttr(ticket.jiraProjectToken)}" data-local-project="${escapeAttr(ticket.localProjectToken)}" data-labels="${escapeAttr(JSON.stringify(ticket.labelTokens))}" data-search="${escapeAttr(ticket.searchText)}" data-completed="${ticket.completed ? 'true' : 'false'}" data-ticket-type="${typeKind}" tabindex="0" aria-label="Open ${escapeAttr(ticket.key)}: ${escapeAttr(summary)}">
     <div class="jira-ticket-heading"><button type="button" class="jira-ticket-key jira-ticket-open" data-action="openTicketWorkspace" data-ticket="${escapeAttr(ticket.key)}" aria-label="Open ${escapeAttr(ticket.key)}: ${escapeAttr(summary)}">${escapeHtml(ticket.key)}</button><div class="jira-ticket-heading-meta"><span class="jira-ticket-priority">${escapeHtml(priority || type)}</span></div></div>
     <div class="jira-ticket-summary">${escapeHtml(summary)}</div>
-    <div class="jira-ticket-meta">${projectChips}${labelChips}${overflowCount > 0 ? chip(`+${overflowCount} more`, '') : ''}${mrChip}${buildChip}${attachmentChip}</div>
+    <div class="jira-ticket-meta">${projectChip}${labelChips}${overflowCount > 0 ? chip(`+${overflowCount} labels`, '') : ''}${mrChip}${buildChip}</div>
     <div class="jira-ticket-actions" aria-label="Actions for ${escapeAttr(ticket.key)}">
       ${actionButton('startClaudeForTicket', 'Start Claude', ticket.key, true)}
       ${actionButton('chooseTicketProject', projectActionLabel, ticket.key)}

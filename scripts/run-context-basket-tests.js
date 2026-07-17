@@ -159,8 +159,10 @@ test('basket messages and HTML expose only bounded explicit actions', () => {
     scriptUri: 'vscode-resource://kronos/media/kronos-context-basket.js',
   });
   assert.match(html, /Add to terminal/);
+  assert.match(html, /Clear basket/);
+  assert.ok(html.indexOf('data-action="close"') < html.indexOf('data-action="clear"'));
   assert.match(html, /data-entry-id="basket-/);
-  assert.match(html, /Nothing refreshes or submits automatically/);
+  assert.match(html, /Actions run only when selected/);
   assert.match(html, /Refresh source/);
   assert.match(html, /<details class="basket-source-details"><summary>Source details<\/summary>/);
   assert.match(html, /kronos-pill info">Jira<\/span>/);

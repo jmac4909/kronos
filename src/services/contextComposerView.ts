@@ -58,8 +58,9 @@ ${kronosWebviewBaseCss()}
 .composer-reference-details { margin-top: 12px; }
 .composer-reference-details summary { cursor: pointer; color: var(--k-muted); font-size: 11px; font-weight: 650; text-transform: uppercase; }
 .composer-actions { margin-top: 13px; }
+.composer-actions .primary { min-width: 132px; }
 .keyboard-hint { margin-top: 9px; color: var(--k-muted); font-size: 11px; }
-.evidence-list { display: grid; gap: 8px; max-height: 560px; overflow: auto; padding-right: 3px; }
+.evidence-list { display: grid; gap: 8px; max-height: min(68vh, 720px); overflow: auto; padding-right: 3px; }
 .evidence-item { padding: 10px 11px; border: 1px solid var(--k-border); border-radius: var(--k-radius-sm); background: var(--k-surface-soft); }
 .evidence-item h3 { margin: 0 0 4px; font-size: 11px; }
 .evidence-item div { color: var(--k-muted); font-size: 11px; line-height: 1.45; white-space: pre-wrap; word-break: break-word; }
@@ -85,8 +86,8 @@ ${kronosWebviewBaseCss()}
       <div class="kronos-muted">Target terminal: ${escapeHtml(terminalName)}</div>
       <div class="kronos-action-row composer-actions">
         <button type="button" class="kronos-button primary" data-action="insertDraft">Add to terminal</button>
-        <button type="button" class="kronos-button" data-action="openArtifact">Open source details</button>
         ${input.canAddToBasket ? '<button type="button" class="kronos-button" data-action="addToBasket">Add to basket</button>' : ''}
+        <button type="button" class="kronos-button" data-action="openArtifact">Open source details</button>
         <button type="button" class="kronos-button" data-action="cancel">Cancel</button>
       </div>
       <div class="keyboard-hint">Ctrl+Enter (Cmd+Enter on macOS) adds it. Enter edits the note. You still submit from the terminal.</div>

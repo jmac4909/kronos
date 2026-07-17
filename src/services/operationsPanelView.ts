@@ -42,8 +42,8 @@ export interface DoctorPanelInput {
 export function buildSetupPanelHtml(input: SetupPanelInput): string {
   const attentionCount = input.steps.filter(step => step.status !== 'pass').length;
   const headline = attentionCount === 0
-    ? 'Ready for terminal-first work'
-    : `${attentionCount} setup item${attentionCount === 1 ? '' : 's'} to review`;
+    ? 'Setup ready'
+    : attentionCount === 1 ? '1 item needs attention' : `${attentionCount} items need attention`;
   const tone = input.steps.some(step => step.status === 'fail') ? 'fail' : attentionCount > 0 ? 'warn' : 'pass';
   const steps = input.steps.map(step => `<article class="setup-step ${escapeClass(step.status)}">
     <div class="setup-step-heading">
@@ -79,19 +79,14 @@ ${operationsPanelCss()}
   <header class="kronos-header operations-header">
     <div>
       <h1 class="kronos-title">Setup</h1>
-      <div class="kronos-subtitle">Connect Claude terminals, local projects, Jira, and read-only provider updates.</div>
+      <div class="kronos-subtitle">Configure Claude, local projects, Jira, and read-only provider updates. Nothing starts automatically.</div>
     </div>
-    <span class="kronos-pill ${escapeClass(tone)}">${tone === 'pass' ? 'Ready' : tone === 'warn' ? 'Review' : 'Blocked'}</span>
+    <span class="kronos-pill ${escapeClass(tone)}">${escapeHtml(headline)}</span>
   </header>
   <div class="kronos-action-row operations-actions">
     ${operationsActionButton('openDoctor', 'Check setup', true)}
     ${operationsActionButton('refreshPanel', 'Refresh')}
   </div>
-  <section class="operations-hero ${escapeClass(tone)}">
-    <div class="kronos-section-title">Setup status</div>
-    <strong>${escapeHtml(headline)}</strong>
-    <p>Nothing starts automatically. You stay in control of every Claude terminal.</p>
-  </section>
   <section class="setup-grid">${steps}</section>
   <details class="provider-guide">
     <summary>Provider setup details</summary>
@@ -140,14 +135,14 @@ export function buildDoctorPanelHtml(input: DoctorPanelInput): string {
 <html>
 <head><style>
 ${operationsPanelCss()}
-.doctor-summary { display: grid; grid-template-columns: repeat(3, minmax(110px, 1fr)); gap: 10px; margin: 0 0 18px; }
-.doctor-stat { padding: 13px 14px; border: 1px solid var(--k-border); border-radius: var(--k-radius); background: var(--k-surface-soft); }
-.doctor-stat strong { display: block; font-size: 25px; line-height: 1; }
-.doctor-stat span { display: block; margin-top: 5px; color: var(--k-muted); font-size: 10px; font-weight: 650; text-transform: uppercase; }
+.doctor-summary { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 14px; }
+.doctor-stat { display: flex; flex: 1 1 110px; align-items: baseline; gap: 6px; padding: 7px 10px; border: 1px solid var(--k-border); border-radius: 999px; background: var(--k-surface-soft); }
+.doctor-stat strong { font-size: 16px; line-height: 1; }
+.doctor-stat span { color: var(--k-muted); font-size: 10px; font-weight: 650; text-transform: uppercase; }
 .doctor-stat.pass strong { color: var(--k-ok); }
 .doctor-stat.warn strong { color: var(--k-warn); }
 .doctor-stat.fail strong { color: var(--k-danger); }
-.doctor-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; align-items: stretch; }
+.doctor-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 8px; align-items: stretch; }
 .doctor-check { display: grid; height: 100%; grid-template-columns: 78px minmax(0, 1fr); gap: 12px; align-items: start; padding: 13px 14px; border: 1px solid var(--k-border); border-left: 3px solid var(--k-border); border-radius: var(--k-radius); background: var(--k-surface); }
 .doctor-check.pass { border-left-color: var(--k-ok); }
 .doctor-check.warn { border-left-color: var(--k-warn); }
@@ -156,11 +151,10 @@ ${operationsPanelCss()}
 .doctor-detail { color: var(--k-muted); font-size: 12px; line-height: 1.45; word-break: break-word; }
 .doctor-action { margin-top: 9px; }
 .privacy-note { margin: 15px 0 0; color: var(--k-muted); font-size: 12px; }
-@media (max-width: 980px) {
+@media (max-width: 720px) {
   .doctor-list { grid-template-columns: 1fr; }
 }
 @media (max-width: 620px) {
-  .doctor-summary { grid-template-columns: 1fr; }
   .doctor-check { grid-template-columns: 1fr; }
 }
 </style></head>
@@ -194,12 +188,6 @@ function operationsPanelCss(): string {
   .operations-shell { max-width: 1280px; }
   .operations-header { align-items: center; }
   .operations-actions { margin: 0 0 16px; }
-  .operations-hero { margin: 0 0 16px; padding: 15px 17px; border: 1px solid var(--k-border); border-left: 3px solid var(--k-border); border-radius: var(--k-radius); background: linear-gradient(135deg, var(--k-surface-soft), var(--k-surface)); }
-  .operations-hero.pass { border-left-color: var(--k-ok); }
-  .operations-hero.warn { border-left-color: var(--k-warn); }
-  .operations-hero.fail { border-left-color: var(--k-danger); }
-  .operations-hero strong { display: block; font-size: 17px; }
-  .operations-hero p { margin: 5px 0 0; color: var(--k-muted); font-size: 12px; }
   .status-mark { width: 9px; height: 9px; margin-top: 5px; border-radius: 50%; background: var(--k-muted); box-shadow: 0 0 0 3px color-mix(in srgb, var(--k-muted) 16%, transparent); }
   .status-mark.pass { background: var(--k-ok); box-shadow: 0 0 0 3px var(--k-ok-bg); }
   .status-mark.warn { background: var(--k-warn); box-shadow: 0 0 0 3px var(--k-warn-bg); }

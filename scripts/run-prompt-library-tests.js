@@ -336,8 +336,14 @@ test('prompt library composer escapes content and accepts only bounded editor me
   assert.match(html, /id="prompt-body"/);
   assert.match(html, /data-action="insertPrompt"/);
   assert.match(html, /Add to terminal/);
-  assert.match(html, /Manage library/);
-  assert.match(html, /<details class="prompt-details"><summary>Context suggestions<\/summary>/);
+  assert.match(html, /Target terminal<\/span><strong>Claude &lt;main&gt;<\/strong>/);
+  assert.match(html, /Library settings/);
+  assert.match(html, /<details class="prompt-details"><summary>Suggested context<\/summary>/);
+  assert.match(html, /<details class="prompt-details"><summary>Filled placeholders<\/summary>/);
+  assert.match(html, /<details class="prompt-details"><summary>What happens next<\/summary>/);
+  assert.match(html, /min-height: clamp\(380px, 58vh, 720px\)/);
+  assert.match(html, /\.prompt-meta \{ position: static; max-height: none; overflow: visible; \}/);
+  assert.ok(html.indexOf('data-action="insertPrompt"') < html.indexOf('data-action="openSettings"'));
   assert.doesNotMatch(html, /<script>bad\(\)<\/script>/);
   assert.match(html, /&lt;script&gt;bad\(\)&lt;\/script&gt;/);
   assert.deepEqual(messages.normalizePromptLibraryComposerMessage({ command: 'insertPrompt', body: 'edited' }), {

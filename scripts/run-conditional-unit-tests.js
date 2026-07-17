@@ -242,7 +242,9 @@ test('managed Sessions tree covers every lifecycle context and loader fallback',
   assert.equal(standaloneAttached.contextValue, 'standalone_session_attached');
   assert.deepEqual(standaloneAttached.liveTerminalBindingIds, ['live-a', 'live-z']);
   assert.equal(standaloneAttached.iconPath.id, 'terminal');
-  assert.match(standaloneAttached.description, /^feature\/conditional-coverage/);
+  assert.equal(standaloneAttached.description, '2 terminals connected');
+  assert.match(standaloneAttached.tooltip, /Project: Customer API/);
+  assert.match(standaloneAttached.tooltip, /Branch: feature\/conditional-coverage/);
 
   const standaloneDetached = new ManagedSessionTreeItem(standalone, [], 300_000);
   assert.equal(standaloneDetached.contextValue, 'standalone_session_detached');
@@ -397,8 +399,9 @@ test('Projects tree covers empty, clean, changed, unavailable, action, and faile
   assert.equal(actions[0].command.command, 'kronos.newClaudeSession');
   assert.equal(actions[0].command.arguments[0].projectPath, cleanPath);
   assert.equal(actions[0].description, 'in this project');
-  assert.equal(actions[1].label, 'Review changes');
-  assert.equal(actions[3].description, undefined);
+  assert.equal(actions[1].label, 'Review local changes');
+  assert.equal(actions[1].description, 'for terminal context');
+  assert.equal(actions[3].description, 'for terminal context');
   assert.equal(actions[6].command.command, 'kronos.renameLocalProject');
   assert.equal(actions[6].label, 'Rename project');
   assert.deepEqual(await provider.getChildren(actions[0]), []);

@@ -315,11 +315,12 @@ test('Work tree directly covers project-rich rows, sorting, filters, empty state
     assert.equal(active[0].ticketKey, 'APP-1');
     assert.equal(provider.getTreeItem(active[0]), active[0]);
     assert.equal(active[0].iconPath.id, 'bug');
-    assert.equal(active[0].description, 'In Progress • High • Customer API');
+    assert.equal(active[0].description, 'In Progress • Customer API');
     assert.match(active[0].tooltip, /Launch directory:.*work-tree-project/);
     assert.match(active[0].tooltip, /Merge request !77: opened \/ changes_requested/);
     assert.match(active[0].tooltip, /Build #41: FAILURE/);
     assert.match(active[0].tooltip, /A multi-line operator-visible description/);
+    assert.match(active[0].tooltip, /Select to open the ticket workspace\. Right-click for ticket actions\./);
 
     provider.setFilter({ completion: 'all' });
     assert.deepEqual(provider.getChildren().map(item => item.ticketKey), ['APP-1', 'APP-2']);
@@ -390,12 +391,13 @@ test('Work tree directly covers project-rich rows, sorting, filters, empty state
     available: true,
   });
   assert.equal(open.iconPath.id, 'issue-opened');
+  assert.equal(open.description, 'In Progress • Medium');
   assert.equal(closed.iconPath.id, 'issue-closed');
   assert.equal(sparse.label, 'Ticket — Untitled ticket');
   assert.equal(sparse.description, '');
   assert.equal(sparse.iconPath.id, 'bug');
   assert.match(sparse.tooltip, /Jira status: Unknown[^]*Jira project: Unknown[^]*Priority: Unknown[^]*Local project: Not linked/);
-  assert.equal(namedProject.description, 'In Progress • Medium • application');
+  assert.equal(namedProject.description, 'In Progress • application');
   assert.match(namedProject.tooltip, /Git branch: unavailable/);
 });
 

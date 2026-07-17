@@ -127,9 +127,10 @@ test('explicit project journey keeps one stable identity across Work, Projects, 
     'Payments API',
   );
   assert.equal(presentation.label, 'Payments API: Investigate payment reconciliation');
-  assert.match(presentation.description, /^feature\/payment-reconciliation/);
-  assert.match(presentation.description, /1 Jira ticket/);
-  assert.match(presentation.description, /1 terminal connected/);
+  assert.match(presentation.description, /^Connected/);
+  assert.doesNotMatch(presentation.description, /feature\/payment-reconciliation|Jira ticket/);
+  assert.match(presentation.tooltip, /Branch: feature\/payment-reconciliation/);
+  assert.match(presentation.tooltip, /Jira tickets: ABC-123/);
 
   const groups = groupAttentionEntriesByProject([
     { id: 'gitlab-mr-72', session, ticketKey: 'ABC-123' },
