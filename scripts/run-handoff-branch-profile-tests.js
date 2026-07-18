@@ -117,6 +117,38 @@ test('local handoff refuses external artifact paths and oversized selections', (
   }), /at most 100/);
 });
 
+test('local handoff rejects incomplete references before publishing an extra-feature bundle', () => {
+  const fixture = session();
+  const source = sourceArtifact('invalid-handoff-source', 'validated source content');
+  const selection = buildHandoffCandidates(session({
+    artifacts: [artifact('invalid-handoff-context', { promptPath: source })],
+  }), [])[0].selection;
+  const handoffRoot = path.join(kronosDir, 'handoffs');
+  const bundleCount = fs.existsSync(handoffRoot) ? fs.readdirSync(handoffRoot).length : 0;
+
+  assert.throws(() => writeLocalHandoffBundle({
+    session: fixture,
+    selections: [],
+    title: 'Empty handoff',
+  }), /choose at least one context or audit reference/i);
+  assert.throws(() => writeLocalHandoffBundle({
+    session: fixture,
+    selections: [{ ...selection, promptPath: '' }],
+    title: 'Missing path handoff',
+  }), /artifact path is missing or too long/i);
+  assert.throws(() => writeLocalHandoffBundle({
+    session: fixture,
+    selections: [{ ...selection, fetchedAt: 'not-a-timestamp' }],
+    title: 'Invalid timestamp handoff',
+  }), /fetched time is invalid/i);
+  assert.throws(() => writeLocalHandoffBundle({
+    session: fixture,
+    selections: [{ ...selection, label: ' \n ' }],
+    title: 'Missing label handoff',
+  }), /context label is missing/i);
+  assert.equal(fs.readdirSync(handoffRoot).length, bundleCount, 'invalid handoffs do not publish partial bundles');
+});
+
 test('local handoff verifies every referenced artifact even when a persisted hash is present', () => {
   const source = sourceArtifact('integrity-source', 'exact retained prompt content');
   const correctSha256 = crypto.createHash('sha256').update(fs.readFileSync(source)).digest('hex');

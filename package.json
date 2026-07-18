@@ -218,6 +218,12 @@
         "icon": "$(terminal)"
       },
       {
+        "command": "kronos.toggleWorkSessionTerminalSize",
+        "title": "Kronos: Toggle Full-Size Session Terminal",
+        "shortTitle": "Toggle Full Size",
+        "icon": "$(layout)"
+      },
+      {
         "command": "kronos.reattachWorkSessionTerminal",
         "title": "Kronos: Connect Focused Terminal to Session",
         "shortTitle": "Connect Focused Terminal",
@@ -498,6 +504,11 @@
           "group": "inline@1"
         },
         {
+          "command": "kronos.toggleWorkSessionTerminalSize",
+          "when": "viewItem == work_session_attached || viewItem == work_session_attached_paused || viewItem == standalone_session_attached",
+          "group": "navigation@2"
+        },
+        {
           "command": "kronos.reattachWorkSessionTerminal",
           "when": "viewItem == work_session_detached || viewItem == work_session_detached_paused || viewItem == work_session_closed || viewItem == standalone_session_detached || viewItem == standalone_session_closed",
           "group": "inline@1"
@@ -731,6 +742,21 @@
           "type": "string",
           "default": "Claude",
           "description": "Base name for terminals created by New Claude or Start Claude."
+        },
+        "kronos.claudeTerminalLayout": {
+          "type": "string",
+          "enum": [
+            "editorSplit",
+            "editorTabs",
+            "panel"
+          ],
+          "enumDescriptions": [
+            "Open the first Claude terminal in the main editor area and split later Kronos-launched Claude terminals beside it.",
+            "Open each Claude terminal as a tab in the main editor area without automatically splitting it.",
+            "Open Claude terminals in the bottom terminal panel."
+          ],
+          "default": "editorSplit",
+          "description": "Layout used for newly launched Claude terminals. Existing terminals are never moved."
         },
         "kronos.claudeLaunchCwd": {
           "type": "string",

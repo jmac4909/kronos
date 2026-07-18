@@ -92,13 +92,43 @@ test('coverage policy discovers the npm test graph and fails closed on missing o
   }
   assert.deepEqual(
     coveragePolicy.CRITICAL_FILE_THRESHOLDS['jiraRestClient.js'],
-    { lines: 79, branches: 78, functions: 88 },
+    { lines: 79.5, branches: 78.5, functions: 90 },
     'Jira core-read gains must remain protected by the coverage policy',
   );
   assert.deepEqual(
+    coveragePolicy.CRITICAL_FILE_THRESHOLDS['jiraContextStore.js'],
+    { lines: 88, branches: 85, functions: 91 },
+    'Jira context publication and envelope-validation gains must remain protected by the coverage policy',
+  );
+  assert.deepEqual(
+    coveragePolicy.CRITICAL_FILE_THRESHOLDS['jenkinsRestClient.js'],
+    { lines: 82.5, branches: 79.5, functions: 91 },
+    'Jenkins core-read and bounded-evidence gains must remain protected by the coverage policy',
+  );
+  assert.deepEqual(
     coveragePolicy.CRITICAL_FILE_THRESHOLDS['terminalFirstExtension.js'],
-    { lines: 77.5, branches: 60, functions: 89.5 },
+    { lines: 79.5, branches: 61.8, functions: 91 },
     'activation and command-orchestration gains must remain protected by the coverage policy',
+  );
+  assert.deepEqual(
+    coveragePolicy.CRITICAL_FILE_THRESHOLDS['TerminalFirstState.js'],
+    { lines: 94.5, branches: 78, functions: 90 },
+    'core Work-state lifecycle gains must remain protected by the coverage policy',
+  );
+  assert.deepEqual(
+    coveragePolicy.CRITICAL_FILE_THRESHOLDS['handoffBundleStore.js'],
+    { lines: 97.5, branches: 82, functions: 91 },
+    'local handoff fail-before-publish gains must remain protected by the coverage policy',
+  );
+  assert.deepEqual(
+    coveragePolicy.CRITICAL_FILE_THRESHOLDS['attentionEventContextStore.js'],
+    { lines: 95.5, branches: 82, functions: 80 },
+    'exact retained-event snapshot gains must remain protected by the coverage policy',
+  );
+  assert.deepEqual(
+    coveragePolicy.CRITICAL_FILE_THRESHOLDS['sonarRestClient.js'],
+    { lines: 78.5, branches: 69.5, functions: 92.5 },
+    'SonarQube rich bounded-evidence gains must remain protected by the coverage policy',
   );
   assert.deepEqual(
     coveragePolicy.CRITICAL_FILE_THRESHOLDS['ciMonitorStore.js'],

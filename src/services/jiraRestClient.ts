@@ -3,7 +3,12 @@ import * as http from 'http';
 import * as https from 'https';
 import { unknownErrorCode } from './errorUtils';
 import { parseJsonWithLabel } from './jsonFiles';
-import { arrayFromUnknown, isRecord, optionalFiniteNumberFromUnknown } from './records';
+import {
+  arrayFromUnknown,
+  boundedInteger,
+  isRecord,
+  nonNegativeIntegerFromUnknown,
+} from './records';
 
 export interface JiraRestRequestOptions {
   timeoutMs?: number;
@@ -400,7 +405,7 @@ export class JiraRestClient {
       const metadata: Record<string, unknown> = isRecord(attachmentValue) ? attachmentValue : {};
       const id = normalizedAttachmentId(metadata['id']);
       const declaredMimeType = normalizedMimeType(firstHeaderLikeString(metadata['mimeType'], metadata['mimetype']));
-      const declaredBytes = nonNegativeInteger(metadata['size']);
+      const declaredBytes = nonNegativeIntegerFromUnknown(metadata['size']);
       const base: JiraAttachmentContentSnapshot = { index, status: 'skipped' };
       if (id) { base.id = id; }
       if (declaredMimeType) { base.declaredMimeType = declaredMimeType; }
@@ -558,7 +563,7 @@ export class JiraRestClient {
         break;
       }
       const pageComments = arrayFromUnknown(page['comments']);
-      const declaredTotal = nonNegativeInteger(page['total']);
+      const declaredTotal = nonNegativeIntegerFromUnknown(page['total']);
       if (declaredTotal !== undefined) {
         total = declaredTotal;
       }
@@ -807,16 +812,6 @@ function jiraHttpError(label: string, statusCode: number): JiraRestError {
     return new JiraRestError(`Jira REST ${label} failed with HTTP 429. Jira rate limiting prevented a complete fetch.`);
   }
   return new JiraRestError(`Jira REST ${label} failed with HTTP ${statusCode}. Response content is not displayed.`);
-}
-
-function nonNegativeInteger(value: unknown): number | undefined {
-  const number = optionalFiniteNumberFromUnknown(value);
-  return number !== undefined && number >= 0 ? Math.floor(number) : undefined;
-}
-
-function boundedInteger(value: number | undefined, fallback: number, minimum: number, maximum: number): number {
-  if (value === undefined || !Number.isFinite(value)) { return fallback; }
-  return Math.min(maximum, Math.max(minimum, Math.floor(value)));
 }
 
 function jiraNextPageToken(value: unknown): string | undefined {

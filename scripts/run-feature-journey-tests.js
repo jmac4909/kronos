@@ -17,6 +17,7 @@ const {
   launchClaudeTerminal,
   claudePermissionModeLabel,
   CLAUDE_PERMISSION_MODES,
+  CLAUDE_TERMINAL_LAYOUTS,
 } = require('../out/services/claudeTerminalLauncher.js');
 const {
   collectWorkTicketFilterOptions,
@@ -206,15 +207,22 @@ test('manifest Claude modes and validated launcher commands cannot drift apart',
     manifest.contributes.configuration.properties['kronos.claudeLaunchCwd'].enum,
     ['ticketProject', 'workspace', 'home'],
   );
+  assert.deepEqual(
+    manifest.contributes.configuration.properties['kronos.claudeTerminalLayout'].enum,
+    [...CLAUDE_TERMINAL_LAYOUTS],
+  );
 
-  const commands = [];
+  const creations = [];
   const factory = {
     createTerminal(options) {
-      return {
+      const actions = [];
+      const terminal = {
         options,
-        show(preserveFocus) { commands.push(['show', preserveFocus]); },
-        sendText(command, shouldExecute) { commands.push(['sendText', command, shouldExecute]); },
+        show(preserveFocus) { actions.push(['show', preserveFocus]); },
+        sendText(command, shouldExecute) { actions.push(['sendText', command, shouldExecute]); },
       };
+      creations.push({ options, terminal, actions });
+      return terminal;
     },
   };
   for (const mode of CLAUDE_PERMISSION_MODES) {
@@ -229,7 +237,12 @@ test('manifest Claude modes and validated launcher commands cannot drift apart',
     assert.ok(claudePermissionModeLabel(mode));
     const result = launchClaudeTerminal(factory, launchInput);
     assert.equal(result.configuration.permissionMode, mode);
-    const submitted = commands.at(-1);
+    const creation = creations.at(-1);
+    assert.equal(result.terminal, creation.terminal);
+    assert.deepEqual(creation.options, { name: 'Kronos Claude', cwd: path.resolve(projectPath) });
+    assert.equal(creation.actions.length, 2, 'one explicit launch focuses once and submits one validated Claude command');
+    assert.deepEqual(creation.actions[0], ['show', false]);
+    const submitted = creation.actions[1];
     assert.equal(submitted[0], 'sendText');
     assert.equal(submitted[2], true);
     if (mode === 'default') { assert.doesNotMatch(submitted[1], /permission|dangerously/); }
@@ -237,12 +250,12 @@ test('manifest Claude modes and validated launcher commands cannot drift apart',
     else { assert.match(submitted[1], new RegExp(`--permission-mode ${mode}$`)); }
   }
 
-  const commandCount = commands.length;
+  const creationCount = creations.length;
   assert.throws(
     () => launchClaudeTerminal(factory, { command: 'claude --dangerously-skip-permissions', cwd: projectPath }),
     /approved interactive|permission mode/i,
   );
-  assert.equal(commands.length, commandCount, 'raw permission flags must fail before terminal creation');
+  assert.equal(creations.length, creationCount, 'raw permission flags must fail before terminal creation');
 });
 
 test('unregistering a project clears launch authority but preserves Jira namespace and provider-only metadata', t => {

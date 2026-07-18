@@ -24,6 +24,7 @@ const EXPECTED_COMMANDS = [
   'kronos.pollManagedWorkSessions',
   'kronos.openWorkSessionAudit',
   'kronos.focusWorkSessionTerminal',
+  'kronos.toggleWorkSessionTerminalSize',
   'kronos.reattachWorkSessionTerminal',
   'kronos.detachWorkSessionTerminal',
   'kronos.closeWorkSession',
@@ -66,6 +67,7 @@ const EXPECTED_SETTINGS = [
   'kronos.claudeCommand',
   'kronos.claudePermissionMode',
   'kronos.claudeTerminalName',
+  'kronos.claudeTerminalLayout',
   'kronos.claudeLaunchCwd',
 ];
 
@@ -305,6 +307,11 @@ function checkSettings() {
   if (properties?.['kronos.claudeTerminalName']?.type !== 'string'
     || properties?.['kronos.claudeTerminalName']?.default !== 'Claude') {
     fail('kronos.claudeTerminalName must default to Claude.');
+  }
+  const terminalLayout = properties?.['kronos.claudeTerminalLayout'];
+  if (terminalLayout?.type !== 'string' || terminalLayout?.default !== 'editorSplit'
+    || JSON.stringify(terminalLayout?.enum) !== JSON.stringify(['editorSplit', 'editorTabs', 'panel'])) {
+    fail('kronos.claudeTerminalLayout must expose editorSplit, editorTabs, and panel and default to editorSplit.');
   }
   const cwd = properties?.['kronos.claudeLaunchCwd'];
   if (cwd?.type !== 'string' || cwd?.default !== 'ticketProject'

@@ -60,6 +60,23 @@ export interface WriteLocalHandoffBundleInput {
   note?: string;
 }
 
+interface HandoffDocument {
+  schemaVersion: 1;
+  id: string;
+  createdAt: string;
+  title: string;
+  note: string;
+  session: {
+    id: string;
+    title: string;
+    kind: string;
+    status: string;
+    projectName?: string;
+    ticketKeys: string[];
+  };
+  selections: HandoffSelection[];
+}
+
 const FILE_MODE = 0o600;
 const MAX_CONTEXT_CANDIDATES = 100;
 const MAX_AUDIT_CANDIDATES = 500;
@@ -110,7 +127,7 @@ export function writeLocalHandoffBundle(
   };
   const identitySha256 = sha256(JSON.stringify(draft));
   const id = `HANDOFF-${identitySha256.slice(0, 24).toUpperCase()}`;
-  const document = { ...draft, id };
+  const document: HandoffDocument = { ...draft, id };
   const json = `${JSON.stringify(document, null, 2)}\n`;
   const contentSha256 = sha256(json);
   const markdown = renderMarkdown(document, contentSha256);
@@ -237,7 +254,7 @@ function normalizeSelection(selection: HandoffSelection, root: string): HandoffS
 }
 
 function renderMarkdown(
-  document: ReturnType<typeof handoffDocumentShape>,
+  document: HandoffDocument,
   contentSha256: string,
 ): string {
   const context = document.selections.filter((selection): selection is HandoffContextSelection => selection.kind === 'context');
@@ -283,16 +300,6 @@ function renderMarkdown(
     '',
   ].join('\n');
 }
-
-function handoffDocumentShape(value: {
-  schemaVersion: 1;
-  id: string;
-  createdAt: string;
-  title: string;
-  note: string;
-  session: { id: string; title: string; kind: string; status: string; projectName?: string; ticketKeys: string[] };
-  selections: HandoffSelection[];
-}) { return value; }
 
 function requiredArtifactPath(value: string, root: string): string {
   const resolved = path.resolve(pathLine(value));

@@ -299,7 +299,7 @@ test('reviewed prompt snapshots are immutable, credential-redacted, and inserted
   if (process.platform !== 'win32') { assert.equal(fs.statSync(artifact.promptPath).mode & 0o777, 0o600); }
   const reference = insertion.buildPromptLibraryTerminalReference(artifact.id, artifact.promptPath);
   const sends = [];
-  insertion.insertTerminalContextReference({ sendText: (...args) => sends.push(args) }, reference);
+  insertion.insertEditableTerminalContextReference({ sendText: (...args) => sends.push(args) }, reference, '');
   assert.deepEqual(sends, [[reference, false]]);
   assert.throws(
     () => insertion.buildPromptLibraryTerminalReference(artifact.id, path.join(tempRoot, 'wrong', 'prompt.md')),

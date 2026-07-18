@@ -139,6 +139,7 @@ test('row context menus contain only actions scoped to the selected row', () => 
     assert.ok(shortTitle.length <= 28, `${menu.command} has an overly long row-menu label`);
   }
   assert.equal(commandsById.get('kronos.reattachWorkSessionTerminal').shortTitle, 'Connect Focused Terminal');
+  assert.equal(commandsById.get('kronos.toggleWorkSessionTerminalSize').shortTitle, 'Toggle Full Size');
   assert.equal(commandsById.get('kronos.detachWorkSessionTerminal').shortTitle, 'Disconnect Terminal');
   assert.equal(commandsById.get('kronos.acknowledgeAttention').shortTitle, 'Clear from Attention');
   assert.equal(commandsById.get('kronos.insertAttentionEventContext').shortTitle, 'Use Event in Prompt');

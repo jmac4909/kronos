@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { readProjectGitBranch } from './projectCatalog';
+import { boundedInteger } from './records';
 
 const MAX_ROOTS = 50;
 const MAX_DEPTH = 5;
@@ -177,12 +178,6 @@ function safePathSetting(value: unknown, maxLength: number): string {
   return typeof value === 'string'
     ? value.replace(/[\u0000-\u001f\u007f\u2028\u2029]/g, '').trim().slice(0, maxLength)
     : '';
-}
-
-function boundedInteger(value: number | undefined, fallback: number, minimum: number, maximum: number): number {
-  return typeof value === 'number' && Number.isFinite(value)
-    ? Math.max(minimum, Math.min(maximum, Math.floor(value)))
-    : fallback;
 }
 
 function pathKey(value: string): string {

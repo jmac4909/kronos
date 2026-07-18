@@ -2,7 +2,6 @@ import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import {
-  privateFileNoFollowFlag,
   privateFileOpenFlags,
   securePrivateDescriptorMode,
   syncPrivateDirectory,
@@ -748,16 +747,6 @@ function safeReadFlags(): number {
 
 function safeWriteFlags(): number {
   return privateFileOpenFlags('read-write-nonblocking');
-}
-
-/**
- * Windows does not implement O_NOFOLLOW for fs.open. Lease operations there
- * use exclusive creation plus lstat/fstat identity checks before every read,
- * write, renew, and unlink. POSIX hosts keep the stronger kernel flag and fail
- * closed when it is genuinely unavailable.
- */
-export function managedMonitorNoFollowFlag(platform: NodeJS.Platform, flagValue: unknown): number {
-  return privateFileNoFollowFlag(platform, flagValue);
 }
 
 function setPrivateDescriptorMode(descriptor: number, mode: number): void {

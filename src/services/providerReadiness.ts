@@ -1,6 +1,7 @@
 import { isGitLabRestConfigured, normalizeGitLabApiBaseUrl } from './gitlabRestClient';
 import { isJenkinsRestConfigured, normalizeJenkinsBaseUrl } from './jenkinsRestClient';
 import { isJiraRestConfigured, normalizeJiraBaseUrl } from './jiraRestClient';
+import { firstNonEmptyString, optionalTrimmedStringFromUnknown } from './records';
 import { isSonarRestConfigured, normalizeSonarBaseUrl } from './sonarRestClient';
 
 export type ProviderReadinessId = 'jira' | 'gitlab' | 'jenkins' | 'sonar';
@@ -34,9 +35,9 @@ export function providerReadiness(
 }
 
 function jiraReadiness(env: NodeJS.ProcessEnv): ProviderReadiness {
-  const baseUrl = nonEmpty(env['JIRA_BASE_URL']);
-  const email = nonEmpty(env['JIRA_EMAIL']);
-  const token = nonEmpty(env['JIRA_API_TOKEN']);
+  const baseUrl = optionalTrimmedStringFromUnknown(env['JIRA_BASE_URL']);
+  const email = optionalTrimmedStringFromUnknown(env['JIRA_EMAIL']);
+  const token = optionalTrimmedStringFromUnknown(env['JIRA_API_TOKEN']);
   const missing = [
     ...(!baseUrl ? ['JIRA_BASE_URL'] : []),
     ...(!email ? ['JIRA_EMAIL'] : []),
@@ -62,13 +63,13 @@ function jiraReadiness(env: NodeJS.ProcessEnv): ProviderReadiness {
 }
 
 function gitLabReadiness(env: NodeJS.ProcessEnv): ProviderReadiness {
-  const baseUrl = firstNonEmpty(
+  const baseUrl = firstNonEmptyString(
     env['GITLAB_API_BASE_URL'],
     env['GITLAB_BASE_URL'],
     env['GITLAB_URL'],
     env['GITLAB_HOST'],
   );
-  const token = nonEmpty(env['GITLAB_TOKEN']);
+  const token = optionalTrimmedStringFromUnknown(env['GITLAB_TOKEN']);
   const missing = [
     ...(!baseUrl ? ['GitLab URL'] : []),
     ...(!token ? ['GITLAB_TOKEN'] : []),
@@ -93,9 +94,9 @@ function gitLabReadiness(env: NodeJS.ProcessEnv): ProviderReadiness {
 }
 
 function jenkinsReadiness(env: NodeJS.ProcessEnv): ProviderReadiness {
-  const baseUrl = nonEmpty(env['JENKINS_URL']);
-  const username = firstNonEmpty(env['JENKINS_USER'], env['JENKINS_USERNAME']);
-  const token = firstNonEmpty(env['JENKINS_API_TOKEN'], env['JENKINS_TOKEN']);
+  const baseUrl = optionalTrimmedStringFromUnknown(env['JENKINS_URL']);
+  const username = firstNonEmptyString(env['JENKINS_USER'], env['JENKINS_USERNAME']);
+  const token = firstNonEmptyString(env['JENKINS_API_TOKEN'], env['JENKINS_TOKEN']);
   if (!baseUrl) {
     return missingReadiness(
       'jenkins',
@@ -126,8 +127,8 @@ function jenkinsReadiness(env: NodeJS.ProcessEnv): ProviderReadiness {
 }
 
 function sonarReadiness(env: NodeJS.ProcessEnv): ProviderReadiness {
-  const baseUrl = firstNonEmpty(env['SONAR_HOST_URL'], env['SONAR_URL']);
-  const token = nonEmpty(env['SONAR_TOKEN']);
+  const baseUrl = firstNonEmptyString(env['SONAR_HOST_URL'], env['SONAR_URL']);
+  const token = optionalTrimmedStringFromUnknown(env['SONAR_TOKEN']);
   const missing = [
     ...(!baseUrl ? ['SonarQube URL'] : []),
     ...(!token ? ['SONAR_TOKEN'] : []),
@@ -195,17 +196,4 @@ function invalidReadiness(id: ProviderReadinessId, name: string, detail: string)
     detail: `${detail} Credential presence: invalid-needs-test; values are not shown.`,
     nextAction: 'Open the private provider configuration, correct this provider, reload it, then check setup.',
   };
-}
-
-function nonEmpty(value: string | undefined): string | undefined {
-  const normalized = value?.trim();
-  return normalized || undefined;
-}
-
-function firstNonEmpty(...values: Array<string | undefined>): string | undefined {
-  for (const value of values) {
-    const normalized = nonEmpty(value);
-    if (normalized) { return normalized; }
-  }
-  return undefined;
 }

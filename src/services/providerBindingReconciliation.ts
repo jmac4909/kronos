@@ -104,23 +104,6 @@ export function latestGitLabMergeRequestBinding(
   );
 }
 
-export function latestGitLabMergeRequestBindingAcrossSessions(
-  workSessions: readonly WorkSessionRecord[],
-): WorkSessionProviderBinding | undefined {
-  return newestWorkSessionProviderBinding(
-    workSessions.flatMap(session => session.providerBindings),
-    binding => binding.provider === 'gitlab' && binding.resource === 'merge-request',
-  );
-}
-
-/** Returns only the newest credential-free, configured-origin MR URL for an explicit session set. */
-export function latestGitLabMergeRequestUrlAcrossSessions(
-  workSessions: readonly WorkSessionRecord[],
-  env: NodeJS.ProcessEnv = process.env,
-): string | undefined {
-  return normalizeProviderPublicUrl(latestGitLabMergeRequestBindingAcrossSessions(workSessions)?.url, 'gitlab', env);
-}
-
 /**
  * Produces only the catalog-owned binding write still needed by a session.
  * A different current binding is never replaced by stale Work evidence.

@@ -33,8 +33,8 @@ assert.deepEqual(packageJson.contributes.views.kronos.map(view => view.id), [
   'kronosProjects',
   'kronosAttention',
 ]);
-assert.equal(packageJson.contributes.commands.length, 41);
-assert.equal(Object.keys(packageJson.contributes.configuration.properties).length, 13);
+assert.equal(packageJson.contributes.commands.length, 43);
+assert.equal(Object.keys(packageJson.contributes.configuration.properties).length, 14);
 assert.equal(work.tickets['JIRA-123'].linked_local_project, 'fixture-service');
 assert.equal(
   fs.readFileSync(path.join(fixtureDir, 'fixture-repo', '.git', 'HEAD'), 'utf8').trim(),

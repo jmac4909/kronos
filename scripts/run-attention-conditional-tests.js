@@ -127,7 +127,7 @@ test('Attention event context freezes exactly one supported transition for non-s
   assert.match(prompt, /unresolvedDiscussionCount/);
   assert.doesNotMatch(prompt, /event-context-other/);
   const reference = terminalContextInsertion.buildAttentionEventContextReference(artifact.contextId, artifact.promptPath);
-  assert.equal(terminalContextInsertion.isSafeTerminalContextReference(reference), true);
+  assert.doesNotThrow(() => terminalContextInsertion.assertSafeTerminalContextReference(reference));
   assert.match(reference, /^\[ATTENTION-GITLAB-[A-F0-9]{24}\] Read exact Attention event context file /);
 
   assert.doesNotThrow(() => attentionEventContexts.buildAttentionEventPromptContext({
@@ -153,6 +153,44 @@ test('Attention event context freezes exactly one supported transition for non-s
   assert.throws(
     () => attentionEventContexts.writeAttentionEventContextArtifacts({ ...context, source: 'sonar' }, { kronosDir: artifactRoot }),
     /unsupported or mismatched provider source/,
+  );
+});
+
+test('Attention event context normalizes owner metadata and rejects oversized snapshots before publication', () => {
+  const event = transitionEvent(
+    'event-context-bounds',
+    'session-context-bounds',
+    '2026-07-16T13:00:00.000Z',
+    'jenkins',
+    'jenkins_build_failed',
+    {
+      summary: 'Build 91 failed.',
+      subject: { kind: 'build', id: '91' },
+      after: { state: 'FAILURE' },
+      metadata: { transitionKind: 'jenkins_build_failed', buildNumber: 91 },
+    },
+  );
+  const normalizedOwner = attentionEventContexts.buildAttentionEventPromptContext(event, {
+    projectName: '  Application\nAPI  ',
+    ticketKey: 'attn-77',
+  });
+  assert.equal(normalizedOwner.projectName, 'Application API');
+  assert.equal(normalizedOwner.ticketKey, 'ATTN-77');
+  const invalidOwner = attentionEventContexts.buildAttentionEventPromptContext(event, {
+    projectName: 42,
+    ticketKey: 'not a Jira key',
+  });
+  assert.equal(Object.hasOwn(invalidOwner, 'projectName'), false);
+  assert.equal(Object.hasOwn(invalidOwner, 'ticketKey'), false);
+
+  const artifactRoot = path.join(tempRoot, 'event-context-bounds-artifacts');
+  assert.throws(
+    () => attentionEventContexts.writeAttentionEventContextArtifacts({
+      ...normalizedOwner,
+      oversizedFixture: 'x'.repeat(33 * 1024),
+    }, { kronosDir: artifactRoot }),
+    /[0-9]+-byte safety limit/,
+    'oversized retained events must fail before publishing a partial artifact',
   );
 });
 

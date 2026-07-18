@@ -79,16 +79,6 @@ function createSymlinkOrSkip(t, target, linkPath, type = 'file') {
   }
 }
 
-test('managed monitoring lease omits unsupported open flags on Windows and fails closed on POSIX', () => {
-  assert.equal(managedMonitorLease.managedMonitorNoFollowFlag('win32', undefined), 0);
-  assert.equal(managedMonitorLease.managedMonitorNoFollowFlag('win32', 0x20000), 0);
-  assert.equal(managedMonitorLease.managedMonitorNoFollowFlag('linux', 0x20000), 0x20000);
-  assert.throws(
-    () => managedMonitorLease.managedMonitorNoFollowFlag('linux', undefined),
-    /require O_NOFOLLOW support/,
-  );
-});
-
 test('private file primitives atomically replace bounded state and reject symbolic paths', t => {
   assert.equal(privateFilePrimitives.privateFileNoFollowFlag('win32', undefined), 0);
   assert.throws(
@@ -342,7 +332,7 @@ test('GitLab and CI context pairs share immutable publication and reject incompl
   assert.equal(projectCiContext.projectName, 'Application API');
   assert.equal(Object.hasOwn(projectCiContext, 'ticketKey'), false);
   assert.match(projectCiReference, /^\[CI-PROJECT-[A-F0-9]{24}\]/);
-  assert.equal(insertion.isSafeTerminalContextReference(projectCiReference), true);
+  assert.doesNotThrow(() => insertion.assertSafeTerminalContextReference(projectCiReference));
 
   for (const sourceName of ['gitlabContextStore.ts', 'ciContextStore.ts']) {
     const source = fs.readFileSync(path.join(root, 'src', 'services', sourceName), 'utf8');
@@ -2935,9 +2925,9 @@ test('terminal context insertion is shell-inert and never submits', () => {
   const promptPath = path.join(tempRoot, 'JIRA-123', `prompt-${'a'.repeat(24)}.md`);
   const reference = insertion.buildJiraContextReference('JIRA-123', promptPath);
   const calls = [];
-  insertion.insertTerminalContextReference({
+  insertion.insertEditableTerminalContextReference({
     sendText: (text, shouldExecute) => calls.push(['sendText', text, shouldExecute]),
-  }, reference);
+  }, reference, '');
   assert.deepEqual(calls, [['sendText', reference, false]]);
   const editable = insertion.insertEditableTerminalContextReference({
     sendText: (text, shouldExecute) => calls.push(['sendText', text, shouldExecute]),
@@ -2960,7 +2950,7 @@ test('terminal context insertion is shell-inert and never submits', () => {
   );
   const gitReference = insertion.buildProjectGitContextReference(gitArtifact.contextId, gitArtifact.promptPath);
   assert.match(gitReference, /^\[GIT-Kronos\]/);
-  assert.equal(insertion.isSafeTerminalContextReference(gitReference), true);
+  assert.doesNotThrow(() => insertion.assertSafeTerminalContextReference(gitReference));
   assert.equal(gitArtifact.redacted, true);
   assert.equal(fs.readFileSync(gitArtifact.promptPath, 'utf8').includes(embeddedToken), false);
 
@@ -2969,10 +2959,10 @@ test('terminal context insertion is shell-inert and never submits', () => {
     path.join(tempRoot, 'basket-context', `prompt-${'c'.repeat(24)}.md`),
   );
   assert.match(basketReference, /^\[BASKET-[A-F0-9]{24}\] Read private context basket file/);
-  assert.equal(insertion.isSafeTerminalContextReference(basketReference), true);
-  assert.equal(insertion.isSafeTerminalContextReference(
+  assert.doesNotThrow(() => insertion.assertSafeTerminalContextReference(basketReference));
+  assert.throws(() => insertion.assertSafeTerminalContextReference(
     basketReference.replace(`${path.sep}basket-context${path.sep}`, `${path.sep}outside${path.sep}`),
-  ), false);
+  ));
 });
 
 test('context placement verifies one exact attachment and remains exactly once after audit work', () => {
@@ -3252,6 +3242,8 @@ test('Claude terminal launch is explicit, focused, validated, and operator-trigg
     command: 'claude   --model opus',
     name: '  Claude: Kronos  ',
     cwd: tempRoot,
+  }, {
+    location: 2,
   });
   assert.equal(result.terminal, terminal);
   assert.deepEqual(result.configuration, {
@@ -3261,7 +3253,7 @@ test('Claude terminal launch is explicit, focused, validated, and operator-trigg
     cwd: path.resolve(tempRoot),
   });
   assert.deepEqual(calls, [
-    ['createTerminal', { name: 'Claude: Kronos', cwd: path.resolve(tempRoot) }],
+    ['createTerminal', { name: 'Claude: Kronos', cwd: path.resolve(tempRoot), location: 2 }],
     ['show', false],
     ['sendText', 'claude --model opus', true],
   ]);
@@ -4081,6 +4073,7 @@ test('extension activation registers the bounded surface and explicit launch com
   const configurationUpdates = [];
   const createdWebviewPanels = [];
   const executedCommands = [];
+  let executeCommandHandler;
   const openedTextDocuments = [];
   const shownTextDocuments = [];
   let gitRepositoryOpenCalls = 0;
@@ -4132,6 +4125,7 @@ test('extension activation registers the bounded surface and explicit launch com
     ConfigurationTarget: { Global: 1 },
     ProgressLocation: { Notification: 15 },
     ViewColumn: { One: 1 },
+    TerminalLocation: { Panel: 1, Editor: 2 },
     window: {
       activeTerminal: undefined,
       terminals: [],
@@ -4221,6 +4215,7 @@ test('extension activation registers the bounded surface and explicit launch com
         }
         const terminal = {
           name: options.name,
+          creationOptions: options,
           processId,
           show(preserveFocus) { actions.push(['show', preserveFocus]); },
           sendText(text, shouldExecute) { actions.push(['sendText', text, shouldExecute]); },
@@ -4253,7 +4248,10 @@ test('extension activation registers the bounded surface and explicit launch com
     },
     commands: {
       registerCommand(id, handler) { registeredCommands.push(id); commandHandlers.set(id, handler); return disposable(); },
-      executeCommand(...args) { executedCommands.push(args); return Promise.resolve(); },
+      executeCommand(...args) {
+        executedCommands.push(args);
+        return executeCommandHandler ? executeCommandHandler(...args) : Promise.resolve();
+      },
     },
     env: {
       openExternal(uri) {
@@ -4410,6 +4408,42 @@ test('extension activation registers the bounded surface and explicit launch com
     assert.ok(ticketWorkspacePanel, 'the ticket workspace command must open its dedicated panel');
     assert.match(ticketWorkspacePanel.webview.html, /JIRA-123/);
     assert.match(ticketWorkspacePanel.webview.html, /Start Claude/);
+    await t.test('ticket and Jira-board webviews reject invalid requests and serialize exact ticket actions', async () => {
+      const warningCount = warningMessages.length;
+      const commandCount = executedCommands.length;
+      await jiraBoardPanel.receive({ command: '__kronosWebviewReady' });
+      assert.equal(warningMessages.length, warningCount, 'the board readiness handshake has no operator side effect');
+      await jiraBoardPanel.receive({ command: 'startClaudeForTicket', ticket: 'MISSING-1' });
+      assert.match(warningMessages.at(-1), /ignored an invalid Jira-board request/i);
+      await jiraBoardPanel.receive({ command: 'startClaudeForTicket', ticket: 'JIRA-123' });
+      assert.deepEqual(executedCommands.at(-1), ['kronos.startClaudeForTicket', { ticketKey: 'JIRA-123' }]);
+
+      await ticketWorkspacePanel.receive({ command: '__kronosWebviewReady' });
+      await ticketWorkspacePanel.receive({ command: 'startClaudeForTicket', ticket: 'JIRA-222' });
+      assert.match(warningMessages.at(-1), /ignored an invalid ticket-workspace request/i);
+      await ticketWorkspacePanel.receive({ command: 'startClaudeForTicket', ticket: 'JIRA-123' });
+      assert.deepEqual(executedCommands.at(-1), ['kronos.startClaudeForTicket', { ticketKey: 'JIRA-123' }]);
+      assert.equal(executedCommands.length, commandCount + 2);
+
+      let releaseAction;
+      executeCommandHandler = () => new Promise(resolve => { releaseAction = resolve; });
+      const first = ticketWorkspacePanel.receive({ command: 'insertJiraContext', ticket: 'JIRA-123' });
+      await new Promise(resolve => setImmediate(resolve));
+      await ticketWorkspacePanel.receive({ command: 'insertJiraContext', ticket: 'JIRA-123' });
+      assert.match(informationMessages.at(-1), /JIRA-123 insertJiraContext is already in progress/i);
+      releaseAction();
+      await first;
+
+      const secret = ['glpat-', 'webviewfailurefixture'].join('');
+      executeCommandHandler = async () => { throw new Error(`Authorization: Bearer ${secret}`); };
+      try {
+        await ticketWorkspacePanel.receive({ command: 'insertJiraContext', ticket: 'JIRA-123' });
+        assert.match(errorMessages.at(-1), /REDACTED/i);
+        assert.doesNotMatch(errorMessages.at(-1), new RegExp(secret));
+      } finally {
+        executeCommandHandler = undefined;
+      }
+    });
     const workProvider = registeredTreeProviders.get('kronosWork');
     workProvider.setFilter({ query: 'fixture' });
     singlePickHandler = items => items.find(item => item.id === 'clear');
@@ -4950,6 +4984,8 @@ test('extension activation registers the bounded surface and explicit launch com
       ['sendText', 'claude', true],
     ]);
     assert.equal(createdTerminals[0].options.name, 'Claude @ feature/runtime-project');
+    assert.equal(createdTerminals[0].options.location, vscode.TerminalLocation.Editor,
+      'the first Kronos Claude terminal opens in the main editor area');
     const standalone = workSessions.listWorkSessions().find(session => session.kind === 'standalone');
     assert.ok(standalone);
     assert.equal(Object.hasOwn(standalone, 'ticketKey'), false);
@@ -5091,6 +5127,7 @@ test('extension activation registers the bounded surface and explicit launch com
     const noWorkspaceLaunchTime = originalDateNow() + 4_000;
     vscode.workspace.name = undefined;
     vscode.workspace.workspaceFolders = undefined;
+    configurationValues.set('claudeTerminalLayout', 'panel');
     Date.now = () => noWorkspaceLaunchTime;
     try {
       await commandHandlers.get('kronos.newClaudeSession')();
@@ -5098,10 +5135,12 @@ test('extension activation registers the bounded surface and explicit launch com
       Date.now = originalDateNow;
       vscode.workspace.name = originalWorkspaceName;
       vscode.workspace.workspaceFolders = originalWorkspaceFolders;
+      configurationValues.delete('claudeTerminalLayout');
     }
     assert.equal(createdTerminals.length, 2, 'New Claude must also work without an open workspace');
     const noWorkspaceTerminalRecord = createdTerminals.pop();
     assert.equal(noWorkspaceTerminalRecord.options.cwd, os.homedir());
+    assert.equal(noWorkspaceTerminalRecord.options.location, vscode.TerminalLocation.Panel);
     assert.deepEqual(noWorkspaceTerminalRecord.actions, [
       ['show', false],
       ['sendText', 'claude', true],
@@ -5110,16 +5149,25 @@ test('extension activation registers the bounded surface and explicit launch com
       session.kind === 'standalone' && session.projectPath === os.homedir());
     assert.ok(noWorkspaceSession);
     assert.equal(noWorkspaceSession.projectName, undefined);
+    await commandHandlers.get('kronos.toggleWorkSessionTerminalSize')({ workSessionId: noWorkspaceSession.id });
+    assert.deepEqual(noWorkspaceTerminalRecord.actions.at(-1), ['show', false], 'panel resizing focuses the exact managed terminal');
+    assert.deepEqual(executedCommands.at(-1), ['workbench.action.toggleMaximizedPanel']);
     closeTerminalHandler(noWorkspaceTerminalRecord.terminal);
     workSessions.removeWorkSession(noWorkspaceSession.id);
     vscode.window.terminals = vscode.window.terminals.filter(terminal => terminal !== noWorkspaceTerminalRecord.terminal);
     vscode.window.activeTerminal = createdTerminals[0].terminal;
 
-    await commandHandlers.get('kronos.newClaudeSession')(projectItems[0]);
+    configurationValues.set('claudeTerminalLayout', 'editorTabs');
+    try {
+      await commandHandlers.get('kronos.newClaudeSession')(projectItems[0]);
+    } finally {
+      configurationValues.delete('claudeTerminalLayout');
+    }
     assert.equal(createdTerminals.length, 2, 'the inline Project-row action creates exactly one project-scoped terminal');
     const projectTerminalRecord = createdTerminals.at(-1);
     assert.equal(projectTerminalRecord.options.cwd, tempRoot);
     assert.equal(projectTerminalRecord.options.name, 'Claude @ feature/runtime-project');
+    assert.equal(projectTerminalRecord.options.location, vscode.TerminalLocation.Editor);
     const projectStandalone = workSessions.listWorkSessions().find(session =>
       session.kind === 'standalone' && session.id !== standalone.id && session.projectName === 'fixture');
     assert.ok(projectStandalone);
@@ -5162,6 +5210,8 @@ test('extension activation registers the bounded surface and explicit launch com
     assert.equal(ticketSession.ticketKey, 'JIRA-123');
     assert.equal(createdTerminals[1].options.name, 'Claude · JIRA-123 @ feature/runtime-project');
     assert.equal(createdTerminals[1].options.cwd, tempRoot);
+    assert.equal(createdTerminals[1].options.location.parentTerminal, createdTerminals[0].terminal,
+      'later Kronos Claude terminals split beside the live Claude workspace');
     assert.equal(ticketSession.projectName, 'fixture');
     assert.equal(ticketSession.projectPath, tempRoot);
     assert.deepEqual(createdTerminals[1].actions, [
@@ -5235,6 +5285,9 @@ test('extension activation registers the bounded surface and explicit launch com
     assert.ok(createdWebviewPanels.filter(panel => panel.viewType === 'kronosContextComposer').length >= 2);
     await commandHandlers.get('kronos.focusWorkSessionTerminal')({ workSessionId: ticketSession.id });
     assert.deepEqual(createdTerminals[1].actions.at(-1), ['show', false], 'selecting a Session must open its attached terminal');
+    await commandHandlers.get('kronos.toggleWorkSessionTerminalSize')({ workSessionId: ticketSession.id });
+    assert.deepEqual(createdTerminals[1].actions.at(-1), ['show', false], 'resizing first focuses the exact managed terminal');
+    assert.deepEqual(executedCommands.at(-1), ['workbench.action.toggleMaximizeEditorGroup']);
 
     closeTerminalHandler(createdTerminals[1].terminal);
     assert.equal(
@@ -5661,6 +5714,10 @@ test('extension activation registers the bounded surface and explicit launch com
     vscode.window.activeTerminal = reconnectedTerminal;
 
     const attentionPanelStart = createdWebviewPanels.length;
+    await commandHandlers.get('kronos.insertAttentionEventContext')();
+    assert.equal(createdWebviewPanels.length, attentionPanelStart, 'an incomplete Attention command cannot open a composer');
+    assert.match(warningMessages.at(-1), /Right-click a supported Attention item/i);
+
     await commandHandlers.get('kronos.insertAttentionEventContext')({
       eventId: 'attention-branch-picker-event',
       sessionId: 'stale-attention-session-id',
@@ -5669,6 +5726,14 @@ test('extension activation registers the bounded surface and explicit launch com
     });
     assert.equal(createdWebviewPanels.length, attentionPanelStart, 'a stale Attention row cannot open a composer');
     assert.match(warningMessages.at(-1), /event is no longer available/i);
+
+    await commandHandlers.get('kronos.insertAttentionEventContext')({
+      eventId: 'attention-branch-picker-event',
+      sessionId: attentionSession.id,
+      projectPath: path.join(tempRoot, 'not-a-registered-project'),
+    });
+    assert.equal(createdWebviewPanels.length, attentionPanelStart, 'an unregistered project target cannot open a composer');
+    assert.match(warningMessages.at(-1), /stale or no longer registered/i);
 
     monitorEventStore.appendMonitorEvent({
       id: 'attention-gitlab-pipeline-event',
@@ -5688,6 +5753,95 @@ test('extension activation registers the bounded surface and explicit launch com
     });
     assert.equal(createdWebviewPanels.length, attentionPanelStart, 'a GitLab pipeline row does not expose MR-only event context');
     assert.match(warningMessages.at(-1), /GitLab merge requests, Jenkins, and SonarQube/i);
+
+    const disconnectedAttentionSession = workSessions.createStandaloneWorkSession({
+      title: 'Disconnected Attention event fixture',
+    });
+    monitorEventStore.appendMonitorEvent({
+      id: 'attention-disconnected-jenkins-event',
+      sessionId: disconnectedAttentionSession.id,
+      type: 'provider.transition',
+      source: 'jenkins',
+      summary: 'Build 31 failed without a connected terminal.',
+      subject: { kind: 'build', id: '31' },
+      after: { state: 'FAILURE', fingerprint: 'attention-disconnected-jenkins' },
+      metadata: { transitionKind: 'jenkins_build_failed', buildNumber: 31 },
+    });
+    await commandHandlers.get('kronos.insertAttentionEventContext')({
+      eventId: 'attention-disconnected-jenkins-event',
+      sessionId: disconnectedAttentionSession.id,
+    });
+    assert.equal(createdWebviewPanels.length, attentionPanelStart, 'a disconnected Session cannot receive event context');
+    assert.match(warningMessages.at(-1), /Connect a terminal for this Attention event/i);
+    workSessions.removeWorkSession(disconnectedAttentionSession.id);
+
+    monitorEventStore.appendMonitorEvent({
+      id: 'attention-ticket-jenkins-event',
+      sessionId: ticketSession.id,
+      type: 'provider.transition',
+      source: 'jenkins',
+      summary: 'JIRA-123 Build 32 recovered.',
+      subject: { kind: 'build', id: '32', ticketKey: 'JIRA-123' },
+      before: { state: 'FAILURE', fingerprint: 'attention-ticket-jenkins-before' },
+      after: { state: 'SUCCESS', fingerprint: 'attention-ticket-jenkins-after' },
+      metadata: { transitionKind: 'jenkins_build_recovered', buildNumber: 32 },
+    });
+    const blockedAttentionStore = path.join(process.env.KRONOS_DIR, 'attention-event-context');
+    assert.equal(fs.existsSync(blockedAttentionStore), false, 'the write-failure fixture must own a fresh path');
+    fs.writeFileSync(blockedAttentionStore, 'not a directory\n', { mode: 0o600 });
+    const errorsBeforeAttentionWrite = errorMessages.length;
+    await commandHandlers.get('kronos.insertAttentionEventContext')({
+      eventId: 'attention-ticket-jenkins-event',
+      sessionId: ticketSession.id,
+    });
+    assert.equal(createdWebviewPanels.length, attentionPanelStart, 'a failed private artifact write cannot open a composer');
+    assert.equal(errorMessages.length, errorsBeforeAttentionWrite + 1);
+    assert.match(errorMessages.at(-1), /Attention event context|local state|private/i);
+    fs.unlinkSync(blockedAttentionStore);
+
+    const ticketAttentionPanelStart = createdWebviewPanels.length;
+    const ticketAttentionWrites = reconnectedActions.length;
+    await commandHandlers.get('kronos.insertAttentionEventContext')({
+      eventId: 'attention-ticket-jenkins-event',
+      sessionId: ticketSession.id,
+    });
+    let ticketAttentionComposer = createdWebviewPanels.slice(ticketAttentionPanelStart)
+      .find(panel => panel.viewType === 'kronosContextComposer');
+    assert.ok(ticketAttentionComposer, 'a ticket-owned event opens against its exact active ticket Session');
+    assert.match(ticketAttentionComposer.webview.html, /JIRA-123 Jenkins results are healthy again/);
+    assert.equal(reconnectedActions.length, ticketAttentionWrites, 'reviewing the event does not write to the terminal');
+    await ticketAttentionComposer.receive({ command: 'insertDraft', focus: 'Review only the recovered Jenkins build.' });
+    assert.equal(reconnectedActions.length, ticketAttentionWrites + 1);
+    assert.equal(reconnectedActions.at(-1)[2], false);
+    assert.match(reconnectedActions.at(-1)[1], /^\[ATTENTION-JENKINS-[A-F0-9]{24}\]/);
+
+    monitorEventStore.appendMonitorEvent({
+      id: 'attention-standalone-sonar-event',
+      sessionId: standalone.id,
+      type: 'provider.transition',
+      source: 'sonar',
+      summary: 'Standalone project quality gate passed.',
+      subject: { kind: 'quality-gate', id: 'fixture:main' },
+      after: { state: 'OK', fingerprint: 'attention-standalone-sonar' },
+      metadata: { transitionKind: 'sonar_gate_recovered', projectKey: 'fixture', branch: 'main' },
+    });
+    const standaloneAttentionPanelStart = createdWebviewPanels.length;
+    const standaloneAttentionWrites = createdTerminals[0].actions.length;
+    await commandHandlers.get('kronos.insertAttentionEventContext')({
+      eventId: 'attention-standalone-sonar-event',
+      sessionId: standalone.id,
+    });
+    ticketAttentionComposer = createdWebviewPanels.slice(standaloneAttentionPanelStart)
+      .find(panel => panel.viewType === 'kronosContextComposer');
+    assert.ok(ticketAttentionComposer, 'a ticket-free event stays scoped to its standalone Session');
+    assert.match(ticketAttentionComposer.webview.html, /SonarQube quality gate is passing again for main/);
+    assert.equal(createdTerminals[0].actions.length, standaloneAttentionWrites);
+    await ticketAttentionComposer.receive({ command: 'insertDraft', focus: 'Review only this project quality gate.' });
+    assert.equal(createdTerminals[0].actions.length, standaloneAttentionWrites + 1);
+    assert.equal(createdTerminals[0].actions.at(-1)[2], false);
+    assert.match(createdTerminals[0].actions.at(-1)[1], /^\[ATTENTION-SONAR-[A-F0-9]{24}\]/);
+    assert.deepEqual(workSessions.readWorkSession(standalone.id).ticketKeys, []);
+    vscode.window.activeTerminal = reconnectedTerminal;
 
     providerPanelStart = createdWebviewPanels.length;
     await commandHandlers.get('kronos.insertAttentionEventContext')({
@@ -5710,7 +5864,7 @@ test('extension activation registers the bounded surface and explicit launch com
     assert.equal(reconnectedActions.at(-1)[2], false, 'Attention event placement must not submit the terminal line');
     assert.match(reconnectedActions.at(-1)[1], /^\[ATTENTION-SONAR-[A-F0-9]{24}\]/);
     const attentionArtifact = workSessions.readWorkSession(ticketSession.id).artifacts
-      .find(artifact => artifact.kind === 'attention-event');
+      .find(artifact => artifact.kind === 'attention-event' && /ATTENTION-SONAR-/.test(artifact.promptPath));
     assert.ok(attentionArtifact, 'the exact Attention event artifact is retained on the chosen Session');
     assert.match(attentionArtifact.promptPath, /attention-event-context[/\\]ATTENTION-SONAR-[A-F0-9]{24}/);
 

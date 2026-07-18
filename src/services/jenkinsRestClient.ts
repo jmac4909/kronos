@@ -2,7 +2,15 @@ import * as http from 'http';
 import * as https from 'https';
 import { unknownErrorCode } from './errorUtils';
 import { parseJsonWithLabel } from './jsonFiles';
-import { arrayFromUnknown, isRecord, optionalFiniteNumberFromUnknown, optionalTrimmedStringFromUnknown } from './records';
+import {
+  arrayFromUnknown,
+  boundedInteger,
+  firstNonEmptyString,
+  isRecord,
+  nonNegativeIntegerFromUnknown,
+  optionalFiniteNumberFromUnknown,
+  optionalTrimmedStringFromUnknown,
+} from './records';
 import { redactSensitiveTokens } from './sensitiveText';
 
 export interface JenkinsRestRequestOptions {
@@ -232,7 +240,7 @@ export class JenkinsRestClient {
       throw new JenkinsRestError('Jenkins build context did not contain a usable build record. Response content is not displayed.');
     }
     const buildFallbackUrl = nestedBuildRecord
-      ? appendJenkinsBuildNumber(resolvedInputUrl, nonNegativeInteger(buildRecord['number']))
+      ? appendJenkinsBuildNumber(resolvedInputUrl, nonNegativeIntegerFromUnknown(buildRecord['number']))
       : resolvedInputUrl;
     const build = normalizeJenkinsBuildDetails(buildRecord, buildFallbackUrl);
     if (!build) {
@@ -261,7 +269,8 @@ export class JenkinsRestClient {
         warnings.push('Jenkins test report returned an invalid payload; no test details were retained.');
       } else if (!tests.complete) {
         testStatus = 'partial';
-        warnings.push(`Jenkins failed-test details were incomplete or limited to ${this.maxTestCases} cases.`);
+        const caseLabel = this.maxTestCases === 1 ? 'case' : 'cases';
+        warnings.push(`Jenkins failed-test details were incomplete or limited to ${this.maxTestCases} ${caseLabel}.`);
       }
     }
 
@@ -276,7 +285,8 @@ export class JenkinsRestClient {
       }
       if (normalizedStages.truncated) {
         stageStatus = 'partial';
-        warnings.push(`Jenkins Pipeline stage details were limited to ${this.maxStages} stages.`);
+        const stageLabel = this.maxStages === 1 ? 'stage' : 'stages';
+        warnings.push(`Jenkins Pipeline stage details were limited to ${this.maxStages} ${stageLabel}.`);
       }
     }
 
@@ -437,8 +447,8 @@ export function isJenkinsRestConfigured(env: NodeJS.ProcessEnv = process.env): b
 function resolveJenkinsRestConfig(env: NodeJS.ProcessEnv): JenkinsRestConfig {
   const config: JenkinsRestConfig = {};
   const baseUrl = normalizeJenkinsBaseUrl(env['JENKINS_URL']);
-  const username = firstNonEmpty(env['JENKINS_USER'], env['JENKINS_USERNAME']);
-  const token = firstNonEmpty(env['JENKINS_API_TOKEN'], env['JENKINS_TOKEN']);
+  const username = firstNonEmptyString(env['JENKINS_USER'], env['JENKINS_USERNAME']);
+  const token = firstNonEmptyString(env['JENKINS_API_TOKEN'], env['JENKINS_TOKEN']);
   if (baseUrl) { config.baseUrl = baseUrl; }
   if (username) { config.username = username; }
   if (token) { config.token = token; }
@@ -480,7 +490,7 @@ function decodeJenkinsJobName(value: string | undefined): string | undefined {
 }
 
 function normalizeJenkinsBuild(record: Record<string, unknown>, fallbackUrl: string): JenkinsBuildSummary | null {
-  const number = nonNegativeInteger(record['number']);
+  const number = nonNegativeIntegerFromUnknown(record['number']);
   if (number === undefined) { return null; }
   const buildingValue = typeof record['building'] === 'boolean' ? record['building'] : undefined;
   const status = boundedProviderText(firstDefined(record['result'], record['status']), 500)
@@ -655,9 +665,9 @@ function normalizeJenkinsChanges(value: unknown): JenkinsBuildChange[] {
 
 function normalizeJenkinsTestReport(value: unknown, maxTestCases: number): JenkinsTestReportContext | undefined {
   if (!isRecord(value) || !Array.isArray(value['suites'])) { return undefined; }
-  const rawPassCount = nonNegativeInteger(value['passCount']);
-  const rawFailCount = nonNegativeInteger(value['failCount']);
-  const rawSkipCount = nonNegativeInteger(value['skipCount']);
+  const rawPassCount = nonNegativeIntegerFromUnknown(value['passCount']);
+  const rawFailCount = nonNegativeIntegerFromUnknown(value['failCount']);
+  const rawSkipCount = nonNegativeIntegerFromUnknown(value['skipCount']);
   if (rawPassCount === undefined || rawFailCount === undefined || rawSkipCount === undefined) { return undefined; }
   const failedCases: JenkinsFailedTestCase[] = [];
   let failedCasesAvailable = 0;
@@ -700,7 +710,7 @@ function normalizeJenkinsTestReport(value: unknown, maxTestCases: number): Jenki
   const failCount = rawFailCount;
   const skipCount = rawSkipCount;
   const computedTotalCount = passCount + failCount + skipCount;
-  const providerTotalCount = nonNegativeInteger(value['totalCount']);
+  const providerTotalCount = nonNegativeIntegerFromUnknown(value['totalCount']);
   const totalCount = providerTotalCount ?? computedTotalCount;
   if (providerTotalCount !== undefined && providerTotalCount !== computedTotalCount) { valid = false; }
   if (caseRecordsAvailable !== computedTotalCount) { valid = false; }
@@ -892,28 +902,17 @@ function safeUrlOrigin(value: string): string | undefined {
 }
 
 function firstBuildRecord(...values: unknown[]): Record<string, unknown> | undefined {
-  return values.find(value => isRecord(value) && nonNegativeInteger(value['number']) !== undefined) as Record<string, unknown> | undefined;
+  return values.find(value => (
+    isRecord(value) && nonNegativeIntegerFromUnknown(value['number']) !== undefined
+  )) as Record<string, unknown> | undefined;
 }
 
 function firstDefined(...values: unknown[]): unknown {
   return values.find(value => value !== undefined && value !== null);
 }
 
-function firstNonEmpty(...values: Array<string | undefined>): string | undefined {
-  for (const value of values) {
-    const trimmed = value?.trim();
-    if (trimmed) { return trimmed; }
-  }
-  return undefined;
-}
-
 function looksLikeBuildRecord(record: Record<string, unknown>): boolean {
   return record['number'] !== undefined;
-}
-
-function nonNegativeInteger(value: unknown): number | undefined {
-  const number = optionalFiniteNumberFromUnknown(value);
-  return number !== undefined && number >= 0 ? Math.floor(number) : undefined;
 }
 
 function assignNonNegativeNumber<T extends object, K extends keyof T>(target: T, key: K, value: unknown): void {
@@ -970,11 +969,6 @@ function jenkinsHttpError(label: string, statusCode: number): JenkinsRestError {
     return new JenkinsRestError(`Jenkins REST ${label} failed with HTTP 429. Jenkins rate limiting prevented the fetch.`);
   }
   return new JenkinsRestError(`Jenkins REST ${label} failed with HTTP ${statusCode}. Response content is not displayed.`);
-}
-
-function boundedInteger(value: number | undefined, fallback: number, minimum: number, maximum: number): number {
-  if (value === undefined || !Number.isFinite(value)) { return fallback; }
-  return Math.min(maximum, Math.max(minimum, Math.floor(value)));
 }
 
 export class JenkinsRestError extends Error {

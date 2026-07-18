@@ -12,7 +12,7 @@
   <img alt="TypeScript strict" src="https://img.shields.io/badge/TypeScript-strict-3178C6">
   <img alt="VS Code 1.85 or newer" src="https://img.shields.io/badge/VS%20Code-%5E1.85-23A8F2">
   <img alt="Zero third-party runtime dependencies" src="https://img.shields.io/badge/runtime%20dependencies-0-22C55E">
-  <img alt="305 automated local tests" src="https://img.shields.io/badge/test%20suite-305%20local-22C55E">
+  <img alt="316 automated local tests" src="https://img.shields.io/badge/test%20suite-316%20local-22C55E">
   <img alt="Preview status" src="https://img.shields.io/badge/status-preview-F59E0B">
 </p>
 
@@ -27,7 +27,7 @@ Kronos solves a narrow enterprise-development problem: the evidence needed for a
 | Surface | Outcome |
 | --- | --- |
 | **Work** | Search and filter Jira work, see current/empty/loading/partial/stale/error refresh state without losing the last good result, explicitly link the right local project and branch, then open a focused ticket workspace. Shared Jira keys never infer a repository. |
-| **Sessions** | Organize operator-owned Claude terminals by local project, attach multiple Jira contexts when useful, and never read terminal contents. |
+| **Sessions** | Organize operator-owned Claude terminals by local project, launch them as main-editor tabs or automatic splits, maximize or restore one explicitly, attach multiple Jira contexts when useful, and never read terminal contents. |
 | **Projects** | Track each registered repository's current branch and clean/dirty status, open a read-only dashboard for local/remote branches, upstream drift, changed paths, and bounded diff, then hand branch switching to VS Code Source Control for operator confirmation. Project-owned GitLab/Jenkins/SonarQube polling remains independent of tickets and Sessions. |
 | **Attention** | Show one newest meaningful row per provider result by project, fold read health into its MR/build/quality result, distinguish GitLab MR, Jenkins, and SonarQube with separate icons, use shared green/yellow/red state colors, and let a right-click use only that retained MR, Jenkins, or SonarQube event in a prompt. Broader fresh MR/CI context remains a separate action; still-open MRs resurface after the next poll and full history stays in the private audit. |
 | **Context composer** | Review fetched evidence, edit the focus, and place one shell-inert line in the chosen terminal with submission disabled. |
@@ -73,7 +73,7 @@ Kronos reads, organizes, inserts, monitors, and audits. It does **not**:
 
 The complete normative boundary is in the [terminal-first product contract](docs/terminal-first-product-contract.md).
 
-Claude launch settings expose Manual/default, Accept Edits, Plan, Auto, Don't Ask, and experimental Bypass Permissions as an enum. Raw permission flags are rejected from the command setting, so the selected mode has one visible authority. Bypass is translated to `--dangerously-skip-permissions` only after the operator chooses that setting and confirms the blocking warning for that individual launch; canceling or opening Claude Settings creates no terminal or session.
+Claude launch settings expose Manual/default, Accept Edits, Plan, Auto, Don't Ask, and experimental Bypass Permissions as an enum. Raw permission flags are rejected from the command setting, so the selected mode has one visible authority. Bypass is translated to `--dangerously-skip-permissions` only after the operator chooses that setting and confirms the blocking warning for that individual launch; canceling or opening Claude Settings creates no terminal or session. New Claude terminals default to the main editor area: the first opens as an editor tab and later Kronos-launched editor terminals split beside it. The layout setting can instead keep each terminal in its own editor tab or use the terminal panel. Existing terminals are never rearranged, and **Toggle Full Size** only asks VS Code to maximize or restore the explicitly selected terminal area.
 
 ## Architecture
 
@@ -107,12 +107,12 @@ The installed extension uses the VS Code API and Node built-ins only. It has **z
 | Enterprise provider integrations | 4 |
 | Focused VS Code views | 4 |
 | Audited terminal-write paths | 2 |
-| Manifest-covered commands | 42 |
-| Manifest-covered settings | 13 |
+| Manifest-covered commands | 43 |
+| Manifest-covered settings | 14 |
 | Reachable runtime modules checked for cycles/dead exports | 89 |
 | Third-party runtime dependencies | 0 |
-| Automated Node/DOM/board tests | 305 |
-| Built-in runtime coverage | 87.39% lines / 78.48% branches / 90.31% functions |
+| Automated Node/DOM/board tests | 316 |
+| Built-in runtime coverage | 88.34% lines / 79.75% branches / 90.79% functions |
 
 Automated gates also cover the runtime graph, security boundary, context governance, activation surface, provider transitions, private state, credential redaction, and packaged extension contents.
 
@@ -206,7 +206,7 @@ npm run feedback:ready
 npm run publish:verify
 ```
 
-`npm test` begins with a public-surface gate that rejects tracked local-state directories, machine-specific home paths, employer identifiers, private-key material, and high-confidence token shapes. The remaining checks enforce the manifest allowlist, reachable runtime graph, explicit-launch boundary, context governance, strict TypeScript compilation, unit behavior, cross-view product contracts, provider fixtures, large synthetic scale/accessibility behavior, exact dependency-free VSIX file surface, dependency-free webviews, and Node's built-in line/function/branch coverage floors. The coverage pass derives its 27-runner inventory from the actual `npm test` graph, fails closed when a runner or report row disappears, and retains tighter per-file floors for all four provider REST clients, GitLab evidence normalization, CI snapshot persistence, exact Attention-event snapshots, Jira normalization/pruning, Work state/presentation, exact terminal insertion and Claude launch, project and provider monitoring, Context Basket, local handoff, local evidence search, date normalization, GitLab pipeline transition normalization, the monitor-event ledger and audit view, webview CSP/bootstrap security, provider-read health, Attention, Sessions, and Projects. `npm run package` repeats the public, manifest, graph, security, governance, roadmap, claim, compile, and exact-surface gates before creating a VSIX; extra or missing files fail closed. The checked [verification matrix](docs/verification-matrix.json) maps roadmap goals to named tests and keeps real VS Code, operator-terminal, Windows, multi-window, and live-provider gates explicit. README engineering metrics are derived from the manifest, source tree, dependencies, and test declarations on every run.
+`npm test` begins with a public-surface gate that rejects tracked local-state directories, machine-specific home paths, employer identifiers, private-key material, and high-confidence token shapes. The remaining checks enforce the manifest allowlist, a reachable runtime graph restricted to local modules, Node built-ins, and the VS Code API, the explicit-launch boundary, context governance, strict TypeScript compilation, unit behavior, cross-view product contracts, provider fixtures, large synthetic scale/accessibility behavior, exact dependency-free VSIX file surface, dependency-free webviews, and Node's built-in line/function/branch coverage floors. The coverage pass derives its 27-runner inventory from the actual `npm test` graph, fails closed when a runner or report row disappears, and retains tighter per-file floors for all four provider REST clients, GitLab evidence normalization, CI snapshot persistence, exact Attention-event snapshots, Jira normalization/pruning, Work state/presentation, exact terminal insertion and Claude launch, project and provider monitoring, Context Basket, local handoff, local evidence search, date normalization, GitLab pipeline transition normalization, the monitor-event ledger and audit view, webview CSP/bootstrap security, provider-read health, Attention, Sessions, and Projects. `npm run package` repeats the public, manifest, graph, security, governance, roadmap, claim, compile, and exact-surface gates before creating a VSIX; extra or missing files fail closed. The checked [verification matrix](docs/verification-matrix.json) maps roadmap goals to named tests and keeps real VS Code, operator-terminal, Windows, multi-window, and live-provider gates explicit. README engineering metrics are derived from the manifest, source tree, dependencies, and test declarations on every run.
 
 For the interactive pass, use [HUMAN_FEEDBACK_CHECKLIST.md](HUMAN_FEEDBACK_CHECKLIST.md). Real-provider, terminal-focus, and Windows feedback remain explicit human gates; see the [completion audit](docs/terminal-first-completion-audit.md).
 

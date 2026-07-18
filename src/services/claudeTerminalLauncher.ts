@@ -5,6 +5,7 @@ import type * as vscode from 'vscode';
 export const DEFAULT_CLAUDE_COMMAND = 'claude';
 export const DEFAULT_CLAUDE_TERMINAL_NAME = 'Claude';
 export const DEFAULT_CLAUDE_PERMISSION_MODE = 'default';
+export const DEFAULT_CLAUDE_TERMINAL_LAYOUT = 'editorSplit';
 export const CLAUDE_PERMISSION_MODES = [
   'default',
   'acceptEdits',
@@ -13,8 +14,14 @@ export const CLAUDE_PERMISSION_MODES = [
   'dontAsk',
   'bypassPermissions',
 ] as const;
+export const CLAUDE_TERMINAL_LAYOUTS = [
+  'editorSplit',
+  'editorTabs',
+  'panel',
+] as const;
 
 export type ClaudePermissionMode = typeof CLAUDE_PERMISSION_MODES[number];
+export type ClaudeTerminalLayout = typeof CLAUDE_TERMINAL_LAYOUTS[number];
 
 const MAX_COMMAND_LENGTH = 512;
 const MAX_TERMINAL_NAME_LENGTH = 80;
@@ -54,6 +61,10 @@ export interface NormalizedClaudeTerminalLaunch {
 
 export type ClaudeTerminalFactory = Pick<typeof vscode.window, 'createTerminal'>;
 
+export interface ClaudeTerminalPresentationOptions {
+  location?: vscode.TerminalOptions['location'];
+}
+
 export interface ClaudeTerminalLaunchResult {
   terminal: vscode.Terminal;
   configuration: NormalizedClaudeTerminalLaunch;
@@ -71,15 +82,65 @@ export interface ClaudeExecutableAvailability {
 export function launchClaudeTerminal(
   factory: ClaudeTerminalFactory,
   input: ClaudeTerminalLaunchInput = {},
+  presentation: ClaudeTerminalPresentationOptions = {},
 ): ClaudeTerminalLaunchResult {
   const configuration = normalizeClaudeTerminalLaunch(input);
   const terminalOptions: vscode.TerminalOptions = { name: configuration.name };
   if (configuration.cwd) { terminalOptions.cwd = configuration.cwd; }
+  if (presentation.location !== undefined) { terminalOptions.location = presentation.location; }
 
   const terminal = factory.createTerminal(terminalOptions);
   terminal.show(false);
   terminal.sendText(configuration.command, true);
   return { terminal, configuration };
+}
+
+export function normalizeClaudeTerminalLayout(value: unknown): ClaudeTerminalLayout {
+  const candidate = value === undefined ? DEFAULT_CLAUDE_TERMINAL_LAYOUT : value;
+  if (typeof candidate !== 'string' || !CLAUDE_TERMINAL_LAYOUTS.includes(candidate as ClaudeTerminalLayout)) {
+    throw new Error(`Claude terminal layout must be one of: ${CLAUDE_TERMINAL_LAYOUTS.join(', ')}.`);
+  }
+  return candidate as ClaudeTerminalLayout;
+}
+
+export type ClaudeTerminalPlacement = 'editor' | 'panel' | 'unknown';
+
+/** Resolves the terminal's creation placement without reading or controlling its process. */
+export function claudeTerminalPlacement(
+  terminal: Pick<vscode.Terminal, 'creationOptions'>,
+  seen: Set<object> = new Set(),
+): ClaudeTerminalPlacement {
+  if (seen.has(terminal)) { return 'unknown'; }
+  seen.add(terminal);
+  const location = terminal.creationOptions.location;
+  // TerminalLocation.Panel and TerminalLocation.Editor are stable numeric enum values in VS Code 1.85.
+  if (location === 1) { return 'panel'; }
+  if (location === 2) { return 'editor'; }
+  if (!location || typeof location !== 'object') { return 'unknown'; }
+  if ('viewColumn' in location) { return 'editor'; }
+  if ('parentTerminal' in location && location.parentTerminal) {
+    return claudeTerminalPlacement(location.parentTerminal, seen);
+  }
+  return 'unknown';
+}
+
+/**
+ * Chooses only a live Kronos-launched editor terminal as a split anchor.
+ * Terminal split locations inherit their parent's area, so a panel terminal
+ * must never anchor an editorSplit launch after the operator changes layouts.
+ */
+export function selectClaudeEditorSplitParent(
+  activeTerminal: vscode.Terminal | undefined,
+  terminals: readonly vscode.Terminal[],
+  launchedTerminals: ReadonlySet<vscode.Terminal>,
+): vscode.Terminal | undefined {
+  const isEligible = (terminal: vscode.Terminal): boolean => (
+    launchedTerminals.has(terminal)
+    && terminal.exitStatus === undefined
+    && claudeTerminalPlacement(terminal) === 'editor'
+  );
+  if (activeTerminal && isEligible(activeTerminal)) { return activeTerminal; }
+  return [...terminals].reverse().find(isEligible);
 }
 
 export function normalizeClaudeTerminalLaunch(

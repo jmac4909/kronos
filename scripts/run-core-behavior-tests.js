@@ -261,6 +261,41 @@ test('TerminalFirstState project mutations preserve explicit identities and watc
   }
 });
 
+test('TerminalFirstState isolates malformed load issues and cancels pending watcher work on dispose', async () => {
+  fs.mkdirSync(path.dirname(stateStore.STATE_FILE), { recursive: true, mode: 0o700 });
+  fs.writeFileSync(stateStore.STATE_FILE, 'not-json', { mode: 0o600 });
+  const malformed = new TerminalFirstState();
+  try {
+    assert.equal(malformed.state.schemaVersion, 2);
+    const issues = malformed.loadIssues;
+    assert.equal(issues.length, 1);
+    assert.equal(issues[0].filePath, stateStore.STATE_FILE);
+    assert.match(issues[0].detail, /could not read|not valid JSON|invalid JSON/i);
+    issues[0].detail = 'caller mutation';
+    assert.notEqual(malformed.loadIssues[0].detail, 'caller mutation', 'load issues are returned as isolated values');
+  } finally {
+    malformed.dispose();
+  }
+
+  fs.rmSync(stateStore.STATE_FILE, { force: true });
+  watcherCallback = undefined;
+  const missing = new TerminalFirstState();
+  try {
+    assert.deepEqual(missing.loadIssues, []);
+    assert.equal(watcherCallback, undefined, 'a missing catalog does not install a watcher');
+  } finally {
+    missing.dispose();
+  }
+
+  stateStore.writeStateFile(stateStore.emptyWorkCatalog());
+  const pending = new TerminalFirstState();
+  assert.equal(typeof watcherCallback, 'function');
+  watcherCallback();
+  pending.dispose();
+  await new Promise(resolve => setTimeout(resolve, 180));
+  assert.equal(pending.jiraRefreshStatus.phase, 'idle', 'disposed watcher work cannot publish a late refresh');
+});
+
 test('Work tree directly covers project-rich rows, sorting, filters, empty states, and refresh errors', () => {
   const projectRoot = createGitProject('work-tree-project', 'feature/work-tree');
   const emitter = new EventEmitter();
@@ -566,6 +601,7 @@ test('Jira context normalization reconciles comments, attachment outcomes, metad
 
 test('Jira context publication validates attachments and completeness before writing any files', () => {
   const valid = capturedJiraContextFixture();
+  const originalContext = structuredClone(valid.context);
   const validRoot = path.join(tempRoot, 'validated-jira-publication');
   const artifact = jiraContextStore.writeJiraContextArtifacts(valid.context, {
     kronosDir: validRoot,
@@ -574,6 +610,8 @@ test('Jira context publication validates attachments and completeness before wri
   assert.equal(artifact.attachmentPaths.length, 1);
   assert.deepEqual(fs.readFileSync(artifact.attachmentPaths[0]), valid.bytes);
   assert.equal(fs.readFileSync(artifact.jsonPath, 'utf8').includes('TRANSIENT-RAW-BYTES'), false);
+  assert.deepEqual(valid.context, originalContext, 'publication must not add artifact paths to the caller-owned context');
+  assert.equal(JSON.parse(fs.readFileSync(artifact.jsonPath, 'utf8')).attachments[0].localPath, artifact.attachmentPaths[0]);
 
   const invalidEnvelope = capturedJiraContextFixture();
   invalidEnvelope.context.completeness.attachmentBodiesCaptured = 0;
@@ -599,6 +637,76 @@ test('Jira context publication validates attachments and completeness before wri
     }), expected);
     assert.equal(fs.existsSync(refusalRoot), false, `${label} must not leave partial local state`);
   }
+});
+
+test('Jira context publication rejects corrupted core envelopes before mutating caller state or disk', () => {
+  const cases = [
+    ['unsupported schema', context => { context.schemaVersion = 2; }, /unsupported schema version/],
+    ['invalid timestamp', context => { context.fetchedAt = 'not-a-date'; }, /fetchedAt timestamp is invalid/],
+    ['invalid collection', context => { context.labels = null; }, /labels must be an array/],
+    ['invalid attachment collection', context => { context.attachments = null; }, /attachments must be an array/],
+    ['invalid attachment entry', context => { context.attachments = [null]; }, /attachment entry must be an object/],
+    ['invalid attachment status', context => { context.attachments[0].contentStatus = 'pending'; }, /contentStatus is invalid/],
+    ['invalid attachment bytes', context => {
+      context.attachments[0].contentStatus = 'skipped';
+      context.attachments[0].contentReason = 'bounded';
+      context.attachments[0].contentBytes = -1;
+    }, /contentBytes is invalid/],
+    ['invalid skipped hash', context => {
+      context.attachments[0].contentStatus = 'skipped';
+      context.attachments[0].contentReason = 'bounded';
+      context.attachments[0].contentSha256 = 'invalid';
+    }, /contentSha256 is invalid/],
+    ['captured failure reason', context => { context.attachments[0].contentReason = 'unexpected'; }, /must not include a failure reason/],
+    ['invalid field record', context => { delete context.coreFields[0].text; }, /field entry is missing required/],
+    ['duplicate field identity', context => {
+      context.customFields.push({ ...context.coreFields[0], custom: true });
+      context.completeness.fieldCount += 1;
+      context.completeness.customFieldCount += 1;
+    }, /duplicate field id/],
+    ['missing completeness', context => { context.completeness = null; }, /completeness block is missing or invalid/],
+    ['invalid completeness source', context => { context.completeness.source = 'cache'; }, /completeness source is invalid/],
+    ['invalid completeness boolean', context => { context.completeness.complete = 'yes'; }, /complete must be boolean/],
+    ['invalid completeness count', context => { context.completeness.commentsFetched = -1; }, /must be a non-negative integer/],
+    ['invalid warnings', context => { context.completeness.warnings = [false]; }, /warnings must be an array/],
+    ['duplicate field metadata', context => {
+      const fieldId = context.coreFields[0].id;
+      context.completeness.missingFieldNameIds = [fieldId, fieldId];
+    }, /missingFieldNameIds must be a string array/],
+    ['unknown field metadata', context => { context.completeness.missingFieldSchemaIds = ['unknown']; }, /contains an unknown field id/],
+    ['comment count mismatch', context => { context.completeness.commentsFetched += 1; }, /commentsFetched does not match/],
+    ['field count mismatch', context => { context.completeness.fieldCount += 1; }, /field completeness counts do not match/],
+    ['attachment byte mismatch', context => { context.completeness.attachmentResponseBytes += 1; }, /attachmentResponseBytes does not match/],
+    ['attachment fetch mismatch', context => { context.completeness.attachmentFetchCount = 0; }, /attachmentFetchCount is inconsistent/],
+    ['attachment flag mismatch', context => { context.completeness.attachmentsComplete = false; }, /completeness flags do not match/],
+    ['all-fields mismatch', context => { context.completeness.allFieldsFetched = false; }, /allFieldsFetched does not match/],
+    ['complete flag mismatch', context => { context.completeness.complete = false; }, /complete flag does not match/],
+  ];
+
+  for (const [label, mutate, expected] of cases) {
+    const fixture = capturedJiraContextFixture();
+    mutate(fixture.context);
+    const before = structuredClone(fixture.context);
+    const refusalRoot = path.join(tempRoot, `corrupt-jira-${label.replace(/\s+/g, '-')}`);
+    assert.throws(() => jiraContextStore.writeJiraContextArtifacts(fixture.context, {
+      kronosDir: refusalRoot,
+      attachmentContents: fixture.attachmentContents,
+    }), expected, label);
+    assert.deepEqual(fixture.context, before, `${label} must not mutate caller-owned evidence`);
+    assert.equal(fs.existsSync(refusalRoot), false, `${label} must fail before local publication`);
+  }
+
+  const fallback = jiraContext.buildFallbackJiraTicketContext('APP-902', {
+    summary: 'Fallback validation',
+    description: 'Cached evidence',
+  }, [], []);
+  fallback.completeness.commentsComplete = true;
+  const fallbackRoot = path.join(tempRoot, 'corrupt-jira-fallback');
+  assert.throws(
+    () => jiraContextStore.writeJiraContextArtifacts(fallback, { kronosDir: fallbackRoot }),
+    /Fallback Jira context must remain explicitly partial/,
+  );
+  assert.equal(fs.existsSync(fallbackRoot), false);
 });
 
 test('Jira fallback and global context budget stay useful, bounded, and explicit', () => {

@@ -211,6 +211,7 @@ test('Sessions action language keeps Open Terminal, reconnect, detach, monitorin
   const titles = Object.fromEntries(manifest.contributes.commands.map(command => [command.command, command.title]));
   assert.deepEqual({
     open: titles['kronos.focusWorkSessionTerminal'],
+    size: titles['kronos.toggleWorkSessionTerminalSize'],
     reconnect: titles['kronos.reattachWorkSessionTerminal'],
     detach: titles['kronos.detachWorkSessionTerminal'],
     pause: titles['kronos.pauseWorkSessionMonitoring'],
@@ -221,6 +222,7 @@ test('Sessions action language keeps Open Terminal, reconnect, detach, monitorin
     remove: titles['kronos.removeWorkSession'],
   }, {
     open: 'Kronos: Open Session Terminal',
+    size: 'Kronos: Toggle Full-Size Session Terminal',
     reconnect: 'Kronos: Connect Focused Terminal to Session',
     detach: 'Kronos: Disconnect Terminal',
     pause: 'Kronos: Pause Provider Updates',
@@ -317,6 +319,8 @@ test('explicit Claude launch creates and focuses exactly one terminal with or wi
     command: 'claude --model opus',
     name: 'Claude @ feature/workspace',
     cwd: tempRoot,
+  }, {
+    location: 2,
   });
   const withoutWorkspace = claudeTerminalLauncher.launchClaudeTerminal(factory, {
     command: 'claude',
@@ -328,6 +332,7 @@ test('explicit Claude launch creates and focuses exactly one terminal with or wi
   assert.deepEqual(creations[0].options, {
     name: 'Claude @ feature/workspace',
     cwd: path.resolve(tempRoot),
+    location: 2,
   });
   assert.deepEqual(creations[0].actions, [
     ['show', false],
@@ -339,6 +344,45 @@ test('explicit Claude launch creates and focuses exactly one terminal with or wi
     ['show', false],
     ['sendText', 'claude', true],
   ]);
+});
+
+test('Claude layout validation and terminal placement stay presentation-only', () => {
+  assert.equal(claudeTerminalLauncher.normalizeClaudeTerminalLayout(undefined), 'editorSplit');
+  assert.equal(claudeTerminalLauncher.normalizeClaudeTerminalLayout('editorTabs'), 'editorTabs');
+  assert.equal(claudeTerminalLauncher.normalizeClaudeTerminalLayout('panel'), 'panel');
+  assert.throws(
+    () => claudeTerminalLauncher.normalizeClaudeTerminalLayout('floating'),
+    /editorSplit, editorTabs, panel/,
+  );
+  const editor = { creationOptions: { name: 'Editor Claude', location: 2 } };
+  const splitEditor = { creationOptions: { name: 'Split Claude', location: { parentTerminal: editor } } };
+  const panel = { creationOptions: { name: 'Panel Claude', location: 1 } };
+  const editorColumn = { creationOptions: { name: 'Column Claude', location: { viewColumn: 2 } } };
+  assert.equal(claudeTerminalLauncher.claudeTerminalPlacement(editor), 'editor');
+  assert.equal(claudeTerminalLauncher.claudeTerminalPlacement(splitEditor), 'editor');
+  assert.equal(claudeTerminalLauncher.claudeTerminalPlacement(panel), 'panel');
+  assert.equal(claudeTerminalLauncher.claudeTerminalPlacement(editorColumn), 'editor');
+  assert.equal(claudeTerminalLauncher.claudeTerminalPlacement({ creationOptions: {} }), 'unknown');
+
+  const exitedEditor = { creationOptions: { location: 2 }, exitStatus: { code: 0 } };
+  editor.exitStatus = undefined;
+  panel.exitStatus = undefined;
+  const launched = new Set([editor, panel, exitedEditor]);
+  assert.equal(
+    claudeTerminalLauncher.selectClaudeEditorSplitParent(panel, [editor, panel], launched),
+    editor,
+    'changing from panel to editorSplit must not inherit the panel location',
+  );
+  assert.equal(
+    claudeTerminalLauncher.selectClaudeEditorSplitParent(undefined, [editor, exitedEditor], launched),
+    editor,
+    'closed terminals cannot become split anchors',
+  );
+  assert.equal(
+    claudeTerminalLauncher.selectClaudeEditorSplitParent(editor, [panel, editor], launched),
+    editor,
+    'the active live editor terminal remains the preferred split anchor',
+  );
 });
 
 test('a closed or rebound terminal invalidates captured context placement without guessing', () => {
@@ -474,10 +518,12 @@ test('all terminal context reference classes enforce their own private artifact 
     ),
   ];
   for (const reference of cases) {
-    assert.equal(terminalContextInsertion.isSafeTerminalContextReference(reference), true, reference);
-    assert.equal(
-      terminalContextInsertion.isSafeTerminalContextReference(reference.replace(`${path.sep}prompt-`, `${path.sep}outside${path.sep}prompt-`)),
-      false,
+    assert.doesNotThrow(() => terminalContextInsertion.assertSafeTerminalContextReference(reference), reference);
+    assert.throws(
+      () => terminalContextInsertion.assertSafeTerminalContextReference(
+        reference.replace(`${path.sep}prompt-`, `${path.sep}outside${path.sep}prompt-`),
+      ),
+      undefined,
       'moving an artifact out of its expected owner directory must invalidate the reference',
     );
   }
@@ -490,7 +536,7 @@ test('all terminal context reference classes enforce their own private artifact 
     '[OPS-42] Read Jira context file "/tmp/OPS-42/context.txt" before answering.',
     '[OPS-42] Read Jira context file "/tmp/OPS-42/prompt.md" before answering.\nnext',
   ]) {
-    assert.equal(terminalContextInsertion.isSafeTerminalContextReference(reference), false, reference);
+    assert.throws(() => terminalContextInsertion.assertSafeTerminalContextReference(reference), undefined, reference);
   }
   assert.throws(
     () => terminalContextInsertion.buildGitLabMergeRequestContextReference(0, path.join(tempRoot, 'MR-0', 'prompt.md')),

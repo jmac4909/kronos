@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { safeFileStem } from './fileNames';
 import { boundedOperationFailure } from './errorUtils';
-import { isRecord } from './records';
+import { boundedInteger, isRecord } from './records';
 import { redactSensitiveTokens } from './sensitiveText';
 import { normalizeProviderPublicUrl } from './providerUrls';
 import {
@@ -1200,11 +1200,6 @@ function writePrivateFileAtomic(filePath: string, content: string): void {
     temporaryPrefix: 'work-session',
     fileMode: FILE_MODE,
   });
-}
-
-function boundedInteger(value: number | undefined, fallback: number, minimum: number, maximum: number): number {
-  if (value === undefined || !Number.isFinite(value)) { return fallback; }
-  return Math.min(maximum, Math.max(minimum, Math.floor(value)));
 }
 
 function cloneWorkSession<T extends WorkSessionRecord>(record: T): T {

@@ -103,14 +103,6 @@ export function buildPromptLibraryTerminalReference(promptIdValue: string, promp
   return reference;
 }
 
-export function insertTerminalContextReference(
-  terminal: TerminalContextInsertionTarget,
-  reference: string,
-): void {
-  assertSafeTerminalContextReference(reference);
-  sendNonSubmittingReference(terminal, reference);
-}
-
 /**
  * Adds operator-authored focus text to a validated provider reference while
  * keeping the resulting line shell-inert and non-submitting.
@@ -180,15 +172,6 @@ export function placeEditableTerminalContextReference<Terminal extends TerminalC
   } catch (error: unknown) {
     placement.phase = 'ready';
     throw error;
-  }
-}
-
-export function isSafeTerminalContextReference(reference: string): boolean {
-  try {
-    parseTerminalContextReference(reference);
-    return true;
-  } catch {
-    return false;
   }
 }
 

@@ -1,6 +1,6 @@
 import * as crypto from 'crypto';
 import * as path from 'path';
-import { isRecord } from './records';
+import { boundedInteger, isRecord } from './records';
 import {
   appendPrivateTextRecord,
   ensurePrivateDirectoryPath,
@@ -392,11 +392,6 @@ function nowIso(now?: Date): string {
   const date = now || new Date();
   if (!Number.isFinite(date.getTime())) { throw new Error('Monitor event timestamp is invalid.'); }
   return date.toISOString();
-}
-
-function boundedInteger(value: number | undefined, fallback: number, minimum: number, maximum: number): number {
-  if (value === undefined || !Number.isFinite(value)) { return fallback; }
-  return Math.min(maximum, Math.max(minimum, Math.floor(value)));
 }
 
 function cloneEvent(event: MonitorEvent): MonitorEvent {

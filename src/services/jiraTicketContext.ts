@@ -1,5 +1,10 @@
 import { JiraTicketSnapshot, normalizeJiraIssueKey } from './jiraRestClient';
-import { arrayFromUnknown, isRecord, optionalFiniteNumberFromUnknown, optionalTrimmedStringFromUnknown } from './records';
+import {
+  arrayFromUnknown,
+  isRecord,
+  nonNegativeIntegerFromUnknown,
+  optionalTrimmedStringFromUnknown,
+} from './records';
 import {
   isEmptyJiraRichText,
   pruneEmptyJiraValue,
@@ -152,12 +157,12 @@ export function normalizeJiraTicketContext(
   const commentsComplete = typeof snapshotRecord['commentsComplete'] === 'boolean'
     ? snapshotRecord['commentsComplete']
     : commentsAreCompleteInIssueFields(fields);
-  const commentTotal = nonNegativeInteger(snapshotRecord['commentTotal'])
+  const commentTotal = nonNegativeIntegerFromUnknown(snapshotRecord['commentTotal'])
     ?? issueCommentTotal(fields);
-  const commentPageCount = nonNegativeInteger(snapshotRecord['commentPageCount']);
-  const commentResponseBytes = nonNegativeInteger(snapshotRecord['commentResponseBytes']);
-  const attachmentFetchCount = nonNegativeInteger(snapshotRecord['attachmentFetchCount']) || 0;
-  const attachmentResponseBytes = nonNegativeInteger(snapshotRecord['attachmentResponseBytes']) || 0;
+  const commentPageCount = nonNegativeIntegerFromUnknown(snapshotRecord['commentPageCount']);
+  const commentResponseBytes = nonNegativeIntegerFromUnknown(snapshotRecord['commentResponseBytes']);
+  const attachmentFetchCount = nonNegativeIntegerFromUnknown(snapshotRecord['attachmentFetchCount']) || 0;
+  const attachmentResponseBytes = nonNegativeIntegerFromUnknown(snapshotRecord['attachmentResponseBytes']) || 0;
   const attachmentBodiesCaptured = attachments.filter(item => item.contentStatus === 'captured').length;
   const attachmentBodiesSkipped = attachments.filter(item => item.contentStatus === 'skipped').length;
   const attachmentBodiesFailed = attachments.filter(item => item.contentStatus === 'failed').length;
@@ -615,7 +620,7 @@ function normalizeAttachment(value: unknown, captureValue: unknown, index: numbe
     metadata: isRecord(metadataSource) ? normalizedRecord(metadataSource) : {},
   };
   assignString(normalized, 'id', attachment['id']);
-  const size = nonNegativeInteger(attachment['size']);
+  const size = nonNegativeIntegerFromUnknown(attachment['size']);
   if (size !== undefined) { normalized.size = size; }
   assignString(normalized, 'mimeType', firstString(attachment['mimeType'], attachment['mimetype']));
   assignString(normalized, 'created', attachment['created']);
@@ -630,7 +635,7 @@ function applyAttachmentCapture(
   index: number,
 ): void {
   const capture = isRecord(captureValue) ? captureValue : undefined;
-  if (!capture || nonNegativeInteger(capture['index']) !== index) { return; }
+  if (!capture || nonNegativeIntegerFromUnknown(capture['index']) !== index) { return; }
   const captureId = optionalTrimmedStringFromUnknown(capture['id']);
   if (captureId && attachment.id && captureId !== attachment.id) {
     attachment.contentStatus = 'failed';
@@ -642,7 +647,7 @@ function applyAttachmentCapture(
   attachment.contentStatus = status;
   assignString(attachment, 'contentReason', capture['reason']);
   assignString(attachment, 'contentMimeType', capture['responseMimeType'] ?? capture['declaredMimeType']);
-  const contentBytes = nonNegativeInteger(capture['responseBytes']);
+  const contentBytes = nonNegativeIntegerFromUnknown(capture['responseBytes']);
   if (contentBytes !== undefined) { attachment.contentBytes = contentBytes; }
   const sourceSha256 = normalizedSha256(capture['sourceSha256']);
   if (sourceSha256) { attachment.contentSha256 = sourceSha256; }
@@ -757,13 +762,13 @@ function commentsAreCompleteInIssueFields(fields: Record<string, unknown>): bool
   if (!commentContainer) { return false; }
   if (commentContainer['isLast'] === true) { return true; }
   const comments = arrayFromUnknown(commentContainer['comments']);
-  const total = nonNegativeInteger(commentContainer['total']);
+  const total = nonNegativeIntegerFromUnknown(commentContainer['total']);
   return total !== undefined && comments.length >= total;
 }
 
 function issueCommentTotal(fields: Record<string, unknown>): number | undefined {
   const commentContainer = isRecord(fields['comment']) ? fields['comment'] : undefined;
-  return commentContainer ? nonNegativeInteger(commentContainer['total']) : undefined;
+  return commentContainer ? nonNegativeIntegerFromUnknown(commentContainer['total']) : undefined;
 }
 
 function namedValueArray(value: unknown): string[] {
@@ -841,7 +846,7 @@ function isCustomFieldSchema(value: unknown): boolean {
   if (!isRecord(value)) { return false; }
   return value['custom'] === true
     || Boolean(optionalTrimmedStringFromUnknown(value['custom']))
-    || nonNegativeInteger(value['customId']) !== undefined;
+    || nonNegativeIntegerFromUnknown(value['customId']) !== undefined;
 }
 
 function renderAdfNode(value: unknown): string {
@@ -874,7 +879,7 @@ function renderAdfNode(value: unknown): string {
     return label ? `[Attachment: ${label}]${nested}` : nested;
   }
   if (type === 'bulletList' || type === 'orderedList') {
-    const start = nonNegativeInteger(attrs['order']) || 1;
+    const start = nonNegativeIntegerFromUnknown(attrs['order']) || 1;
     return content.map((item, index) => {
       const itemText = cleanAdfText(renderAdfNode(item)).replace(/\n/g, '\n  ');
       const marker = type === 'orderedList' ? `${start + index}.` : '-';
@@ -946,11 +951,6 @@ function firstString(...values: unknown[]): string {
     if (stringValue) { return stringValue; }
   }
   return '';
-}
-
-function nonNegativeInteger(value: unknown): number | undefined {
-  const number = optionalFiniteNumberFromUnknown(value);
-  return number !== undefined && number >= 0 ? Math.floor(number) : undefined;
 }
 
 function assignString<T extends object, K extends keyof T>(target: T, key: K, value: unknown): void {

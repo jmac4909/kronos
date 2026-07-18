@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const ts = require('typescript');
+const { runtimeImportPolicyFailure } = require('./runtime-import-policy.js');
 
 const root = path.resolve(__dirname, '..');
 const sourceRoot = path.join(root, 'src');
@@ -24,7 +25,10 @@ if (failures.length > 0) {
   for (const failure of failures) { console.error(`- ${failure}`); }
   process.exitCode = 1;
 } else {
-  console.log(`Kronos source graph OK (${sourceFiles.length} reachable modules, no cycles or dead runtime exports).`);
+  console.log(
+    `Kronos source graph OK (${sourceFiles.length} reachable modules; Node/VS Code-only imports; `
+      + 'no cycles or dead runtime exports).',
+  );
 }
 
 function listFiles(directory, extension) {
@@ -42,6 +46,11 @@ function sourceDependencies(filePath) {
   const references = ts.preProcessFile(source, true, true).importedFiles;
   const dependencies = [];
   for (const reference of references) {
+    const policyFailure = runtimeImportPolicyFailure(reference.fileName);
+    if (policyFailure) {
+      fail(`${relative(filePath)}: ${policyFailure}.`);
+      continue;
+    }
     if (!reference.fileName.startsWith('.')) { continue; }
     const base = path.resolve(path.dirname(filePath), reference.fileName);
     const resolved = [base, `${base}.ts`, path.join(base, 'index.ts')].find(candidate => sourceSet.has(candidate));
@@ -111,21 +120,21 @@ function checkDeadExports() {
       if (symbol) { referenceCounts.set(symbol, (referenceCounts.get(symbol) || 0) + 1); }
     });
   }
-  const scriptIdentifiers = externalScriptIdentifiers();
-  const allowedDynamicExports = new Set([
+  const allowedExternalExports = new Set([
     `${path.normalize('src/extension.ts')}:activate`,
     `${path.normalize('src/extension.ts')}:deactivate`,
     `${path.normalize('src/terminalFirstExtension.ts')}:activate`,
     `${path.normalize('src/terminalFirstExtension.ts')}:deactivate`,
+    `${path.normalize('src/services/terminalFirstCommandRouter.ts')}:terminalFirstCommandRouteInventory`,
   ]);
   for (const sourceFile of program.getSourceFiles()) {
     const absolutePath = path.resolve(sourceFile.fileName);
     if (!sourceSet.has(absolutePath)) { continue; }
     for (const declaration of runtimeExportDeclarations(sourceFile)) {
       const symbol = canonicalSymbol(checker.getSymbolAtLocation(declaration.name), checker);
-      if (!symbol || (referenceCounts.get(symbol) || 0) > 1 || scriptIdentifiers.has(declaration.name.text)) { continue; }
+      if (!symbol || (referenceCounts.get(symbol) || 0) > 1) { continue; }
       const key = `${relative(absolutePath)}:${declaration.name.text}`;
-      if (!allowedDynamicExports.has(key)) {
+      if (!allowedExternalExports.has(key)) {
         const line = sourceFile.getLineAndCharacterOfPosition(declaration.name.getStart()).line + 1;
         fail(`Exported runtime value has no caller: ${key}:${line}`);
       }
@@ -146,16 +155,6 @@ function runtimeExportDeclarations(sourceFile) {
     }
   }
   return declarations;
-}
-
-function externalScriptIdentifiers() {
-  const identifiers = new Set();
-  for (const filePath of listFiles(path.join(root, 'scripts'), '.js')) {
-    if (path.basename(filePath) === 'check-runtime-graph.js') { continue; }
-    const sourceFile = ts.createSourceFile(filePath, fs.readFileSync(filePath, 'utf8'), ts.ScriptTarget.ES2020, true, ts.ScriptKind.JS);
-    walk(sourceFile, node => { if (ts.isIdentifier(node)) { identifiers.add(node.text); } });
-  }
-  return identifiers;
 }
 
 function canonicalSymbol(symbol, checker) {

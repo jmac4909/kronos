@@ -2,7 +2,14 @@ import * as http from 'http';
 import * as https from 'https';
 import { unknownErrorCode, unknownErrorMessage } from './errorUtils';
 import { parseJsonWithLabel } from './jsonFiles';
-import { arrayFromUnknown, isRecord, optionalFiniteNumberFromUnknown, optionalTrimmedStringFromUnknown } from './records';
+import {
+  arrayFromUnknown,
+  boundedInteger,
+  firstNonEmptyString,
+  isRecord,
+  optionalFiniteNumberFromUnknown,
+  optionalTrimmedStringFromUnknown,
+} from './records';
 
 export interface GitLabMergeRequestTarget {
   projectIdOrPath: string;
@@ -566,13 +573,13 @@ export function createGitLabRestClient(options: GitLabRestClientOptions = {}): G
 export const gitlabRestClient = createGitLabRestClient();
 
 export function resolveGitLabRestConfig(env: NodeJS.ProcessEnv = process.env): GitLabRestConfig {
-  const apiBaseUrl = normalizeGitLabApiBaseUrl(firstNonEmpty(
+  const apiBaseUrl = normalizeGitLabApiBaseUrl(firstNonEmptyString(
     env['GITLAB_API_BASE_URL'],
     env['GITLAB_BASE_URL'],
     env['GITLAB_URL'],
     env['GITLAB_HOST'],
   ));
-  const token = firstNonEmpty(env['GITLAB_TOKEN']);
+  const token = firstNonEmptyString(env['GITLAB_TOKEN']);
   const missing: string[] = [];
   if (!apiBaseUrl) { missing.push('GITLAB_BASE_URL'); }
   if (!token) { missing.push('GITLAB_TOKEN'); }
@@ -641,12 +648,12 @@ export function configuredGitLabProjectPathFromMergeRequestUrl(
 }
 
 export function isGitLabRestConfigured(env: NodeJS.ProcessEnv = process.env): boolean {
-  return Boolean(normalizeGitLabApiBaseUrl(firstNonEmpty(
+  return Boolean(normalizeGitLabApiBaseUrl(firstNonEmptyString(
     env['GITLAB_API_BASE_URL'],
     env['GITLAB_BASE_URL'],
     env['GITLAB_URL'],
     env['GITLAB_HOST'],
-  )) && firstNonEmpty(env['GITLAB_TOKEN']));
+  )) && firstNonEmptyString(env['GITLAB_TOKEN']));
 }
 
 class GitLabRestError extends Error {
@@ -681,14 +688,6 @@ function nextPageHeader(headers: Record<string, string | string[] | undefined>):
   const value = Array.isArray(raw) ? raw[0] : raw;
   const page = optionalFiniteNumberFromUnknown(value);
   return page !== undefined && page > 0 ? Math.floor(page) : undefined;
-}
-
-function firstNonEmpty(...values: Array<string | undefined>): string | undefined {
-  for (const value of values) {
-    const trimmed = value?.trim();
-    if (trimmed) { return trimmed; }
-  }
-  return undefined;
 }
 
 interface NormalizedDiscoveryCandidate extends GitLabDiscoveredMergeRequest {
@@ -820,11 +819,6 @@ class GitLabResponseBudget {
 
 function uniqueStrings(values: string[]): string[] {
   return [...new Set(values)];
-}
-
-function boundedInteger(value: number | undefined, fallback: number, minimum: number, maximum: number): number {
-  if (value === undefined || !Number.isFinite(value)) { return fallback; }
-  return Math.min(maximum, Math.max(minimum, Math.floor(value)));
 }
 
 function isLoopbackHostname(hostname: string): boolean {

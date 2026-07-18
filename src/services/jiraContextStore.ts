@@ -40,28 +40,29 @@ export function writeJiraContextArtifacts(
   options: JiraContextStoreOptions = {},
 ): JiraContextArtifactPaths {
   const safeKey = normalizeJiraIssueKey(context.key);
+  const materializedContext = copyJiraContextForMaterialization(context);
   const kronosDirectory = path.resolve(options.kronosDir || KRONOS_DIR);
   const rootPath = path.join(kronosDirectory, 'jira-context');
   const directoryPath = path.join(rootPath, safeKey);
   assertContainedPath(kronosDirectory, directoryPath);
   const preparedAttachments = prepareCapturedAttachments(
-    context,
+    materializedContext,
     options.attachmentContents || [],
     directoryPath,
   );
 
-  const validatedKey = validateContextEnvelope(context);
+  const validatedKey = validateContextEnvelope(materializedContext);
   if (validatedKey !== safeKey) {
     throw new Error('Materialized Jira context key does not match its normalized envelope.');
   }
-  const serializedContext = serializeContext(context);
+  const serializedContext = serializeContext(materializedContext);
   const serializedEnvelopeKey = validateContextEnvelope(JSON.parse(serializedContext) as unknown);
   if (serializedEnvelopeKey !== safeKey) {
     throw new Error('Serialized Jira context key does not match its normalized envelope.');
   }
   assertContentByteLimit(serializedContext, MAX_SERIALIZED_CONTEXT_BYTES, 'Jira context JSON');
 
-  const prompt = buildJiraContextPrompt(context, serializedContext);
+  const prompt = buildJiraContextPrompt(materializedContext, serializedContext);
   assertContentByteLimit(prompt, MAX_PROMPT_BYTES, 'Jira context prompt');
   const contentSha256 = sha256(serializedContext);
   const promptSha256 = sha256(prompt);
@@ -99,6 +100,20 @@ export function writeJiraContextArtifacts(
   };
 }
 
+function copyJiraContextForMaterialization(context: JiraTicketContext): JiraTicketContext {
+  const attachments: unknown = context.attachments;
+  return {
+    ...context,
+    attachments: (Array.isArray(attachments)
+      ? attachments.map(attachment => (
+        attachment && typeof attachment === 'object' && !Array.isArray(attachment)
+          ? { ...attachment }
+          : attachment
+      ))
+      : attachments) as JiraTicketContext['attachments'],
+  };
+}
+
 function prepareCapturedAttachments(
   context: JiraTicketContext,
   captures: readonly JiraAttachmentContentSnapshot[],
@@ -106,10 +121,18 @@ function prepareCapturedAttachments(
 ): PreparedJiraAttachment[] {
   const prepared: PreparedJiraAttachment[] = [];
   const attachmentsDirectory = path.join(directoryPath, 'attachments');
-  for (let index = 0; index < context.attachments.length; index += 1) {
-    const attachment = context.attachments[index];
-    if (!attachment || attachment.contentStatus !== 'captured') {
-      if (attachment) { delete attachment.localPath; }
+  const attachments: unknown = context.attachments;
+  if (!Array.isArray(attachments)) {
+    throw new Error('Jira context artifact attachments must be an array.');
+  }
+  for (let index = 0; index < attachments.length; index += 1) {
+    const attachmentValue: unknown = attachments[index];
+    if (!attachmentValue || typeof attachmentValue !== 'object' || Array.isArray(attachmentValue)) {
+      throw new Error('Jira context attachment entry must be an object.');
+    }
+    const attachment = attachmentValue as JiraTicketContext['attachments'][number];
+    if (attachment.contentStatus !== 'captured') {
+      delete attachment.localPath;
       continue;
     }
     const capture = captures[index];

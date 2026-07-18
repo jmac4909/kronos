@@ -7,11 +7,15 @@ const root = path.resolve(__dirname, '..');
 const fixtureRoot = path.join(root, 'test-fixtures', 'providers');
 const stateStore = require('../out/services/stateStore.js');
 const jiraWorkCatalog = require('../out/services/jiraWorkCatalog.js');
-const { JiraRestCancelledError, JiraRestClient } = require('../out/services/jiraRestClient.js');
+const {
+  JiraRestCancelledError,
+  JiraRestClient,
+  normalizeJiraBaseUrl,
+} = require('../out/services/jiraRestClient.js');
 const gitlabContext = require('../out/services/gitlabMergeRequestContext.js');
-const { GitLabRestClient } = require('../out/services/gitlabRestClient.js');
-const { JenkinsRestClient } = require('../out/services/jenkinsRestClient.js');
-const { SonarRestClient } = require('../out/services/sonarRestClient.js');
+const { GitLabRestClient, normalizeGitLabApiBaseUrl } = require('../out/services/gitlabRestClient.js');
+const { JenkinsRestClient, normalizeJenkinsBaseUrl } = require('../out/services/jenkinsRestClient.js');
+const { SonarRestClient, normalizeSonarBaseUrl } = require('../out/services/sonarRestClient.js');
 
 test('provider contract matrix covers requests, bounds, normalization, completeness, and errors for every provider', () => {
   const matrix = fs.readFileSync(path.join(root, 'docs', 'provider-contract-matrix.md'), 'utf8');
@@ -41,6 +45,23 @@ test('sanitized provider fixture set is bounded, credential-free, and reserved-o
     for (const match of raw.matchAll(/https?:\/\/[^\s"<>]+/g)) {
       assert.match(new URL(match[0]).hostname, /\.(?:example|invalid)$/);
     }
+  }
+});
+
+test('provider URL normalization permits local HTTP without weakening remote HTTPS requirements', () => {
+  assert.equal(normalizeJiraBaseUrl('http://localhost:8080/'), 'http://localhost:8080');
+  assert.equal(normalizeGitLabApiBaseUrl('http://127.0.0.1:8081/'), 'http://127.0.0.1:8081/api/v4');
+  assert.equal(normalizeJenkinsBaseUrl('http://localhost:8082/'), 'http://localhost:8082');
+  assert.equal(normalizeJenkinsBaseUrl('http://127.0.0.1:8084/'), 'http://127.0.0.1:8084');
+  assert.equal(normalizeJenkinsBaseUrl('http://[::1]:8085/'), 'http://[::1]:8085');
+  assert.equal(normalizeSonarBaseUrl('http://127.0.0.1:8083/'), 'http://127.0.0.1:8083');
+  for (const normalize of [
+    normalizeJiraBaseUrl,
+    normalizeGitLabApiBaseUrl,
+    normalizeJenkinsBaseUrl,
+    normalizeSonarBaseUrl,
+  ]) {
+    assert.equal(normalize('http://provider.example'), undefined);
   }
 });
 
@@ -848,6 +869,170 @@ test('Jenkins refuses to send configured credentials outside the pinned provider
   assert.equal(transportCalls, 0);
 });
 
+test('Jenkins core status reads classify bounded HTTP, JSON, and transport failures without leaking response content', async () => {
+  const requests = [];
+  let outcome = jsonResponse({});
+  const client = new JenkinsRestClient({
+    env: { JENKINS_URL: 'https://jenkins.example', JENKINS_TOKEN: 'fixture-only' },
+    maxResponseBytes: 1,
+    transport: async request => {
+      requests.push(request);
+      if (typeof outcome === 'function') { return outcome(); }
+      return outcome;
+    },
+  });
+  const jobUrl = 'https://jenkins.example/job/application';
+
+  assert.equal(await client.buildStatus(''), null);
+  assert.equal(requests.length, 0);
+  assert.equal(await client.buildStatus(jobUrl, { timeoutMs: 1 }), null);
+  assert.equal(requests.at(-1).timeoutMs, 250);
+  assert.equal(requests.at(-1).maxResponseBytes, 1024);
+  assert.equal(requests.at(-1).headers.Authorization, 'Bearer fixture-only');
+
+  for (const [statusCode, expected] of [
+    [401, /check Jenkins credentials/i],
+    [404, /missing or unavailable/i],
+    [429, /rate limiting prevented the fetch/i],
+    [503, /HTTP 503.*content is not displayed/i],
+  ]) {
+    outcome = { statusCode, body: '{"private":"must not appear"}', headers: {} };
+    await assert.rejects(client.buildStatus(jobUrl), error => {
+      assert.match(error.message, expected);
+      assert.doesNotMatch(error.message, /must not appear|fixture-only/);
+      return true;
+    });
+  }
+
+  outcome = { statusCode: 200, body: '{invalid', headers: {} };
+  await assert.rejects(client.buildStatus(jobUrl), /invalid JSON.*content is not displayed/i);
+
+  outcome = () => {
+    throw Object.assign(new Error('private transport detail'), { code: 'ECONNRESET' });
+  };
+  await assert.rejects(client.buildStatus(jobUrl), error => {
+    assert.match(error.message, /request failed \(ECONNRESET\)/i);
+    assert.doesNotMatch(error.message, /private transport detail|fixture-only/);
+    return true;
+  });
+
+  outcome = { statusCode: 200, body: 'x'.repeat(1025), headers: {} };
+  await assert.rejects(client.buildStatus(jobUrl), /exceeded the 1024-byte response safety limit/i);
+});
+
+test('Jenkins context retains the core build while marking bounded test and stage evidence partial', async () => {
+  const buildUrl = 'https://jenkins.example/job/application/91/';
+  const client = new JenkinsRestClient({
+    env: { JENKINS_URL: 'https://jenkins.example' },
+    maxTestCases: 1,
+    maxStages: 1,
+    transport: async request => {
+      const url = new URL(request.url);
+      if (url.pathname === '/job/application/91/api/json') {
+        return jsonResponse({ number: 91, result: 'FAILURE', building: false, url: buildUrl });
+      }
+      if (url.pathname === '/job/application/91/testReport/api/json') {
+        return jsonResponse({
+          passCount: 0,
+          failCount: 2,
+          skipCount: 0,
+          totalCount: 2,
+          suites: [{ cases: [
+            { className: 'BoundedTest', name: 'first failure', status: 'FAILED' },
+            { className: 'BoundedTest', name: 'second failure', status: 'REGRESSION' },
+          ] }],
+        });
+      }
+      if (url.pathname === '/job/application/91/wfapi/describe') {
+        return jsonResponse({ stages: [
+          { id: '1', name: 'Build', status: 'SUCCESS' },
+          { id: '2', name: 'Verify', status: 'FAILED' },
+        ] });
+      }
+      if (url.pathname === '/job/application/config.xml') {
+        return { statusCode: 503, body: '<private>not retained</private>', headers: {} };
+      }
+      return { statusCode: 404, body: '', headers: {} };
+    },
+  });
+
+  const context = await client.buildContext(buildUrl);
+  assert.equal(context.build.number, 91);
+  assert.equal(context.tests.failedCasesAvailable, 2);
+  assert.deepEqual(context.tests.failedCases.map(testCase => testCase.name), ['first failure']);
+  assert.equal(context.tests.complete, false);
+  assert.deepEqual(context.stages.map(stage => stage.name), ['Build']);
+  assert.deepEqual(context.completeness, {
+    complete: false,
+    buildComplete: true,
+    testReport: 'partial',
+    stages: 'partial',
+    configuration: 'partial',
+    logsIncluded: false,
+    warnings: [
+      'Jenkins failed-test details were incomplete or limited to 1 case.',
+      'Jenkins Pipeline stage details were limited to 1 stage.',
+    ],
+  });
+  assert.equal(JSON.stringify(context).includes('<private>'), false);
+});
+
+test('Jenkins extra build metadata falls back to pinned, bounded core evidence when provider fields are unsafe', async () => {
+  let buildRecord = {
+    number: 92,
+    result: 'FAILURE',
+    building: false,
+    url: 'https://other.example/job/application/92/',
+    fullDisplayName: 'application #92',
+    description: `bounded-${'x'.repeat(16_100)}`,
+    actions: [{ causes: 'invalid' }],
+    artifacts: [{ fileName: '', relativePath: 'reports/private.xml' }],
+    changeSet: { items: 'invalid' },
+  };
+  const client = new JenkinsRestClient({
+    env: { JENKINS_URL: 'https://jenkins.example' },
+    transport: async request => {
+      const url = new URL(request.url);
+      if (url.pathname === '/job/application/api/json') {
+        return jsonResponse({ lastBuild: buildRecord });
+      }
+      return { statusCode: 404, body: '', headers: {} };
+    },
+  });
+
+  const context = await client.buildContext('https://jenkins.example/job/application');
+  assert.equal(context.build.number, 92);
+  assert.equal(context.build.url, 'https://jenkins.example/job/application/92/');
+  assert.equal(context.build.description.length, 16_000);
+  assert.deepEqual(context.build.causes, []);
+  assert.deepEqual(context.build.artifacts, []);
+  assert.deepEqual(context.build.changes, []);
+  assert.equal(context.completeness.complete, false);
+  assert.equal(context.completeness.buildComplete, false);
+  assert.equal(context.completeness.testReport, 'unavailable');
+  assert.equal(context.completeness.stages, 'unavailable');
+  assert.match(context.completeness.warnings.join(' '), /cross-origin build URL/);
+  assert.match(context.completeness.warnings.join(' '), /text exceeded safety limits/);
+  assert.match(context.completeness.warnings.join(' '), /causes were invalid/);
+  assert.match(context.completeness.warnings.join(' '), /artifacts were invalid/);
+  assert.match(context.completeness.warnings.join(' '), /changes were invalid/);
+  assert.equal(JSON.stringify(context).includes('reports/private.xml'), false);
+
+  buildRecord = {
+    number: 93,
+    result: 'FAILURE',
+    building: false,
+    actions: 'invalid',
+    artifacts: 'invalid',
+    changeSet: 'invalid',
+  };
+  const malformedCollections = await client.buildContext('https://jenkins.example/job/application');
+  assert.equal(malformedCollections.build.number, 93);
+  assert.match(malformedCollections.completeness.warnings.join(' '), /causes were invalid/);
+  assert.match(malformedCollections.completeness.warnings.join(' '), /artifacts were invalid/);
+  assert.match(malformedCollections.completeness.warnings.join(' '), /changes were invalid/);
+});
+
 test('sanitized SonarQube fixture retains branch-qualified gate, measures, and issues', async () => {
   const fixture = readFixture('sonarqube-branch.json');
   const client = new SonarRestClient({
@@ -950,6 +1135,101 @@ test('SonarQube issue pagination retains prior evidence and stops on a mismatche
   assert.equal(result.pages, 1);
   assert.equal(result.total, 2);
   assert.match(result.warnings.join(' '), /returned page index 1/i);
+});
+
+test('SonarQube extra issue evidence retains bounded optional fields and marks malformed provider records partial', async () => {
+  const requests = [];
+  const client = new SonarRestClient({
+    env: { SONAR_HOST_URL: 'https://sonar.example', SONAR_TOKEN: 'fixture-value' },
+    issuesPerPage: 2,
+    maxIssues: 2,
+    transport: async request => {
+      requests.push(request);
+      const url = new URL(request.url);
+      if (url.pathname === '/api/qualitygates/project_status') {
+        return jsonResponse({ projectStatus: {
+          status: 'WARN',
+          ignoredConditions: false,
+          caycStatus: 'compliant',
+          conditions: [{
+            status: 'ERROR',
+            metricKey: 'new_coverage',
+            comparator: 'LT',
+            errorThreshold: '80',
+            actualValue: '72.5',
+            periodIndex: 1,
+          }],
+        } });
+      }
+      if (url.pathname === '/api/measures/component') {
+        return jsonResponse({ component: { measures: [
+          { metric: 'coverage', value: '81.0', bestValue: false },
+          { metric: 'new_coverage', period: { value: '72.5' } },
+        ] } });
+      }
+      if (url.pathname === '/api/issues/search') {
+        return jsonResponse({
+          paging: { pageIndex: 1, pageSize: 2, total: 2 },
+          issues: [
+            {
+              key: 'issue-rich',
+              rule: 'typescript:S100',
+              severity: 'CRITICAL',
+              component: 'application:src/provider.ts',
+              project: 'application',
+              line: 14,
+              message: 'Retain bounded optional issue evidence.',
+              status: 'RESOLVED',
+              resolution: 'FIXED',
+              issueStatus: 'ACCEPTED',
+              type: 'VULNERABILITY',
+              scope: 'MAIN',
+              effort: '15min',
+              debt: '15min',
+              author: 'fixture-author',
+              cleanCodeAttribute: 'CONVENTIONAL',
+              cleanCodeAttributeCategory: 'CONSISTENT',
+              creationDate: '2026-07-01T00:00:00Z',
+              updateDate: '2026-07-02T00:00:00Z',
+              closeDate: '2026-07-03T00:00:00Z',
+              tags: ['security', 'provider'],
+              impacts: [{ softwareQuality: 'SECURITY', severity: 'HIGH' }],
+              textRange: { startLine: 14, endLine: 14, startOffset: 2, endOffset: 9 },
+            },
+            {
+              key: 'issue-over-limit',
+              message: 'x'.repeat(16_001),
+              tags: ['bounded'],
+              impacts: [{ softwareQuality: 'MAINTAINABILITY', severity: 'MEDIUM' }],
+            },
+          ],
+        });
+      }
+      return { statusCode: 404, body: '', headers: {} };
+    },
+  });
+
+  const context = await client.projectContext(' application ', ' feature/extra ', {
+    metricKeys: ['coverage', 'coverage', 'new_coverage', 'invalid key'],
+  });
+  assert.equal(context.projectKey, 'application');
+  assert.equal(context.branch, 'feature/extra');
+  assert.equal(context.qualityGate.conditions[0].actualValue, '72.5');
+  assert.equal(context.measures[1].periodValue, '72.5');
+  assert.equal(context.issues[0].resolution, 'FIXED');
+  assert.equal(context.issues[0].cleanCodeAttributeCategory, 'CONSISTENT');
+  assert.deepEqual(context.issues[0].tags, ['security', 'provider']);
+  assert.deepEqual(context.issues[0].impacts, [{ softwareQuality: 'SECURITY', severity: 'HIGH' }]);
+  assert.equal(context.issues[1].message.length, 16_000);
+  assert.equal(context.completeness.qualityGateComplete, true);
+  assert.equal(context.completeness.measuresComplete, true);
+  assert.equal(context.completeness.issuesComplete, false);
+  assert.equal(context.completeness.complete, false);
+  assert.match(context.completeness.warnings.join(' '), /invalid or over-limit issue data.*truncated/i);
+  assert.equal(new URL(context.dashboardUrl).searchParams.get('branch'), 'feature/extra');
+  const measureRequest = requests.find(request => new URL(request.url).pathname === '/api/measures/component');
+  assert.equal(new URL(measureRequest.url).searchParams.get('metricKeys'), 'coverage,new_coverage');
+  assert.ok(requests.every(request => request.headers.Authorization === 'Bearer fixture-value'));
 });
 
 function readFixture(name) {

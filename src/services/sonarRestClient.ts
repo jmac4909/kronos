@@ -2,7 +2,15 @@ import * as http from 'http';
 import * as https from 'https';
 import { unknownErrorCode } from './errorUtils';
 import { parseJsonWithLabel } from './jsonFiles';
-import { arrayFromUnknown, isRecord, optionalFiniteNumberFromUnknown, optionalTrimmedStringFromUnknown } from './records';
+import {
+  arrayFromUnknown,
+  boundedInteger,
+  firstNonEmptyString,
+  isRecord,
+  nonNegativeIntegerFromUnknown,
+  optionalFiniteNumberFromUnknown,
+  optionalTrimmedStringFromUnknown,
+} from './records';
 
 export interface SonarRestRequestOptions {
   timeoutMs?: number;
@@ -275,8 +283,8 @@ export class SonarRestClient {
         break;
       }
       const paging = isRecord(response.value['paging']) ? response.value['paging'] : {};
-      const reportedPageIndex = nonNegativeInteger(paging['pageIndex']);
-      const reportedPageSize = nonNegativeInteger(paging['pageSize']);
+      const reportedPageIndex = nonNegativeIntegerFromUnknown(paging['pageIndex']);
+      const reportedPageSize = nonNegativeIntegerFromUnknown(paging['pageSize']);
       if (reportedPageIndex !== undefined && reportedPageIndex !== pageNumber) {
         warnings.push(`SonarQube issue pagination stopped at page ${pageNumber} because the provider returned page index ${reportedPageIndex}.`);
         break;
@@ -470,7 +478,7 @@ export function isSonarRestConfigured(env: NodeJS.ProcessEnv = process.env): boo
 
 export function resolveSonarRestConfig(env: NodeJS.ProcessEnv = process.env): SonarRestConfig {
   const baseUrl = normalizeSonarBaseUrl(env['SONAR_HOST_URL']) || normalizeSonarBaseUrl(env['SONAR_URL']);
-  const token = firstNonEmpty(env['SONAR_TOKEN']);
+  const token = firstNonEmptyString(env['SONAR_TOKEN']);
   const missing: string[] = [];
   if (!baseUrl) { missing.push('SONAR_HOST_URL or SONAR_URL'); }
   if (!token) { missing.push('SONAR_TOKEN'); }
@@ -592,7 +600,7 @@ function isCompleteQualityGateCondition(value: unknown): boolean {
     ['actualValue', 2000],
   ];
   if (textFields.some(([key, limit]) => !isOptionalProviderTextWithinLimit(value[key], limit))) { return false; }
-  return value['periodIndex'] === undefined || nonNegativeInteger(value['periodIndex']) !== undefined;
+  return value['periodIndex'] === undefined || nonNegativeIntegerFromUnknown(value['periodIndex']) !== undefined;
 }
 
 function isCompleteSonarMeasureRecord(value: unknown): boolean {
@@ -628,7 +636,7 @@ function isCompleteSonarIssueRecord(value: unknown): boolean {
     ['closeDate', 500],
   ];
   if (textFields.some(([key, limit]) => !isOptionalProviderTextWithinLimit(value[key], limit))) { return false; }
-  if (value['line'] !== undefined && nonNegativeInteger(value['line']) === undefined) { return false; }
+  if (value['line'] !== undefined && nonNegativeIntegerFromUnknown(value['line']) === undefined) { return false; }
 
   const tags = value['tags'];
   if (tags !== undefined && (!Array.isArray(tags) || tags.length > 100
@@ -656,7 +664,7 @@ function isCompleteSonarTextRange(value: unknown): boolean {
   if (!isRecord(value)) { return false; }
   const keys = ['startLine', 'endLine', 'startOffset', 'endOffset'] as const;
   return keys.some(key => value[key] !== undefined)
-    && keys.every(key => value[key] === undefined || nonNegativeInteger(value[key]) !== undefined);
+    && keys.every(key => value[key] === undefined || nonNegativeIntegerFromUnknown(value[key]) !== undefined);
 }
 
 function isRequiredProviderTextWithinLimit(value: unknown, maxLength: number): boolean {
@@ -792,7 +800,7 @@ function sonarHeaders(config: SonarRestConfig): Record<string, string> {
 
 function sonarIssueTotal(value: Record<string, unknown>): number | undefined {
   const paging = isRecord(value['paging']) ? value['paging'] : {};
-  return nonNegativeInteger(paging['total']) ?? nonNegativeInteger(value['total']);
+  return nonNegativeIntegerFromUnknown(paging['total']) ?? nonNegativeIntegerFromUnknown(value['total']);
 }
 
 function emptySonarIssueCollection(): SonarIssueCollection {
@@ -834,19 +842,6 @@ function sonarHttpError(label: string, statusCode: number): SonarRestError {
   return new SonarRestError(`SonarQube REST ${label} failed with HTTP ${statusCode}. Response content is not displayed.`);
 }
 
-function firstNonEmpty(...values: Array<string | undefined>): string | undefined {
-  for (const value of values) {
-    const trimmed = value?.trim();
-    if (trimmed) { return trimmed; }
-  }
-  return undefined;
-}
-
-function nonNegativeInteger(value: unknown): number | undefined {
-  const number = optionalFiniteNumberFromUnknown(value);
-  return number !== undefined && number >= 0 ? Math.floor(number) : undefined;
-}
-
 function assignNonNegativeNumber<T extends object, K extends keyof T>(target: T, key: K, value: unknown): void {
   const number = optionalFiniteNumberFromUnknown(value);
   if (number !== undefined && number >= 0) { target[key] = number as T[K]; }
@@ -869,11 +864,6 @@ function uniqueStrings(values: readonly string[]): string[] {
 function isLoopbackHostname(hostname: string): boolean {
   const normalized = hostname.toLowerCase().replace(/^\[|\]$/g, '');
   return normalized === 'localhost' || normalized === '127.0.0.1' || normalized === '::1';
-}
-
-function boundedInteger(value: number | undefined, fallback: number, minimum: number, maximum: number): number {
-  if (value === undefined || !Number.isFinite(value)) { return fallback; }
-  return Math.min(maximum, Math.max(minimum, Math.floor(value)));
 }
 
 export class SonarRestError extends Error {

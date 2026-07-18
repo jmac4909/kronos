@@ -40,9 +40,9 @@ const allowedDevDependencies = new Set(['@types/node', '@types/vscode', 'typescr
 for (const name of Object.keys(manifest.devDependencies || {})) {
   if (!allowedDevDependencies.has(name)) { fail(`unexpected development dependency: ${name}`); }
 }
-if (manifest.contributes.commands.length !== 41) { fail('expected exactly 41 terminal-first commands'); }
+if (manifest.contributes.commands.length !== 43) { fail('expected exactly 43 terminal-first commands'); }
 if (manifest.contributes.views.kronos.length !== 4) { fail('expected exactly Work, Sessions, Projects, and Attention'); }
-if (Object.keys(manifest.contributes.configuration.properties || {}).length !== 13) { fail('expected exactly thirteen mapped terminal-first settings'); }
+if (Object.keys(manifest.contributes.configuration.properties || {}).length !== 14) { fail('expected exactly fourteen mapped terminal-first settings'); }
 
 requireMarkers('README.md', ['zero third-party runtime dependencies', 'Work', 'Sessions', 'Projects', 'Attention']);
 requireMarkers('docs/terminal-first-product-contract.md', ['Ownership Invariants', 'Context Insertion Contract', 'Monitoring Contract']);

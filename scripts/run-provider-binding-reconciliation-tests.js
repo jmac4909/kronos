@@ -221,20 +221,6 @@ test('multi-project reconciliation stays inside the explicitly linked project se
     })],
   });
   assert.equal(
-    reconciliation.latestGitLabMergeRequestUrlAcrossSessions(
-      [applicationSession],
-      { GITLAB_API_BASE_URL: 'https://gitlab.example/api/v4' },
-    ),
-    'https://gitlab.example/team/application/-/merge_requests/88',
-  );
-  assert.equal(
-    reconciliation.latestGitLabMergeRequestUrlAcrossSessions(
-      [serviceSession],
-      { GITLAB_API_BASE_URL: 'https://gitlab.example/api/v4' },
-    ),
-    'https://gitlab.example/team/service/-/merge_requests/99',
-  );
-  assert.equal(
     reconciliation.providerBindingsForEvent(
       { ...providerEvent('gitlab', 'merge-request', '88'), sessionId: applicationSession.id },
       applicationSession,

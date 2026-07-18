@@ -30,6 +30,29 @@ export function optionalFiniteNumberFromUnknown(value: unknown): number | undefi
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
+export function nonNegativeIntegerFromUnknown(value: unknown): number | undefined {
+  const number = optionalFiniteNumberFromUnknown(value);
+  return number !== undefined && number >= 0 ? Math.floor(number) : undefined;
+}
+
+export function boundedInteger(
+  value: number | undefined,
+  fallback: number,
+  minimum: number,
+  maximum: number,
+): number {
+  if (value === undefined || !Number.isFinite(value)) { return fallback; }
+  return Math.min(maximum, Math.max(minimum, Math.floor(value)));
+}
+
+export function firstNonEmptyString(...values: Array<string | undefined>): string | undefined {
+  for (const value of values) {
+    const trimmed = value?.trim();
+    if (trimmed) { return trimmed; }
+  }
+  return undefined;
+}
+
 export function recordEntriesFromUnknown<T>(value: Record<string, T> | null | undefined): Array<[string, T]>;
 export function recordEntriesFromUnknown(value: unknown): Array<[string, unknown]>;
 export function recordEntriesFromUnknown(value: unknown): Array<[string, unknown]> {

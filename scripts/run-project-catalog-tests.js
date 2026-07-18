@@ -579,6 +579,24 @@ test('project discovery honors configured roots, depth, limits, and workspace fo
   const limited = projectDiscovery.discoverLocalProjects({ roots: [discoveryRoot], depth: 2, limit: 1 });
   assert.equal(limited.projects.length, 1);
   assert.equal(limited.truncated, true);
+
+  const unreadable = path.join(tempRoot, 'temporarily-unreadable-discovery-root');
+  fs.mkdirSync(unreadable);
+  const originalReadDirectory = fs.readdirSync;
+  fs.readdirSync = (directory, ...args) => {
+    if (path.resolve(String(directory)) === unreadable) {
+      throw new Error('fixture directory unavailable\nwith control text');
+    }
+    return originalReadDirectory(directory, ...args);
+  };
+  let unavailable;
+  try {
+    unavailable = projectDiscovery.discoverLocalProjects({ roots: [unreadable], depth: 1, limit: 100 });
+  } finally {
+    fs.readdirSync = originalReadDirectory;
+  }
+  assert.equal(unavailable.projects.length, 0);
+  assert.match(unavailable.warnings.join(' '), /fixture directory unavailable with control text/);
 });
 
 test('project discovery finds and independently registers a Git repository nested inside another repository', () => {

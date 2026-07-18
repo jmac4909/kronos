@@ -19,6 +19,7 @@
         { "file": "scripts/run-feature-journey-tests.js", "test": "Work and Jira board free-text search index the same rich ticket evidence" },
         { "file": "scripts/run-core-behavior-tests.js", "test": "TerminalFirstState reports complete and partial Jira refreshes without losing prior provider evidence" },
         { "file": "scripts/run-core-behavior-tests.js", "test": "TerminalFirstState keeps the newest explicit refresh and exposes a bounded error state" },
+        { "file": "scripts/run-core-behavior-tests.js", "test": "TerminalFirstState isolates malformed load issues and cancels pending watcher work on dispose" },
         { "file": "scripts/run-core-behavior-tests.js", "test": "Work tree directly covers project-rich rows, sorting, filters, empty states, and refresh errors" }
       ],
       "humanGates": ["operator-terminal"]
@@ -31,6 +32,7 @@
         { "file": "scripts/run-terminal-lifecycle-tests.js", "test": "one lifecycle projection distinguishes none, attached, paused, detached, closed, and stopped" },
         { "file": "scripts/run-terminal-lifecycle-tests.js", "test": "session removal deletes only colocated state and registry detachment never controls the terminal" },
         { "file": "scripts/run-terminal-lifecycle-tests.js", "test": "explicit Claude launch creates and focuses exactly one terminal with or without a cwd" },
+        { "file": "scripts/run-terminal-lifecycle-tests.js", "test": "Claude layout validation and terminal placement stay presentation-only" },
         { "file": "scripts/run-terminal-lifecycle-tests.js", "test": "a closed or rebound terminal invalidates captured context placement without guessing" },
         { "file": "scripts/run-terminal-lifecycle-tests.js", "test": "terminal context placement is reentrancy-safe and rejects ambiguous attachment identities" },
         { "file": "scripts/run-terminal-lifecycle-tests.js", "test": "Claude launch validation covers labels, filesystem failures, and PATH probe failures before creation" },
@@ -128,7 +130,6 @@
       "id": "persistence-and-migration",
       "goals": ["G06", "G15"],
       "automated": [
-        { "file": "scripts/run-unit-tests.js", "test": "managed monitoring lease omits unsupported open flags on Windows and fails closed on POSIX" },
         { "file": "scripts/run-unit-tests.js", "test": "managed monitoring lease acquires, blocks duplicate owners, renews, and releases" },
         { "file": "scripts/run-unit-tests.js", "test": "legacy ~/.claude/kronos state migrates once without helper scripts" },
         { "file": "scripts/run-unit-tests.js", "test": "legacy state uses a private staging path and never publishes an unsafe target" },
@@ -152,6 +153,7 @@
         { "file": "scripts/run-persistence-recovery-tests.js", "test": "registered-project monitoring owners refresh identity, reject stale bindings, and isolate returned state" },
         { "file": "scripts/run-persistence-recovery-tests.js", "test": "project monitoring state fails closed for missing owners, invalid identity, and invalid timestamps" },
         { "file": "scripts/run-persistence-recovery-tests.js", "test": "disposing the monitor releases its lease and prevents late provider state writes" },
+        { "file": "scripts/run-core-behavior-tests.js", "test": "TerminalFirstState isolates malformed load issues and cancels pending watcher work on dispose" },
         { "file": "scripts/run-schema-invariant-tests.js", "test": "state ownership matrix covers every canonical record family and ingress boundary" },
         { "file": "scripts/run-schema-invariant-tests.js", "test": "Work catalog migrates legacy aliases once and current schema exposes only canonical fields" },
         { "file": "scripts/run-schema-invariant-tests.js", "test": "session and event normalizers strip unknown fields while preserving explicit partial state" },
@@ -314,6 +316,7 @@
         { "file": "scripts/run-handoff-branch-profile-tests.js", "test": "local handoff writes a private immutable Markdown and JSON reference pair without copying source payloads" },
         { "file": "scripts/run-handoff-branch-profile-tests.js", "test": "local handoff has no provider, Git, or terminal side effects" },
         { "file": "scripts/run-handoff-branch-profile-tests.js", "test": "local handoff refuses external artifact paths and oversized selections" },
+        { "file": "scripts/run-handoff-branch-profile-tests.js", "test": "local handoff rejects incomplete references before publishing an extra-feature bundle" },
         { "file": "scripts/run-handoff-branch-profile-tests.js", "test": "local handoff verifies every referenced artifact even when a persisted hash is present" },
         { "file": "scripts/run-handoff-branch-profile-tests.js", "test": "project integration parses, formats, and stores explicit Jenkins and SonarQube branch profiles" },
         { "file": "scripts/run-handoff-branch-profile-tests.js", "test": "branch profile validation refuses duplicates, unsafe branches, credentials, and unknown active profiles" },
@@ -328,6 +331,7 @@
         { "file": "scripts/run-command-routing-tests.js", "test": "runtime dependency surface is Node and VS Code only" },
         { "file": "scripts/run-jira-work-board-tests.js", "test": "board runtime posts only normalized command and Jira ticket key" },
         { "file": "scripts/run-webview-dom-tests.js", "test": "ticket workspace action panel posts one normalized, ticket-scoped message" },
+        { "file": "scripts/run-unit-tests.js", "test": "ticket and Jira-board webviews reject invalid requests and serialize exact ticket actions" },
         { "file": "scripts/run-release-surface-tests.js", "test": "actual VSIX release surface is exact and runtime-dependency-free" },
         { "file": "scripts/run-release-surface-tests.js", "test": "release surface validator fails closed on sensitive and development-only package files" },
         { "file": "scripts/run-release-surface-tests.js", "test": "release documents and package metadata remain linked to current evidence" },
@@ -864,8 +868,7 @@
     {
       "requirements": ["G06-case-01:1072ee91"],
       "automated": [
-        { "file": "scripts/run-persistence-recovery-tests.js", "test": "one private open-flag layer omits unsupported Windows flags and fails closed on POSIX" },
-        { "file": "scripts/run-unit-tests.js", "test": "managed monitoring lease omits unsupported open flags on Windows and fails closed on POSIX" }
+        { "file": "scripts/run-persistence-recovery-tests.js", "test": "one private open-flag layer omits unsupported Windows flags and fails closed on POSIX" }
       ],
       "humanGates": ["windows-native"]
     },
@@ -1643,7 +1646,7 @@
     {
       "requirements": ["G16-case-07:4aae12f1"],
       "automated": [
-        { "file": "scripts/run-unit-tests.js", "test": "managed monitoring lease omits unsupported open flags on Windows and fails closed on POSIX" },
+        { "file": "scripts/run-persistence-recovery-tests.js", "test": "one private open-flag layer omits unsupported Windows flags and fails closed on POSIX" },
         { "file": "scripts/run-unit-tests.js", "test": "managed monitoring lease acquires, blocks duplicate owners, renews, and releases" },
         { "file": "scripts/run-persistence-recovery-tests.js", "test": "distinct processes sharing one Kronos directory enforce one polling owner and clean handoff" }
       ],
@@ -1754,6 +1757,7 @@
       "requirements": ["G18-case-02:b4995dec"],
       "automated": [
         { "file": "scripts/run-command-routing-tests.js", "test": "runtime dependency surface is Node and VS Code only" },
+        { "file": "scripts/run-release-surface-tests.js", "test": "runtime source imports are limited to local modules, Node built-ins, and VS Code" },
         { "file": "scripts/run-jira-work-board-tests.js", "test": "board runtime posts only normalized command and Jira ticket key" },
         { "file": "scripts/run-webview-dom-tests.js", "test": "Setup and Doctor actions post only their allowlisted operation command field" },
         { "file": "scripts/run-provider-binding-reconciliation-tests.js", "test": "reconciled provider URLs are credential-free and rejected outside the configured origin" }
@@ -1958,7 +1962,8 @@
       "requirements": ["G22-case-02:6814f220"],
       "automated": [
         { "file": "scripts/run-handoff-branch-profile-tests.js", "test": "local handoff writes a private immutable Markdown and JSON reference pair without copying source payloads" },
-        { "file": "scripts/run-handoff-branch-profile-tests.js", "test": "local handoff refuses external artifact paths and oversized selections" }
+        { "file": "scripts/run-handoff-branch-profile-tests.js", "test": "local handoff refuses external artifact paths and oversized selections" },
+        { "file": "scripts/run-handoff-branch-profile-tests.js", "test": "local handoff rejects incomplete references before publishing an extra-feature bundle" }
       ]
     },
     {
@@ -1992,6 +1997,7 @@
         { "file": "scripts/run-handoff-branch-profile-tests.js", "test": "handoff candidates cap context and audit metadata without accepting terminal content" },
         { "file": "scripts/run-handoff-branch-profile-tests.js", "test": "local handoff writes a private immutable Markdown and JSON reference pair without copying source payloads" },
         { "file": "scripts/run-handoff-branch-profile-tests.js", "test": "local handoff refuses external artifact paths and oversized selections" },
+        { "file": "scripts/run-handoff-branch-profile-tests.js", "test": "local handoff rejects incomplete references before publishing an extra-feature bundle" },
         { "file": "scripts/run-handoff-branch-profile-tests.js", "test": "branch profile validation refuses duplicates, unsafe branches, credentials, and unknown active profiles" },
         { "file": "scripts/run-handoff-branch-profile-tests.js", "test": "CI target selection uses an exact MR profile then explicit fallback without creating a ticket project link" }
       ]

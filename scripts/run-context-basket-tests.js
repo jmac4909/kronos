@@ -18,7 +18,7 @@ const {
   writeContextBasketBundle,
 } = require('../out/services/contextBasketStore.js');
 const { buildContextBasketHtml } = require('../out/services/contextBasketView.js');
-const { isSafeTerminalContextReference } = require('../out/services/terminalContextInsertion.js');
+const { assertSafeTerminalContextReference } = require('../out/services/terminalContextInsertion.js');
 const { normalizeContextBasketMessage } = require('../out/services/webviewMessages.js');
 
 test.beforeEach(() => clearContextBasket());
@@ -112,7 +112,7 @@ test('basket bundles retain references and hashes without copying source payload
   assert.match(body, /Compare the evidence and explain conflicts\./);
   assert.match(body, /Artifact: `.*bundle-first.*`/);
   assert.doesNotMatch(body, /SECRET-SOURCE-PAYLOAD/);
-  assert.equal(isSafeTerminalContextReference(buildContextBasketReference(bundle)), true);
+  assert.doesNotThrow(() => assertSafeTerminalContextReference(buildContextBasketReference(bundle)));
 });
 
 test('basket bundle creation revalidates selected source content and metadata', () => {

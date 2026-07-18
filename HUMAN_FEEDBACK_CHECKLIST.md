@@ -137,17 +137,20 @@ If GitLab and CI providers are safely configured:
 
 1. Choose **New Claude** and confirm exactly one new terminal is created and focused without asking for a Jira ticket.
 2. Confirm the configured Claude command is executed exactly once and the session appears using its workspace-derived standalone title with no fake ticket key or ticket link.
-3. In a disposable isolated workspace, set Claude Permission Mode to experimental Bypass Permissions. Choose **New Claude**, confirm the modal explains that prompts will be skipped and offers **Launch Without Permission Prompts**, **Open Claude Settings**, and cancel. Cancel once and choose Settings once; both paths must create no terminal or Session. Confirm once and verify exactly one terminal starts with `claude --dangerously-skip-permissions`, then restore Manual/default before continuing.
-4. Confirm the project session shows its real Jira context(s), attached terminal state, provider bindings, monitoring state, last attempt, latest result, and audited launch permission mode without showing terminal content.
-5. Select each attached Session and confirm its correct terminal opens immediately.
-6. Reload VS Code, select a detached Session, and confirm Kronos reconnects the sole unclaimed terminal or asks which open terminal belongs to the Session before opening it.
-7. Detach the standalone terminal and confirm it remains open and Claude remains operator-controlled.
-8. Try the Session pause/resume action for a configured registered project and confirm Kronos explains that polling belongs to the project and remains automatic; the Session setting must not stop project polling.
-9. Run **Check Provider Updates** once and confirm the Project, not the Session, receives the latest provider health.
-10. Open the ticket workspace and confirm GitLab, Jenkins, and SonarQube each show active, discovering, paused, or setup state. Confirm GitLab discovers a unique open MR by current branch/ticket key without a manual connect prompt and refuses an ambiguous fixture.
-11. Open each available work-session audit. Confirm it uses the standalone title or real ticket identity as appropriate and contains no terminal transcript.
-12. Stop managing one session and confirm its terminal remains open and usable. Remove an old session, confirm the terminal still remains open, and confirm the removed row no longer appears while retained context/audit files remain local.
-13. After two unchanged polls, inspect the Project. Confirm it shows the latest attempt, last successful poll, last meaningful change, next scheduled poll, normalized current error, and increasing quiet/suppressed count without adding Attention rows. The Session may show legacy history, but it must not claim ownership of configured-project polling.
+3. Leave Claude Terminal Layout at **Editor Split**. Confirm the first Kronos-launched Claude terminal opens as an editor tab and a second Kronos-launched Claude terminal splits beside a live Kronos editor terminal. Keep an unrelated pre-existing terminal open and confirm Kronos neither moves it nor uses a panel terminal as the editor-split anchor.
+4. Change Claude Terminal Layout to **Editor Tabs**, launch once, and confirm no automatic split is created. Change it to **Panel**, launch once, and confirm the terminal opens in the terminal panel. Restore **Editor Split** and confirm the next launch returns to the editor area instead of inheriting the prior panel terminal's location.
+5. From an attached editor Session choose **Toggle Full Size** twice and confirm VS Code maximizes then restores that editor group. Repeat on a Kronos-launched panel Session and confirm the panel maximizes then restores. Neither action may write to, interrupt, move, or close the terminal.
+6. In a disposable isolated workspace, set Claude Permission Mode to experimental Bypass Permissions. Choose **New Claude**, confirm the modal explains that prompts will be skipped and offers **Launch Without Permission Prompts**, **Open Claude Settings**, and cancel. Cancel once and choose Settings once; both paths must create no terminal or Session. Confirm once and verify exactly one terminal starts with `claude --dangerously-skip-permissions`, then restore Manual/default before continuing.
+7. Confirm the project session shows its real Jira context(s), attached terminal state, provider bindings, monitoring state, last attempt, latest result, and audited launch permission mode without showing terminal content.
+8. Select each attached Session and confirm its correct terminal opens immediately.
+9. Reload VS Code, select a detached Session, and confirm Kronos reconnects the sole unclaimed terminal or asks which open terminal belongs to the Session before opening it.
+10. Detach the standalone terminal and confirm it remains open and Claude remains operator-controlled.
+11. Try the Session pause/resume action for a configured registered project and confirm Kronos explains that polling belongs to the project and remains automatic; the Session setting must not stop project polling.
+12. Run **Check Provider Updates** once and confirm the Project, not the Session, receives the latest provider health.
+13. Open the ticket workspace and confirm GitLab, Jenkins, and SonarQube each show active, discovering, paused, or setup state. Confirm GitLab discovers a unique open MR by current branch/ticket key without a manual connect prompt and refuses an ambiguous fixture.
+14. Open each available work-session audit. Confirm it uses the standalone title or real ticket identity as appropriate and contains no terminal transcript.
+15. Stop managing one session and confirm its terminal remains open and usable. Remove an old session, confirm the terminal still remains open, and confirm the removed row no longer appears while retained context/audit files remain local.
+16. After two unchanged polls, inspect the Project. Confirm it shows the latest attempt, last successful poll, last meaningful change, next scheduled poll, normalized current error, and increasing quiet/suppressed count without adding Attention rows. The Session may show legacy history, but it must not claim ownership of configured-project polling.
 
 ## Local Evidence Search
 

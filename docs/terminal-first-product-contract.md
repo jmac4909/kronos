@@ -9,7 +9,7 @@ Kronos is a VS Code work companion for organizing Jira work and operator-control
 Kronos has five bounded runtime verbs:
 
 1. **Read** ticket and provider context.
-2. **Start** a validated Claude command, only after an explicit operator action.
+2. **Start** a validated Claude command, only after an explicit operator action, in an operator-selected VS Code terminal layout.
 3. **Insert** an editable local context reference without submission.
 4. **Monitor** bounded provider state for meaningful structural changes.
 5. **Audit** what context and provider evidence was observed.
@@ -19,6 +19,8 @@ Anything outside those five verbs is outside the product.
 ## Ownership Invariants
 
 The operator owns the terminal, process, interactive agent, repository, and submission decision at all times, including when Kronos creates the terminal on request.
+
+Kronos may place a newly and explicitly launched Claude terminal in the VS Code editor area, split it beside another live Kronos-launched Claude terminal, or place it in the terminal panel according to the visible layout setting. It may focus an explicitly selected managed terminal and ask VS Code to maximize or restore that terminal's editor group or panel. These presentation actions never read terminal content, move pre-existing terminals automatically, submit input, interrupt a process, or close a terminal.
 
 Kronos never:
 

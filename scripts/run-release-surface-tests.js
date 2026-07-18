@@ -5,6 +5,7 @@ const test = require('node:test');
 const root = path.resolve(__dirname, '..');
 const release = require('./release-surface.js');
 const { normalizeRepositoryText } = require('./repository-text.js');
+const { runtimeImportPolicyFailure } = require('./runtime-import-policy.js');
 const { publishedStateFailures } = require('./verify-published-branch.js');
 
 test('actual VSIX release surface is exact and runtime-dependency-free', () => {
@@ -33,6 +34,16 @@ test('release surface validator fails closed on sensitive and development-only p
   const manifest = { ...require('../package.json'), dependencies: { 'runtime-surprise': '1.0.0' } };
   assert.ok(release.releaseSurfaceFailures(files, { root, manifest })
     .some(failure => /runtime dependencies must remain empty/i.test(failure)));
+});
+
+test('runtime source imports are limited to local modules, Node built-ins, and VS Code', () => {
+  for (const specifier of ['./local-module', '../shared-module', 'fs', 'node:path', 'vscode']) {
+    assert.equal(runtimeImportPolicyFailure(specifier), undefined, `${specifier} should be allowed`);
+  }
+  for (const specifier of ['typescript', 'axios', '@scope/provider-sdk', '/absolute/module']) {
+    assert.match(runtimeImportPolicyFailure(specifier), /third-party runtime import/i);
+  }
+  assert.match(runtimeImportPolicyFailure(''), /non-empty module specifier/i);
 });
 
 test('release documents and package metadata remain linked to current evidence', () => {

@@ -128,13 +128,18 @@ import {
 import {
   DEFAULT_CLAUDE_COMMAND,
   DEFAULT_CLAUDE_PERMISSION_MODE,
+  DEFAULT_CLAUDE_TERMINAL_LAYOUT,
   DEFAULT_CLAUDE_TERMINAL_NAME,
   buildClaudeTerminalTitle,
   claudePermissionModeLabel,
+  claudeTerminalPlacement,
   launchClaudeTerminal,
   normalizeClaudeTerminalLaunch,
+  normalizeClaudeTerminalLayout,
   probeClaudeExecutableAvailability,
+  selectClaudeEditorSplitParent,
   type ClaudePermissionMode,
+  type ClaudeTerminalLayout,
   type ClaudeTerminalLaunchInput,
   type NormalizedClaudeTerminalLaunch,
 } from './services/claudeTerminalLauncher';
@@ -420,6 +425,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
   private contextBasketInsertionInFlight = false;
   private readonly claudeLaunchesInFlight = new Set<string>();
   private readonly claudeLaunchCooldownUntil = new Map<string, number>();
+  private readonly launchedClaudeTerminals = new Set<vscode.Terminal>();
   private jiraBoardPanel: JiraBoardPanelRecord | undefined;
   private setupPanel: OperationsPanelRecord | undefined;
   private doctorPanel: OperationsPanelRecord | undefined;
@@ -484,6 +490,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
     for (const panel of this.ticketPanels.values()) { panel.panel.dispose(); }
     this.ticketPanels.clear();
     this.claudeLaunchCooldownUntil.clear();
+    this.launchedClaudeTerminals.clear();
     this.jiraBoardPanel?.panel.dispose();
     this.jiraBoardPanel = undefined;
     this.setupPanel?.panel.dispose();
@@ -539,6 +546,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
         pollManagedWorkSessions: async () => this.pollProviders(true),
         openWorkSessionAudit: async argument => this.openWorkSessionAudit(argument),
         focusWorkSessionTerminal: async argument => this.focusWorkSessionTerminal(argument),
+        toggleWorkSessionTerminalSize: async argument => this.toggleWorkSessionTerminalSize(argument),
         reattachWorkSessionTerminal: async argument => this.reattachFocusedTerminal(argument),
         detachWorkSessionTerminal: async argument => this.detachManagedTerminal(argument),
         closeWorkSession: async argument => this.stopManagingSession(argument),
@@ -1463,7 +1471,11 @@ class TerminalFirstRuntime implements vscode.Disposable {
         session = createStandaloneWorkSession({ title: input.title, ...projectDetails });
         closeSessionIfNotSubmitted = true;
       }
-      const launched = launchClaudeTerminal(vscode.window, launch.request);
+      const terminalLayout = this.claudeTerminalLayout();
+      const launched = launchClaudeTerminal(vscode.window, launch.request, {
+        location: this.claudeTerminalLaunchLocation(terminalLayout),
+      });
+      this.launchedClaudeTerminals.add(launched.terminal);
       commandSubmitted = true;
       session = await this.attachTerminal(session, launched.terminal);
       const eventContext = workSessionEventContext(session);
@@ -1479,6 +1491,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
           explicitLaunch: true,
           commandSubmitted: true,
           terminalName: launched.configuration.name,
+          terminalLayout,
           claudePermissionMode: permissionMode,
           experimentalPermissionBypass: permissionMode === 'bypassPermissions',
         },
@@ -1568,6 +1581,24 @@ class TerminalFirstRuntime implements vscode.Disposable {
     const name = buildClaudeTerminalTitle(configuredName, ticketKey, branch);
     const request: ClaudeTerminalLaunchInput = { command, name, cwd, permissionMode };
     return { request, validated: normalizeClaudeTerminalLaunch(request) };
+  }
+
+  private claudeTerminalLayout(): ClaudeTerminalLayout {
+    return normalizeClaudeTerminalLayout(vscode.workspace.getConfiguration('kronos').get<string>(
+      'claudeTerminalLayout',
+      DEFAULT_CLAUDE_TERMINAL_LAYOUT,
+    ));
+  }
+
+  private claudeTerminalLaunchLocation(layout: ClaudeTerminalLayout): vscode.TerminalOptions['location'] {
+    if (layout === 'panel') { return vscode.TerminalLocation.Panel; }
+    if (layout === 'editorTabs') { return vscode.TerminalLocation.Editor; }
+    const parent = selectClaudeEditorSplitParent(
+      vscode.window.activeTerminal,
+      vscode.window.terminals,
+      this.launchedClaudeTerminals,
+    );
+    return parent ? { parentTerminal: parent } : vscode.TerminalLocation.Editor;
   }
 
   private standaloneProjectDetails(cwd?: string): { projectName?: string; projectPath?: string } {
@@ -3196,6 +3227,36 @@ class TerminalFirstRuntime implements vscode.Disposable {
     if (selected) { selected.terminal.show(false); }
   }
 
+  private async toggleWorkSessionTerminalSize(argument: unknown): Promise<void> {
+    const session = await this.resolveWorkSession(argument, true);
+    if (!session) { return; }
+    const selected = await this.chooseLiveTerminal(session.id);
+    if (!selected) {
+      void vscode.window.showInformationMessage(`${workSessionEventContext(session).label} has no live terminal to resize.`);
+      return;
+    }
+    selected.terminal.show(false);
+    const placement = claudeTerminalPlacement(selected.terminal);
+    const command = placement === 'editor'
+      ? 'workbench.action.toggleMaximizeEditorGroup'
+      : placement === 'panel'
+        ? 'workbench.action.toggleMaximizedPanel'
+        : undefined;
+    if (!command) {
+      void vscode.window.showInformationMessage(
+        'Kronos could not determine whether this attached terminal is in the editor or panel. Move it explicitly, then use the matching VS Code maximize command.',
+      );
+      return;
+    }
+    try {
+      await vscode.commands.executeCommand(command);
+    } catch (error: unknown) {
+      const detail = boundedOperationFailure(error, 'VS Code could not toggle the terminal size.').display;
+      this.log('Could not toggle the managed terminal size.', detail);
+      void vscode.window.showWarningMessage(detail);
+    }
+  }
+
   private async chooseOpenTerminalForSession(session: WorkSessionRecord): Promise<vscode.Terminal | undefined> {
     const terminals = vscode.window.terminals.filter(terminal => {
       const binding = this.operatorTerminals.bindingForTerminal(terminal);
@@ -3724,22 +3785,18 @@ class TerminalFirstRuntime implements vscode.Disposable {
       if (!project) { return; }
       selection = await this.chooseProjectInsertionTerminal(project, `${event.source} Attention event context`);
     } else {
+      let eventSession: WorkSessionRecord | null = null;
+      try { eventSession = readWorkSession(event.sessionId); } catch { eventSession = null; }
       const ticketKey = stringProperty(argument, 'ticketKey') || event.subject?.ticketKey;
       if (ticketKey) {
-        let eventSession: WorkSessionRecord | null = null;
-        try { eventSession = readWorkSession(event.sessionId); } catch { eventSession = null; }
         selection = await this.chooseInsertionTerminal(
           ticketKey,
           eventSession?.status === 'active' ? eventSession.id : undefined,
         );
-      } else {
-        let eventSession: WorkSessionRecord | null = null;
-        try { eventSession = readWorkSession(event.sessionId); } catch { eventSession = null; }
-        if (eventSession?.status === 'active') {
-          const live = await this.chooseLiveTerminal(eventSession.id);
-          if (live) {
-            selection = { terminal: live.terminal, binding: live.binding, workSession: eventSession };
-          }
+      } else if (eventSession?.status === 'active') {
+        const live = await this.chooseLiveTerminal(eventSession.id);
+        if (live) {
+          selection = { terminal: live.terminal, binding: live.binding, workSession: eventSession };
         }
       }
     }
@@ -4495,6 +4552,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
 
   private handleClosedTerminal(terminal: vscode.Terminal): void {
     this.closedTerminals.add(terminal);
+    this.launchedClaudeTerminals.delete(terminal);
     const binding = this.operatorTerminals.detachTerminal(terminal);
     if (!binding) { return; }
     try {
