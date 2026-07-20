@@ -60,6 +60,19 @@ test('local evidence search enforces independent source budgets and a 2000-entry
   });
 });
 
+test('local evidence search stops oversized per-session collections at each independent budget', () => {
+  const oversized = session({
+    id: 'session-oversized-sources',
+    ticketKeys: Array.from({ length: 301 }, (_, index) => `LIMIT-${index + 1}`),
+    providerBindings: Array.from({ length: 401 }, (_, index) => providerBinding(`provider-limit-${index}`)),
+    artifacts: Array.from({ length: 401 }, (_, index) => artifact(`artifact-limit-${index}`)),
+  });
+  const index = buildLocalEvidenceSearchIndex({ projects: [], sessions: [oversized], events: [] });
+  assert.equal(index.filter(entry => entry.kind === 'ticket').length, 300);
+  assert.equal(index.filter(entry => entry.kind === 'provider').length, 400);
+  assert.equal(index.filter(entry => entry.kind === 'artifact').length, 400);
+});
+
 test('local evidence search strips controls and bounds every visible field', () => {
   const index = buildLocalEvidenceSearchIndex({
     projects: [project(`Project\n${'x'.repeat(500)}`, `branch\u0000${'y'.repeat(800)}`)],

@@ -79,6 +79,11 @@ test('coverage policy discovers the npm test graph and fails closed on missing o
   assert.ok(testFiles.includes('scripts/run-conditional-unit-tests.js'));
   assert.ok(testFiles.includes('scripts/run-unit-tests.js'));
   assert.equal(testFiles.length, new Set(testFiles).size);
+  assert.deepEqual(
+    coveragePolicy.COVERAGE_THRESHOLDS,
+    { lines: 95, branches: 95, functions: 95 },
+    'global runtime coverage must not regress below 95% for code, conditionals, or functions',
+  );
   for (const coreProviderFile of [
     'gitlabRestClient.js',
     'jenkinsRestClient.js',
@@ -94,6 +99,11 @@ test('coverage policy discovers the npm test graph and fails closed on missing o
     coveragePolicy.CRITICAL_FILE_THRESHOLDS['jiraRestClient.js'],
     { lines: 79.5, branches: 78.5, functions: 90 },
     'Jira core-read gains must remain protected by the coverage policy',
+  );
+  assert.deepEqual(
+    coveragePolicy.CRITICAL_FILE_THRESHOLDS['boundedHttpTransport.js'],
+    { lines: 100, branches: 100, functions: 100 },
+    'the shared provider transport boundary must retain complete direct coverage',
   );
   assert.deepEqual(
     coveragePolicy.CRITICAL_FILE_THRESHOLDS['jiraContextStore.js'],
@@ -500,6 +510,13 @@ test('Projects tree covers empty, clean, changed, unavailable, action, and faile
   const warnings = warning.mock.calls.map(call => call.arguments[0]).join(' ');
   assert.equal(warnings.includes(secret), false);
   assert.match(warnings, /REDACTED/);
+
+  const defaultEmptyProvider = new ProjectTreeProvider();
+  assert.equal((await defaultEmptyProvider.getChildren())[0].contextValue, 'registered_project_empty');
+  defaultEmptyProvider.dispose();
+  const defaultRuntimeProvider = new ProjectTreeProvider(() => state);
+  assert.equal((await defaultRuntimeProvider.getChildren()).filter(item => item.projectName).length, 3);
+  defaultRuntimeProvider.dispose();
 });
 
 function requiredPipelineDigest(snapshot) {

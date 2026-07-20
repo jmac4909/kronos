@@ -201,6 +201,49 @@ test('provider diagnostics retain current live failures and partial reads until 
   assert.deepEqual(recovered, []);
 });
 
+test('provider diagnostics bound malformed timestamps, empty Jira failures, counts, and event ties', () => {
+  const tied = id => ({
+    schemaVersion: 1,
+    id,
+    at: 'not-a-timestamp',
+    sessionId: `session-${id}`,
+    type: 'provider.transition',
+    source: 'gitlab',
+    summary: 'Bounded diagnostic fixture.',
+    subject: { kind: 'merge-request', id },
+    metadata: {
+      transitionKind: 'provider_read_partial',
+      readState: 'partial',
+      readReason: 'bounded_read_incomplete',
+      readComponents: 'none',
+    },
+  });
+  const diagnostics = currentProviderReadDiagnostics([tied('a'), tied('b')], {
+    phase: 'partial',
+    completedAt: 'invalid',
+    startedAt: 'also-invalid',
+    retainedFromPrevious: -7,
+    warningCount: Number.NaN,
+  });
+  const jira = diagnostics.find(item => item.provider === 'jira');
+  const gitlab = diagnostics.find(item => item.provider === 'gitlab');
+  assert.equal(jira.observedAt, undefined);
+  assert.match(jira.detail, /0 warnings.*0 earlier tickets remain/);
+  assert.equal(gitlab.observedAt, undefined);
+  assert.equal(gitlab.problemCount, 2);
+  assert.match(gitlab.detail, /Missing: some provider details/);
+
+  const emptyFailure = currentProviderReadDiagnostics([], {
+    phase: 'error',
+    completedAt: '2026-07-20T12:00:00.000Z',
+    detail: 7,
+    retainedFromPrevious: 0,
+    warningCount: 0,
+  })[0];
+  assert.equal(emptyFailure.detail, 'Jira ticket refresh failed safely.');
+  assert.equal(emptyFailure.observedAt, '2026-07-20T12:00:00.000Z');
+});
+
 function session(monitoring) {
   return { status: 'active', monitoring: { enabled: true, ...monitoring } };
 }

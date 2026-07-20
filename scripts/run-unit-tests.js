@@ -37,6 +37,7 @@ const { createOperatorTerminalRegistry } = require('../out/services/operatorTerm
 const claudeTerminalLauncher = require('../out/services/claudeTerminalLauncher.js');
 const workSessions = require('../out/services/workSessionStore.js');
 const projectMonitoringStore = require('../out/services/projectMonitoringStore.js');
+const promptLibraryArtifactStore = require('../out/services/promptLibraryArtifactStore.js');
 const workSessionLifecycle = require('../out/services/workSessionLifecycle.js');
 const pipelineTransitions = require('../out/services/pipelineTransitions.js');
 const mergeRequestTransitions = require('../out/services/gitlabMergeRequestTransitions.js');
@@ -341,6 +342,48 @@ test('GitLab and CI context pairs share immutable publication and reject incompl
   }
 });
 
+test('GitLab artifact ingress rejects malformed envelopes, mismatched identities, and oversized evidence', () => {
+  const base = gitlabMergeRequestContext.normalizeGitLabMergeRequestContext('JIRA-188', 188, {
+    fetchedAt: '2026-07-20T12:00:00.000Z',
+    mr: { iid: 188, title: 'Artifact ingress matrix', state: 'opened' },
+    notes: [], discussions: [], diffs: [], pipelines: [], jobs: [], completeness: {},
+  });
+  const options = { kronosDir: path.join(tempRoot, 'gitlab-artifact-ingress') };
+  for (const value of [null, undefined, 'context']) {
+    assert.throws(
+      () => gitlabContextStore.writeGitLabContextArtifacts(value, options),
+      /normalized context object/i,
+    );
+  }
+  assert.throws(
+    () => gitlabContextStore.writeGitLabContextArtifacts({ ...base, schemaVersion: 2 }, options),
+    /unsupported schema or source/i,
+  );
+  assert.throws(
+    () => gitlabContextStore.writeGitLabContextArtifacts({ ...base, source: 'other' }, options),
+    /unsupported schema or source/i,
+  );
+  assert.throws(
+    () => gitlabContextStore.writeGitLabContextArtifacts({ ...base, ticketKey: 'bad' }, options),
+    /ticket key/i,
+  );
+  assert.throws(
+    () => gitlabContextStore.writeGitLabContextArtifacts({ ...base, iid: 0 }, options),
+    /positive safe integer/i,
+  );
+  assert.throws(
+    () => gitlabContextStore.writeGitLabContextArtifacts({ ...base, iid: 189 }, options),
+    /does not match/i,
+  );
+  assert.throws(
+    () => gitlabContextStore.writeGitLabContextArtifacts({
+      ...base,
+      oversizedFixture: 'x'.repeat((12 * 1024 * 1024) + 1),
+    }, options),
+    /artifact safety limit/i,
+  );
+});
+
 test('CI artifacts distinguish complete, partial, mixed-success, unavailable, and truncated provider evidence', () => {
   const completeJenkins = {
     completeness: { complete: true, warnings: [] },
@@ -397,6 +440,69 @@ test('CI artifacts distinguish complete, partial, mixed-success, unavailable, an
   assert.equal(truncated.completeness.complete, false);
   assert.match(truncated.completeness.warnings.at(-1), /truncated at Kronos safety limits/);
   assert.equal(truncated.jenkins.build.status.length, 32 * 1024);
+});
+
+test('CI context sanitization covers primitive, collection, depth, identity, and artifact bounds', () => {
+  const deep = {};
+  let cursor = deep;
+  for (let index = 0; index < 30; index += 1) {
+    cursor.next = {};
+    cursor = cursor.next;
+  }
+  const oversizedArray = Array.from({ length: 2_501 }, (_, index) => index);
+  const oversizedObject = Object.fromEntries(
+    Array.from({ length: 2_501 }, (_, index) => [`field${index}`, index]),
+  );
+  const context = ciContextStore.buildProjectCiContext('  Application   API  ', {
+    jenkins: {
+      completeness: { complete: true, warnings: [' repeated warning ', 'repeated warning'] },
+      primitives: {
+        nothing: null,
+        enabled: true,
+        finite: 7,
+        infinite: Number.POSITIVE_INFINITY,
+        secret: 'Authorization: Bearer fixture-secret-token',
+        control: 'safe\u0000text\u0001',
+        unsupported: Symbol('fixture'),
+      },
+      password: 'must not survive',
+      deep,
+      oversizedArray,
+      oversizedObject,
+    },
+    warnings: [' repeated warning ', '', 'Authorization: Bearer top-level-secret'],
+  });
+  assert.equal(context.projectName, 'Application API');
+  assert.equal(context.jenkins.primitives.infinite, null);
+  assert.equal(context.jenkins.primitives.unsupported, null);
+  assert.equal(context.jenkins.password, '[REDACTED]');
+  assert.doesNotMatch(context.jenkins.primitives.secret, /fixture-secret-token/);
+  assert.equal(context.jenkins.primitives.control, 'safetext');
+  assert.equal(context.jenkins.oversizedArray.length, 2_500);
+  assert.equal(Object.keys(context.jenkins.oversizedObject).length, 2_500);
+  assert.match(JSON.stringify(context.jenkins.deep), /Truncated by Kronos depth safety limit/);
+  assert.match(context.completeness.warnings.join(' '), /truncated at Kronos safety limits/i);
+  assert.equal(context.completeness.warnings.filter(warning => warning === 'repeated warning').length, 1);
+  assert.doesNotMatch(context.completeness.warnings.join(' '), /top-level-secret/);
+  assert.match(ciContextStore.renderCiContextPrompt(context, '{"fixture":true}\n'), /"fixture":true/);
+  assert.match(ciContextStore.ciProjectContextDirectory('Application API'), /^PROJECT-[A-F0-9]{24}$/);
+
+  for (const ticketKey of ['', 'bad', 'ABC-0']) {
+    assert.throws(() => ciContextStore.buildCiContext(ticketKey, {}), /ticket key/i);
+  }
+  for (const projectName of ['', 'x'.repeat(201), 'line\nbreak']) {
+    assert.throws(() => ciContextStore.buildProjectCiContext(projectName, {}), /project name/i);
+  }
+  const oversizedContext = {
+    ...ciContextStore.buildCiContext('JIRA-189', {}),
+    oversizedFixture: 'x'.repeat((12 * 1024 * 1024) + 1),
+  };
+  assert.throws(
+    () => ciContextStore.writeCiContextArtifacts(oversizedContext, {
+      kronosDir: path.join(tempRoot, 'oversized-ci-artifact'),
+    }),
+    /artifact safety limit/i,
+  );
 });
 
 test('Attention stream identity is stable by project, provider, resource, logical subject, and facet', () => {
@@ -503,6 +609,74 @@ test('Attention stream identity is stable by project, provider, resource, logica
     stream(detachedTwo, 'jenkins', 'build', '2', 'jenkins_recovered'),
     'sessions without a project retain independent Attention scope',
   );
+
+  const sparseEvent = { sessionId: 'sparse-session', source: 'jira' };
+  assert.match(providerTransitionStreams.providerTransitionStreamKey(sparseEvent, undefined), /^provider-stream-[a-f0-9]{48}$/);
+  assert.equal(providerTransitionStreams.providerTransitionProjectResourceKey(sparseEvent, undefined), undefined);
+  assert.notEqual(
+    providerTransitionStreams.providerTransitionStreamKey({
+      sessionId: 'sparse-session', source: 'gitlab', subject: { kind: 'provider-read', id: '' },
+      metadata: { transitionKind: 'provider_read_failed', mergeRequestIid: '' },
+    }, undefined),
+    providerTransitionStreams.providerTransitionStreamKey(sparseEvent, undefined),
+  );
+
+  const bindingSession = {
+    id: 'binding-session',
+    projectName: 'Application',
+    providerBindings: [
+      { provider: 'jira', resource: 'ticket', subjectId: 'APP-1', attachedAt: '2026-07-20T09:00:00.000Z' },
+      { provider: 'sonar', resource: 'branch', subjectId: 'app:ignored', projectId: 'app', attachedAt: '2026-07-20T09:01:00.000Z' },
+      { provider: 'sonar', resource: 'quality-gate', subjectId: 'app:main', projectId: 'app', attachedAt: '2026-07-20T09:02:00.000Z' },
+      { provider: 'sonar', resource: 'quality-gate', subjectId: 'fallback-subject', attachedAt: '2026-07-20T09:03:00.000Z' },
+      { provider: 'gitlab', resource: 'merge-request', subjectId: '77', attachedAt: '2026-07-20T09:04:00.000Z' },
+      { provider: 'gitlab', resource: 'merge-request', subjectId: '77', projectId: 'group/older', attachedAt: '2026-07-20T09:05:00.000Z' },
+      { provider: 'gitlab', resource: 'merge-request', subjectId: '77', projectId: 'group/newer', attachedAt: '2026-07-20T09:06:00.000Z' },
+      { provider: 'jenkins', resource: 'job', subjectId: 'app', projectId: 'job/older', attachedAt: '2026-07-20T09:07:00.000Z' },
+      { provider: 'jenkins', resource: 'build', subjectId: '8', projectId: 'job/newer', attachedAt: '2026-07-20T09:08:00.000Z' },
+    ],
+  };
+  const qualityWithoutMetadata = {
+    sessionId: bindingSession.id, source: 'sonar', subject: { kind: 'quality-gate', id: 'fallback-subject' },
+  };
+  assert.match(providerTransitionStreams.providerTransitionStreamKey(qualityWithoutMetadata, bindingSession), /^provider-stream-/);
+  assert.match(providerTransitionStreams.providerTransitionProjectResourceKey(qualityWithoutMetadata, bindingSession), /^provider-resource-/);
+  assert.match(providerTransitionStreams.providerTransitionProjectResourceKey({
+    sessionId: bindingSession.id, source: 'sonar', subject: { kind: 'provider-read', id: 'sonar' },
+    metadata: { transitionKind: 'provider_read_failed', projectKey: 'app' },
+  }, bindingSession), /^provider-resource-/);
+  assert.match(providerTransitionStreams.providerTransitionProjectResourceKey({
+    sessionId: bindingSession.id, source: 'gitlab', subject: { kind: 'merge-request', id: '77' },
+  }, bindingSession), /^provider-resource-/);
+  assert.match(providerTransitionStreams.providerTransitionProjectResourceKey({
+    sessionId: bindingSession.id, source: 'jenkins', subject: { kind: 'build', id: '8' },
+  }, bindingSession), /^provider-resource-/);
+
+  const streamEdges = [
+    { sessionId: 'edge', source: 'gitlab', subject: { kind: 'provider-read', id: 'gitlab' }, metadata: { transitionKind: 'provider_read_failed', mergeRequestIid: 0 } },
+    { sessionId: 'edge', source: 'gitlab', subject: { kind: 'pipeline', id: '91' }, metadata: { transitionKind: 'pipeline_failed' } },
+    { sessionId: 'edge', source: 'gitlab', subject: { kind: 'merge-request', id: '' }, metadata: {} },
+    { sessionId: 'edge', source: 'sonar', subject: { kind: 'quality-gate', id: 'subject-only' }, metadata: { projectKey: 'app' } },
+    { sessionId: 'edge', source: 'sonar', subject: { kind: 'quality-gate', id: 'subject-only' }, metadata: { branch: 'feature' } },
+    { sessionId: 'edge', source: 'sonar', metadata: {} },
+    { sessionId: 'edge', source: 'operator', subject: { kind: 'custom', id: '' }, metadata: {} },
+  ];
+  for (const edge of streamEdges) {
+    assert.match(providerTransitionStreams.providerTransitionStreamKey(edge, undefined), /^provider-stream-/);
+  }
+  const noBindings = { ...bindingSession, providerBindings: [] };
+  assert.equal(providerTransitionStreams.providerTransitionProjectResourceKey({
+    sessionId: 'edge', source: 'gitlab', subject: { kind: 'pipeline', id: '9' }, metadata: {},
+  }, noBindings), undefined);
+  assert.equal(providerTransitionStreams.providerTransitionProjectResourceKey({
+    sessionId: 'edge', source: 'jenkins', subject: { kind: 'provider-read', id: 'jenkins' }, metadata: { transitionKind: 'provider_read_failed' },
+  }, noBindings), undefined);
+  assert.equal(providerTransitionStreams.providerTransitionProjectResourceKey({
+    sessionId: 'edge', source: 'sonar', subject: { kind: 'provider-read', id: 'sonar' }, metadata: { transitionKind: 'provider_read_failed' },
+  }, noBindings), undefined);
+  assert.equal(providerTransitionStreams.providerTransitionProjectResourceKey({
+    sessionId: 'edge', source: 'jira', subject: { kind: 'provider-read', id: 'jira' }, metadata: { transitionKind: 'provider_read_failed' },
+  }, noBindings), undefined);
 });
 
 test('all provider evidence paths share the complete credential redaction vocabulary', () => {
@@ -1502,8 +1676,66 @@ test('local monitoring blockers transition once, recover once, and retain audit 
     title: 'Local monitoring blocker fixture',
     projectName: 'Application',
   });
+  const malformedHistorySession = workSessions.createOrGetWorkSessionByTicket({
+    ticketKey: 'JIRA-910',
+    title: 'Local monitoring history fallback fixture',
+    projectName: 'Application',
+  });
   const monitor = new managedProviderMonitor.ManagedProviderMonitor({ state: () => stateStore.emptyWorkCatalog() });
   try {
+    assert.equal(
+      managedProviderMonitor.appendLocalMonitoringAttentionTransition(session, false),
+      null,
+      'a newly healthy owner does not invent a recovery transition',
+    );
+    monitorEventStore.appendMonitorEvent({
+      id: 'local-monitoring-malformed-history',
+      at: '2026-07-20T10:00:00.000Z',
+      sessionId: malformedHistorySession.id,
+      type: 'provider.transition',
+      source: 'kronos',
+      summary: 'Legacy local monitoring history without generation metadata.',
+      subject: {
+        kind: 'monitoring-blocker',
+        id: 'provider-configuration',
+        project: 'Application',
+        ticketKey: 'JIRA-910',
+      },
+      after: { state: 'monitoring/legacy' },
+      metadata: { transitionKind: 'legacy_monitoring_state' },
+    });
+    const normalizedLegacyBlocker = managedProviderMonitor.appendLocalMonitoringAttentionTransition(
+      malformedHistorySession,
+      true,
+    );
+    assert.equal(normalizedLegacyBlocker.metadata.monitoringGeneration, 1);
+    monitorEventStore.appendMonitorEvent({
+      id: 'local-monitoring-max-generation',
+      at: '2026-07-20T10:01:00.000Z',
+      sessionId: malformedHistorySession.id,
+      type: 'provider.transition',
+      source: 'kronos',
+      summary: 'Saturated local monitoring generation fixture.',
+      subject: {
+        kind: 'monitoring-blocker',
+        id: 'provider-configuration',
+        project: 'Application',
+        ticketKey: 'JIRA-910',
+      },
+      after: { state: 'monitoring/ready', fingerprint: 'ready-saturated' },
+      metadata: {
+        transitionKind: 'monitoring_recovered',
+        monitoringState: 'ready',
+        monitoringGeneration: Number.MAX_SAFE_INTEGER,
+      },
+    });
+    const saturatedBlocker = managedProviderMonitor.appendLocalMonitoringAttentionTransition(
+      malformedHistorySession,
+      true,
+    );
+    assert.equal(saturatedBlocker.metadata.monitoringGeneration, Number.MAX_SAFE_INTEGER);
+    workSessions.removeWorkSession(malformedHistorySession.id);
+
     const firstPoll = await monitor.poll();
     assert.equal(firstPoll.unconfigured, 1);
     assert.equal(firstPoll.transitions, 1);
@@ -1538,6 +1770,9 @@ test('local monitoring blockers transition once, recover once, and retain audit 
   } finally {
     monitor.dispose();
     workSessions.removeWorkSession(session.id);
+    if (workSessions.readWorkSession(malformedHistorySession.id)) {
+      workSessions.removeWorkSession(malformedHistorySession.id);
+    }
   }
 });
 
@@ -1919,6 +2154,469 @@ test('managed Jenkins polling retains branch-build targets for Attention choices
   } finally {
     jenkinsRestModule.jenkinsRestClient.buildContext = originalBuildContext;
     workSessions.removeWorkSession(session.id);
+  }
+});
+
+test('managed provider monitor isolates discovery, partial reads, lease loss, and provider failures', async () => {
+  const state = stateStore.emptyWorkCatalog();
+  state.projects.EdgeMatrix = {
+    config: {
+      gitlab_project_path: 'team/edge-matrix',
+      jenkins_url: 'https://jenkins.example/job/edge-matrix',
+      sonar_project_key: 'team:edge-matrix',
+      sonar_branch: 'feature/edge-matrix',
+    },
+  };
+  state.tickets['JIRA-950'] = fixtureTicket({
+    summary: 'Managed monitor edge matrix',
+    linked_local_project: 'EdgeMatrix',
+  });
+  const session = workSessions.createOrGetWorkSessionByTicket({
+    ticketKey: 'JIRA-950',
+    title: 'Managed monitor edge matrix',
+    projectName: 'EdgeMatrix',
+  });
+  const unconfigured = workSessions.createOrGetWorkSessionByTicket({
+    ticketKey: 'JIRA-951',
+    title: 'Unconfigured GitLab identity',
+  });
+  const original = {
+    discover: gitLabRestModule.gitlabRestClient.discoverOpenMergeRequest,
+    gitlab: gitLabRestModule.gitlabRestClient.mergeRequestMonitor,
+    jenkins: jenkinsRestModule.jenkinsRestClient.buildContext,
+    sonar: sonarRestModule.sonarRestClient.branchContext,
+  };
+  const logs = [];
+  const notices = [];
+  const monitor = new managedProviderMonitor.ManagedProviderMonitor({
+    state: () => state,
+    log: (message, detail) => logs.push([message, detail]),
+    notify: notice => notices.push(notice),
+  });
+  const completeGitLabSnapshot = overrides => ({
+    mr: {
+      iid: 950,
+      state: 'opened',
+      title: 'JIRA-950 Managed monitor edge matrix',
+      source_branch: 'feature/edge-matrix',
+      target_branch: 'main',
+      web_url: 'https://gitlab.example/team/edge-matrix/-/merge_requests/950',
+      detailed_merge_status: 'mergeable',
+      reviewers: [],
+      updated_at: '2026-07-20T10:00:00.000Z',
+    },
+    notes: [],
+    discussions: [],
+    approvals: { approved: false, approvals_required: 1, approvals_left: 1, approved_by: [] },
+    pipelines: [],
+    jobs: [],
+    fetchedAt: '2026-07-20T10:00:00.000Z',
+    responseBytes: 128,
+    completeness: {
+      notesComplete: true,
+      discussionsComplete: true,
+      approvalsComplete: true,
+      pipelinesComplete: true,
+      jobsComplete: true,
+      testsComplete: true,
+      warnings: [],
+    },
+    ...overrides,
+  });
+  const jenkinsContext = completeness => ({
+    schemaVersion: 1,
+    provider: 'jenkins',
+    fetchedAt: '2026-07-20T10:01:00.000Z',
+    jobOrBuildUrl: 'https://jenkins.example/job/edge-matrix',
+    build: {
+      number: 95,
+      status: 'FAILURE',
+      building: false,
+      url: 'https://jenkins.example/job/edge-matrix/95/',
+      causes: [],
+      artifacts: [],
+      changes: [],
+    },
+    completeness,
+  });
+  const sonarContext = completeness => ({
+    schemaVersion: 1,
+    provider: 'sonarqube',
+    fetchedAt: '2026-07-20T10:02:00.000Z',
+    projectKey: 'team:edge-matrix',
+    branch: 'feature/edge-matrix',
+    dashboardUrl: 'https://sonar.example/dashboard?id=team%3Aedge-matrix&branch=feature%2Fedge-matrix',
+    qualityGate: { status: 'ERROR', conditions: [] },
+    measures: [],
+    issues: [],
+    completeness,
+  });
+  try {
+    gitLabRestModule.gitlabRestClient.discoverOpenMergeRequest = async () => ({
+      strategy: 'project-open', candidateCount: 2, ambiguous: true,
+    });
+    assert.deepEqual(await monitor.pollGitLab(session, () => true), {
+      polled: 0, transitions: 0, failures: 0, skipped: 1, unconfigured: 0, leaseUnavailable: false,
+    });
+    gitLabRestModule.gitlabRestClient.discoverOpenMergeRequest = async () => {
+      throw new Error('Synthetic discovery transport failure.');
+    };
+    assert.equal((await monitor.pollGitLab(session, () => true)).failures, 1);
+
+    state.tickets['JIRA-951'] = fixtureTicket({
+      summary: 'Unconfigured GitLab identity',
+      mr: { iid: 951, state: 'opened', review_status: 'pending_review' },
+    });
+    const noIdentity = await monitor.pollGitLab(unconfigured, () => true);
+    assert.deepEqual(
+      { skipped: noIdentity.skipped, unconfigured: noIdentity.unconfigured },
+      { skipped: 1, unconfigured: 1 },
+    );
+
+    gitLabRestModule.gitlabRestClient.discoverOpenMergeRequest = async () => ({
+      match: {
+        iid: 950,
+        title: 'JIRA-950 Managed monitor edge matrix',
+        sourceBranch: 'feature/edge-matrix',
+        targetBranch: 'main',
+        webUrl: 'https://gitlab.example/team/edge-matrix/-/merge_requests/950',
+      },
+      strategy: 'ticket-key',
+      candidateCount: 1,
+      ambiguous: false,
+    });
+    gitLabRestModule.gitlabRestClient.mergeRequestMonitor = async () => {
+      throw Object.assign(new Error('Synthetic GitLab timeout.'), { code: 'ETIMEDOUT' });
+    };
+    const failed = await monitor.pollGitLab(session, () => true);
+    assert.equal(failed.failures, 1);
+    assert.equal(failed.transitions, 1);
+    assert.equal((await monitor.pollGitLab(session, () => true)).transitions, 0);
+
+    gitLabRestModule.gitlabRestClient.mergeRequestMonitor = async () => completeGitLabSnapshot({
+      completeness: {
+        notesComplete: false,
+        discussionsComplete: false,
+        approvalsComplete: false,
+        pipelinesComplete: false,
+        jobsComplete: false,
+        testsComplete: false,
+        warnings: ['Synthetic bounded GitLab partial read.'],
+      },
+    });
+    const lostGitLab = await monitor.pollGitLab(session, () => false);
+    assert.equal(lostGitLab.leaseUnavailable, true);
+    assert.equal(lostGitLab.polled, 1);
+    const partial = await monitor.pollGitLab(session, () => true);
+    assert.equal(partial.polled, 1);
+    assert.equal(partial.skipped, 1);
+
+    assert.deepEqual(await monitor.pollCi(unconfigured, () => true), {
+      polled: 0, transitions: 0, failures: 0, skipped: 0, unconfigured: 0, leaseUnavailable: false,
+    });
+    jenkinsRestModule.jenkinsRestClient.buildContext = async () => {
+      throw new Error('Synthetic Jenkins authentication failure.');
+    };
+    sonarRestModule.sonarRestClient.branchContext = async () => {
+      throw new Error('Synthetic SonarQube rate limit failure.');
+    };
+    const bothFailed = await monitor.pollCi(session, () => true);
+    assert.equal(bothFailed.failures, 2);
+    assert.equal(bothFailed.polled, 0);
+    assert.ok(bothFailed.transitions >= 2);
+
+    jenkinsRestModule.jenkinsRestClient.buildContext = async () => jenkinsContext({
+      complete: false,
+      buildComplete: true,
+      testReport: 'partial',
+      stages: 'unavailable',
+      configuration: 'partial',
+      logsIncluded: false,
+      warnings: ['Synthetic Jenkins partial evidence.'],
+    });
+    sonarRestModule.sonarRestClient.branchContext = async () => sonarContext({
+      complete: false,
+      qualityGateComplete: true,
+      measuresComplete: false,
+      issuesComplete: false,
+      issuesFetched: 0,
+      issuePages: 0,
+      issueResponseBytes: 0,
+      warnings: ['Synthetic SonarQube partial evidence.'],
+    });
+    const lostCi = await monitor.pollCi(session, () => false);
+    assert.equal(lostCi.leaseUnavailable, true);
+    assert.equal(lostCi.polled, 1, 'lease loss after Jenkins prevents the SonarQube read');
+    const partialCi = await monitor.pollCi(session, () => true);
+    assert.equal(partialCi.polled, 2);
+    assert.ok(partialCi.transitions >= 2);
+    assert.ok(notices.some(notice => notice.severity === 'warning'));
+    assert.ok(logs.some(([message]) => /partial|failed/i.test(message)));
+  } finally {
+    monitor.dispose();
+    gitLabRestModule.gitlabRestClient.discoverOpenMergeRequest = original.discover;
+    gitLabRestModule.gitlabRestClient.mergeRequestMonitor = original.gitlab;
+    jenkinsRestModule.jenkinsRestClient.buildContext = original.jenkins;
+    sonarRestModule.sonarRestClient.branchContext = original.sonar;
+    for (const current of [session, unconfigured]) {
+      if (workSessions.readWorkSession(current.id)) { workSessions.removeWorkSession(current.id); }
+    }
+  }
+});
+
+test('managed provider monitor lease and project-owner faults stay isolated from provider work', async () => {
+  const originalAcquire = managedMonitorLease.tryAcquireManagedMonitorLease;
+  const originalEnsureProjectMonitor = projectMonitoringStore.ensureProjectMonitoringRecord;
+  const logs = [];
+  const lease = overrides => ({
+    acquired: true,
+    ownerId: 'fixture-owner',
+    renew: () => true,
+    release: () => true,
+    ...overrides,
+  });
+  try {
+    managedMonitorLease.tryAcquireManagedMonitorLease = () => ({ acquired: false });
+    const contended = await new managedProviderMonitor.ManagedProviderMonitor({
+      state: () => stateStore.emptyWorkCatalog(), log: (...entry) => logs.push(entry),
+    }).poll();
+    assert.equal(contended.leaseUnavailable, true);
+    assert.equal(contended.leaseReason, 'contended');
+
+    let disposedReleaseCount = 0;
+    managedMonitorLease.tryAcquireManagedMonitorLease = () => lease({
+      release: () => { disposedReleaseCount += 1; return true; },
+    });
+    const disposed = new managedProviderMonitor.ManagedProviderMonitor({ state: () => stateStore.emptyWorkCatalog() });
+    disposed.dispose();
+    assert.deepEqual(await disposed.pollOnce(), {
+      polled: 0, transitions: 0, failures: 0, skipped: 0, unconfigured: 0, leaseUnavailable: false,
+    });
+    assert.equal(disposedReleaseCount, 1);
+
+    const leaseSession = workSessions.createOrGetWorkSessionByTicket({
+      ticketKey: 'LEASE-1', title: 'Lease renewal edge fixture',
+    });
+    managedMonitorLease.tryAcquireManagedMonitorLease = () => lease({ renew: () => false, release: () => false });
+    const renewalMonitor = new managedProviderMonitor.ManagedProviderMonitor({
+      state: () => stateStore.emptyWorkCatalog(), log: (...entry) => logs.push(entry),
+    });
+    const renewal = await renewalMonitor.pollOnce();
+    assert.equal(renewal.leaseUnavailable, true);
+    assert.equal(renewal.leaseReason, 'renewal-failed');
+    assert.ok(logs.some(([message]) => /lease could not be renewed/i.test(message)));
+    assert.ok(logs.some(([message]) => /no longer owned at release/i.test(message)));
+    renewalMonitor.dispose();
+    workSessions.removeWorkSession(leaseSession.id);
+
+    const projectRoot = path.join(tempRoot, 'monitor-project-owner-fault');
+    fs.mkdirSync(path.join(projectRoot, '.git'), { recursive: true });
+    const projectState = stateStore.emptyWorkCatalog();
+    projectState.projects.LeaseEdge = {
+      path: projectRoot,
+      config: { jenkins_url: 'https://jenkins.example/job/lease-edge' },
+    };
+    managedMonitorLease.tryAcquireManagedMonitorLease = () => lease({});
+    projectMonitoringStore.ensureProjectMonitoringRecord = () => { throw new Error('Synthetic project owner write failure.'); };
+    const ownerFailure = await new managedProviderMonitor.ManagedProviderMonitor({
+      state: () => projectState, log: (...entry) => logs.push(entry),
+    }).pollOnce();
+    assert.equal(ownerFailure.failures, 1);
+    assert.ok(logs.some(([message]) => /prepare automatic provider polling/i.test(message)));
+  } finally {
+    managedMonitorLease.tryAcquireManagedMonitorLease = originalAcquire;
+    projectMonitoringStore.ensureProjectMonitoringRecord = originalEnsureProjectMonitor;
+  }
+});
+
+test('managed provider monitor isolates persistence, baseline, read-status, and concurrent poll faults', async () => {
+  const gitLabPipelineStore = require('../out/services/gitlabPipelineMonitorStore.js');
+  const ciMonitorStore = require('../out/services/ciMonitorStore.js');
+  const emptyPoll = {
+    polled: 0, transitions: 0, failures: 0, skipped: 0, unconfigured: 0, leaseUnavailable: false,
+  };
+
+  let releasePendingPoll;
+  const concurrent = new managedProviderMonitor.ManagedProviderMonitor({ state: () => stateStore.emptyWorkCatalog() });
+  concurrent.pollOnce = () => new Promise(resolve => { releasePendingPoll = () => resolve(emptyPoll); });
+  const firstPending = concurrent.poll();
+  assert.equal(concurrent.poll(), firstPending, 'one runtime shares its in-flight provider poll');
+  releasePendingPoll();
+  assert.deepEqual(await firstPending, emptyPoll);
+  concurrent.dispose();
+  assert.deepEqual(await concurrent.poll(), emptyPoll);
+
+  const state = stateStore.emptyWorkCatalog();
+  state.projects.MonitorFault = {
+    config: {
+      gitlab_project_path: 'team/monitor-fault',
+      jenkins_url: 'https://jenkins.example/job/monitor-fault',
+      sonar_project_key: 'team:monitor-fault',
+      sonar_branch: 'feature/monitor-fault',
+    },
+  };
+  state.tickets['FAULT-1'] = fixtureTicket({
+    summary: 'Managed monitor persistence fault matrix',
+    linked_local_project: 'MonitorFault',
+    mr: {
+      iid: 501,
+      state: 'opened',
+      review_status: 'pending_review',
+      url: 'https://gitlab.example/team/monitor-fault/-/merge_requests/501',
+    },
+  });
+  const session = workSessions.createOrGetWorkSessionByTicket({
+    ticketKey: 'FAULT-1', title: 'Managed monitor persistence fault matrix', projectName: 'MonitorFault',
+  });
+  const logs = [];
+  const monitor = new managedProviderMonitor.ManagedProviderMonitor({
+    state: () => state,
+    log: (...entry) => logs.push(entry),
+  });
+  const gitLabSnapshot = () => ({
+    mr: {
+      iid: 501,
+      state: 'opened',
+      title: 'FAULT-1 persistence fault matrix',
+      source_branch: 'feature/monitor-fault',
+      target_branch: 'main',
+      web_url: 'https://gitlab.example/team/monitor-fault/-/merge_requests/501',
+      detailed_merge_status: 'mergeable',
+      reviewers: [],
+      updated_at: '2026-07-20T12:00:00.000Z',
+    },
+    notes: [],
+    discussions: [],
+    approvals: { approved: false, approvals_required: 1, approvals_left: 1, approved_by: [] },
+    pipelines: [{ id: 701, status: 'failed', web_url: 'https://gitlab.example/pipelines/701' }],
+    jobs: [{ id: 801, pipeline_id: 701, name: 'test', status: 'failed', allow_failure: false }],
+    fetchedAt: '2026-07-20T12:00:00.000Z',
+    responseBytes: 256,
+    completeness: {
+      notesComplete: true,
+      discussionsComplete: true,
+      approvalsComplete: true,
+      pipelinesComplete: true,
+      jobsComplete: true,
+      testsComplete: true,
+      warnings: [],
+    },
+  });
+  const jenkinsContext = {
+    schemaVersion: 1,
+    provider: 'jenkins',
+    fetchedAt: '2026-07-20T12:01:00.000Z',
+    jobOrBuildUrl: 'https://jenkins.example/job/monitor-fault',
+    build: {
+      number: 44,
+      status: 'SUCCESS',
+      building: false,
+      url: 'https://jenkins.example/job/monitor-fault/44/',
+      causes: [], artifacts: [], changes: [],
+    },
+    completeness: {
+      complete: true,
+      buildComplete: true,
+      testReport: 'complete',
+      stages: 'complete',
+      configuration: 'complete',
+      logsIncluded: false,
+      warnings: [],
+    },
+  };
+  const sonarContext = {
+    schemaVersion: 1,
+    provider: 'sonarqube',
+    fetchedAt: '2026-07-20T12:01:01.000Z',
+    projectKey: 'team:monitor-fault',
+    branch: 'feature/monitor-fault',
+    dashboardUrl: 'https://sonar.example/dashboard?id=team%3Amonitor-fault&branch=feature%2Fmonitor-fault',
+    qualityGate: { status: 'OK', conditions: [] },
+    measures: [], issues: [],
+    completeness: {
+      complete: true,
+      qualityGateComplete: true,
+      measuresComplete: true,
+      issuesComplete: true,
+      issuesFetched: 0,
+      issuePages: 1,
+      issueResponseBytes: 2,
+      issuesTotal: 0,
+      warnings: [],
+    },
+  };
+  const originals = {
+    addBinding: workSessions.addWorkSessionProviderBinding,
+    gitlab: gitLabRestModule.gitlabRestClient.mergeRequestMonitor,
+    jenkins: jenkinsRestModule.jenkinsRestClient.buildContext,
+    sonar: sonarRestModule.sonarRestClient.branchContext,
+    readMr: mergeRequestMonitorStore.readGitLabMergeRequestMonitorSnapshot,
+    readMrStatus: mergeRequestMonitorStore.readGitLabMergeRequestReadStatus,
+    writeMr: mergeRequestMonitorStore.writeGitLabMergeRequestMonitorSnapshot,
+    writeMrStatus: mergeRequestMonitorStore.writeGitLabMergeRequestReadStatus,
+    readPipeline: gitLabPipelineStore.readGitLabPipelineMonitorSnapshot,
+    writePipeline: gitLabPipelineStore.writeGitLabPipelineMonitorSnapshot,
+    readCi: ciMonitorStore.readCiMonitorSnapshot,
+    writeCi: ciMonitorStore.writeCiMonitorSnapshot,
+    listEvents: monitorEventStore.listMonitorEvents,
+  };
+  try {
+    workSessions.addWorkSessionProviderBinding = () => { throw new Error('Synthetic provider binding persistence failure.'); };
+    assert.equal((await monitor.pollGitLab(session, () => true)).failures, 1);
+    assert.equal((await monitor.pollCi(session, () => true)).failures, 1);
+    workSessions.addWorkSessionProviderBinding = originals.addBinding;
+
+    gitLabRestModule.gitlabRestClient.mergeRequestMonitor = async () => { throw new Error('Synthetic GitLab transport failure.'); };
+    assert.equal((await monitor.pollGitLab(session, () => false)).leaseUnavailable, true);
+    mergeRequestMonitorStore.writeGitLabMergeRequestReadStatus = () => { throw new Error('Synthetic GitLab read-status write failure.'); };
+    assert.equal((await monitor.pollGitLab(session, () => true)).failures, 1);
+    mergeRequestMonitorStore.writeGitLabMergeRequestReadStatus = originals.writeMrStatus;
+
+    gitLabRestModule.gitlabRestClient.mergeRequestMonitor = async () => gitLabSnapshot();
+    mergeRequestMonitorStore.readGitLabMergeRequestMonitorSnapshot = () => { throw new Error('Synthetic MR baseline read failure.'); };
+    mergeRequestMonitorStore.readGitLabMergeRequestReadStatus = () => { throw new Error('Synthetic MR read-status baseline failure.'); };
+    mergeRequestMonitorStore.writeGitLabMergeRequestMonitorSnapshot = () => { throw new Error('Synthetic MR state write failure.'); };
+    gitLabPipelineStore.readGitLabPipelineMonitorSnapshot = () => { throw new Error('Synthetic pipeline baseline read failure.'); };
+    const brokenMrState = await monitor.pollGitLab(session, () => true);
+    assert.ok(brokenMrState.failures >= 1);
+    mergeRequestMonitorStore.readGitLabMergeRequestMonitorSnapshot = originals.readMr;
+    mergeRequestMonitorStore.readGitLabMergeRequestReadStatus = originals.readMrStatus;
+    mergeRequestMonitorStore.writeGitLabMergeRequestMonitorSnapshot = originals.writeMr;
+
+    gitLabPipelineStore.writeGitLabPipelineMonitorSnapshot = () => { throw new Error('Synthetic pipeline state write failure.'); };
+    const brokenPipelineState = await monitor.pollGitLab(session, () => true);
+    assert.ok(brokenPipelineState.failures >= 1);
+    gitLabPipelineStore.readGitLabPipelineMonitorSnapshot = originals.readPipeline;
+    gitLabPipelineStore.writeGitLabPipelineMonitorSnapshot = originals.writePipeline;
+
+    jenkinsRestModule.jenkinsRestClient.buildContext = async () => jenkinsContext;
+    sonarRestModule.sonarRestClient.branchContext = async () => sonarContext;
+    monitorEventStore.listMonitorEvents = () => { throw new Error('Synthetic provider read-status ledger failure.'); };
+    const brokenReadStatus = await monitor.pollCi(session, () => true);
+    assert.ok(brokenReadStatus.failures >= 2);
+    monitorEventStore.listMonitorEvents = originals.listEvents;
+
+    ciMonitorStore.readCiMonitorSnapshot = () => { throw new Error('Synthetic CI baseline read failure.'); };
+    ciMonitorStore.writeCiMonitorSnapshot = () => { throw new Error('Synthetic CI state write failure.'); };
+    const brokenCiState = await monitor.pollCi(session, () => true);
+    assert.ok(brokenCiState.failures >= 1);
+    assert.ok(logs.some(([message]) => /baseline|read-status|state|binding/i.test(message)));
+  } finally {
+    monitor.dispose();
+    workSessions.addWorkSessionProviderBinding = originals.addBinding;
+    gitLabRestModule.gitlabRestClient.mergeRequestMonitor = originals.gitlab;
+    jenkinsRestModule.jenkinsRestClient.buildContext = originals.jenkins;
+    sonarRestModule.sonarRestClient.branchContext = originals.sonar;
+    mergeRequestMonitorStore.readGitLabMergeRequestMonitorSnapshot = originals.readMr;
+    mergeRequestMonitorStore.readGitLabMergeRequestReadStatus = originals.readMrStatus;
+    mergeRequestMonitorStore.writeGitLabMergeRequestMonitorSnapshot = originals.writeMr;
+    mergeRequestMonitorStore.writeGitLabMergeRequestReadStatus = originals.writeMrStatus;
+    gitLabPipelineStore.readGitLabPipelineMonitorSnapshot = originals.readPipeline;
+    gitLabPipelineStore.writeGitLabPipelineMonitorSnapshot = originals.writePipeline;
+    ciMonitorStore.readCiMonitorSnapshot = originals.readCi;
+    ciMonitorStore.writeCiMonitorSnapshot = originals.writeCi;
+    monitorEventStore.listMonitorEvents = originals.listEvents;
+    if (workSessions.readWorkSession(session.id)) { workSessions.removeWorkSession(session.id); }
   }
 });
 
@@ -2373,6 +3071,87 @@ test('legacy rollback preserves a newly claimed legacy path and keeps staging ou
   }
 });
 
+test('legacy migration bounds source, staging, and cross-device publication filesystem faults', () => {
+  const originalLstatSync = fs.lstatSync;
+  const originalRenameSync = fs.renameSync;
+  const originalCopyFileSync = fs.copyFileSync;
+  const originalDateNow = Date.now;
+  try {
+    const sourceHome = path.join(tempRoot, 'legacy-source-stat-failure-home');
+    const sourceLegacy = path.join(sourceHome, '.claude', 'kronos');
+    const sourceTarget = path.join(sourceHome, '.kronos');
+    fs.mkdirSync(sourceLegacy, { recursive: true });
+    fs.lstatSync = target => {
+      if (path.resolve(target) === path.resolve(sourceLegacy)) {
+        const error = new Error('synthetic source stat refusal');
+        error.code = 'EACCES';
+        throw error;
+      }
+      return originalLstatSync(target);
+    };
+    assert.deepEqual(legacyStateMigration.migrateLegacyKronosState(sourceTarget, sourceLegacy), {
+      migrated: false,
+      reason: 'failed',
+    });
+    fs.lstatSync = originalLstatSync;
+
+    const stagingHome = path.join(tempRoot, 'legacy-staging-stat-failure-home');
+    const stagingLegacy = path.join(stagingHome, '.claude', 'kronos');
+    const stagingTarget = path.join(stagingHome, '.kronos');
+    const fixedNow = 1_726_100_000_000;
+    const stagingPath = `${stagingTarget}.migration-${process.pid}-${fixedNow}`;
+    fs.mkdirSync(stagingLegacy, { recursive: true });
+    Date.now = () => fixedNow;
+    fs.lstatSync = target => {
+      if (path.resolve(target) === path.resolve(stagingPath)) {
+        const error = new Error('synthetic staging stat refusal');
+        error.code = 'EACCES';
+        throw error;
+      }
+      return originalLstatSync(target);
+    };
+    assert.deepEqual(legacyStateMigration.migrateLegacyKronosState(stagingTarget, stagingLegacy), {
+      migrated: false,
+      reason: 'failed',
+    });
+    fs.lstatSync = originalLstatSync;
+    Date.now = originalDateNow;
+
+    const raceHome = path.join(tempRoot, 'legacy-copy-publication-race-home');
+    const raceLegacy = path.join(raceHome, '.claude', 'kronos');
+    const raceTarget = path.join(raceHome, '.kronos');
+    fs.mkdirSync(raceLegacy, { recursive: true });
+    fs.writeFileSync(path.join(raceLegacy, 'work.json'), 'legacy copy\n');
+    fs.renameSync = (source, destination) => {
+      if (path.resolve(source) === path.resolve(raceLegacy)) {
+        const error = new Error('synthetic cross-device copy path');
+        error.code = 'EXDEV';
+        throw error;
+      }
+      return originalRenameSync(source, destination);
+    };
+    fs.copyFileSync = (...args) => {
+      const result = originalCopyFileSync(...args);
+      if (!fs.existsSync(raceTarget)) {
+        fs.mkdirSync(raceTarget, { mode: 0o700 });
+        fs.writeFileSync(path.join(raceTarget, 'owner.txt'), 'new owner\n');
+      }
+      return result;
+    };
+    assert.deepEqual(legacyStateMigration.migrateLegacyKronosState(raceTarget, raceLegacy), {
+      migrated: false,
+      reason: 'target-exists',
+    });
+    assert.equal(fs.readFileSync(path.join(raceTarget, 'owner.txt'), 'utf8'), 'new owner\n');
+    assert.equal(fs.existsSync(raceLegacy), true);
+  } finally {
+    fs.lstatSync = originalLstatSync;
+    fs.renameSync = originalRenameSync;
+    fs.copyFileSync = originalCopyFileSync;
+    Date.now = originalDateNow;
+  }
+});
+
 test('Work catalog strips legacy automation fields and persists privately', () => {
   const normalized = stateStore.normalizeWorkCatalog({
     schemaVersion: 1,
@@ -2718,6 +3497,43 @@ test('Work data status distinguishes empty, loading, partial, stale, error, and 
   assert.match(failed.detail, /Showing 3 last-known tickets/);
   assert.equal(present({ loadIssueCount: 1 }).mode, 'partial');
   assert.equal(present({ ticketCount: 0, stateAvailable: false }).mode, 'error');
+});
+
+test('Work data presentation explains every singular, empty, malformed, and timestamp boundary', () => {
+  const refreshedAt = '2026-07-14T12:00:00.000Z';
+  const status = (ticketCount, overrides = {}) => workRefreshStatus.workDataPresentation({
+    ticketCount,
+    staleAfterMs: 60_000,
+    nowMs: Date.parse('2026-07-14T12:00:30.000Z'),
+    ...overrides,
+  });
+  assert.match(status(0, { refreshStatus: { phase: 'loading', retainedFromPrevious: 0, warningCount: 0 } }).detail, /Waiting for the first/);
+  assert.match(status(1, { refreshStatus: { phase: 'loading', retainedFromPrevious: 0, warningCount: 0 } }).detail, /1 last-known ticket until/);
+  assert.deepEqual(status(0, { stateAvailable: false }), {
+    mode: 'error', title: 'Jira refresh failed', detail: 'Kronos could not read Jira work metadata.', ticketCount: 0,
+  });
+  assert.match(status(0, {
+    refreshStatus: { phase: 'partial', retainedFromPrevious: 0, warningCount: 0 },
+  }).detail, /did not return a complete result/);
+  assert.match(status(1, {
+    refreshStatus: { phase: 'partial', retainedFromPrevious: 1, warningCount: 2 },
+  }).detail, /1 earlier ticket remains.*2 refresh warnings.*1 available ticket\./);
+  assert.equal(status(0, { loadIssueCount: 2 }).title, 'Jira data unavailable');
+  assert.equal(status(0, { refreshedAt }).title, 'No Jira tickets returned');
+  assert.match(status(0, { refreshedAt }).detail, /last complete Jira refresh/);
+  assert.match(status(1).detail, /^1 ticket available\.$/);
+  assert.equal(status(1, {
+    refreshedAt,
+    nowMs: Date.parse('2026-07-14T12:02:00.001Z'),
+  }).detail, 'Showing 1 ticket from the last successful refresh. Refresh Jira before relying on current status.');
+  for (const staleAfterMs of [undefined, 0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+    assert.notEqual(status(1, { refreshedAt, staleAfterMs }).mode, 'stale');
+  }
+  assert.equal(status(1, { refreshedAt: 'invalid', nowMs: Number.NaN }).refreshedAt, undefined);
+  assert.equal(status(Number.NaN).ticketCount, 0);
+  assert.equal(status(-1).ticketCount, 0);
+  assert.equal(status(2.9).ticketCount, 2);
+  assert.equal(status(Number.MAX_VALUE).ticketCount, Number.MAX_SAFE_INTEGER);
 });
 
 test('Jira Work search retains completed pages and reports a later read failure', async () => {
@@ -3701,6 +4517,97 @@ test('ticket workspace exposes explicit Claude launch, project branch, terminal 
   assert.doesNotMatch(locallyConnected, /Provider Bindings|content-addressed artifact/);
 });
 
+test('ticket workspace presentation stays useful across sparse, plural, and bounded provider evidence', () => {
+  const bindings = Array.from({ length: 14 }, (_, index) => ({
+    id: `provider-binding-${index}`,
+    provider: index === 12 ? 'sonar' : index === 13 ? 'jenkins' : 'jira',
+    resource: index === 12 ? '' : index === 13 ? 'merge_request' : 'ticket',
+    subjectId: index === 12 ? '' : index === 13 ? 'not-numeric' : `EDGE-${index}`,
+    attachedAt: `2026-07-13T12:${String(index).padStart(2, '0')}:00.000Z`,
+  }));
+  bindings.push({
+    id: 'unsafe-merge-request-binding',
+    provider: 'gitlab',
+    resource: 'merge-request',
+    subjectId: '999999999999999999999999999999',
+    projectId: '',
+    attachedAt: '2026-07-13T13:00:00.000Z',
+  });
+  const workSession = {
+    schemaVersion: 1,
+    id: 'session-edge-workspace',
+    kind: 'ticket',
+    ticketKey: 'EDGE-1',
+    ticketKeys: ['EDGE-1'],
+    title: 'Sparse workspace fixture',
+    status: 'active',
+    createdAt: '2026-07-13T12:00:00.000Z',
+    updatedAt: '2026-07-13T12:00:00.000Z',
+    terminals: [
+      { id: 'terminal-1', name: 'One', status: 'attached', attachedAt: '2026-07-13T12:00:00.000Z' },
+      { id: 'terminal-2', name: 'Two', status: 'attached', attachedAt: '2026-07-13T12:00:00.000Z' },
+    ],
+    providerBindings: bindings,
+    artifacts: [
+      {
+        id: 'artifact-one', kind: 'local-git', label: '', promptPath: '/private/artifact-one.md',
+        fetchedAt: 'invalid', recordedAt: 'invalid', complete: false, warnings: ['bounded warning'],
+      },
+      {
+        id: 'artifact-two', kind: 'ci', label: 'CI evidence', promptPath: '/private/artifact-two.md',
+        fetchedAt: '2026-07-13T12:00:00.000Z', recordedAt: '2026-07-13T12:05:00.000Z', complete: true, warnings: [],
+      },
+    ],
+    monitoring: {
+      enabled: true,
+      lastState: 'blocked',
+      lastFailureCount: 2,
+      lastSkippedCount: 3,
+      lastSummary: 'Some provider reads need attention.',
+    },
+  };
+  const html = buildTicketWorkspaceHtml({
+    ticketKey: ' \n ',
+    ticket: fixtureTicket({
+      summary: '', type: '', priority: '', jira_status: '', jira_project_key: '',
+      updated: undefined, description: '', labels: [], attachments: undefined,
+      jira_url: 'ftp://unsafe.example/EDGE-1',
+      mr: { iid: 9, state: '', review_status: '', url: '', title: '', source_branch: '', target_branch: '' },
+      build: { number: 7, status: '' },
+    }),
+    nonce: 'edge-workspace-nonce',
+    actionScriptUri: 'vscode-resource://kronos/media/kronos-action-panel.js',
+    workSession,
+    liveTerminalCount: -1,
+    localProject: { name: 'Fallback project', displayName: '', path: '/workspace/fallback', branch: '', detached: false, available: true },
+    providerPolling: [{ provider: 'GitLab', state: 'setup', detail: 'Configuration needed.' }],
+  });
+  assert.match(html, /Ticket — Untitled ticket/);
+  assert.match(html, />Unknown<\/strong>/);
+  assert.match(html, />Fallback project<\/strong>/);
+  assert.match(html, />Unavailable<\/strong>/);
+  assert.match(html, />2 connected<\/span>/);
+  assert.match(html, />Problems<\/span><strong>2<\/strong>/);
+  assert.match(html, />Skipped sources<\/span><strong>3<\/strong>/);
+  assert.match(html, /2 saved items/);
+  assert.match(html, /<strong>local-git<\/strong>/);
+  assert.match(html, /Showing 12 of 15 connected sources/);
+  assert.match(html, /Merge request not-numeric/);
+  assert.match(html, /Setup needed/);
+  assert.doesNotMatch(html, /href="ftp:/);
+  assert.doesNotMatch(html, /999999999999999999999999999999<\/button>/);
+
+  const unsafeBindingHtml = buildTicketWorkspaceHtml({
+    ticketKey: 'EDGE-2',
+    ticket: fixtureTicket({ mr: null }),
+    nonce: 'unsafe-binding-workspace-nonce',
+    actionScriptUri: 'vscode-resource://kronos/media/kronos-action-panel.js',
+    workSession: { ...workSession, ticketKey: 'EDGE-2', ticketKeys: ['EDGE-2'], artifacts: [] },
+  });
+  assert.match(unsafeBindingHtml, />Review merge request<\/button>/);
+  assert.doesNotMatch(unsafeBindingHtml, /Review merge request !999999999999999999999999999999/);
+});
+
 test('ticket workspace messages retain only the allowed command and ticket', () => {
   const message = normalizeActionPanelMessage({
     command: 'insertJiraContext',
@@ -4034,6 +4941,41 @@ test('project Git evidence reads only the bounded VS Code Git model', async () =
       staged: false,
     });
 
+    repository.state.HEAD = undefined;
+    repository.state.refs = undefined;
+    repository.state.indexChanges = undefined;
+    repository.state.workingTreeChanges = undefined;
+    repository.state.untrackedChanges = undefined;
+    repository.state.mergeChanges = undefined;
+    const sparseEvidence = await gitEvidence.readProjectGitEvidence(projectPath, { includeDiff: false });
+    assert.equal(sparseEvidence.available, true);
+    assert.equal(sparseEvidence.changeCount, 0);
+    assert.deepEqual(sparseEvidence.changes, []);
+    assert.equal(sparseEvidence.ahead, undefined);
+    assert.equal(sparseEvidence.behind, undefined);
+
+    const unavailableMarkdown = gitEvidence.renderProjectGitEvidence('', {
+      projectPath,
+      detached: false,
+      branches: [],
+      branchCount: 0,
+      branchesTruncated: true,
+      changes: [],
+      changeCount: 0,
+      diff: '',
+      diffTruncated: false,
+      available: false,
+      warning: 'Fixture Git model unavailable.',
+    });
+    assert.match(unavailableMarkdown, /Git working tree — Project/);
+    assert.match(unavailableMarkdown, /Branch: unavailable/);
+    assert.match(unavailableMarkdown, /Upstream: unavailable/);
+    assert.match(unavailableMarkdown, /Branches: 0 \(list truncated\)/);
+    assert.match(unavailableMarkdown, /Sync: 0 ahead \/ 0 behind/);
+    assert.match(unavailableMarkdown, /Git status unavailable/);
+    assert.match(unavailableMarkdown, /Clean working tree or no readable changes/);
+    assert.match(unavailableMarkdown, /No textual diff was returned/);
+
     repositoryVisible = false;
     const unopenedEvidence = await gitEvidence.readProjectGitEvidence(projectPath, { includeDiff: false });
     assert.equal(unopenedEvidence.available, false);
@@ -4071,6 +5013,7 @@ test('extension activation registers the bounded surface and explicit launch com
   const createdTerminals = [];
   const configurationValues = new Map();
   const configurationUpdates = [];
+  let configurationUpdateError;
   const createdWebviewPanels = [];
   const executedCommands = [];
   let executeCommandHandler;
@@ -4089,6 +5032,7 @@ test('extension activation registers the bounded surface and explicit launch com
   let lastSinglePickOptions;
   const openedExternalUrls = [];
   let warningMessageResult;
+  let informationMessageResult;
   let lastWarningMessage;
   const warningMessages = [];
   const warningMessageCalls = [];
@@ -4144,7 +5088,12 @@ test('extension activation registers the bounded surface and explicit launch com
         warningMessageResult = undefined;
         return Promise.resolve(result);
       },
-      showInformationMessage(message) { informationMessages.push(message); return Promise.resolve(undefined); },
+      showInformationMessage(message) {
+        informationMessages.push(message);
+        const result = informationMessageResult;
+        informationMessageResult = undefined;
+        return Promise.resolve(result);
+      },
       showErrorMessage(message) { errorMessages.push(message); return Promise.resolve(undefined); },
       showTextDocument(document, options) {
         shownTextDocuments.push({ document, options });
@@ -4234,6 +5183,11 @@ test('extension activation registers the bounded surface and explicit launch com
         return {
           get(key, fallback) { return configurationValues.has(key) ? configurationValues.get(key) : fallback; },
           async update(key, value, target) {
+            if (configurationUpdateError) {
+              const error = configurationUpdateError;
+              configurationUpdateError = undefined;
+              throw error;
+            }
             configurationValues.set(key, value);
             configurationUpdates.push({ key, value, target });
           },
@@ -4348,6 +5302,8 @@ test('extension activation registers the bounded surface and explicit launch com
     fs.mkdirSync(path.join(tempRoot, '.git'), { recursive: true });
     fs.writeFileSync(path.join(tempRoot, '.git', 'HEAD'), 'ref: refs/heads/feature/runtime-project\n');
     require(modulePath).activate(context);
+    const runtime = context.subscriptions.at(-1);
+    assert.ok(runtime, 'activation must retain one disposable runtime');
     assert.deepEqual(registeredViews, ['kronosWork', 'kronosSessions', 'kronosProjects', 'kronosAttention']);
     const manifest = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
     const expectedCommands = manifest.contributes.commands.map(command => command.command);
@@ -4356,6 +5312,1116 @@ test('extension activation registers the bounded surface and explicit launch com
       manifest.contributes.commands.find(command => command.command === 'kronos.settings').title,
       'Kronos: Settings',
     );
+    await t.test('runtime helper seams cover configuration, target resolution, launch planning, and safe local navigation', async () => {
+      assert.equal(runtime.effectiveState().tickets['JIRA-123'].summary, 'Terminal-first fixture');
+      assert.equal(runtime.effectiveTicket('JIRA-123', runtime.state.state.tickets['JIRA-123']), runtime.state.state.tickets['JIRA-123']);
+      assert.deepEqual(runtime.providerPollingViewStatus(
+        'JIRA-222', runtime.state.state.tickets['JIRA-222'], null,
+      ).map(status => status.state), ['setup', 'setup', 'setup']);
+      assert.equal(runtime.readProjectMonitor('missing-project'), null);
+      assert.equal(runtime.readProjectMonitorById('missing-record'), null);
+
+      configurationValues.set('refreshIntervalSec', 1);
+      configurationValues.set('completedJiraStatuses', [' Done ', 'DONE', 'Closed\nValue', null]);
+      configurationValues.set('projectDiscoveryRoots', ['/one', '/one', '/two']);
+      configurationValues.set('projectDiscoveryDepth', 99);
+      configurationValues.set('projectDiscoveryLimit', -1);
+      configurationValues.set('promptLibraryLocalPaths', ['/prompts']);
+      configurationValues.set('promptLibraryRemoteManifestUrls', ['https://example.test/prompts.json']);
+      assert.equal(runtime.configurationIntervalMs('refreshIntervalSec', 300), 15_000);
+      assert.equal(runtime.jiraWorkStaleAfterMs(), 5 * 60_000);
+      assert.deepEqual(runtime.completedJiraStatuses(), ['done', 'done', 'closed value']);
+      assert.deepEqual(runtime.projectDiscoverySettings(), { roots: ['/one', '/two'], depth: 5, limit: 1 });
+      assert.deepEqual(runtime.promptLibrarySettings(), {
+        localPaths: ['/prompts'], remoteUrls: ['https://example.test/prompts.json'],
+      });
+      configurationValues.set('completedJiraStatuses', 'invalid');
+      assert.deepEqual(runtime.completedJiraStatuses(), []);
+      for (const key of [
+        'refreshIntervalSec', 'completedJiraStatuses', 'projectDiscoveryRoots', 'projectDiscoveryDepth',
+        'projectDiscoveryLimit', 'promptLibraryLocalPaths', 'promptLibraryRemoteManifestUrls',
+      ]) configurationValues.delete(key);
+
+      assert.deepEqual(runtime.projectRegistrations([
+        { name: 'fixture', path: tempRoot },
+        { name: 'fixture', path: path.join(tempRoot, 'other') },
+      ]).map(project => project.name), ['fixture']);
+      assert.equal(runtime.resolveRegisteredProject({ projectName: 'fixture', projectPath: '/stale' }).projectPath, tempRoot);
+      assert.equal(runtime.resolveRegisteredProject({ target: { projectPath: tempRoot } }).projectName, 'fixture');
+      assert.equal(runtime.resolveRegisteredProject({ projectName: 'missing' }), undefined);
+      assert.match(warningMessages.at(-1), /stale or no longer registered/i);
+
+      assert.equal(await runtime.resolveTicketKey('jira-123', false), 'JIRA-123');
+      assert.equal(await runtime.resolveTicketKey({ ticket: 'missing-1' }, false), undefined);
+      singlePickHandler = items => items.find(item => item.ticketKey === 'JIRA-222');
+      assert.equal(await runtime.resolveTicketKey({}, true), 'JIRA-222');
+      singlePickHandler = () => undefined;
+      assert.equal(await runtime.resolveTicketKey({}, true), undefined);
+
+      assert.deepEqual(runtime.standaloneProjectDetails(tempRoot), { projectName: 'fixture', projectPath: tempRoot });
+      assert.deepEqual(runtime.standaloneProjectDetails('/outside/project'), { projectPath: '/outside/project' });
+      assert.equal(runtime.terminalWorkingDirectory({}), undefined);
+      assert.equal(runtime.terminalWorkingDirectory({ shellIntegration: { cwd: { fsPath: '/terminal/cwd' } } }), '/terminal/cwd');
+
+      const defaultPlan = runtime.claudeLaunchPlan();
+      assert.equal(defaultPlan.validated.cwd, tempRoot);
+      assert.match(defaultPlan.validated.name, /Claude/);
+      configurationValues.set('claudeLaunchCwd', 'home');
+      assert.equal(runtime.claudeLaunchPlan().validated.cwd, os.homedir());
+      configurationValues.set('claudeLaunchCwd', 'workspace');
+      assert.equal(runtime.claudeLaunchPlan().validated.cwd, tempRoot);
+      const projectPlan = runtime.claudeLaunchPlan(undefined, undefined, {
+        projectName: 'fixture', projectPath: tempRoot, displayName: 'Fixture',
+      });
+      assert.equal(projectPlan.validated.cwd, tempRoot);
+      configurationValues.delete('claudeLaunchCwd');
+      for (const layout of ['panel', 'editorTabs', 'editorSplit']) {
+        configurationValues.set('claudeTerminalLayout', layout);
+        const normalized = runtime.claudeTerminalLayout();
+        assert.ok(['panel', 'editorTabs', 'editorSplit'].includes(normalized));
+      }
+      configurationValues.set('claudeTerminalLayout', 'invalid');
+      assert.throws(() => runtime.claudeTerminalLayout(), /layout must be one of/);
+      configurationValues.delete('claudeTerminalLayout');
+      assert.equal(runtime.claudeTerminalLaunchLocation('panel'), vscode.TerminalLocation.Panel);
+      assert.equal(runtime.claudeTerminalLaunchLocation('editorTabs'), vscode.TerminalLocation.Editor);
+      assert.equal(runtime.claudeTerminalLaunchLocation('editorSplit'), vscode.TerminalLocation.Editor);
+
+      assert.equal(await runtime.confirmClaudePermissionMode('manual'), true);
+      warningMessageResult = undefined;
+      assert.equal(await runtime.confirmClaudePermissionMode('bypassPermissions'), false);
+      warningMessageResult = 'Open Claude Settings';
+      assert.equal(await runtime.confirmClaudePermissionMode('bypassPermissions'), false);
+      assert.deepEqual(executedCommands.at(-1), [
+        'workbench.action.openSettings', '@ext:jmacke01.kronos claude',
+      ]);
+      warningMessageResult = 'Launch Without Permission Prompts';
+      assert.equal(await runtime.confirmClaudePermissionMode('bypassPermissions'), true);
+      vscode.workspace.isTrusted = false;
+      assert.equal(runtime.canLaunchClaude(), false);
+      vscode.workspace.isTrusted = true;
+      assert.equal(runtime.canLaunchClaude(), true);
+
+      const standalone = workSessions.createStandaloneWorkSession({ title: 'Resolution fixture' });
+      assert.equal((await runtime.resolveWorkSession(standalone.id, false)).id, standalone.id);
+      assert.equal(await runtime.resolveWorkSession('missing-session', false), undefined);
+      assert.throws(() => runtime.requireTicketSession(standalone), /ticket-linked work session/);
+      assert.deepEqual(runtime.promptTemplateContext(standalone), {
+        sessionTitle: 'Resolution fixture', jiraKeys: [],
+      });
+      singlePickHandler = items => items.find(item => item.session?.id === standalone.id);
+      assert.equal((await runtime.resolveWorkSession({}, true)).id, standalone.id);
+      workSessions.removeWorkSession(standalone.id);
+
+      assert.equal(runtime.projectConfig(runtime.state.state.tickets['JIRA-123']).gitlab_project_path, 'group/fixture');
+      assert.equal(runtime.projectConfig(runtime.state.state.tickets['JIRA-222']), undefined);
+      assert.equal(runtime.currentTerminalContextAttachment({ sessionId: 'missing', bindingId: 'missing' }), undefined);
+      assert.doesNotThrow(() => runtime.appendTerminalDetachedEvent({ sessionId: 'missing', bindingId: 'missing' }, 'test'));
+      assert.doesNotThrow(() => runtime.handleClosedTerminal({ name: 'unmanaged' }));
+
+      const externalCount = openedExternalUrls.length;
+      await runtime.openHttpUrl('https://user:secret@example.test/path?q=1#hash');
+      assert.equal(openedExternalUrls.length, externalCount + 1);
+      assert.equal(openedExternalUrls.at(-1), 'https://example.test/path?q=1#hash');
+      await runtime.openHttpUrl('file:///private');
+      await runtime.openHttpUrl('not a url');
+      assert.equal(openedExternalUrls.length, externalCount + 1);
+      assert.match(warningMessages.at(-1), /invalid URL|Only HTTP/i);
+      await runtime.openLocalArtifact(path.join(tempRoot, 'artifact.txt'));
+      assert.equal(shownTextDocuments.at(-1).options.preview, true);
+      await runtime.runProgress('Successful fixture', async progress => progress.report({ message: 'done' }));
+      await runtime.runProgress('Failed fixture', async () => { throw new Error('synthetic progress failure'); });
+      assert.match(errorMessages.at(-1), /synthetic progress failure/);
+      assert.ok(runtime.operationsReadiness().length > 0);
+      assert.equal(runtime.activeProviderPollingSummary().sessions, 1);
+    });
+    await t.test('runtime command edge paths remain bounded when selections, terminals, and targets disappear', async () => {
+      const edgeSession = workSessions.createStandaloneWorkSession({ title: 'Runtime edge session' });
+      await runtime.openWorkSessionAudit('missing-session');
+      await runtime.focusWorkSessionTerminal('missing-session');
+      await runtime.toggleWorkSessionTerminalSize('missing-session');
+      await runtime.reattachFocusedTerminal('missing-session');
+      await runtime.detachManagedTerminal('missing-session');
+      await runtime.stopManagingSession('missing-session');
+      await runtime.removeManagedSession('missing-session');
+      await runtime.setMonitoring('missing-session', true);
+
+      await runtime.chooseTicketProject('MISSING-1');
+      await runtime.openTicketWorkspace('MISSING-1');
+      await runtime.openTicketWorkspace('JIRA-123');
+      const ticketPanel = runtime.ticketPanels.get('JIRA-123');
+      assert.ok(ticketPanel);
+      await runtime.openTicketWorkspace('JIRA-123');
+      assert.equal(ticketPanel.panel.revealCalls.length, 1);
+      ticketPanel.panel.dispose();
+
+      const originalLaunchClaudeSession = runtime.launchClaudeSession;
+      const originalWorkspaceName = vscode.workspace.name;
+      const originalWorkspaceFolders = vscode.workspace.workspaceFolders;
+      const launchInputs = [];
+      try {
+        runtime.launchClaudeSession = async input => { launchInputs.push(input); };
+        await runtime.newClaudeSession({ projectName: 'missing-project' });
+        assert.equal(launchInputs.length, 0);
+
+        vscode.workspace.isTrusted = false;
+        await runtime.newClaudeSession();
+        await runtime.startClaudeForTicket({ ticketKey: 'JIRA-123' });
+        assert.equal(launchInputs.length, 0);
+        vscode.workspace.isTrusted = true;
+        await runtime.startClaudeForTicket({ ticketKey: 'MISSING-1' });
+        assert.equal(launchInputs.length, 0);
+
+        vscode.workspace.name = undefined;
+        vscode.workspace.workspaceFolders = [{ name: 'Loose Workspace', uri: { fsPath: '/loose-workspace' } }];
+        assert.deepEqual(runtime.standaloneProjectDetails(), {
+          projectName: 'Loose Workspace', projectPath: '/loose-workspace',
+        });
+        await runtime.newClaudeSession();
+        assert.match(launchInputs.at(-1).title, /^Claude session ·/);
+      } finally {
+        runtime.launchClaudeSession = originalLaunchClaudeSession;
+        vscode.workspace.name = originalWorkspaceName;
+        vscode.workspace.workspaceFolders = originalWorkspaceFolders;
+        vscode.workspace.isTrusted = true;
+      }
+
+      const originalAttachWorkSessionTerminal = workSessions.attachWorkSessionTerminal;
+      try {
+        workSessions.attachWorkSessionTerminal = () => ({ ...edgeSession, terminals: [] });
+        await assert.rejects(
+          runtime.attachTerminal(edgeSession, {
+            name: 'Unpersisted terminal', processId: Promise.resolve(7001), exitStatus: undefined,
+          }),
+          /could not persist the terminal attachment/i,
+        );
+      } finally {
+        workSessions.attachWorkSessionTerminal = originalAttachWorkSessionTerminal;
+      }
+
+      const bindingSession = workSessions.createOrGetWorkSessionByTicket({
+        ticketKey: 'JIRA-123', title: 'Provider binding edge session', projectName: 'fixture', projectPath: tempRoot,
+      });
+      const fixtureConfig = runtime.state.state.projects.fixture.config;
+      const originalJenkinsUrl = fixtureConfig.jenkins_url;
+      const ticketBuild = runtime.state.state.tickets['JIRA-123'].build;
+      try {
+        fixtureConfig.jenkins_url = 'https://jenkins.example/job/fixture/';
+        runtime.state.state.tickets['JIRA-123'].build = {
+          number: 17, status: 'SUCCESS', url: 'https://jenkins.example/job/fixture/17/',
+        };
+        const bound = runtime.ensureProviderBindings(bindingSession, runtime.state.state.tickets['JIRA-123']);
+        assert.ok(bound.providerBindings.some(binding => binding.id === 'jenkins-job'));
+        assert.ok(bound.providerBindings.some(binding => binding.provider === 'jenkins' && binding.resource === 'build'));
+      } finally {
+        if (originalJenkinsUrl === undefined) delete fixtureConfig.jenkins_url;
+        else fixtureConfig.jenkins_url = originalJenkinsUrl;
+        runtime.state.state.tickets['JIRA-123'].build = ticketBuild;
+        workSessions.removeWorkSession(bindingSession.id);
+      }
+      await runtime.toggleWorkSessionTerminalSize(edgeSession.id);
+      assert.match(informationMessages.at(-1), /no live terminal to resize/i);
+
+      const originalTerminals = vscode.window.terminals;
+      const originalActiveTerminal = vscode.window.activeTerminal;
+      vscode.window.terminals = [];
+      vscode.window.activeTerminal = undefined;
+      try {
+        assert.equal(await runtime.chooseOpenTerminalForSession(edgeSession), undefined);
+        assert.match(warningMessages.at(-1), /no unclaimed open terminals/i);
+        await runtime.reattachFocusedTerminal(edgeSession.id);
+        assert.match(warningMessages.at(-1), /Focus the terminal/i);
+        await runtime.detachManagedTerminal(edgeSession.id);
+        assert.match(informationMessages.at(-1), /no live terminal attachment/i);
+
+        const first = { name: 'First open terminal' };
+        const second = { name: 'Second open terminal' };
+        vscode.window.terminals = [first, second];
+        singlePickHandler = () => undefined;
+        assert.equal(await runtime.chooseOpenTerminalForSession(edgeSession), undefined);
+        singlePickHandler = items => items[1];
+        assert.equal(await runtime.chooseOpenTerminalForSession(edgeSession), second);
+      } finally {
+        vscode.window.terminals = originalTerminals;
+        vscode.window.activeTerminal = originalActiveTerminal;
+      }
+
+      const insertionSession = workSessions.createStandaloneWorkSession({ title: 'Insertion selection edge session' });
+      const originalReadInsertionSession = workSessions.readWorkSession;
+      const originalFindTicketSession = workSessions.getWorkSessionForTicketContext;
+      const originalChooseLiveTerminal = runtime.chooseLiveTerminal;
+      const originalInsertionActiveTerminal = vscode.window.activeTerminal;
+      try {
+        workSessions.readWorkSession = () => { throw new Error('Fixture requested Session read failure.'); };
+        assert.equal(await runtime.chooseInsertionTerminal('JIRA-123', insertionSession.id), undefined);
+        workSessions.readWorkSession = originalReadInsertionSession;
+
+        const closedInsertionSession = workSessions.closeWorkSession(insertionSession.id);
+        assert.equal(await runtime.chooseInsertionTerminal('JIRA-123', closedInsertionSession.id), undefined);
+        workSessions.reopenWorkSession(insertionSession.id);
+
+        const selectedTerminal = {
+          name: 'Selected insertion terminal',
+          showCalls: [],
+          show(value) { this.showCalls.push(value); },
+        };
+        runtime.chooseLiveTerminal = async () => ({
+          terminal: selectedTerminal,
+          binding: { sessionId: insertionSession.id, bindingId: 'selected-insertion-binding' },
+        });
+        const selectedInsertion = await runtime.chooseInsertionTerminal('JIRA-123', insertionSession.id);
+        assert.equal(selectedInsertion.terminal, selectedTerminal);
+        assert.deepEqual(selectedTerminal.showCalls, [false]);
+
+        runtime.chooseLiveTerminal = async () => undefined;
+        assert.equal(await runtime.chooseInsertionTerminal('JIRA-123', insertionSession.id), undefined);
+        assert.match(warningMessages.at(-1), /Focus or reconnect/i);
+
+        vscode.window.activeTerminal = undefined;
+        workSessions.getWorkSessionForTicketContext = () => undefined;
+        assert.equal(await runtime.chooseInsertionTerminal('JIRA-123'), undefined);
+        assert.match(warningMessages.at(-1), /Connect a terminal/i);
+      } finally {
+        workSessions.readWorkSession = originalReadInsertionSession;
+        workSessions.getWorkSessionForTicketContext = originalFindTicketSession;
+        runtime.chooseLiveTerminal = originalChooseLiveTerminal;
+        vscode.window.activeTerminal = originalInsertionActiveTerminal;
+        workSessions.removeWorkSession(insertionSession.id);
+      }
+
+      const multiTerminalSession = workSessions.createStandaloneWorkSession({ title: 'Multiple terminal choice fixture' });
+      const firstAttached = { name: 'First attached choice' };
+      const secondAttached = { name: 'Second attached choice' };
+      runtime.operatorTerminals.attach(firstAttached, { sessionId: multiTerminalSession.id, bindingId: 'choice-one' });
+      runtime.operatorTerminals.attach(secondAttached, { sessionId: multiTerminalSession.id, bindingId: 'choice-two' });
+      const originalChoiceActiveTerminal = vscode.window.activeTerminal;
+      vscode.window.activeTerminal = undefined;
+      try {
+        singlePickHandler = () => undefined;
+        assert.equal(await runtime.chooseLiveTerminal(multiTerminalSession.id), undefined);
+        singlePickHandler = items => items[1];
+        assert.equal((await runtime.chooseLiveTerminal(multiTerminalSession.id)).terminal, secondAttached);
+      } finally {
+        vscode.window.activeTerminal = originalChoiceActiveTerminal;
+        runtime.operatorTerminals.detachSession(multiTerminalSession.id);
+        workSessions.removeWorkSession(multiTerminalSession.id);
+      }
+
+      warningMessageResult = undefined;
+      await runtime.stopManagingSession(edgeSession.id);
+      assert.equal(workSessions.readWorkSession(edgeSession.id).status, 'active');
+      await runtime.removeManagedSession(edgeSession.id);
+      assert.match(informationMessages.at(-1), /Stop tracking/i);
+      await runtime.setMonitoring(edgeSession.id, true);
+      assert.match(informationMessages.at(-1), /do not require a Jira ticket/i);
+
+      warningMessageResult = 'Stop Tracking';
+      await runtime.stopManagingSession(edgeSession.id);
+      warningMessageResult = undefined;
+      await runtime.removeManagedSession(edgeSession.id);
+      assert.ok(workSessions.readWorkSession(edgeSession.id));
+      warningMessageResult = 'Remove from Kronos';
+      await runtime.removeManagedSession(edgeSession.id);
+      assert.equal(workSessions.readWorkSession(edgeSession.id), null);
+
+      await runtime.acknowledgeAttention({});
+      assert.match(warningMessages.at(-1), /Select an Attention item/i);
+      await runtime.insertAttentionEventContext({});
+      assert.match(warningMessages.at(-1), /Right-click a supported Attention item/i);
+
+      await runtime.openProvider({});
+      assert.deepEqual(executedCommands.at(-1), ['kronos.doctor']);
+      runtime.openProvider({ projectName: 'fixture', projectPath: tempRoot });
+      await new Promise(resolve => setImmediate(resolve));
+      assert.ok(createdWebviewPanels.some(panel => panel.viewType === 'kronosProjectIntegrationSetup'));
+      singlePickHandler = () => undefined;
+      await runtime.openProvider({
+        providerChoices: [
+          { label: 'First', url: 'https://provider.example/first' },
+          { label: 'Second', url: 'https://provider.example/second' },
+        ],
+      });
+      singlePickHandler = items => items[1];
+      await runtime.openProvider({
+        providerChoices: [
+          { label: 'First', url: 'https://provider.example/first' },
+          { label: 'Second', url: 'https://provider.example/second' },
+        ],
+      });
+      assert.equal(openedExternalUrls.at(-1), 'https://provider.example/second');
+      assert.doesNotThrow(() => runtime.selectMonitoredSonarBranch({}, 'not a URL'));
+
+      const originalRuntimeMethods = {
+        resolveTicketKey: runtime.resolveTicketKey,
+        resolveWorkSession: runtime.resolveWorkSession,
+        resolveRegisteredProject: runtime.resolveRegisteredProject,
+        chooseInsertionTerminal: runtime.chooseInsertionTerminal,
+        chooseProjectInsertionTerminal: runtime.chooseProjectInsertionTerminal,
+        resolveGitLabInsertionTarget: runtime.resolveGitLabInsertionTarget,
+        resolveProjectGitLabInsertionTarget: runtime.resolveProjectGitLabInsertionTarget,
+        insertJiraContext: runtime.insertJiraContext,
+        discoverRegisteredProjectGitLabTarget: runtime.discoverRegisteredProjectGitLabTarget,
+      };
+      const ticket = runtime.state.state.tickets['JIRA-123'];
+      const originalTicketSource = ticket.source;
+      const edgeProject = { projectName: 'fixture', projectPath: tempRoot, displayName: 'Fixture' };
+      const terminalSelection = { terminal: { name: 'Edge terminal' } };
+      try {
+        runtime.resolveTicketKey = async () => undefined;
+        await runtime.insertJiraContext({});
+        runtime.resolveTicketKey = async () => 'MISSING-1';
+        await runtime.insertJiraContext({});
+        runtime.resolveTicketKey = async () => 'JIRA-123';
+        ticket.source = 'local';
+        await runtime.insertJiraContext({});
+        ticket.source = originalTicketSource;
+        runtime.chooseInsertionTerminal = async () => undefined;
+        await runtime.insertJiraContext({ workSessionId: 'missing-session' });
+
+        runtime.resolveWorkSession = async () => undefined;
+        await runtime.insertOtherTicket({});
+        runtime.resolveWorkSession = async () => ({ ...edgeSession, status: 'stopped' });
+        await runtime.insertOtherTicket({});
+        runtime.resolveWorkSession = async () => edgeSession;
+        runtime.resolveTicketKey = async () => undefined;
+        await runtime.insertOtherTicket({});
+
+        runtime.resolveRegisteredProject = () => undefined;
+        await runtime.insertGitLabContext({ projectName: 'missing' });
+        runtime.resolveRegisteredProject = () => edgeProject;
+        runtime.chooseProjectInsertionTerminal = async () => undefined;
+        await runtime.insertGitLabContext(edgeProject);
+        runtime.chooseProjectInsertionTerminal = async () => terminalSelection;
+        runtime.resolveProjectGitLabInsertionTarget = async () => undefined;
+        await runtime.insertGitLabContext(edgeProject);
+
+        runtime.resolveTicketKey = async () => undefined;
+        await runtime.insertGitLabContext({ ticketKey: 'missing' });
+        runtime.resolveTicketKey = async () => 'MISSING-1';
+        await runtime.insertGitLabContext({ ticketKey: 'missing' });
+        runtime.resolveTicketKey = async () => 'JIRA-123';
+        runtime.resolveGitLabInsertionTarget = async () => undefined;
+        await runtime.insertGitLabContext({ ticketKey: 'JIRA-123' });
+        runtime.resolveGitLabInsertionTarget = async () => ({ iid: 123, projectIdOrPath: 'group/fixture' });
+        runtime.chooseInsertionTerminal = async () => undefined;
+        await runtime.insertGitLabContext({ ticketKey: 'JIRA-123' });
+
+        runtime.resolveRegisteredProject = () => undefined;
+        await runtime.insertCiContext({ projectName: 'missing' });
+        runtime.resolveRegisteredProject = () => edgeProject;
+        runtime.chooseProjectInsertionTerminal = async () => undefined;
+        await runtime.insertCiContext(edgeProject);
+        runtime.chooseProjectInsertionTerminal = async () => terminalSelection;
+        await runtime.insertCiContext(edgeProject);
+        assert.match(warningMessages.at(-1), /no configured Jenkins URL or SonarQube/i);
+
+        runtime.resolveTicketKey = async () => undefined;
+        await runtime.insertCiContext({ ticketKey: 'missing' });
+        runtime.resolveTicketKey = async () => 'MISSING-1';
+        await runtime.insertCiContext({ ticketKey: 'missing' });
+        runtime.resolveTicketKey = async () => 'JIRA-222';
+        runtime.chooseInsertionTerminal = async () => undefined;
+        await runtime.insertCiContext({ ticketKey: 'JIRA-222' });
+        runtime.chooseInsertionTerminal = async () => terminalSelection;
+        await runtime.insertCiContext({ ticketKey: 'JIRA-222' });
+
+        runtime.resolveRegisteredProject = () => undefined;
+        await runtime.insertProjectGitContext({ projectName: 'missing' });
+        await runtime.insertProjectProviderContext({ projectName: 'missing' }, 'gitlab');
+        await runtime.renameLocalProject({ projectName: 'missing' });
+        await runtime.openProjectMergeRequest({ projectName: 'missing' });
+        runtime.resolveRegisteredProject = () => edgeProject;
+        runtime.chooseProjectInsertionTerminal = async () => undefined;
+        await runtime.insertProjectGitContext(edgeProject);
+
+        const previousApiBaseUrl = process.env.GITLAB_API_BASE_URL;
+        try {
+          process.env.GITLAB_API_BASE_URL = 'https://gitlab.example/api/v4';
+          runtime.discoverRegisteredProjectGitLabTarget = async () => ({
+            kind: 'matched', target: { iid: 123, projectIdOrPath: 'group/fixture' }, sourceBranch: 'feature/runtime-project',
+          });
+          await runtime.openProjectMergeRequest(edgeProject);
+          assert.match(openedExternalUrls.at(-1), /group\/fixture\/-\/merge_requests\/123$/);
+          runtime.discoverRegisteredProjectGitLabTarget = async () => ({ kind: 'ambiguous', candidateCount: 2 });
+          await runtime.openProjectMergeRequest(edgeProject);
+          assert.match(warningMessages.at(-1), /2 possible open merge requests/);
+          runtime.discoverRegisteredProjectGitLabTarget = async () => ({ kind: 'unconfigured' });
+          await runtime.openProjectMergeRequest(edgeProject);
+          assert.match(warningMessages.at(-1), /needs a GitLab project ID/);
+          runtime.discoverRegisteredProjectGitLabTarget = async () => ({ kind: 'failed', detail: 'Synthetic discovery failure.' });
+          await runtime.openProjectMergeRequest(edgeProject);
+          assert.match(openedExternalUrls.at(-1), /merge_requests\/new/);
+        } finally {
+          if (previousApiBaseUrl === undefined) delete process.env.GITLAB_API_BASE_URL;
+          else process.env.GITLAB_API_BASE_URL = previousApiBaseUrl;
+        }
+      } finally {
+        ticket.source = originalTicketSource;
+        Object.assign(runtime, originalRuntimeMethods);
+      }
+    });
+    await t.test('runtime project, monitoring, notification, and terminal commands cover every operator decision', async () => {
+      const originalActiveTerminal = vscode.window.activeTerminal;
+      const originalDiscover = runtime.discoverRegisteredProjectGitLabTarget;
+      const originalMonitorPoll = runtime.monitor.poll;
+      const originalRename = runtime.state.renameLocalProjectDisplayName;
+      const previousGitLabApiBaseUrl = process.env.GITLAB_API_BASE_URL;
+      const attachedTerminals = [];
+      try {
+        singlePickHandler = () => undefined;
+        await runtime.chooseTicketProject({ ticketKey: 'JIRA-123' });
+        assert.equal(stateStore.readStateFileWithIssues().state.tickets['JIRA-123'].linked_local_project, 'fixture');
+
+        const linkedSession = workSessions.createOrGetWorkSessionByTicket({
+          ticketKey: 'JIRA-123',
+          title: 'Project choice fixture',
+          projectName: 'fixture',
+          projectPath: tempRoot,
+        });
+        singlePickHandler = items => items.find(item => item.unlink);
+        await runtime.chooseTicketProject({ ticketKey: 'JIRA-123' });
+        assert.equal(stateStore.readStateFileWithIssues().state.tickets['JIRA-123'].linked_local_project, undefined);
+        assert.equal(workSessions.readWorkSession(linkedSession.id).projectName, undefined);
+        singlePickHandler = items => items.find(item => item.project?.name === 'fixture');
+        await runtime.chooseTicketProject({ ticketKey: 'JIRA-123' });
+        assert.equal(workSessions.readWorkSession(linkedSession.id).projectName, 'fixture');
+
+        inputBoxResult = undefined;
+        await runtime.renameLocalProject({ projectName: 'fixture', projectPath: tempRoot });
+        inputBoxResult = '   ';
+        await runtime.renameLocalProject({ projectName: 'fixture', projectPath: tempRoot });
+        assert.match(informationMessages.at(-1), /nickname cleared/i);
+        runtime.state.renameLocalProjectDisplayName = () => { throw new Error('Synthetic nickname write failure.'); };
+        inputBoxResult = 'Broken nickname';
+        await runtime.renameLocalProject({ projectName: 'fixture', projectPath: tempRoot });
+        assert.match(errorMessages.at(-1), /nickname write failure/i);
+        runtime.state.renameLocalProjectDisplayName = originalRename;
+
+        const makeAttachedTerminal = async (name, location) => {
+          const actions = [];
+          const terminal = {
+            name,
+            creationOptions: { name, location },
+            processId: Promise.resolve(8000 + attachedTerminals.length),
+            exitStatus: undefined,
+            show(preserveFocus) { actions.push(['show', preserveFocus]); },
+          };
+          attachedTerminals.push(terminal);
+          vscode.window.activeTerminal = terminal;
+          await runtime.attachTerminal(workSessions.readWorkSession(linkedSession.id), terminal);
+          return { terminal, actions };
+        };
+        const panelTerminal = await makeAttachedTerminal('Panel terminal', vscode.TerminalLocation.Panel);
+        await runtime.toggleWorkSessionTerminalSize(linkedSession.id);
+        assert.deepEqual(executedCommands.at(-1), ['workbench.action.toggleMaximizedPanel']);
+        assert.deepEqual(panelTerminal.actions.at(-1), ['show', false]);
+
+        await makeAttachedTerminal('Unknown terminal', undefined);
+        await runtime.toggleWorkSessionTerminalSize(linkedSession.id);
+        assert.match(informationMessages.at(-1), /could not determine/i);
+
+        await makeAttachedTerminal('Editor terminal', vscode.TerminalLocation.Editor);
+        executeCommandHandler = async command => {
+          if (command === 'workbench.action.toggleMaximizeEditorGroup') {
+            throw new Error('Synthetic resize command failure.');
+          }
+        };
+        await runtime.toggleWorkSessionTerminalSize(linkedSession.id);
+        assert.match(warningMessages.at(-1), /resize command failure/i);
+        executeCommandHandler = undefined;
+
+        const legacySession = workSessions.createOrGetWorkSessionByTicket({
+          ticketKey: 'JIRA-222',
+          title: 'Legacy monitoring fixture',
+        });
+        const legacyTerminal = {
+          name: 'Legacy monitoring terminal',
+          creationOptions: { name: 'Legacy monitoring terminal', location: vscode.TerminalLocation.Panel },
+          processId: Promise.resolve(9001),
+          exitStatus: undefined,
+          show() {},
+        };
+        attachedTerminals.push(legacyTerminal);
+        vscode.window.activeTerminal = legacyTerminal;
+        await runtime.attachTerminal(legacySession, legacyTerminal);
+        await runtime.setMonitoring(legacySession.id, false);
+        assert.equal(workSessions.readWorkSession(legacySession.id).monitoring.enabled, false);
+        await runtime.setMonitoring(legacySession.id, true);
+        assert.equal(workSessions.readWorkSession(legacySession.id).monitoring.enabled, true);
+        workSessions.closeWorkSession(legacySession.id);
+        await runtime.setMonitoring(legacySession.id, true);
+        assert.match(warningMessages.at(-1), /connect a terminal/i);
+
+        runtime.monitor.poll = async () => ({
+          polled: 0, transitions: 0, failures: 0, skipped: 0, unconfigured: 0,
+          leaseUnavailable: true,
+        });
+        await runtime.pollProviders(true);
+        assert.match(informationMessages.at(-1), /another VS Code window/i);
+        runtime.monitor.poll = async () => ({
+          polled: 2, transitions: 1, failures: 0, skipped: 0, unconfigured: 1,
+          leaseUnavailable: false,
+        });
+        await runtime.pollProviders(true);
+        assert.match(warningMessages.at(-1), /need setup/i);
+        runtime.monitor.poll = async () => { throw new Error('Synthetic provider poll failure.'); };
+        await runtime.pollProviders(true);
+        assert.match(warningMessages.at(-1), /provider poll failure/i);
+
+        process.env.GITLAB_API_BASE_URL = 'https://gitlab.example/api/v4';
+        runtime.discoverRegisteredProjectGitLabTarget = async () => ({
+          kind: 'matched',
+          target: { iid: 401, url: 'https://gitlab.example/group/fixture/-/merge_requests/401' },
+        });
+        await runtime.openProjectMergeRequest({ projectName: 'fixture', projectPath: tempRoot });
+        assert.equal(openedExternalUrls.at(-1), 'https://gitlab.example/group/fixture/-/merge_requests/401');
+        runtime.discoverRegisteredProjectGitLabTarget = async () => ({
+          kind: 'matched', target: { iid: 402 },
+        });
+        await runtime.openProjectMergeRequest({ projectName: 'fixture', projectPath: tempRoot });
+        assert.equal(openedExternalUrls.at(-1), 'https://gitlab.example/group/fixture/-/merge_requests/402');
+        runtime.discoverRegisteredProjectGitLabTarget = async () => ({
+          kind: 'ambiguous', candidateCount: 2, sourceBranch: 'feature/runtime-project',
+        });
+        await runtime.openProjectMergeRequest({ projectName: 'fixture', projectPath: tempRoot });
+        assert.match(warningMessages.at(-1), /2 possible open merge requests/i);
+        runtime.discoverRegisteredProjectGitLabTarget = async () => ({ kind: 'unconfigured' });
+        await runtime.openProjectMergeRequest({ projectName: 'fixture', projectPath: tempRoot });
+        assert.match(warningMessages.at(-1), /needs a GitLab project ID/i);
+        runtime.discoverRegisteredProjectGitLabTarget = async () => ({
+          kind: 'failed', detail: 'Synthetic merge request discovery failure.',
+        });
+        await runtime.openProjectMergeRequest({ projectName: 'fixture', projectPath: tempRoot });
+        assert.match(openedExternalUrls.at(-1), /merge_requests\/new\?merge_request%5Bsource_branch%5D=feature%2Fruntime-project/);
+
+        const noticeSession = workSessions.readWorkSession(linkedSession.id);
+        const noticeEvent = monitorEventStore.appendMonitorEvent({
+          id: 'runtime-notification-actions',
+          sessionId: noticeSession.id,
+          type: 'provider.transition',
+          source: 'gitlab',
+          summary: 'Runtime notification action fixture.',
+          subject: { kind: 'merge-request', id: '401', ticketKey: 'JIRA-123' },
+          after: { state: 'opened', fingerprint: 'runtime-notification-actions-fingerprint' },
+          metadata: { transitionKind: 'initial_observation' },
+        });
+        informationMessageResult = 'Open Provider';
+        runtime.showProviderNotice({
+          event: noticeEvent,
+          session: noticeSession,
+          severity: 'information',
+          providerUrl: 'https://gitlab.example/group/fixture/-/merge_requests/401',
+        });
+        await new Promise(resolve => setImmediate(resolve));
+        assert.equal(openedExternalUrls.at(-1), 'https://gitlab.example/group/fixture/-/merge_requests/401');
+        informationMessageResult = 'Insert Fresh Context';
+        runtime.showProviderNotice({
+          event: noticeEvent,
+          session: noticeSession,
+          severity: 'information',
+          contextCommand: 'kronos.insertGitLabContext',
+          contextArgument: { ticketKey: 'JIRA-123' },
+        });
+        await new Promise(resolve => setImmediate(resolve));
+        assert.deepEqual(executedCommands.at(-1), ['kronos.insertGitLabContext', { ticketKey: 'JIRA-123' }]);
+        warningMessageResult = 'Clear Until Next Poll';
+        runtime.showProviderNotice({
+          event: noticeEvent,
+          session: noticeSession,
+          severity: 'warning',
+        });
+        await new Promise(resolve => setImmediate(resolve));
+        assert.ok(monitorEventStore.listMonitorEvents({ sessionId: noticeSession.id })
+          .some(event => event.type === 'notification.acknowledged'));
+      } finally {
+        runtime.discoverRegisteredProjectGitLabTarget = originalDiscover;
+        runtime.monitor.poll = originalMonitorPoll;
+        runtime.state.renameLocalProjectDisplayName = originalRename;
+        executeCommandHandler = undefined;
+        if (previousGitLabApiBaseUrl === undefined) { delete process.env.GITLAB_API_BASE_URL; }
+        else { process.env.GITLAB_API_BASE_URL = previousGitLabApiBaseUrl; }
+        vscode.window.activeTerminal = originalActiveTerminal;
+        for (const terminal of attachedTerminals) { runtime.operatorTerminals.detachTerminal(terminal); }
+        for (const ticketKey of ['JIRA-123', 'JIRA-222']) {
+          const session = workSessions.getWorkSessionByTicket(ticketKey);
+          if (session) { workSessions.removeWorkSession(session.id); }
+        }
+      }
+    });
+    await t.test('runtime defensive orchestration covers stale panels, recovery choices, and isolated command faults', async () => {
+      const edgeProject = { projectName: 'fixture', projectPath: tempRoot, displayName: 'Fixture' };
+      const originalActiveTerminal = vscode.window.activeTerminal;
+      const originalTerminals = vscode.window.terminals;
+      const originalChooseLiveTerminal = runtime.chooseLiveTerminal;
+      const originalDiscover = runtime.discoverRegisteredProjectGitLabTarget;
+      const originalOpenProviderEnvironment = runtime.openProviderEnvironment;
+      const originalChoosePromptLibraryTerminal = runtime.choosePromptLibraryTerminal;
+      const originalReadWorkSession = workSessions.readWorkSession;
+      const originalListWorkSessions = workSessions.listWorkSessions;
+      const originalAppendMonitorEvent = monitorEventStore.appendMonitorEvent;
+      const originalReadMonitorEvent = monitorEventStore.readMonitorEvent;
+      const originalListMonitorEvents = monitorEventStore.listMonitorEvents;
+      const originalShowInformationMessage = vscode.window.showInformationMessage;
+      const originalSetSonarTarget = runtime.state.setLocalProjectSonarTarget;
+      const originalPollProviders = runtime.pollProviders;
+      const originalGitBranchRead = projectCatalog.readProjectGitBranch;
+      const originalGetExtension = vscode.extensions.getExtension;
+      const localEvidenceModule = require('../out/services/localEvidenceSearch.js');
+      const originalBuildLocalEvidenceSearchIndex = localEvidenceModule.buildLocalEvidenceSearchIndex;
+      const promptLibraryModule = require('../out/services/promptLibrary.js');
+      const originalLoadPromptLibraries = promptLibraryModule.loadPromptLibraries;
+      const originalProviderEnvironmentLoad = runtime.providerEnvironmentLoad;
+      const originalMonitorPoll = runtime.monitor.poll;
+      const config = runtime.state.state.projects.fixture.config;
+      const originalConfig = { ...config };
+      const previousGitLabEnvironment = Object.fromEntries([
+        'GITLAB_API_BASE_URL', 'GITLAB_BASE_URL', 'GITLAB_URL', 'GITLAB_HOST',
+      ].map(name => [name, process.env[name]]));
+      const createdSessionIds = new Set();
+      try {
+        const firstProjectSession = workSessions.createStandaloneWorkSession({
+          title: 'Project chooser first fixture', projectName: 'fixture', projectPath: tempRoot,
+        });
+        const secondProjectSession = workSessions.createStandaloneWorkSession({
+          title: 'Project chooser second fixture', projectName: 'fixture', projectPath: tempRoot,
+        });
+        createdSessionIds.add(firstProjectSession.id);
+        createdSessionIds.add(secondProjectSession.id);
+        const firstProjectTerminal = { name: 'Project chooser first terminal', show() {} };
+        const secondProjectTerminal = { name: 'Project chooser second terminal', show() {} };
+        runtime.operatorTerminals.attach(firstProjectTerminal, {
+          sessionId: firstProjectSession.id, bindingId: 'project-choice-first',
+        });
+        runtime.operatorTerminals.attach(secondProjectTerminal, {
+          sessionId: secondProjectSession.id, bindingId: 'project-choice-second',
+        });
+        vscode.window.activeTerminal = undefined;
+        singlePickHandler = () => undefined;
+        assert.equal(await runtime.chooseProjectInsertionTerminal(edgeProject), undefined);
+        runtime.chooseLiveTerminal = async () => undefined;
+        singlePickHandler = items => items.find(item => item.session.id === firstProjectSession.id);
+        assert.equal(await runtime.chooseProjectInsertionTerminal(edgeProject), undefined);
+        assert.match(warningMessages.at(-1), /focus or reconnect/i);
+        runtime.chooseLiveTerminal = async sessionId => sessionId === secondProjectSession.id
+          ? {
+              terminal: secondProjectTerminal,
+              binding: { sessionId, bindingId: 'project-choice-second' },
+            }
+          : undefined;
+        singlePickHandler = items => items.find(item => item.session.id === secondProjectSession.id);
+        assert.equal((await runtime.chooseProjectInsertionTerminal(edgeProject)).terminal, secondProjectTerminal);
+        workSessions.listWorkSessions = () => [firstProjectSession];
+        runtime.chooseLiveTerminal = async sessionId => ({
+          terminal: firstProjectTerminal,
+          binding: { sessionId, bindingId: 'project-choice-first' },
+        });
+        assert.equal((await runtime.chooseProjectInsertionTerminal(edgeProject)).terminal, firstProjectTerminal);
+        let backgroundPolls = 0;
+        runtime.pollProviders = async () => { backgroundPolls += 1; };
+        const selectedTicketContext = await runtime.chooseInsertionTerminal('JIRA-321', firstProjectSession.id);
+        assert.equal(selectedTicketContext.terminal, firstProjectTerminal);
+        assert.equal(backgroundPolls, 1, 'adding a ticket context to a monitored project session refreshes providers');
+        runtime.pollProviders = originalPollProviders;
+        workSessions.listWorkSessions = originalListWorkSessions;
+        runtime.chooseLiveTerminal = originalChooseLiveTerminal;
+
+        runtime.chooseLiveTerminal = async () => undefined;
+        vscode.window.terminals = [];
+        await runtime.focusWorkSessionTerminal(secondProjectSession.id);
+        assert.match(warningMessages.at(-1), /no attached terminal.*no unclaimed open terminals/i);
+        runtime.chooseLiveTerminal = originalChooseLiveTerminal;
+
+        monitorEventStore.listMonitorEvents = () => { throw new Error('Fixture local search audit failure.'); };
+        singlePickHandler = () => undefined;
+        await runtime.searchLocalEvidence();
+        assert.match(warningMessages.at(-1), /Recent history could not be included/i);
+        monitorEventStore.listMonitorEvents = () => [];
+        workSessions.listWorkSessions = () => [];
+        localEvidenceModule.buildLocalEvidenceSearchIndex = () => [];
+        await runtime.searchLocalEvidence();
+        assert.match(informationMessages.at(-1), /no Sessions or saved context/i);
+        localEvidenceModule.buildLocalEvidenceSearchIndex = originalBuildLocalEvidenceSearchIndex;
+        workSessions.listWorkSessions = originalListWorkSessions;
+        monitorEventStore.listMonitorEvents = originalListMonitorEvents;
+
+        const orphanedClosedTerminal = { name: 'Orphaned closed terminal' };
+        runtime.operatorTerminals.attach(orphanedClosedTerminal, {
+          sessionId: 'missing-closed-session', bindingId: 'missing-closed-binding',
+        });
+        runtime.handleClosedTerminal(orphanedClosedTerminal);
+        assert.equal(runtime.operatorTerminals.bindingForTerminal(orphanedClosedTerminal), undefined);
+
+        const recoverySession = workSessions.createOrGetWorkSessionByTicket({
+          ticketKey: 'JIRA-456', title: 'Closed recovery fixture', projectName: 'fixture', projectPath: tempRoot,
+        });
+        createdSessionIds.add(recoverySession.id);
+        workSessions.closeWorkSession(recoverySession.id);
+        const recoveryActions = [];
+        const recoveryTerminal = {
+          name: 'Unclaimed recovery terminal',
+          processId: Promise.resolve(9801),
+          exitStatus: undefined,
+          creationOptions: { name: 'Unclaimed recovery terminal', location: vscode.TerminalLocation.Panel },
+          show(value) { recoveryActions.push(value); },
+        };
+        vscode.window.terminals = [recoveryTerminal];
+        vscode.window.activeTerminal = undefined;
+        await runtime.focusWorkSessionTerminal(recoverySession.id);
+        assert.equal(workSessions.readWorkSession(recoverySession.id).status, 'active');
+        assert.deepEqual(recoveryActions, [false]);
+        runtime.operatorTerminals.detachSession(recoverySession.id);
+        workSessions.closeWorkSession(recoverySession.id);
+        vscode.window.activeTerminal = recoveryTerminal;
+        await runtime.reattachFocusedTerminal(recoverySession.id);
+        assert.equal(workSessions.readWorkSession(recoverySession.id).status, 'active');
+
+        const removedSession = workSessions.createStandaloneWorkSession({ title: 'Removal audit failure fixture' });
+        createdSessionIds.add(removedSession.id);
+        workSessions.closeWorkSession(removedSession.id);
+        monitorEventStore.appendMonitorEvent = () => { throw new Error('Fixture final removal audit failure.'); };
+        warningMessageResult = 'Remove from Kronos';
+        await runtime.removeManagedSession(removedSession.id);
+        assert.equal(workSessions.readWorkSession(removedSession.id), null);
+        assert.match(informationMessages.at(-1), /removed/i);
+        monitorEventStore.appendMonitorEvent = originalAppendMonitorEvent;
+
+        await runtime.openProjectGitStatus({ projectName: 'missing-project' });
+        if (runtime.projectGitPanel) { runtime.projectGitPanel.panel.dispose(); }
+        await runtime.openProjectGitStatus(edgeProject);
+        const gitPanel = runtime.projectGitPanel.panel;
+        await gitPanel.receive({ command: '__kronosWebviewReady' });
+        await gitPanel.receive({ command: 'unknown-action' });
+        assert.match(warningMessages.at(-1), /invalid project Git-state request/i);
+        await gitPanel.receive({ command: 'openSourceControl' });
+        assert.deepEqual(executedCommands.at(-1), ['workbench.view.scm']);
+        const gitRecord = runtime.projectGitPanel;
+        runtime.projectGitPanel = undefined;
+        await runtime.refreshProjectGitPanel(gitRecord, false);
+        runtime.projectGitPanel = gitRecord;
+        vscode.extensions.getExtension = () => undefined;
+        await runtime.refreshProjectGitPanel(gitRecord, true);
+        assert.match(warningMessages.at(-1), /VS Code (?:built-in )?Git extension is unavailable/i);
+        vscode.extensions.getExtension = originalGetExtension;
+        await gitPanel.receive({ command: 'close' });
+        createdWebviewPanels.splice(createdWebviewPanels.indexOf(gitPanel), 1);
+
+        runtime.discoverRegisteredProjectGitLabTarget = async () => ({ kind: 'matched', target: { iid: 901 } });
+        delete config.gitlab_project_path;
+        await runtime.openProjectMergeRequest(edgeProject);
+        assert.match(warningMessages.at(-1), /did not return a browser URL/i);
+        runtime.discoverRegisteredProjectGitLabTarget = async () => ({ kind: 'failed', detail: 'Fixture discovery failed.' });
+        await runtime.openProjectMergeRequest(edgeProject);
+        assert.match(warningMessages.at(-1), /needs a GitLab group\/project path/i);
+        config.gitlab_project_path = 'group/fixture';
+        for (const name of Object.keys(previousGitLabEnvironment)) { delete process.env[name]; }
+        await runtime.openProjectMergeRequest(edgeProject);
+        assert.match(warningMessages.at(-1), /GitLab base URL is not configured/i);
+        projectCatalog.readProjectGitBranch = () => ({ branch: 'detached@abc123' });
+        await runtime.openProjectMergeRequest(edgeProject);
+        assert.match(warningMessages.at(-1), /current branch/i);
+        projectCatalog.readProjectGitBranch = originalGitBranchRead;
+
+        runtime.operationsPanelActionsInFlight.add('setup:openProviderEnvironment');
+        await runtime.executeOperationsPanelAction('setup', 'openProviderEnvironment');
+        runtime.operationsPanelActionsInFlight.delete('setup:openProviderEnvironment');
+        runtime.openProviderEnvironment = async () => { throw new Error('Fixture operations action failure.'); };
+        await runtime.executeOperationsPanelAction('setup', 'openProviderEnvironment');
+        assert.match(errorMessages.at(-1), /operations action failure/i);
+        runtime.openProviderEnvironment = originalOpenProviderEnvironment;
+
+        runtime.monitor.poll = async () => { throw new Error('Fixture silent provider poll failure.'); };
+        await runtime.pollProviders(false);
+        runtime.monitor.poll = originalMonitorPoll;
+
+        await runtime.openProvider({
+          providerChoices: [{ label: 'Only provider target', url: 'https://provider.example/only' }],
+        });
+        assert.equal(openedExternalUrls.at(-1), 'https://provider.example/only');
+
+        const sonarSession = workSessions.readWorkSession(firstProjectSession.id);
+        config.sonar_project_key = 'fixture-sonar';
+        config.sonar_branch = 'main';
+        runtime.state.setLocalProjectSonarTarget = () => { throw new Error('unchanged Sonar target must not be persisted'); };
+        runtime.selectMonitoredSonarBranch(
+          { workSessionId: sonarSession.id },
+          'https://sonar.example/dashboard?id=fixture-sonar&branch=main',
+        );
+        runtime.selectMonitoredSonarBranch({}, 'https://sonar.example/dashboard?id=fixture-sonar&branch=feature');
+        let selectedSonarTarget;
+        runtime.state.setLocalProjectSonarTarget = (...values) => { selectedSonarTarget = values; };
+        runtime.pollProviders = async () => {};
+        runtime.selectMonitoredSonarBranch(
+          { workSessionId: sonarSession.id },
+          'https://sonar.example/dashboard?id=fixture-sonar&branch=feature',
+        );
+        assert.deepEqual(selectedSonarTarget, ['fixture', 'fixture-sonar', 'feature']);
+        runtime.state.setLocalProjectSonarTarget = originalSetSonarTarget;
+        runtime.pollProviders = originalPollProviders;
+
+        const noticeEvent = {
+          id: 'runtime-defensive-notice',
+          at: '2026-07-20T12:00:00.000Z',
+          sessionId: sonarSession.id,
+          type: 'provider.transition',
+          source: 'jenkins',
+          summary: 'Fixture defensive provider notice.',
+          subject: { kind: 'build', id: '91' },
+          after: { state: 'FAILURE', fingerprint: 'fixture-defensive-notice' },
+          metadata: { transitionKind: 'build_failed' },
+        };
+        monitorEventStore.appendMonitorEvent = () => { throw new Error('Fixture notification audit failure.'); };
+        runtime.showProviderNotice({ event: noticeEvent, session: sonarSession, severity: 'information' });
+        await new Promise(resolve => setImmediate(resolve));
+        monitorEventStore.appendMonitorEvent = originalAppendMonitorEvent;
+        vscode.window.showInformationMessage = () => Promise.reject(new Error('Fixture notification choice failure.'));
+        runtime.showProviderNotice({ event: noticeEvent, session: sonarSession, severity: 'information' });
+        await new Promise(resolve => setImmediate(resolve));
+        vscode.window.showInformationMessage = originalShowInformationMessage;
+        runtime.showProviderNotice({
+          event: { ...noticeEvent, id: 'runtime-defensive-notice-without-subject', subject: undefined },
+          session: sonarSession,
+          severity: 'information',
+        });
+        await new Promise(resolve => setImmediate(resolve));
+
+        configurationValues.set('promptLibraryLocalPaths', ['/fixture/missing-prompt-library.json']);
+        runtime.choosePromptLibraryTerminal = async () => undefined;
+        await runtime.openPromptLibrary({});
+        const stalePromptSession = workSessions.createStandaloneWorkSession({ title: 'Stale prompt Session fixture' });
+        createdSessionIds.add(stalePromptSession.id);
+        workSessions.closeWorkSession(stalePromptSession.id);
+        runtime.choosePromptLibraryTerminal = async () => ({
+          terminal: firstProjectTerminal,
+          binding: { sessionId: stalePromptSession.id, bindingId: 'stale-prompt-binding' },
+          workSession: workSessions.readWorkSession(stalePromptSession.id),
+        });
+        promptLibraryModule.loadPromptLibraries = async () => ({
+          prompts: [{
+            id: 'stale-prompt-fixture',
+            title: 'Stale Session prompt',
+            description: 'Prompt selected after its Session closed.',
+            libraryName: 'Fixture library',
+            sourceKind: 'local',
+            sourceLocation: '/fixture/missing-prompt-library.json',
+            body: 'Review {{sessionTitle}}.',
+            tags: [],
+            suggestedContext: [],
+          }],
+          sources: [],
+          warnings: [],
+        });
+        singlePickHandler = items => items[0];
+        await runtime.openPromptLibrary({});
+        assert.match(warningMessages.at(-1), /selected Session is no longer active/i);
+        promptLibraryModule.loadPromptLibraries = originalLoadPromptLibraries;
+        runtime.choosePromptLibraryTerminal = originalChoosePromptLibraryTerminal;
+        workSessions.listWorkSessions = () => [];
+        vscode.window.activeTerminal = undefined;
+        assert.equal(await runtime.choosePromptLibraryTerminal({}), undefined);
+        workSessions.listWorkSessions = () => [firstProjectSession, secondProjectSession];
+        singlePickHandler = () => undefined;
+        assert.equal(await runtime.choosePromptLibraryTerminal({}), undefined);
+        runtime.chooseLiveTerminal = async () => undefined;
+        singlePickHandler = items => items[0];
+        assert.equal(await runtime.choosePromptLibraryTerminal({}), undefined);
+        runtime.chooseLiveTerminal = originalChooseLiveTerminal;
+        workSessions.listWorkSessions = originalListWorkSessions;
+        configurationValues.delete('promptLibraryLocalPaths');
+
+        runtime.providerEnvironmentLoad = undefined;
+        configurationValues.set('claudeCommand', '   ');
+        assert.equal(runtime.claudeReadinessCheck().status, 'fail');
+        assert.ok(runtime.operationsReadiness().length > 0);
+        const loadedState = runtime.state.state;
+        runtime.state.state = null;
+        assert.ok(runtime.operationsReadiness().length > 0);
+        runtime.state.state = loadedState;
+        configurationValues.delete('claudeCommand');
+        runtime.providerEnvironmentLoad = originalProviderEnvironmentLoad;
+
+        workSessions.readWorkSession = () => { throw new Error('Fixture selected session read failure.'); };
+        assert.equal(await runtime.resolveWorkSession('missing-defensive-session', false), undefined);
+        workSessions.readWorkSession = originalReadWorkSession;
+
+        monitorEventStore.readMonitorEvent = () => { throw new Error('Fixture Attention event read failure.'); };
+        await runtime.insertAttentionEventContext({ eventId: 'missing-event', sessionId: sonarSession.id });
+        assert.match(warningMessages.at(-1), /no longer available/i);
+        monitorEventStore.readMonitorEvent = originalReadMonitorEvent;
+        const retainedEvent = monitorEventStore.appendMonitorEvent(noticeEvent);
+        workSessions.readWorkSession = () => { throw new Error('Fixture Attention session read failure.'); };
+        await runtime.insertAttentionEventContext({ eventId: retainedEvent.id, sessionId: sonarSession.id });
+        assert.match(warningMessages.at(-1), /Connect a terminal for this Attention event/i);
+      } finally {
+        vscode.window.activeTerminal = originalActiveTerminal;
+        vscode.window.terminals = originalTerminals;
+        runtime.chooseLiveTerminal = originalChooseLiveTerminal;
+        runtime.discoverRegisteredProjectGitLabTarget = originalDiscover;
+        runtime.openProviderEnvironment = originalOpenProviderEnvironment;
+        runtime.choosePromptLibraryTerminal = originalChoosePromptLibraryTerminal;
+        runtime.state.setLocalProjectSonarTarget = originalSetSonarTarget;
+        runtime.pollProviders = originalPollProviders;
+        runtime.monitor.poll = originalMonitorPoll;
+        runtime.providerEnvironmentLoad = originalProviderEnvironmentLoad;
+        workSessions.readWorkSession = originalReadWorkSession;
+        workSessions.listWorkSessions = originalListWorkSessions;
+        monitorEventStore.appendMonitorEvent = originalAppendMonitorEvent;
+        monitorEventStore.readMonitorEvent = originalReadMonitorEvent;
+        monitorEventStore.listMonitorEvents = originalListMonitorEvents;
+        vscode.window.showInformationMessage = originalShowInformationMessage;
+        projectCatalog.readProjectGitBranch = originalGitBranchRead;
+        vscode.extensions.getExtension = originalGetExtension;
+        localEvidenceModule.buildLocalEvidenceSearchIndex = originalBuildLocalEvidenceSearchIndex;
+        promptLibraryModule.loadPromptLibraries = originalLoadPromptLibraries;
+        runtime.operationsPanelActionsInFlight.delete('setup:openProviderEnvironment');
+        Object.keys(config).forEach(key => { delete config[key]; });
+        Object.assign(config, originalConfig);
+        for (const [name, value] of Object.entries(previousGitLabEnvironment)) { restoreEnv(name, value); }
+        configurationValues.delete('promptLibraryLocalPaths');
+        configurationValues.delete('claudeCommand');
+        if (runtime.projectGitPanel) { runtime.projectGitPanel.panel.dispose(); }
+        for (let index = createdWebviewPanels.length - 1; index >= 0; index -= 1) {
+          if (createdWebviewPanels[index].viewType === 'kronosProjectGitState') {
+            createdWebviewPanels.splice(index, 1);
+          }
+        }
+        for (const sessionId of createdSessionIds) {
+          runtime.operatorTerminals.detachSession(sessionId);
+          if (workSessions.readWorkSession(sessionId)) { workSessions.removeWorkSession(sessionId); }
+        }
+      }
+    });
+    await t.test('runtime terminal ownership and launch failures preserve explicit operator control', async () => {
+      const originalActiveTerminal = vscode.window.activeTerminal;
+      const originalOpenTerminals = [...vscode.window.terminals];
+      const createdTerminalCount = createdTerminals.length;
+      const originalReadSnapshot = mergeRequestMonitorStore.readGitLabMergeRequestMonitorSnapshot;
+      const originalReadProjectMonitor = projectMonitoringStore.readProjectMonitoringRecord;
+      const originalReadProjectMonitorById = projectMonitoringStore.readProjectMonitoringRecordById;
+      const originalAttachTerminal = runtime.attachTerminal;
+      const originalCloseWorkSession = workSessions.closeWorkSession;
+      const providerEnvModule = require('../out/services/providerEnv.js');
+      const originalLoadProviderEnv = providerEnvModule.loadProviderEnv;
+      const createdSessionIds = new Set();
+      const fixtureTerminals = [];
+      try {
+        vscode.window.activeTerminal = undefined;
+        await runtime.manageFocusedTerminal({});
+        assert.match(warningMessages.at(-1), /focus the terminal/i);
+
+        const standaloneActions = [];
+        const standaloneTerminal = {
+          name: 'Operator-owned terminal',
+          creationOptions: { name: 'Operator-owned terminal', location: vscode.TerminalLocation.Panel },
+          processId: Promise.resolve(7101),
+          exitStatus: undefined,
+          shellIntegration: { cwd: { fsPath: tempRoot } },
+          show(preserveFocus) { standaloneActions.push(['show', preserveFocus]); },
+        };
+        fixtureTerminals.push(standaloneTerminal);
+        vscode.window.activeTerminal = standaloneTerminal;
+        await runtime.manageFocusedTerminal({ ticketKey: 'MISSING-404' });
+        assert.match(warningMessages.at(-1), /no longer present/i);
+        inputBoxResult = undefined;
+        await runtime.manageFocusedTerminal({});
+        assert.equal(runtime.operatorTerminals.bindingForTerminal(standaloneTerminal), undefined);
+        inputBoxResult = 'Existing operator shell';
+        await runtime.manageFocusedTerminal({});
+        const standaloneBinding = runtime.operatorTerminals.bindingForTerminal(standaloneTerminal);
+        assert.ok(standaloneBinding);
+        createdSessionIds.add(standaloneBinding.sessionId);
+        assert.equal(workSessions.readWorkSession(standaloneBinding.sessionId).kind, 'standalone');
+        await runtime.manageFocusedTerminal({});
+        assert.match(informationMessages.at(-1), /already connected/i);
+
+        await runtime.manageFocusedTerminal({ ticketKey: 'JIRA-123' });
+        const ticketBinding = runtime.operatorTerminals.bindingForTerminal(standaloneTerminal);
+        assert.notEqual(ticketBinding.sessionId, standaloneBinding.sessionId);
+        createdSessionIds.add(ticketBinding.sessionId);
+        assert.equal(workSessions.readWorkSession(standaloneBinding.sessionId).terminals.at(-1).status, 'detached');
+        workSessions.closeWorkSession(ticketBinding.sessionId);
+        await runtime.manageFocusedTerminal({ ticketKey: 'JIRA-123' });
+        assert.equal(workSessions.readWorkSession(ticketBinding.sessionId).status, 'active');
+
+        const rejectedProcessTerminal = {
+          name: 'Unavailable process id terminal',
+          creationOptions: { name: 'Unavailable process id terminal', location: vscode.TerminalLocation.Editor },
+          processId: Promise.reject(new Error('Synthetic process id failure.')),
+          exitStatus: undefined,
+          show() {},
+        };
+        fixtureTerminals.push(rejectedProcessTerminal);
+        const attachedWithoutPid = await runtime.attachTerminal(
+          workSessions.readWorkSession(ticketBinding.sessionId),
+          rejectedProcessTerminal,
+        );
+        assert.equal(attachedWithoutPid.terminals.at(-1).processId, undefined);
+        const closedTerminal = {
+          name: 'Already closed terminal',
+          creationOptions: { name: 'Already closed terminal' },
+          processId: Promise.resolve(7103),
+          exitStatus: { code: 0 },
+          show() {},
+        };
+        await assert.rejects(
+          runtime.attachTerminal(attachedWithoutPid, closedTerminal),
+          /closed before Kronos could attach/i,
+        );
+
+        mergeRequestMonitorStore.readGitLabMergeRequestMonitorSnapshot = () => {
+          throw new Error('Synthetic snapshot read failure.');
+        };
+        assert.equal(runtime.effectiveTicket('JIRA-123', runtime.state.state.tickets['JIRA-123']).summary, 'Terminal-first fixture');
+        projectMonitoringStore.readProjectMonitoringRecord = () => { throw new Error('Synthetic project monitor read failure.'); };
+        projectMonitoringStore.readProjectMonitoringRecordById = () => { throw new Error('Synthetic project monitor id failure.'); };
+        assert.equal(runtime.readProjectMonitor('fixture'), null);
+        assert.equal(runtime.readProjectMonitorById('project-monitor-fixture'), null);
+
+        providerEnvModule.loadProviderEnv = () => ({
+          present: false, loaded: 0, skippedExisting: 0, error: 'Synthetic environment load failure.',
+        });
+        runtime.loadProviderEnvironment();
+        assert.match(warningMessages.at(-1), /provider environment file/i);
+        providerEnvModule.loadProviderEnv = () => ({ present: true, loaded: 2, skippedExisting: 1 });
+        assert.doesNotThrow(() => runtime.loadProviderEnvironment());
+
+        runtime.claudeLaunchCooldownUntil.set('standalone', Date.now() + 10_000);
+        await runtime.launchClaudeSession({ title: 'Cooldown fixture' });
+        assert.match(informationMessages.at(-1), /already in progress or was just submitted/i);
+        runtime.claudeLaunchCooldownUntil.delete('standalone');
+
+        runtime.attachTerminal = async () => { throw new Error('Synthetic post-submit attach failure.'); };
+        await runtime.launchClaudeSession({ title: 'Post-submit attachment fixture' });
+        assert.match(errorMessages.at(-1), /command was submitted.*could not finish attaching/i);
+        const postSubmitSession = workSessions.listWorkSessions().find(session => session.title === 'Post-submit attachment fixture');
+        assert.ok(postSubmitSession);
+        createdSessionIds.add(postSubmitSession.id);
+        runtime.attachTerminal = originalAttachTerminal;
+        runtime.claudeLaunchCooldownUntil.delete('standalone');
+
+        workSessions.closeWorkSession = () => { throw new Error('Synthetic compensation failure.'); };
+        failNextTerminalCreation = true;
+        await runtime.launchClaudeSession({ title: 'Compensation fixture' });
+        assert.match(errorMessages.at(-1), /terminal creation failed/i);
+        const compensationSession = workSessions.listWorkSessions().find(session => session.title === 'Compensation fixture');
+        assert.ok(compensationSession);
+        createdSessionIds.add(compensationSession.id);
+      } finally {
+        mergeRequestMonitorStore.readGitLabMergeRequestMonitorSnapshot = originalReadSnapshot;
+        projectMonitoringStore.readProjectMonitoringRecord = originalReadProjectMonitor;
+        projectMonitoringStore.readProjectMonitoringRecordById = originalReadProjectMonitorById;
+        runtime.attachTerminal = originalAttachTerminal;
+        workSessions.closeWorkSession = originalCloseWorkSession;
+        providerEnvModule.loadProviderEnv = originalLoadProviderEnv;
+        runtime.claudeLaunchCooldownUntil.delete('standalone');
+        vscode.window.activeTerminal = originalActiveTerminal;
+        vscode.window.terminals = originalOpenTerminals;
+        createdTerminals.splice(createdTerminalCount);
+        for (const terminal of fixtureTerminals) { runtime.operatorTerminals.detachTerminal(terminal); }
+        for (const sessionId of createdSessionIds) {
+          if (workSessions.readWorkSession(sessionId)) { workSessions.removeWorkSession(sessionId); }
+        }
+      }
+    });
     const sessionItems = await registeredTreeProviders.get('kronosSessions').getChildren();
     assert.equal(sessionItems.some(item => item.label === 'Projects'), false, 'Sessions must not contain a nested Projects section');
     const projectItems = await registeredTreeProviders.get('kronosProjects').getChildren();
@@ -4444,6 +6510,9 @@ test('extension activation registers the bounded surface and explicit launch com
         executeCommandHandler = undefined;
       }
     });
+    runtime.renderTicketPanel('MISSING-1', { panel: ticketWorkspacePanel, nonce: 'missing-ticket-fixture' });
+    assert.match(ticketWorkspacePanel.webview.html, /no longer present/i);
+    runtime.renderTicketPanel('JIRA-123', runtime.ticketPanels.get('JIRA-123'));
     const workProvider = registeredTreeProviders.get('kronosWork');
     workProvider.setFilter({ query: 'fixture' });
     singlePickHandler = items => items.find(item => item.id === 'clear');
@@ -4900,6 +6969,25 @@ test('extension activation registers the bounded surface and explicit launch com
     await commandHandlers.get('kronos.doctor')();
     assert.equal(createdWebviewPanels.filter(panel => panel.viewType === 'kronosDoctor').length, 1);
     assert.deepEqual(doctorPanel.revealCalls, [vscode.ViewColumn.One]);
+    const operationsWarningCount = warningMessages.length;
+    await setupPanel.receive({ command: '__kronosWebviewReady' });
+    await doctorPanel.receive({ command: '__kronosWebviewReady' });
+    await setupPanel.receive({ command: 'invalidSetupAction' });
+    await doctorPanel.receive({ command: 'invalidDoctorAction' });
+    assert.equal(warningMessages.length, operationsWarningCount + 2);
+    await doctorPanel.receive({ command: 'openSetup' });
+    await jiraBoardPanel.receive({ command: 'openDoctor' });
+    assert.equal(doctorPanel.revealCalls.length >= 2, true);
+    await setupPanel.receive({ command: 'openSettings' });
+    assert.deepEqual(executedCommands.at(-1), ['workbench.action.openSettings', '@ext:jmacke01.kronos']);
+    await setupPanel.receive({ command: 'openPromptLibrarySettings' });
+    assert.deepEqual(executedCommands.at(-1), [
+      'workbench.action.openSettings', '@ext:jmacke01.kronos prompt library',
+    ]);
+    await setupPanel.receive({ command: 'chooseProjectDiscoveryFolders' });
+    await setupPanel.receive({ command: 'openJiraBoard' });
+    await setupPanel.receive({ command: 'configureProjectIntegrations' });
+    runtime.projectIntegrationPanel?.panel.dispose();
     await setupPanel.receive({ command: 'openClaudeSettings' });
     assert.deepEqual(executedCommands.at(-1), ['workbench.action.openSettings', '@ext:jmacke01.kronos claude']);
     await setupPanel.receive({ command: 'openProjectsView' });
@@ -4934,6 +7022,11 @@ test('extension activation registers the bounded surface and explicit launch com
     fs.mkdirSync(path.join(pycharmProject, '.git'), { recursive: true });
     fs.writeFileSync(path.join(ideaProject, '.git', 'HEAD'), 'ref: refs/heads/feature/idea-service\n');
     fs.writeFileSync(path.join(pycharmProject, '.git', 'HEAD'), 'ref: refs/heads/main\n');
+    await commandHandlers.get('kronos.configureProjectDiscoveryFolders')();
+    configurationUpdateError = new Error('Fixture configuration update failure.');
+    openDialogResult = [{ fsPath: ideaProjectsRoot }];
+    await commandHandlers.get('kronos.configureProjectDiscoveryFolders')();
+    assert.match(errorMessages.at(-1), /configuration update failure/i);
     openDialogResult = [{ fsPath: ideaProjectsRoot }, { fsPath: pycharmProjectsRoot }];
     await commandHandlers.get('kronos.configureProjectDiscoveryFolders')();
     assert.deepEqual(configurationValues.get('projectDiscoveryRoots'), [ideaProjectsRoot, pycharmProjectsRoot]);
@@ -4954,12 +7047,47 @@ test('extension activation registers the bounded surface and explicit launch com
     assert.match(integrationPanel.webview.html, /GitLab project ID or path/);
     assert.match(integrationPanel.webview.html, /Jenkins job URL/);
     assert.match(integrationPanel.webview.html, /SonarQube project key/);
+    const integrationWarningCount = warningMessages.length;
+    await integrationPanel.receive({ command: '__kronosWebviewReady' });
+    await integrationPanel.receive({ command: 'invalid' });
+    await integrationPanel.receive({ command: 'save', projects: [] });
+    assert.equal(warningMessages.length, integrationWarningCount + 2);
+    assert.match(warningMessages.at(-1), /unexpected project set/i);
     await integrationPanel.receive({ command: 'cancel' });
     await commandHandlers.get('kronos.configureProjectIntegrations')({ projectName: 'python-service', projectPath: pycharmProject });
     const reopenedIntegrationPanel = createdWebviewPanels.at(-1);
     assert.equal(reopenedIntegrationPanel.viewType, 'kronosProjectIntegrationSetup');
     assert.match(reopenedIntegrationPanel.webview.html, /python-service/);
-    await reopenedIntegrationPanel.receive({ command: 'cancel' });
+    const integrationValues = {
+      name: 'python-service',
+      nickname: 'Python API',
+      gitlabProject: 'group/python-service',
+      jenkinsUrl: 'https://jenkins.example/job/python-service/',
+      sonarProjectKey: 'python-service',
+      defaultBranch: 'main',
+      branchProfiles: '',
+      activeBranchProfile: '',
+    };
+    const runtimePollProviders = runtime.pollProviders;
+    const runtimeSetProjectIntegrations = runtime.state.setLocalProjectIntegrations;
+    runtime.pollProviders = async () => {};
+    try {
+      runtime.state.setLocalProjectIntegrations = () => { throw new Error('Fixture integration save failure.'); };
+      await reopenedIntegrationPanel.receive({ command: 'save', projects: [integrationValues] });
+      assert.match(errorMessages.at(-1), /integration save failure/i);
+      runtime.state.setLocalProjectIntegrations = runtimeSetProjectIntegrations;
+      await reopenedIntegrationPanel.receive({ command: 'save', projects: [integrationValues] });
+    } finally {
+      runtime.state.setLocalProjectIntegrations = runtimeSetProjectIntegrations;
+      runtime.pollProviders = runtimePollProviders;
+    }
+    assert.equal(stateStore.readStateFileWithIssues().state.projects['python-service'].display_name, 'Python API');
+    runtime.state.setLocalProjectIntegrations([{
+      ...integrationValues,
+      gitlabProject: '',
+      jenkinsUrl: '',
+      sonarProjectKey: '',
+    }]);
 
     const unregisteredProject = path.join(ideaProjectsRoot, 'new-service');
     fs.mkdirSync(path.join(unregisteredProject, '.git'), { recursive: true });
@@ -5027,6 +7155,7 @@ test('extension activation registers the bounded surface and explicit launch com
     assert.equal(lastSinglePickOptions.title, 'Choose a team prompt');
     assert.equal(lastSinglePickOptions.placeHolder, 'Search by title, library, description, tag, or suggested context');
     assert.equal(lastSinglePickItems[0].description, 'Fixture Team • Local file');
+    const promptDefinition = lastSinglePickItems[0].prompt;
     const promptPanel = createdWebviewPanels.slice(promptPanelStart)
       .find(panel => panel.viewType === 'kronosPromptLibrary');
     assert.ok(promptPanel, 'a configured team prompt opens the dedicated editable composer');
@@ -5035,6 +7164,15 @@ test('extension activation registers the bounded surface and explicit launch com
     assert.match(promptPanel.webview.html, /Local file •/);
     assert.match(promptPanel.webview.html, /Library settings/);
     assert.equal(createdTerminals[0].actions.length, promptWritesBefore, 'opening a team prompt must not write to the terminal');
+    const promptWarningCount = warningMessages.length;
+    await promptPanel.receive({ command: '__kronosWebviewReady' });
+    await promptPanel.receive({ command: 'invalidPromptAction' });
+    assert.equal(warningMessages.length, promptWarningCount + 1);
+    assert.match(warningMessages.at(-1), /invalid prompt-library request/i);
+    await promptPanel.receive({ command: 'openSettings' });
+    assert.deepEqual(executedCommands.at(-1), [
+      'workbench.action.openSettings', '@ext:jmacke01.kronos prompt library',
+    ]);
     await promptPanel.receive({
       command: 'insertPrompt',
       body: 'Review fixture carefully, then report the evidence.',
@@ -5052,6 +7190,168 @@ test('extension activation registers the bounded surface and explicit launch com
     await promptPanel.receive({ command: 'insertPrompt', body: 'Late duplicate must be ignored.' });
     assert.equal(createdTerminals[0].actions.length, promptWritesBefore + 1);
     assert.equal(fs.readdirSync(promptArtifactRoot).length, promptArtifactCount, 'duplicate placement must not create an unused snapshot');
+
+    await t.test('prompt placement reports stale terminals, private-write failures, insertion failures, and lost sessions', async () => {
+      const terminal = createdTerminals[0].terminal;
+      const binding = runtime.operatorTerminals.bindingForTerminal(terminal);
+      const templateContext = runtime.promptTemplateContext(standalone);
+      const input = body => ({
+        selection: { terminal, binding, workSession: standalone },
+        prompt: promptDefinition,
+        templateContext,
+        body,
+        appliedVariables: [],
+        warnings: [],
+      });
+
+      runtime.openPromptLibraryComposer({
+        ...input('Already stale while opening fixture.'),
+        selection: { terminal, binding: { ...binding, bindingId: 'missing-at-open' }, workSession: standalone },
+      });
+      assert.match(warningMessages.at(-1), /changed while the prompt library was loading/i);
+
+      runtime.openPromptLibraryComposer(input('Cancellation fixture.'));
+      let canceledRecord = runtime.promptLibraryPanel;
+      await canceledRecord.panel.receive({ command: 'cancel' });
+      assert.equal(runtime.promptLibraryPanel, undefined);
+
+      const originalPlacePromptReference = insertion.placeEditableTerminalContextReference;
+      try {
+        for (const kind of ['busy', 'already-placed', 'target-changed']) {
+          insertion.placeEditableTerminalContextReference = () => ({ kind });
+          runtime.openPromptLibraryComposer(input(`${kind} placement fixture.`));
+          const edgeRecord = runtime.promptLibraryPanel;
+          await edgeRecord.panel.receive({ command: 'insertPrompt', body: `${kind} placement fixture.` });
+          if (kind === 'target-changed') {
+            assert.match(warningMessages.at(-1), /changed before the prompt was added/i);
+          }
+          edgeRecord.panel.dispose();
+        }
+      } finally {
+        insertion.placeEditableTerminalContextReference = originalPlacePromptReference;
+      }
+
+      await runtime.placePromptLibraryArtifact({
+        ...input('Non-ready placement fixture.'),
+        placement: { phase: 'placing' },
+      }, 'Non-ready placement fixture.');
+
+      runtime.openPromptLibraryComposer(input('Stale target fixture.'));
+      let record = runtime.promptLibraryPanel;
+      record.placement.bindingId = 'stale-prompt-binding';
+      await record.panel.receive({ command: 'insertPrompt', body: 'Stale target fixture.' });
+      assert.match(warningMessages.at(-1), /connected terminal changed while this prompt was open/i);
+      record.panel.dispose();
+
+      const originalWritePromptArtifact = promptLibraryArtifactStore.writePromptLibraryArtifact;
+      promptLibraryArtifactStore.writePromptLibraryArtifact = () => { throw new Error('Fixture prompt snapshot failure.'); };
+      try {
+        runtime.openPromptLibraryComposer(input('Private write failure fixture.'));
+        record = runtime.promptLibraryPanel;
+        await record.panel.receive({ command: 'insertPrompt', body: 'Private write failure fixture.' });
+        assert.match(errorMessages.at(-1), /prompt snapshot failure/i);
+        record.panel.dispose();
+      } finally {
+        promptLibraryArtifactStore.writePromptLibraryArtifact = originalWritePromptArtifact;
+      }
+
+      const originalSendText = terminal.sendText;
+      terminal.sendText = () => { throw new Error('Fixture prompt terminal write failure.'); };
+      try {
+        runtime.openPromptLibraryComposer(input('Terminal insertion failure fixture.'));
+        record = runtime.promptLibraryPanel;
+        await record.panel.receive({ command: 'insertPrompt', body: 'Terminal insertion failure fixture.' });
+        assert.match(errorMessages.at(-1), /terminal write failure/i);
+        record.panel.dispose();
+      } finally {
+        terminal.sendText = originalSendText;
+      }
+
+      const originalReadWorkSession = workSessions.readWorkSession;
+      workSessions.readWorkSession = () => null;
+      try {
+        runtime.openPromptLibraryComposer({
+          ...input('Lost Session fixture.'),
+          selection: { terminal, binding },
+        });
+        record = runtime.promptLibraryPanel;
+        await record.panel.receive({ command: 'insertPrompt', body: 'Lost Session fixture.' });
+        assert.match(errorMessages.at(-1), /Session disappeared/i);
+      } finally {
+        workSessions.readWorkSession = originalReadWorkSession;
+      }
+
+      const originalRecordArtifact = workSessions.recordWorkSessionContextArtifact;
+      workSessions.recordWorkSessionContextArtifact = () => { throw new Error('Fixture prompt history failure.'); };
+      try {
+        runtime.openPromptLibraryComposer(input('History failure fixture.'));
+        record = runtime.promptLibraryPanel;
+        await record.panel.receive({ command: 'insertPrompt', body: 'History failure fixture.' });
+        assert.match(errorMessages.at(-1), /prompt history failure/i);
+      } finally {
+        workSessions.recordWorkSessionContextArtifact = originalRecordArtifact;
+      }
+
+      assert.equal(await runtime.choosePromptLibraryTerminal({ projectName: 'missing-project' }), undefined);
+      const closedPromptSession = workSessions.closeWorkSession(
+        workSessions.createStandaloneWorkSession({ title: 'Closed prompt fixture' }).id,
+      );
+      assert.equal(await runtime.choosePromptLibraryTerminal(closedPromptSession.id), undefined);
+      const unboundPromptSession = workSessions.createStandaloneWorkSession({ title: 'Unbound prompt fixture' });
+      assert.equal(await runtime.choosePromptLibraryTerminal(unboundPromptSession.id), undefined);
+      const originalPromptMethods = {
+        chooseInsertionTerminal: runtime.chooseInsertionTerminal,
+        resolveWorkSession: runtime.resolveWorkSession,
+        chooseLiveTerminal: runtime.chooseLiveTerminal,
+      };
+      try {
+        const ticketSelection = { terminal, binding, workSession: standalone };
+        runtime.chooseInsertionTerminal = async () => ticketSelection;
+        assert.equal(
+          await runtime.choosePromptLibraryTerminal({ ticketKey: 'JIRA-123', workSessionId: standalone.id }),
+          ticketSelection,
+        );
+
+        const showCalls = [];
+        runtime.resolveWorkSession = async () => standalone;
+        runtime.chooseLiveTerminal = async () => ({
+          terminal: { name: 'Direct prompt terminal', show: value => showCalls.push(value) }, binding,
+        });
+        assert.equal((await runtime.choosePromptLibraryTerminal(standalone.id)).workSession.id, standalone.id);
+        assert.deepEqual(showCalls, [false]);
+
+        runtime.resolveWorkSession = async () => undefined;
+        runtime.chooseLiveTerminal = originalPromptMethods.chooseLiveTerminal;
+        assert.equal((await runtime.choosePromptLibraryTerminal()).workSession.id, standalone.id);
+      } finally {
+        Object.assign(runtime, originalPromptMethods);
+      }
+      const activePromptTerminal = vscode.window.activeTerminal;
+      vscode.window.activeTerminal = undefined;
+      try {
+        assert.equal((await runtime.choosePromptLibraryTerminal()).workSession.id, standalone.id);
+      } finally {
+        vscode.window.activeTerminal = activePromptTerminal;
+        workSessions.removeWorkSession(closedPromptSession.id);
+        workSessions.removeWorkSession(unboundPromptSession.id);
+      }
+    });
+    singlePickHandler = () => undefined;
+    const panelsBeforeCancelledPrompt = createdWebviewPanels.length;
+    await commandHandlers.get('kronos.openPromptLibrary')(projectItems[0]);
+    assert.equal(createdWebviewPanels.length, panelsBeforeCancelledPrompt, 'canceling prompt selection opens no composer');
+    configurationValues.set('promptLibraryLocalPaths', [path.join(tempRoot, 'missing-prompts.json')]);
+    await commandHandlers.get('kronos.openPromptLibrary')(projectItems[0]);
+    assert.match(warningMessages.at(-1), /No valid prompts were found|loaded 0 prompts/i);
+    const emptyPromptManifestPath = path.join(tempRoot, 'empty-prompts.json');
+    fs.writeFileSync(emptyPromptManifestPath, JSON.stringify({ schemaVersion: 1, name: 'Empty', prompts: [] }));
+    configurationValues.set('promptLibraryLocalPaths', [emptyPromptManifestPath]);
+    warningMessageResult = 'Open Prompt Library Settings';
+    await commandHandlers.get('kronos.openPromptLibrary')(projectItems[0]);
+    assert.deepEqual(executedCommands.at(-1), [
+      'workbench.action.openSettings', '@ext:jmacke01.kronos prompt library',
+    ]);
+    configurationValues.set('promptLibraryLocalPaths', [promptManifestPath]);
     await commandHandlers.get('kronos.newClaudeSession')();
     assert.equal(createdTerminals.length, 1, 'a rapid sequential standalone click must be ignored during the cooldown');
 
@@ -5307,6 +7607,111 @@ test('extension activation registers the bounded surface and explicit launch com
     await commandHandlers.get('kronos.focusWorkSessionTerminal')({ workSessionId: ticketSession.id });
     assert.deepEqual(reconnectedActions, [['show', false]], 'selecting a detached Session must reconnect and open the sole unclaimed terminal');
     assert.equal(workSessions.getWorkSessionByTicket('JIRA-123').terminals.at(-1).name, 'Restored JIRA-123 terminal');
+
+    await t.test('context composer reports stale targets, unsupported basket sources, and post-placement failures', async () => {
+      const binding = runtime.operatorTerminals.bindingForTerminal(reconnectedTerminal);
+      assert.ok(binding);
+      const retainedArtifact = workSessions.readWorkSession(ticketSession.id).artifacts
+        .find(artifact => artifact.kind === 'jira-ticket');
+      assert.ok(retainedArtifact);
+      const reference = insertion.buildJiraContextReference('JIRA-123', retainedArtifact.promptPath);
+      const request = (key, onInserted, basketItem) => ({
+        key,
+        panelTitle: 'Kronos context edge fixture',
+        title: 'Context edge fixture',
+        subtitle: 'Exercises explicit local failure handling.',
+        sourceLabel: 'Fixture source',
+        selection: { terminal: reconnectedTerminal, binding, workSession: ticketSession },
+        reference,
+        promptPath: retainedArtifact.promptPath,
+        suggestedFocus: '',
+        evidence: [{ label: 'Retained fixture', detail: 'Retained fixture evidence' }],
+        warnings: [],
+        basketItem,
+        onInserted,
+      });
+
+      const panelCount = createdWebviewPanels.length;
+      runtime.openContextComposer({
+        ...request('stale-before-open', async () => {}),
+        selection: { terminal: reconnectedTerminal, binding: { ...binding, bindingId: 'stale-binding' } },
+      });
+      assert.equal(createdWebviewPanels.length, panelCount);
+      assert.match(warningMessages.at(-1), /connected terminal changed while context was loading/i);
+
+      runtime.openContextComposer(request('unsupported-basket', async () => {
+        throw new Error('Fixture post-insertion update failure.');
+      }));
+      const unsupportedPanel = createdWebviewPanels.at(-1);
+      await unsupportedPanel.receive({ command: 'addToBasket' });
+      assert.match(warningMessages.at(-1), /cannot be added to the basket/i);
+      await unsupportedPanel.receive({ command: 'insertDraft', focus: 'Exercise post-placement failure.' });
+      assert.match(errorMessages.at(-1), /inserted without submission.*post-insertion update failure/i);
+
+      runtime.openContextComposer(request('failed-outcome', async () => ({
+        operation: 'fixture retained outcome',
+        failed: true,
+        display: 'fixture retained outcome failed after placement',
+        steps: [],
+      })));
+      const outcomePanel = createdWebviewPanels.at(-1);
+      await outcomePanel.receive({ command: 'insertDraft', focus: '' });
+      assert.match(errorMessages.at(-1), /fixture retained outcome failed after placement/i);
+
+      runtime.openContextComposer(request('invalid-basket-artifact', async () => {}, {
+        kind: 'jira',
+        sourceKey: 'JIRA-123',
+        label: 'Invalid basket fixture',
+        provenance: 'Test fixture',
+        promptPath: path.join(tempRoot, 'outside-kronos-artifact.md'),
+        fetchedAt: '2026-07-14T12:00:00.000Z',
+        complete: false,
+        refresh: { kind: 'jira', ticketKey: 'JIRA-123' },
+      }));
+      const invalidBasketPanel = createdWebviewPanels.at(-1);
+      await invalidBasketPanel.receive({ command: 'addToBasket' });
+      assert.match(errorMessages.at(-1), /basket|artifact/i);
+      const invalidBasketRecord = runtime.contextComposerPanels.get('invalid-basket-artifact');
+      invalidBasketRecord.placement.bindingId = 'changed-after-open';
+      const writeCount = reconnectedActions.length;
+      await invalidBasketPanel.receive({ command: 'insertDraft', focus: '' });
+      assert.equal(reconnectedActions.length, writeCount);
+      assert.match(warningMessages.at(-1), /connected terminal changed while this context was open/i);
+      invalidBasketPanel.dispose();
+
+      informationMessageResult = 'Open Basket';
+      runtime.openContextComposer(request('open-valid-basket', async () => {}, {
+        kind: 'jira',
+        sourceKey: 'JIRA-123',
+        label: 'Valid basket fixture',
+        provenance: 'Retained Jira fixture',
+        promptPath: retainedArtifact.promptPath,
+        fetchedAt: '2026-07-14T12:00:00.000Z',
+        complete: true,
+        warnings: [],
+        refresh: { kind: 'jira', ticketKey: 'JIRA-123' },
+        contentSha256: retainedArtifact.contentSha256,
+      }));
+      const openBasketPanel = createdWebviewPanels.at(-1);
+      await openBasketPanel.receive({ command: 'addToBasket' });
+      assert.ok(runtime.contextBasketPanel, 'the explicit Open Basket choice opens the retained basket');
+      const openedBasketPanel = runtime.contextBasketPanel.panel;
+      openedBasketPanel.dispose();
+      createdWebviewPanels.splice(createdWebviewPanels.indexOf(openedBasketPanel), 1);
+      openBasketPanel.dispose();
+
+      runtime.openContextComposer(request('terminal-write-failure', async () => {}));
+      const terminalWriteFailurePanel = createdWebviewPanels.at(-1);
+      const originalSendText = reconnectedTerminal.sendText;
+      reconnectedTerminal.sendText = () => { throw new Error('Fixture terminal write failure.'); };
+      try {
+        await terminalWriteFailurePanel.receive({ command: 'insertDraft', focus: 'Exercise terminal write failure.' });
+        assert.match(errorMessages.at(-1), /terminal write failure/i);
+      } finally {
+        reconnectedTerminal.sendText = originalSendText;
+        terminalWriteFailurePanel.dispose();
+      }
+    });
 
     const duplicateCandidateActions = [[], []];
     const duplicateCandidates = duplicateCandidateActions.map((actions, index) => ({
@@ -5713,6 +8118,116 @@ test('extension activation registers the bounded surface and explicit launch com
     assert.deepEqual(workSessions.readWorkSession(standalone.id).ticketKeys, []);
     vscode.window.activeTerminal = reconnectedTerminal;
 
+    await t.test('provider context preparation isolates read, normalization, and private artifact failures', async () => {
+      const gitReadService = require('../out/services/vscodeGitReadService.js');
+      const originals = {
+        jiraRead: jiraRestModule.jiraRestClient.ticketContext,
+        jiraWrite: jiraContextStore.writeJiraContextArtifacts,
+        gitlabRead: gitLabRestModule.gitlabRestClient.mergeRequestContext,
+        gitlabNormalize: gitlabMergeRequestContext.normalizeGitLabMergeRequestContext,
+        gitlabWrite: gitlabContextStore.writeGitLabContextArtifacts,
+        jenkinsRead: jenkinsRestModule.jenkinsRestClient.buildContext,
+        sonarRead: sonarRestModule.sonarRestClient.branchContext,
+        ciBuild: ciContextStore.buildCiContext,
+        ciWrite: ciContextStore.writeCiContextArtifacts,
+        gitRead: gitReadService.readProjectGitEvidence,
+        gitWrite: projectGitContextStore.writeProjectGitContextArtifact,
+      };
+      const jiraEnv = {
+        baseUrl: process.env.JIRA_BASE_URL,
+        email: process.env.JIRA_EMAIL,
+        token: process.env.JIRA_API_TOKEN,
+      };
+      const latestComposer = start => createdWebviewPanels.slice(start)
+        .find(panel => panel.viewType === 'kronosContextComposer');
+      const expectPreparationFailure = async action => {
+        const before = errorMessages.length;
+        await action();
+        assert.equal(errorMessages.length, before + 1);
+      };
+      try {
+        process.env.JIRA_BASE_URL = 'https://jira.example';
+        process.env.JIRA_EMAIL = 'fixture@example.test';
+        process.env.JIRA_API_TOKEN = 'fixture-context-token';
+        jiraRestModule.jiraRestClient.ticketContext = async () => { throw new Error('Synthetic Jira read failure.'); };
+        let panelStart = createdWebviewPanels.length;
+        await runtime.insertJiraContext({ ticketKey: 'JIRA-123' });
+        let fallbackComposer = latestComposer(panelStart);
+        assert.ok(fallbackComposer);
+        assert.match(fallbackComposer.webview.html, /Jira partial/);
+        fallbackComposer.dispose();
+
+        jiraRestModule.jiraRestClient.ticketContext = originals.jiraRead;
+        jiraContextStore.writeJiraContextArtifacts = () => { throw new Error('Synthetic Jira artifact failure.'); };
+        await expectPreparationFailure(() => runtime.insertJiraContext({ ticketKey: 'JIRA-123' }));
+        assert.match(errorMessages.at(-1), /Jira context preparation.*artifact write failed/i);
+        jiraContextStore.writeJiraContextArtifacts = originals.jiraWrite;
+
+        gitLabRestModule.gitlabRestClient.mergeRequestContext = async () => { throw new Error('Synthetic GitLab read failure.'); };
+        await expectPreparationFailure(() => runtime.insertGitLabContext({ ticketKey: 'JIRA-123' }));
+        assert.match(errorMessages.at(-1), /GitLab.*provider read failed/i);
+        gitLabRestModule.gitlabRestClient.mergeRequestContext = async () => gitLabSnapshot;
+        gitlabMergeRequestContext.normalizeGitLabMergeRequestContext = () => { throw new Error('Synthetic GitLab normalization failure.'); };
+        await expectPreparationFailure(() => runtime.insertGitLabContext({ ticketKey: 'JIRA-123' }));
+        assert.match(errorMessages.at(-1), /Snapshot failed.*Synthetic GitLab normalization failure/i);
+        gitlabMergeRequestContext.normalizeGitLabMergeRequestContext = originals.gitlabNormalize;
+        gitlabContextStore.writeGitLabContextArtifacts = () => { throw new Error('Synthetic GitLab artifact failure.'); };
+        await expectPreparationFailure(() => runtime.insertGitLabContext({ ticketKey: 'JIRA-123' }));
+        assert.match(errorMessages.at(-1), /GitLab context preparation.*artifact write failed/i);
+        gitlabContextStore.writeGitLabContextArtifacts = originals.gitlabWrite;
+
+        jenkinsRestModule.jenkinsRestClient.buildContext = async () => { throw new Error('Synthetic Jenkins read failure.'); };
+        sonarRestModule.sonarRestClient.branchContext = async () => { throw new Error('Synthetic SonarQube read failure.'); };
+        await expectPreparationFailure(() => runtime.insertCiContext({ ticketKey: 'JIRA-123' }));
+        assert.match(errorMessages.at(-1), /Provider read failed.*Synthetic Jenkins read failure.*Synthetic SonarQube read failure/i);
+        jenkinsRestModule.jenkinsRestClient.buildContext = async () => jenkinsContext;
+        ciContextStore.buildCiContext = () => { throw new Error('Synthetic CI normalization failure.'); };
+        await expectPreparationFailure(() => runtime.insertCiContext({ ticketKey: 'JIRA-123' }));
+        assert.match(errorMessages.at(-1), /Snapshot failed.*Synthetic CI normalization failure/i);
+        ciContextStore.buildCiContext = originals.ciBuild;
+        sonarRestModule.sonarRestClient.branchContext = async () => sonarContext;
+        ciContextStore.writeCiContextArtifacts = () => { throw new Error('Synthetic CI artifact failure.'); };
+        await expectPreparationFailure(() => runtime.insertCiContext({ ticketKey: 'JIRA-123' }));
+        assert.match(errorMessages.at(-1), /CI context preparation.*artifact write failed/i);
+        ciContextStore.writeCiContextArtifacts = originals.ciWrite;
+
+        gitReadService.readProjectGitEvidence = async () => { throw new Error('Synthetic Git evidence failure.'); };
+        await expectPreparationFailure(() => runtime.insertProjectGitContext({ projectName: 'fixture', projectPath: tempRoot }));
+        assert.match(errorMessages.at(-1), /Snapshot failed.*Synthetic Git evidence failure/i);
+        gitReadService.readProjectGitEvidence = async () => ({
+          projectPath: tempRoot, detached: false, branches: [], branchCount: 0, branchesTruncated: false,
+          changes: [], changeCount: 0, diff: '', diffTruncated: false, available: false,
+          warning: 'Synthetic Git model unavailable.',
+        });
+        const warningsBeforeUnavailableGit = warningMessages.length;
+        await runtime.insertProjectGitContext({ projectName: 'fixture', projectPath: tempRoot });
+        assert.equal(warningMessages.length, warningsBeforeUnavailableGit + 1);
+        assert.match(warningMessages.at(-1), /Synthetic Git model unavailable/);
+        gitReadService.readProjectGitEvidence = originals.gitRead;
+        projectGitContextStore.writeProjectGitContextArtifact = () => { throw new Error('Synthetic Git artifact failure.'); };
+        await expectPreparationFailure(() => runtime.insertProjectGitContext({ projectName: 'fixture', projectPath: tempRoot }));
+        assert.match(errorMessages.at(-1), /local Git context preparation.*artifact write failed/i);
+      } finally {
+        jiraRestModule.jiraRestClient.ticketContext = originals.jiraRead;
+        jiraContextStore.writeJiraContextArtifacts = originals.jiraWrite;
+        gitLabRestModule.gitlabRestClient.mergeRequestContext = originals.gitlabRead;
+        gitlabMergeRequestContext.normalizeGitLabMergeRequestContext = originals.gitlabNormalize;
+        gitlabContextStore.writeGitLabContextArtifacts = originals.gitlabWrite;
+        jenkinsRestModule.jenkinsRestClient.buildContext = originals.jenkinsRead;
+        sonarRestModule.sonarRestClient.branchContext = originals.sonarRead;
+        ciContextStore.buildCiContext = originals.ciBuild;
+        ciContextStore.writeCiContextArtifacts = originals.ciWrite;
+        gitReadService.readProjectGitEvidence = originals.gitRead;
+        projectGitContextStore.writeProjectGitContextArtifact = originals.gitWrite;
+        if (jiraEnv.baseUrl === undefined) delete process.env.JIRA_BASE_URL;
+        else process.env.JIRA_BASE_URL = jiraEnv.baseUrl;
+        if (jiraEnv.email === undefined) delete process.env.JIRA_EMAIL;
+        else process.env.JIRA_EMAIL = jiraEnv.email;
+        if (jiraEnv.token === undefined) delete process.env.JIRA_API_TOKEN;
+        else process.env.JIRA_API_TOKEN = jiraEnv.token;
+      }
+    });
+
     const attentionPanelStart = createdWebviewPanels.length;
     await commandHandlers.get('kronos.insertAttentionEventContext')();
     assert.equal(createdWebviewPanels.length, attentionPanelStart, 'an incomplete Attention command cannot open a composer');
@@ -5896,6 +8411,60 @@ test('extension activation registers the bounded surface and explicit launch com
       assert.match(warningMessages.at(-1), /no longer selected/i);
       assert.equal(contextBasketStore.listContextBasketItems().length, itemCount);
 
+      const firstBasketItem = contextBasketStore.listContextBasketItems()[0];
+      const originalListBasketItems = contextBasketStore.listContextBasketItems;
+      contextBasketStore.listContextBasketItems = () => { throw new Error('Fixture basket read failure.'); };
+      try {
+        await basketPanel.receive({ command: 'remove', entryId: firstBasketItem.id, focus: '' });
+        assert.match(errorMessages.at(-1), /basket read failure/i);
+      } finally {
+        contextBasketStore.listContextBasketItems = originalListBasketItems;
+      }
+
+      const basketBinding = runtime.operatorTerminals.bindingForTerminal(reconnectedTerminal);
+      const originalBasketMethods = {
+        resolveWorkSession: runtime.resolveWorkSession,
+        chooseLiveTerminal: runtime.chooseLiveTerminal,
+      };
+      const originalWriteBasketBundle = contextBasketStore.writeContextBasketBundle;
+      const originalPlaceBasketReference = insertion.placeEditableTerminalContextReference;
+      const originalRecordBasketArtifact = workSessions.recordWorkSessionContextArtifact;
+      try {
+        runtime.resolveWorkSession = async () => undefined;
+        await runtime.insertContextBasket('No selected Session fixture.');
+
+        runtime.resolveWorkSession = async () => ({ ...ticketSession, status: 'closed' });
+        await runtime.insertContextBasket('Closed Session fixture.');
+        assert.match(warningMessages.at(-1), /Choose an active Session/i);
+
+        runtime.resolveWorkSession = async () => ticketSession;
+        runtime.chooseLiveTerminal = async () => undefined;
+        await runtime.insertContextBasket('Missing terminal fixture.');
+        assert.match(warningMessages.at(-1), /Focus or reconnect/i);
+
+        runtime.chooseLiveTerminal = async () => ({ terminal: reconnectedTerminal, binding: basketBinding });
+        contextBasketStore.writeContextBasketBundle = () => { throw new Error('Fixture basket bundle failure.'); };
+        await runtime.insertContextBasket('Bundle write fixture.');
+        assert.match(errorMessages.at(-1), /basket bundle failure/i);
+        contextBasketStore.writeContextBasketBundle = originalWriteBasketBundle;
+
+        for (const kind of ['target-changed', 'busy']) {
+          insertion.placeEditableTerminalContextReference = () => ({ kind });
+          await runtime.insertContextBasket(`${kind} basket placement fixture.`);
+        }
+        assert.match(warningMessages.at(-1), /changed while the basket was being prepared/i);
+
+        insertion.placeEditableTerminalContextReference = () => ({ kind: 'placed' });
+        workSessions.recordWorkSessionContextArtifact = () => { throw new Error('Fixture basket history failure.'); };
+        await runtime.insertContextBasket('Post-placement history fixture.');
+        assert.match(errorMessages.at(-1), /basket history failure/i);
+      } finally {
+        Object.assign(runtime, originalBasketMethods);
+        contextBasketStore.writeContextBasketBundle = originalWriteBasketBundle;
+        insertion.placeEditableTerminalContextReference = originalPlaceBasketReference;
+        workSessions.recordWorkSessionContextArtifact = originalRecordBasketArtifact;
+      }
+
       warningMessageResult = undefined;
       await basketPanel.receive({ command: 'clear', focus: 'keep selected sources' });
       assert.equal(contextBasketStore.listContextBasketItems().length, itemCount, 'canceling clear retains every source');
@@ -5943,6 +8512,35 @@ test('extension activation registers the bounded surface and explicit launch com
     );
     await refreshedCiComposer.receive({ command: 'cancel' });
 
+    await t.test('Context Basket refresh routing stays explicit for every saved source kind', async () => {
+      const calls = [];
+      const originalInsertJira = runtime.insertJiraContext;
+      const originalInsertGitLab = runtime.insertGitLabContext;
+      const originalInsertCi = runtime.insertCiContext;
+      const originalInsertGit = runtime.insertProjectGitContext;
+      runtime.insertJiraContext = async argument => { calls.push(['jira', argument]); };
+      runtime.insertGitLabContext = async argument => { calls.push(['gitlab', argument]); };
+      runtime.insertCiContext = async argument => { calls.push(['ci', argument]); };
+      runtime.insertProjectGitContext = async argument => { calls.push(['git', argument]); };
+      const item = refresh => ({ label: 'Refresh fixture', refresh });
+      try {
+        await runtime.refreshContextBasketItem(item({ kind: 'jira', ticketKey: 'JIRA-123' }));
+        await runtime.refreshContextBasketItem(item({ kind: 'gitlab', ticketKey: 'JIRA-123' }));
+        await runtime.refreshContextBasketItem(item({ kind: 'gitlab', projectName: 'fixture' }));
+        await runtime.refreshContextBasketItem(item({ kind: 'ci', ticketKey: 'JIRA-123' }));
+        await runtime.refreshContextBasketItem(item({ kind: 'ci', projectName: 'fixture' }));
+        await runtime.refreshContextBasketItem(item({ kind: 'git', projectName: 'fixture' }));
+        await runtime.refreshContextBasketItem(item({ kind: 'git', projectName: 'missing-project' }));
+      } finally {
+        runtime.insertJiraContext = originalInsertJira;
+        runtime.insertGitLabContext = originalInsertGitLab;
+        runtime.insertCiContext = originalInsertCi;
+        runtime.insertProjectGitContext = originalInsertGit;
+      }
+      assert.deepEqual(calls.map(([kind]) => kind), ['jira', 'gitlab', 'gitlab', 'ci', 'ci', 'git']);
+      assert.match(warningMessages.at(-1), /no longer has a registered source target/i);
+    });
+
     const shownBeforeEvidenceSearch = shownTextDocuments.length;
     singlePickHandler = items => items.find(item => item.entry?.action?.kind === 'artifact'
       && item.entry.action.promptPath === basketArtifact.promptPath);
@@ -5950,6 +8548,105 @@ test('extension activation registers the bounded surface and explicit launch com
     assert.equal(shownTextDocuments.length, shownBeforeEvidenceSearch + 1);
     assert.equal(shownTextDocuments.at(-1).document.fsPath, basketArtifact.promptPath);
     assert.equal(shownTextDocuments.at(-1).options.preview, true);
+
+    await t.test('local evidence search routes each result without mutating providers', async () => {
+      const calls = [];
+      const originals = {
+        focus: runtime.focusWorkSessionTerminal,
+        ticket: runtime.openTicketWorkspace,
+        audit: runtime.openWorkSessionAudit,
+        project: runtime.openProjectGitStatus,
+        artifact: runtime.openLocalArtifact,
+        url: runtime.openHttpUrl,
+      };
+      runtime.focusWorkSessionTerminal = async argument => { calls.push(['session', argument]); };
+      runtime.openTicketWorkspace = async argument => { calls.push(['ticket', argument]); };
+      runtime.openWorkSessionAudit = async argument => { calls.push(['audit', argument]); };
+      runtime.openProjectGitStatus = async argument => { calls.push(['project', argument]); };
+      runtime.openLocalArtifact = async filePath => {
+        if (filePath.endsWith('missing.md')) { throw new Error('Fixture missing artifact.'); }
+        calls.push(['artifact', filePath]);
+      };
+      runtime.openHttpUrl = async url => { calls.push(['provider', url]); };
+      try {
+        await runtime.openLocalEvidenceSearchResult({ action: { kind: 'session', sessionId: ticketSession.id } });
+        await runtime.openLocalEvidenceSearchResult({
+          action: { kind: 'ticket', ticketKey: 'JIRA-123', sessionId: ticketSession.id },
+        });
+        await runtime.openLocalEvidenceSearchResult({
+          action: { kind: 'ticket', ticketKey: 'MISSING-1', sessionId: ticketSession.id },
+        });
+        await runtime.openLocalEvidenceSearchResult({
+          action: { kind: 'project', projectName: 'fixture', projectPath: tempRoot },
+        });
+        await runtime.openLocalEvidenceSearchResult({ action: { kind: 'artifact', promptPath: basketArtifact.promptPath } });
+        await runtime.openLocalEvidenceSearchResult({ action: { kind: 'artifact', promptPath: '/tmp/missing.md' } });
+        await runtime.openLocalEvidenceSearchResult({ action: { kind: 'provider', url: 'https://provider.example/item' } });
+        await runtime.openLocalEvidenceSearchResult({ action: { kind: 'history', sessionId: ticketSession.id } });
+      } finally {
+        runtime.focusWorkSessionTerminal = originals.focus;
+        runtime.openTicketWorkspace = originals.ticket;
+        runtime.openWorkSessionAudit = originals.audit;
+        runtime.openProjectGitStatus = originals.project;
+        runtime.openLocalArtifact = originals.artifact;
+        runtime.openHttpUrl = originals.url;
+      }
+      assert.deepEqual(calls.map(([kind]) => kind), [
+        'session', 'ticket', 'audit', 'project', 'artifact', 'provider', 'audit',
+      ]);
+      assert.match(warningMessages.at(-1), /missing artifact/i);
+    });
+
+    await t.test('local handoff keeps every canceled, oversized, unreadable, and failed path non-mutating', async () => {
+      const handoffBundleStore = require('../out/services/handoffBundleStore.js');
+      const originalResolveWorkSession = runtime.resolveWorkSession;
+      const originalListMonitorEvents = monitorEventStore.listMonitorEvents;
+      const originalWriteHandoff = handoffBundleStore.writeLocalHandoffBundle;
+      const emptySession = workSessions.createStandaloneWorkSession({ title: 'Empty handoff fixture' });
+      try {
+        runtime.resolveWorkSession = async () => undefined;
+        await runtime.createLocalHandoff();
+
+        runtime.resolveWorkSession = async () => emptySession;
+        await runtime.createLocalHandoff();
+        assert.match(informationMessages.at(-1), /no saved context or history/i);
+
+        runtime.resolveWorkSession = async () => ticketSession;
+        monitorEventStore.listMonitorEvents = () => { throw new Error('Fixture handoff audit failure.'); };
+        multiPickHandler = () => undefined;
+        await runtime.createLocalHandoff();
+        assert.match(warningMessages.at(-1), /could not include audit events/i);
+        monitorEventStore.listMonitorEvents = originalListMonitorEvents;
+
+        multiPickHandler = () => undefined;
+        await runtime.createLocalHandoff();
+
+        multiPickHandler = items => Array.from({ length: 101 }, () => items[0]);
+        await runtime.createLocalHandoff();
+        assert.match(warningMessages.at(-1), /at most 100 references/i);
+
+        multiPickHandler = items => items.slice(0, 1);
+        inputBoxHandler = options => options.title === 'Handoff title' ? undefined : '';
+        await runtime.createLocalHandoff();
+
+        multiPickHandler = items => items.slice(0, 1);
+        inputBoxHandler = options => options.title === 'Handoff title' ? 'Canceled note fixture' : undefined;
+        await runtime.createLocalHandoff();
+
+        handoffBundleStore.writeLocalHandoffBundle = () => { throw new Error('Fixture handoff write failure.'); };
+        multiPickHandler = items => items.slice(0, 1);
+        inputBoxHandler = options => options.title === 'Handoff title' ? 'Failed handoff fixture' : '';
+        await runtime.createLocalHandoff();
+        assert.match(errorMessages.at(-1), /handoff write failure/i);
+      } finally {
+        runtime.resolveWorkSession = originalResolveWorkSession;
+        monitorEventStore.listMonitorEvents = originalListMonitorEvents;
+        handoffBundleStore.writeLocalHandoffBundle = originalWriteHandoff;
+        multiPickHandler = undefined;
+        inputBoxHandler = undefined;
+        workSessions.removeWorkSession(emptySession.id);
+      }
+    });
 
     const shownBeforeHandoff = shownTextDocuments.length;
     multiPickHandler = items => items.slice(0, 2);
@@ -5966,9 +8663,46 @@ test('extension activation registers the bounded surface and explicit launch com
     assert.match(handoffMarkdown, /JIRA\\-123 review handoff/);
     assert.match(handoffMarkdown, /Confirm the newest MR and CI evidence before changing code\./);
     assert.match(handoffMarkdown, /does not post to Jira, GitLab, Jenkins, or SonarQube/);
+    const removableBasketItem = contextBasketStore.listContextBasketItems()[0];
+    const originalRemoveBasketItem = contextBasketStore.removeContextBasketItem;
+    contextBasketStore.removeContextBasketItem = () => { throw new Error('Fixture basket remove failure.'); };
+    try {
+      await basketPanel.receive({ command: 'remove', entryId: removableBasketItem.id, focus: '' });
+      assert.match(errorMessages.at(-1), /basket remove failure/i);
+    } finally {
+      contextBasketStore.removeContextBasketItem = originalRemoveBasketItem;
+    }
+    await basketPanel.receive({ command: 'remove', entryId: removableBasketItem.id, focus: '' });
+    assert.equal(contextBasketStore.listContextBasketItems().some(item => item.id === removableBasketItem.id), false);
+
+    const originalClearBasket = contextBasketStore.clearContextBasket;
+    contextBasketStore.clearContextBasket = () => { throw new Error('Fixture basket clear failure.'); };
+    warningMessageResult = 'Clear Basket';
+    try {
+      await basketPanel.receive({ command: 'clear', focus: '' });
+      assert.match(errorMessages.at(-1), /basket clear failure/i);
+    } finally {
+      contextBasketStore.clearContextBasket = originalClearBasket;
+    }
+    warningMessageResult = 'Clear Basket';
+    await basketPanel.receive({ command: 'clear', focus: '' });
+    assert.deepEqual(contextBasketStore.listContextBasketItems(), []);
+    runtime.contextBasketInsertionInFlight = true;
+    await runtime.insertContextBasket('busy fixture');
+    assert.match(informationMessages.at(-1), /already preparing/i);
+    runtime.contextBasketInsertionInFlight = false;
+    await runtime.insertContextBasket('empty fixture');
+    assert.match(warningMessages.at(-1), /Context Basket is empty/i);
+
+    const basketStatePath = contextBasketStore.contextBasketPath();
+    fs.writeFileSync(basketStatePath, 'not-json', { mode: 0o600 });
+    runtime.renderContextBasketPanel();
+    assert.match(errorMessages.at(-1), /Context Basket|JSON/i);
+    fs.rmSync(basketStatePath, { force: true });
+    runtime.renderContextBasketPanel();
     await basketPanel.receive({ command: 'close' });
 
-    await commandHandlers.get('kronos.pollManagedWorkSessions')();
+    await setupPanel.receive({ command: 'pollProvidersNow' });
     const manuallyPolledSession = workSessions.getWorkSessionByTicket('JIRA-123');
     const manuallyPolledProject = projectMonitoringStore.readProjectMonitoringRecord('fixture');
     assert.equal(manuallyPolledProject.monitoring.lastState, 'healthy');
@@ -6015,6 +8749,12 @@ test('extension activation registers the bounded surface and explicit launch com
     await commandHandlers.get('kronos.removeWorkSession')({ workSessionId: failedSession.id });
     assert.equal(workSessions.getWorkSessionByTicket('JIRA-999'), null, 'removing an old session deletes its local session record');
 
+    multiPickHandler = () => undefined;
+    await commandHandlers.get('kronos.registerWorkspaceProject')();
+    multiPickHandler = items => items.filter(item => item.registered && item.project?.name !== 'fixture');
+    warningMessageResult = undefined;
+    await commandHandlers.get('kronos.registerWorkspaceProject')();
+    assert.ok(stateStore.readStateFileWithIssues().state.projects.fixture.path, 'canceling unlink keeps the registered project');
     multiPickHandler = items => items.filter(item => item.registered && item.project?.name !== 'fixture');
     warningMessageResult = 'Unregister and Unlink';
     await commandHandlers.get('kronos.registerWorkspaceProject')();
@@ -6024,6 +8764,34 @@ test('extension activation registers the bounded surface and explicit launch com
     assert.equal(unregisteredFixtureState.tickets['JIRA-123'].linked_local_project, undefined);
     assert.equal(workSessions.getWorkSessionByTicket('JIRA-123').projectName, undefined);
     assert.equal(workSessions.getWorkSessionByTicket('JIRA-123').projectPath, undefined);
+
+    multiPickHandler = () => [];
+    await commandHandlers.get('kronos.registerWorkspaceProject')();
+    assert.equal(Object.values(stateStore.readStateFileWithIssues().state.projects).some(project => project.path), false);
+
+    const discoveryWorkspaceFolders = vscode.workspace.workspaceFolders;
+    const discoveryRoots = configurationValues.get('projectDiscoveryRoots');
+    vscode.workspace.workspaceFolders = undefined;
+    configurationValues.set('projectDiscoveryRoots', []);
+    try {
+      warningMessageResult = 'Open Discovery Settings';
+      await commandHandlers.get('kronos.registerWorkspaceProject')();
+      assert.deepEqual(executedCommands.at(-1), [
+        'workbench.action.openSettings', '@ext:jmacke01.kronos project discovery',
+      ]);
+      warningMessageResult = 'Choose Discovery Folders';
+      await commandHandlers.get('kronos.registerWorkspaceProject')();
+      assert.equal(lastOpenDialogOptions.title, 'Choose Project Folders');
+      warningMessageResult = 'Open Projects';
+      await commandHandlers.get('kronos.chooseTicketProject')({ ticketKey: 'JIRA-123' });
+      assert.deepEqual(executedCommands.at(-1), ['kronosProjects.focus']);
+      runtime.openProjectIntegrationSetup(['missing-project']);
+      assert.match(warningMessages.at(-1), /Register at least one project/i);
+    } finally {
+      vscode.workspace.workspaceFolders = discoveryWorkspaceFolders;
+      if (discoveryRoots === undefined) { configurationValues.delete('projectDiscoveryRoots'); }
+      else { configurationValues.set('projectDiscoveryRoots', discoveryRoots); }
+    }
 
     jiraRestModule.jiraRestClient.searchWorkList = async () => ({
       issues: [
@@ -6050,7 +8818,7 @@ test('extension activation registers the bounded surface and explicit launch com
     process.env.JIRA_EMAIL = 'fixture@example.test';
     process.env.JIRA_API_TOKEN = 'fixture-test-token';
     try {
-      await commandHandlers.get('kronos.refreshTickets')();
+      await jiraBoardPanel.receive({ command: 'refreshTickets' });
       assert.equal(stateStore.readStateFileWithIssues().state.refreshedAt, '2026-07-14T13:00:00.000Z');
 
       let resolvePartialRefresh;

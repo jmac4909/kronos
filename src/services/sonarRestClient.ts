@@ -1,5 +1,4 @@
-import * as http from 'http';
-import * as https from 'https';
+import { boundedHttpTransport } from './boundedHttpTransport';
 import { unknownErrorCode } from './errorUtils';
 import { parseJsonWithLabel } from './jsonFiles';
 import {
@@ -316,12 +315,9 @@ export class SonarRestClient {
         retainedAllProviderRows = false;
         warnings.push(`SonarQube issue page ${pageNumber} contained invalid or over-limit issue data that was omitted or truncated.`);
       }
-      const remaining = this.maxIssues - issues.length;
-      if (pageIssues.length > remaining) {
-        retainedAllProviderRows = false;
-        warnings.push(`SonarQube issue page ${pageNumber} exceeded the remaining ${remaining}-issue safety limit; extra issues were omitted.`);
-      }
-      issues.push(...pageIssues.slice(0, remaining));
+      // The request size is already capped to the remaining collection budget,
+      // and over-sized provider pages are rejected above.
+      issues.push(...pageIssues);
       pages = pageNumber;
       total = effectiveTotal;
       providerRowsFetched += rawIssues.length;
@@ -479,14 +475,12 @@ export function isSonarRestConfigured(env: NodeJS.ProcessEnv = process.env): boo
 export function resolveSonarRestConfig(env: NodeJS.ProcessEnv = process.env): SonarRestConfig {
   const baseUrl = normalizeSonarBaseUrl(env['SONAR_HOST_URL']) || normalizeSonarBaseUrl(env['SONAR_URL']);
   const token = firstNonEmptyString(env['SONAR_TOKEN']);
-  const missing: string[] = [];
-  if (!baseUrl) { missing.push('SONAR_HOST_URL or SONAR_URL'); }
-  if (!token) { missing.push('SONAR_TOKEN'); }
-  if (missing.length > 0) {
-    throw new SonarRestError(`SonarQube REST configuration missing ${missing.join(', ')}. Values are not displayed.`);
-  }
   if (!baseUrl || !token) {
-    throw new SonarRestError('SonarQube REST configuration is incomplete. Values are not displayed.');
+    const missing = [
+      ...(!baseUrl ? ['SONAR_HOST_URL or SONAR_URL'] : []),
+      ...(!token ? ['SONAR_TOKEN'] : []),
+    ];
+    throw new SonarRestError(`SonarQube REST configuration missing ${missing.join(', ')}. Values are not displayed.`);
   }
   return { baseUrl, token };
 }
@@ -568,9 +562,11 @@ function normalizeQualityGateResponse(value: unknown): SonarQualityGateStatus {
   if (!Array.isArray(rawConditions)) {
     throw new SonarRestError('SonarQube quality gate returned invalid condition data. Response content is not displayed.');
   }
+  if (rawConditions.some(condition => !isCompleteQualityGateCondition(condition))) {
+    throw new SonarRestError('SonarQube quality gate contained invalid conditions. Response content is not displayed.');
+  }
   const normalized = normalizeQualityGateStatus(value);
   if (normalized.conditions.length !== rawConditions.length
-    || rawConditions.some(condition => !isCompleteQualityGateCondition(condition))
     || !isOptionalBoolean(value['projectStatus']['ignoredConditions'])
     || !isOptionalProviderTextWithinLimit(value['projectStatus']['caycStatus'], 500)) {
     throw new SonarRestError('SonarQube quality gate contained invalid conditions. Response content is not displayed.');
@@ -582,9 +578,11 @@ function normalizeSonarMeasureResponse(value: unknown): SonarMeasure[] {
   if (!isRecord(value) || !isRecord(value['component']) || !Array.isArray(value['component']['measures'])) {
     throw new SonarRestError('SonarQube measures returned an invalid payload. Response content is not displayed.');
   }
+  if (value['component']['measures'].some(measure => !isCompleteSonarMeasureRecord(measure))) {
+    throw new SonarRestError('SonarQube measures contained invalid records. Response content is not displayed.');
+  }
   const normalized = normalizeSonarMeasures(value);
-  if (normalized.length !== value['component']['measures'].length
-    || value['component']['measures'].some(measure => !isCompleteSonarMeasureRecord(measure))) {
+  if (normalized.length !== value['component']['measures'].length) {
     throw new SonarRestError('SonarQube measures contained invalid records. Response content is not displayed.');
   }
   return normalized;
@@ -875,62 +873,14 @@ export class SonarRestError extends Error {
 }
 
 function defaultSonarTransport(request: SonarHttpRequest): Promise<SonarHttpResponse> {
-  return new Promise((resolve, reject) => {
-    let parsed: URL;
-    try {
-      parsed = new URL(request.url);
-    } catch {
-      reject(new SonarRestError('Invalid SonarQube REST URL.'));
-      return;
-    }
-    if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && isLoopbackHostname(parsed.hostname))) {
-      reject(new SonarRestError('SonarQube REST requires HTTPS except for loopback development.'));
-      return;
-    }
-    const client = parsed.protocol === 'https:' ? https : http;
-    const req = client.request(parsed, {
-      method: request.method,
-      timeout: request.timeoutMs,
-      headers: request.headers,
-    }, res => {
-      const chunks: Buffer[] = [];
-      let receivedBytes = 0;
-      let settled = false;
-      res.on('data', chunk => {
-        if (settled) { return; }
-        const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk));
-        receivedBytes += buffer.length;
-        if (receivedBytes > request.maxResponseBytes) {
-          settled = true;
-          res.destroy();
-          req.destroy();
-          reject(new SonarRestError(`SonarQube REST response exceeded the ${request.maxResponseBytes}-byte safety limit.`));
-          return;
-        }
-        chunks.push(buffer);
-      });
-      res.on('end', () => {
-        if (settled) { return; }
-        settled = true;
-        resolve({
-          statusCode: res.statusCode || 0,
-          body: Buffer.concat(chunks).toString('utf8'),
-          headers: res.headers,
-        });
-      });
-      res.on('error', () => {
-        if (settled) { return; }
-        settled = true;
-        reject(new SonarRestError('SonarQube REST response ended unexpectedly.'));
-      });
-    });
-    req.on('timeout', () => {
-      req.destroy();
-      reject(new SonarRestError(`Timed out after ${request.timeoutMs}ms reaching SonarQube REST API.`));
-    });
-    req.on('error', () => {
-      reject(new SonarRestError('SonarQube REST network request failed.'));
-    });
-    req.end();
+  return boundedHttpTransport(request, {
+    allowHttp: 'loopback',
+    invalidUrl: 'Invalid SonarQube REST URL.',
+    invalidProtocol: 'SonarQube REST requires HTTPS except for loopback development.',
+    responseLimit: max => `SonarQube REST response exceeded the ${max}-byte safety limit.`,
+    unexpectedResponse: 'SonarQube REST response ended unexpectedly.',
+    timeout: timeoutMs => `Timed out after ${timeoutMs}ms reaching SonarQube REST API.`,
+    network: 'SonarQube REST network request failed.',
+    createError: message => new SonarRestError(message),
   });
 }

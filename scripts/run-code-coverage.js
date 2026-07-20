@@ -4,9 +4,10 @@ const { spawnSync } = require('node:child_process');
 const { testSuiteFiles } = require('./test-suite-files.js');
 
 const root = path.resolve(__dirname, '..');
-const COVERAGE_THRESHOLDS = Object.freeze({ lines: 88.3, branches: 79.6, functions: 90.7 });
+const COVERAGE_THRESHOLDS = Object.freeze({ lines: 95, branches: 95, functions: 95 });
 const CRITICAL_FILE_THRESHOLDS = Object.freeze({
   'attentionEventContextStore.js': Object.freeze({ lines: 95.5, branches: 82, functions: 80 }),
+  'boundedHttpTransport.js': Object.freeze({ lines: 100, branches: 100, functions: 100 }),
   'ciMonitorStore.js': Object.freeze({ lines: 94, branches: 83.5, functions: 82 }),
   'contextBasketStore.js': Object.freeze({ lines: 90, branches: 78, functions: 93 }),
   'dateValues.js': Object.freeze({ lines: 100, branches: 100, functions: 100 }),

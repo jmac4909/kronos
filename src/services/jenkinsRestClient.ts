@@ -1,5 +1,4 @@
-import * as http from 'http';
-import * as https from 'https';
+import { boundedHttpTransport } from './boundedHttpTransport';
 import { unknownErrorCode } from './errorUtils';
 import { parseJsonWithLabel } from './jsonFiles';
 import {
@@ -980,65 +979,14 @@ export class JenkinsRestError extends Error {
 }
 
 function defaultJenkinsTransport(request: JenkinsHttpRequest): Promise<JenkinsHttpResponse> {
-  return new Promise((resolve, reject) => {
-    let parsed: URL;
-    try {
-      parsed = new URL(request.url);
-    } catch {
-      reject(new JenkinsRestError('Invalid Jenkins REST URL.'));
-      return;
-    }
-    if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && isLoopbackHostname(parsed.hostname))) {
-      reject(new JenkinsRestError('Jenkins REST requires HTTPS except for loopback development.'));
-      return;
-    }
-    const client = parsed.protocol === 'https:' ? https : http;
-    const req = client.request(parsed, {
-      method: request.method,
-      timeout: request.timeoutMs,
-      headers: request.headers,
-      ...(parsed.protocol === 'https:' && request.rejectUnauthorized !== undefined
-        ? { rejectUnauthorized: request.rejectUnauthorized }
-        : {}),
-    }, res => {
-      const chunks: Buffer[] = [];
-      let receivedBytes = 0;
-      let settled = false;
-      res.on('data', chunk => {
-        if (settled) { return; }
-        const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk));
-        receivedBytes += buffer.length;
-        if (receivedBytes > request.maxResponseBytes) {
-          settled = true;
-          res.destroy();
-          req.destroy();
-          reject(new JenkinsRestError(`Jenkins REST response exceeded the ${request.maxResponseBytes}-byte safety limit.`));
-          return;
-        }
-        chunks.push(buffer);
-      });
-      res.on('end', () => {
-        if (settled) { return; }
-        settled = true;
-        resolve({
-          statusCode: res.statusCode || 0,
-          body: Buffer.concat(chunks).toString('utf8'),
-          headers: res.headers,
-        });
-      });
-      res.on('error', () => {
-        if (settled) { return; }
-        settled = true;
-        reject(new JenkinsRestError('Jenkins REST response ended unexpectedly.'));
-      });
-    });
-    req.on('timeout', () => {
-      req.destroy();
-      reject(new JenkinsRestError(`Timed out after ${request.timeoutMs}ms reaching Jenkins REST API.`));
-    });
-    req.on('error', () => {
-      reject(new JenkinsRestError('Jenkins REST network request failed.'));
-    });
-    req.end();
+  return boundedHttpTransport(request, {
+    allowHttp: 'loopback',
+    invalidUrl: 'Invalid Jenkins REST URL.',
+    invalidProtocol: 'Jenkins REST requires HTTPS except for loopback development.',
+    responseLimit: max => `Jenkins REST response exceeded the ${max}-byte safety limit.`,
+    unexpectedResponse: 'Jenkins REST response ended unexpectedly.',
+    timeout: timeoutMs => `Timed out after ${timeoutMs}ms reaching Jenkins REST API.`,
+    network: 'Jenkins REST network request failed.',
+    createError: message => new JenkinsRestError(message),
   });
 }

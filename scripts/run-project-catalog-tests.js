@@ -197,6 +197,117 @@ test('Jira project keys never auto-link a repository; only an explicit ticket li
   assert.equal(refreshed.tickets['ABC-124'].linked_local_project, 'Web', 'a second ticket in the same Jira namespace keeps its own link');
 });
 
+test('Jira Work catalog normalizes rich text, attachments, fallbacks, malformed rows, and complete-page retention', () => {
+  const current = stateStore.emptyWorkCatalog();
+  const projectPath = path.join(tempRoot, 'catalog-matrix-project');
+  fs.mkdirSync(projectPath, { recursive: true });
+  current.projects.Application = { path: projectPath, config: {} };
+  current.tickets['CAT-1'] = {
+    ...fixtureTicket({
+      summary: 'Previous catalog ticket',
+      type: 'Story',
+      priority: 'High',
+      jira_status: 'Open',
+      jira_status_category: 'To Do',
+      jira_project_key: 'CAT',
+      linked_local_project: 'Application',
+      description: 'Previous description',
+      attachments: [{ filename: 'previous.txt', size: 4, mimeType: 'text/plain' }],
+      mr: { iid: 7, state: 'opened', review_status: 'pending_review' },
+      build: { number: 8, status: 'SUCCESS' },
+    }),
+  };
+  current.tickets['CAT-9'] = fixtureTicket({ summary: 'Retained rejected row' });
+  const richDescription = {
+    type: 'doc',
+    content: [
+      { type: 'heading', content: [{ type: 'text', text: 'Heading' }] },
+      { type: 'paragraph', content: [{ type: 'text', text: 'Paragraph' }, { type: 'hardBreak' }, 'tail'] },
+      { type: 'bulletList', content: [{ type: 'listItem', content: [{ type: 'text', text: 'Item' }] }] },
+      { type: 'orderedList', content: [{ type: 'codeBlock', content: [{ type: 'text', text: 'code' }] }] },
+      7,
+    ],
+  };
+  const snapshot = {
+    issues: [
+      null,
+      {},
+      { key: 'BAD', fields: { summary: 'Invalid key' } },
+      { key: 'CAT-9', fields: { summary: null } },
+      {
+        key: ' cat-1 ',
+        fields: {
+          summary: '  Rich\u0000 catalog   ticket ',
+          issuetype: null,
+          priority: {},
+          status: { name: '', statusCategory: { key: '', name: 'In Progress' } },
+          project: null,
+          updated: ' 2026-07-20T12:00:00.000Z ',
+          labels: [' one ', '', 7, 'one', 'two'],
+          description: richDescription,
+          attachment: [
+            null,
+            { filename: '' },
+            { filename: ' report.xml ', size: 12.9, mimeType: ' text/xml ' },
+            { filename: 'negative.bin', size: -1 },
+            { filename: 'infinite.bin', size: Number.POSITIVE_INFINITY, mimeType: '' },
+          ],
+        },
+      },
+      {
+        key: 'CAT-2',
+        fields: {
+          summary: 'String description',
+          description: ' first\r\n second\n\n\nthird ',
+          attachment: [],
+          labels: 'not-an-array',
+        },
+      },
+      {
+        key: 'CAT-3',
+        fields: { summary: 'Missing optional fields' },
+      },
+    ],
+    fetchedAt: '2026-07-20T12:30:00.000Z',
+    complete: true,
+  };
+  const result = jiraWorkCatalog.catalogFromJiraWorkList(snapshot, current, 'https://jira.example///');
+  const ticket = result.state.tickets['CAT-1'];
+  assert.equal(ticket.summary, 'Rich catalog ticket');
+  assert.equal(ticket.type, 'Story');
+  assert.equal(ticket.priority, 'High');
+  assert.equal(ticket.jira_status, 'Open');
+  assert.equal(ticket.jira_status_category, 'In Progress');
+  assert.equal(ticket.jira_project_key, 'CAT');
+  assert.equal(ticket.linked_local_project, 'Application');
+  assert.equal(ticket.jira_url, 'https://jira.example/browse/CAT-1');
+  assert.deepEqual(ticket.labels, ['one', 'two']);
+  assert.match(ticket.description, /Heading\nParagraph\ntail/);
+  assert.match(ticket.description, /Item/);
+  assert.deepEqual(ticket.attachments, [
+    { filename: 'report.xml', size: 12, mimeType: 'text/xml' },
+    { filename: 'negative.bin', size: 0, mimeType: 'application/octet-stream' },
+    { filename: 'infinite.bin', size: 0, mimeType: 'application/octet-stream' },
+  ]);
+  assert.equal(result.state.tickets['CAT-1'].mr.iid, 7);
+  assert.equal(result.state.tickets['CAT-1'].build.number, 8);
+  assert.equal(result.state.tickets['CAT-2'].description, 'first\nsecond\n\nthird');
+  assert.equal(result.state.tickets['CAT-2'].attachments, undefined);
+  assert.equal(result.state.tickets['CAT-3'].type, 'Issue');
+  assert.equal(result.state.tickets['CAT-3'].priority, 'Unknown');
+  assert.equal(result.state.tickets['CAT-3'].jira_status, 'Unknown');
+  assert.equal(result.retainedFromPrevious, 1, 'a rejected row retains the prior ticket even on a nominally complete page');
+  assert.equal(result.state.tickets['CAT-9'].summary, 'Retained rejected row');
+
+  const missingFields = jiraWorkCatalog.catalogFromJiraWorkList({
+    issues: [{ key: 'CAT-1', fields: { summary: 'Retain omitted fields' } }],
+    fetchedAt: snapshot.fetchedAt,
+    complete: false,
+  }, current, 'https://jira.example').state.tickets['CAT-1'];
+  assert.equal(missingFields.description, 'Previous description');
+  assert.deepEqual(missingFields.attachments, current.tickets['CAT-1'].attachments);
+});
+
 test('unlinked tickets stay unlinked across refresh, registration, reload, polling selection, and standalone sessions', () => {
   const projectRoot = path.join(tempRoot, 'unlinked-identity-project');
   fs.mkdirSync(projectRoot, { recursive: true });
@@ -394,6 +505,26 @@ test('project integration values round-trip, clear, and default to the observed 
   assert.match(html, /Branch routing <span>Optional Jenkins and SonarQube overrides<\/span>/);
   assert.doesNotMatch(html, /<details class="branch-routing" open>/);
   assert.doesNotMatch(html, /Connect registered folders/);
+
+  const minimalHtml = buildProjectIntegrationPanelHtml({
+    projects: [{ name: 'Minimal', path: '/workspace/minimal' }],
+    providerReadiness: [{ name: 'GitLab', ready: false, detail: 'Configuration needed.' }],
+    nonce: 'minimal-project-integration-nonce',
+    scriptUri: 'vscode-webview://fixture/kronos-project-integration.js',
+  });
+  assert.match(minimalHtml, /<h2>Minimal<\/h2>/);
+  assert.doesNotMatch(minimalHtml, /Project ID: Minimal/);
+  assert.match(minimalHtml, /branch unavailable/);
+  assert.match(minimalHtml, /data-field="defaultBranch" value=""/);
+  assert.match(minimalHtml, /provider-readiness warn/);
+
+  const emptyHtml = buildProjectIntegrationPanelHtml({
+    projects: [],
+    providerReadiness: [],
+    nonce: 'empty-project-integration-nonce',
+    scriptUri: 'vscode-webview://fixture/kronos-project-integration.js',
+  });
+  assert.match(emptyHtml, /No registered local projects are available to configure/);
 });
 
 test('Git worktree pointers are bounded and symbolic Git metadata is ignored', t => {
@@ -454,6 +585,25 @@ test('project Git presentation distinguishes unavailable, clean, staged, untrack
     untrackedCount: 1,
     conflictCount: 1,
   });
+
+  const conflictStatuses = [
+    'added by us', 'added by them', 'deleted by us', 'deleted by them',
+    'both added', 'both deleted', 'both modified',
+  ];
+  const conflictMatrix = projectGitPresentation.projectGitStatusPresentation(evidence({
+    changeCount: conflictStatuses.length,
+    changes: conflictStatuses.map((status, index) => ({ path: `conflict-${index}`, status, staged: false })),
+  }));
+  assert.equal(conflictMatrix.conflictCount, conflictStatuses.length);
+  assert.equal(conflictMatrix.modifiedCount, 0);
+
+  const singular = projectGitPresentation.projectGitStatusPresentation(evidence({
+    changeCount: 1,
+    changes: [{ path: 'only.ts', status: 'modified', staged: false }],
+  }));
+  assert.equal(singular.label, '1 change');
+  assert.equal(singular.conflictCount, 0);
+  assert.equal(singular.stagedCount, 0);
 });
 
 test('project Git state panel makes branches and dirty state scannable without exposing a checkout action', () => {
@@ -504,6 +654,28 @@ test('project Git state panel makes branches and dirty state scannable without e
   assert.match(html, /Kronos keeps Git read-only/);
   assert.match(html, /&lt;\/pre&gt;&lt;script&gt;unsafe\(\)&lt;\/script&gt;/);
   assert.doesNotMatch(html, /data-action="checkout"|git\.checkout|<script>unsafe\(\)<\/script>/);
+
+  const defaultSyncHtml = projectGitPresentation.buildProjectGitStatePanelHtml({
+    projectName: 'Default sync project',
+    evidence: {
+      projectPath: '/fixture/default-sync',
+      branch: 'feature/default-sync',
+      detached: false,
+      upstream: 'origin/feature/default-sync',
+      branches: [],
+      branchCount: 0,
+      branchesTruncated: false,
+      changes: [{ path: 'src/default.ts', status: 'modified', staged: false }],
+      changeCount: 1,
+      diff: '+default',
+      diffTruncated: true,
+      available: true,
+    },
+    nonce: 'default-sync-nonce',
+    actionScriptUri: 'vscode-webview://fixture/kronos-action-panel.js',
+  });
+  assert.match(defaultSyncHtml, /0 ahead · 0 behind/);
+  assert.match(defaultSyncHtml, /Diff against HEAD · truncated/);
 
   const cleanHtml = projectGitPresentation.buildProjectGitStatePanelHtml({
     projectName: 'Clean project',
@@ -717,6 +889,61 @@ test('project discovery recognizes real Git worktrees and rejects malformed Git 
   }]);
 });
 
+test('project discovery edge inputs remain bounded across invalid roots, aliases, home expansion, and wide folders', () => {
+  const rootPath = path.join(tempRoot, 'discovery-edge-root');
+  const repository = path.join(rootPath, 'repository');
+  fs.mkdirSync(path.join(repository, '.git'), { recursive: true });
+  fs.writeFileSync(path.join(repository, '.git', 'HEAD'), 'ref: refs/heads/edge\n');
+  const regularFile = path.join(rootPath, 'regular-file');
+  fs.writeFileSync(regularFile, 'not a directory');
+
+  const invalid = projectDiscovery.discoverLocalProjects({
+    workspaceFolders: [
+      { name: 7, path: repository },
+      { name: 'duplicate', path: repository },
+      { name: 'missing', path: '' },
+      { name: 'file', path: regularFile },
+      { name: 'relative', path: 'relative/path' },
+    ],
+    roots: [7, '', regularFile, 'relative/path', '~/kronos-definitely-missing-discovery-root'],
+    depth: 0,
+    limit: 10,
+  });
+  assert.equal(invalid.projects.length, 1);
+  assert.equal(invalid.projects[0].name, 'duplicate');
+  assert.equal(invalid.warnings.length, 8);
+  assert.deepEqual(projectDiscovery.discoverLocalProjects({}), {
+    projects: [], warnings: [], visitedDirectories: 0, truncated: false,
+  });
+
+  const originalReadDirectory = fs.readdirSync;
+  fs.readdirSync = (target, options) => {
+    if (path.resolve(target) === path.resolve(rootPath)) { throw 'fixture unavailable directory'; }
+    return originalReadDirectory(target, options);
+  };
+  let nonErrorFailure;
+  try {
+    nonErrorFailure = projectDiscovery.discoverLocalProjects({ roots: [rootPath], depth: 1, limit: 10 });
+  } finally {
+    fs.readdirSync = originalReadDirectory;
+  }
+  assert.match(nonErrorFailure.warnings.join(' '), /unavailable directory/i);
+
+  const wideRoot = path.join(tempRoot, 'discovery-wide-root');
+  fs.mkdirSync(wideRoot);
+  for (let index = 0; index < 2001; index += 1) {
+    fs.writeFileSync(path.join(wideRoot, `entry-${String(index).padStart(4, '0')}`), 'x');
+  }
+  const wide = projectDiscovery.discoverLocalProjects({ roots: [wideRoot], depth: 1, limit: 10 });
+  assert.equal(wide.truncated, true);
+  assert.match(wide.warnings.join(' '), /first 2000/i);
+
+  const home = projectDiscovery.discoverLocalProjects({
+    roots: ['~', '~\\kronos-definitely-missing-discovery-root'], depth: 0, limit: 1,
+  });
+  assert.ok(home.visitedDirectories <= 1);
+});
+
 test('project integration presentation exposes readiness without provider identifiers or credentials', () => {
   const config = {
     gitlab_project_path: 'group/private-application',
@@ -854,6 +1081,141 @@ test('project configuration is canonical at setup and Work catalog ingress', () 
     () => projectCatalog.setLocalProjectSonarTarget(setupState, 'Valid', 'team:application', '../unsafe'),
     /SonarQube branch contains unsupported Git branch characters/i,
   );
+});
+
+test('project catalog edge matrix validates identity, integration, profile, and Git pointer boundaries', t => {
+  const projectRoot = path.join(tempRoot, 'project-edge-root');
+  const nestedRoot = path.join(projectRoot, 'nested');
+  fs.mkdirSync(nestedRoot, { recursive: true });
+  const initial = stateStore.emptyWorkCatalog();
+  initial.projects.Application = {
+    path: projectRoot,
+    display_name: 'Customer API',
+    config: { repo_name: 'Application' },
+  };
+  initial.projects.Nested = { path: nestedRoot, config: {} };
+  initial.projects.ProviderOnly = { config: { gitlab_project_id: 7 } };
+  initial.tickets['EDGE-1'] = fixtureTicket({ linked_local_project: 'Application' });
+
+  assert.equal(projectCatalog.matchesLocalProject({}, { name: 'Application', path: projectRoot }), false);
+  assert.equal(projectCatalog.matchesLocalProject({ projectPath: projectRoot }, { name: 'Other', path: projectRoot }), true);
+  assert.equal(projectCatalog.localProjectReferenceKey({ projectPath: projectRoot }), `path:${projectRoot}`);
+  assert.equal(projectCatalog.localProjectReferenceKey({ projectName: 'Application' }), 'name:Application');
+  assert.equal(projectCatalog.localProjectReferenceKey({}), undefined);
+  assert.equal(projectCatalog.registeredLocalProjectForDirectory(initial, path.join(nestedRoot, 'src')).name, 'Nested');
+
+  const registeredAgain = projectCatalog.registerLocalProject(initial, 'Renamed', projectRoot);
+  assert.equal(registeredAgain.projects.Application.display_name, 'Customer API');
+  assert.equal(registeredAgain.projects.Application.config.repo_name, 'Application');
+  assert.equal(projectCatalog.renameLocalProjectDisplayName(initial, 'Application', 'Customer API'), initial);
+  assert.throws(() => projectCatalog.renameLocalProjectDisplayName(initial, 'Missing', 'Name'), /not registered/i);
+  assert.throws(() => projectCatalog.registerLocalProject(initial, '', projectRoot), /project name is required/i);
+  assert.throws(() => projectCatalog.registerLocalProject(initial, 'Bad', 'relative/path'), /must be absolute/i);
+  const regularFile = path.join(tempRoot, 'not-a-project-directory');
+  fs.writeFileSync(regularFile, 'file');
+  assert.throws(() => projectCatalog.registerLocalProject(initial, 'Bad', regularFile), /not a directory/i);
+
+  assert.equal(projectCatalog.projectTicketProviderState(initial, 'EDGE-9', {}), initial);
+  assert.equal(projectCatalog.projectTicketProviderState(initial, 'EDGE-1', {}), initial);
+  const providerState = projectCatalog.projectTicketProviderState(initial, 'EDGE-1', {
+    mr: { iid: 1, state: 'opened', review_status: 'pending_review' },
+    build: { number: 2, status: 'FAILURE' },
+  });
+  assert.equal(providerState.tickets['EDGE-1'].mr.iid, 1);
+  assert.equal(providerState.tickets['EDGE-1'].build.number, 2);
+  assert.throws(() => projectCatalog.projectTicketProviderState(initial, 'bad', {}), /Invalid Jira ticket key/i);
+  assert.throws(() => projectCatalog.setTicketLocalProject(initial, 'EDGE-9'), /not loaded/i);
+  assert.throws(() => projectCatalog.setTicketLocalProject(initial, 'EDGE-1', 'ProviderOnly'), /not registered/i);
+  assert.throws(() => projectCatalog.setTicketLocalProject(initial, 'EDGE-1', ''), /project name is required/i);
+
+  const planned = projectCatalog.planLocalProjectRegistrations(initial, [
+    { name: 'first', path: projectRoot },
+    { name: 'duplicate', path: projectRoot },
+    { name: 7, path: nestedRoot },
+    { name: 'missing', path: path.join(tempRoot, 'missing-project') },
+  ]);
+  assert.deepEqual(planned.map(item => item.name), ['Application', 'Nested']);
+  const emptyState = stateStore.emptyWorkCatalog();
+  assert.equal(projectCatalog.planLocalProjectRegistrations(emptyState, [{ name: 7, path: projectRoot }])[0].name, 'Project');
+
+  assert.throws(() => projectCatalog.setLocalProjectIntegrations(initial, [{ name: 'Missing' }]), /not registered/i);
+  assert.throws(() => projectCatalog.setLocalProjectIntegrations(initial, [{ name: 7 }]), /project name is required/i);
+  assert.throws(() => projectCatalog.setLocalProjectIntegrations(initial, [{
+    name: 'Application', gitlabProject: '9'.repeat(400),
+  }]), /project ID is too large/i);
+  assert.throws(() => projectCatalog.setLocalProjectIntegrations(initial, [{
+    name: 'Application', gitlabProject: 'invalid path',
+  }]), /numeric ID or group\/project path/i);
+  assert.throws(() => projectCatalog.setLocalProjectIntegrations(initial, [{
+    name: 'Application', jenkinsUrl: 'http://remote.example/job/app',
+  }]), /must be an HTTPS URL/i);
+  assert.throws(() => projectCatalog.setLocalProjectIntegrations(initial, [{
+    name: 'Application', sonarProjectKey: 'invalid key',
+  }]), /unsupported characters/i);
+  assert.throws(() => projectCatalog.setLocalProjectIntegrations(initial, [{
+    name: 'Application', branchProfiles: 'main | https://jenkins.example/job/app', activeBranchProfile: 'release',
+  }]), /must match one configured branch profile/i);
+  const cleared = projectCatalog.setLocalProjectIntegrations(initial, [{ name: 'Application', nickname: 'Application' }]);
+  assert.equal(cleared.projects.Application.display_name, undefined);
+
+  for (const [value, expected] of [
+    [7, /20,?000-character limit/i],
+    ['x'.repeat(20_001), /20,?000-character limit/i],
+    ['main', /must use/i],
+    [' | https://jenkins.example/job/app', /unsupported Git branch/i],
+    ['main | | invalid key', /unsupported characters/i],
+    ['main | | ', /must configure/i],
+    ['main | https://jenkins.example/job/app\nmain | https://jenkins.example/job/other', /duplicated/i],
+    [Array.from({ length: 21 }, (_, index) => `branch-${index} | https://jenkins.example/job/${index}`).join('\n'), /20-profile limit/i],
+  ]) {
+    assert.throws(() => projectCatalog.parseProjectBranchProfiles(value), expected);
+  }
+  const sonarOnly = projectCatalog.parseProjectBranchProfiles('main | | team:app');
+  assert.deepEqual(sonarOnly, [{ branch: 'main', sonar_project_key: 'team:app', sonar_branch: 'main' }]);
+  assert.equal(projectCatalog.formatProjectBranchProfiles(undefined), '');
+  assert.equal(projectCatalog.formatProjectBranchProfiles([{ branch: 'main' }]), 'main |  |  | ');
+  assert.deepEqual(projectCatalog.selectProjectBranchProfile({
+    branch_profiles: sonarOnly,
+    active_branch_profile: 'main',
+  }, [null, ' ', 'missing']), sonarOnly[0]);
+  assert.equal(projectCatalog.selectProjectBranchProfile({
+    branch_profiles: sonarOnly,
+    active_branch_profile: 'missing',
+  }), undefined);
+  assert.deepEqual(projectCatalog.projectConfigurationForTicket(initial, initial.tickets['EDGE-1']), { repo_name: 'Application' });
+  assert.deepEqual(projectCatalog.projectConfigurationForTicket(initial, { ...initial.tickets['EDGE-1'], linked_local_project: 'Missing' }), {});
+  assert.deepEqual(projectCatalog.projectConfigurationForTicket(null, initial.tickets['EDGE-1']), {});
+  assert.deepEqual(projectCatalog.listLocalProjects(null), []);
+  assert.equal(projectCatalog.ticketLocalProject(initial, null), undefined);
+  assert.equal(projectCatalog.ticketLocalProject(initial, { ...initial.tickets['EDGE-1'], linked_local_project: 'Missing' }), undefined);
+  assert.equal(projectCatalog.ticketLocalProject(initial, { ...initial.tickets['EDGE-1'], linked_local_project: 'ProviderOnly' }), undefined);
+
+  const relativeState = stateStore.emptyWorkCatalog();
+  relativeState.projects.Relative = { path: 'relative/path', config: {} };
+  assert.equal(projectCatalog.listLocalProjects(relativeState)[0].path, 'relative/path');
+  assert.equal(projectCatalog.listLocalProjects(relativeState)[0].available, false);
+
+  const gitCases = path.join(tempRoot, 'project-git-edge');
+  fs.mkdirSync(gitCases);
+  fs.writeFileSync(path.join(gitCases, '.git'), 'not a git pointer\n');
+  assert.equal(projectCatalog.readProjectGitBranch(gitCases), undefined);
+  fs.writeFileSync(path.join(gitCases, '.git'), 'gitdir: missing\n');
+  assert.equal(projectCatalog.readProjectGitBranch(gitCases), undefined);
+  const externalGit = path.join(tempRoot, 'external-git-dir');
+  fs.mkdirSync(externalGit);
+  fs.writeFileSync(path.join(externalGit, 'HEAD'), 'not-a-ref-or-sha\n');
+  fs.writeFileSync(path.join(gitCases, '.git'), `gitdir: ${externalGit}\n`);
+  assert.equal(projectCatalog.readProjectGitBranch(gitCases), undefined);
+  fs.writeFileSync(path.join(externalGit, 'HEAD'), `ref: refs/heads/${String.fromCharCode(0)}\n`);
+  assert.equal(projectCatalog.readProjectGitBranch(gitCases), undefined);
+  fs.writeFileSync(path.join(externalGit, 'HEAD'), 'ABCDEF0123456789\n');
+  assert.deepEqual(projectCatalog.readProjectGitBranch(gitCases), { branch: 'detached@abcdef0', detached: true });
+
+  const symlinkProject = path.join(tempRoot, 'project-git-symlink');
+  fs.mkdirSync(symlinkProject);
+  if (createSymlinkOrSkip(t, externalGit, path.join(symlinkProject, '.git'), 'dir')) {
+    assert.equal(projectCatalog.readProjectGitBranch(symlinkProject), undefined);
+  }
 });
 
 function fixtureTicket(overrides = {}) {

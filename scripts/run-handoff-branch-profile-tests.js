@@ -184,6 +184,32 @@ test('local handoff verifies every referenced artifact even when a persisted has
   }), /source artifact is unavailable/);
 });
 
+test('audit-only handoffs render sparse session and subject metadata explicitly', () => {
+  const fixture = session({ projectName: undefined, ticketKey: undefined, ticketKeys: [] });
+  const noSubject = { ...event('audit-no-subject'), subject: undefined };
+  const kindOnlySubject = {
+    ...event('audit-kind-only'),
+    subject: { kind: 'pipeline', id: '91' },
+  };
+  const candidates = buildHandoffCandidates(fixture, [noSubject, kindOnlySubject]);
+  assert.equal(candidates[0].detail, `Session ${fixture.id}`);
+  assert.equal(candidates[1].detail, 'pipeline • 91');
+  const bundle = writeLocalHandoffBundle({
+    session: fixture,
+    selections: candidates.map(candidate => candidate.selection),
+    title: 'Sparse audit handoff',
+  }, { now: new Date('2026-07-15T15:45:00.000Z') });
+  const markdown = fs.readFileSync(bundle.markdownPath, 'utf8');
+  const document = JSON.parse(fs.readFileSync(bundle.jsonPath, 'utf8'));
+  assert.match(markdown, /Project: unassigned/);
+  assert.match(markdown, /Jira contexts: none/);
+  assert.match(markdown, /No context references selected\./);
+  assert.match(markdown, /No handoff note supplied\./);
+  assert.equal(document.session.projectName, undefined);
+  assert.equal(document.selections[0].subject, undefined);
+  assert.deepEqual(document.selections[1].subject, { kind: 'pipeline', id: '91' });
+});
+
 test('project integration parses, formats, and stores explicit Jenkins and SonarQube branch profiles', () => {
   const projectPath = path.join(kronosDir, 'project');
   fs.mkdirSync(projectPath, { mode: 0o700 });

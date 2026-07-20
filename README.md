@@ -12,7 +12,7 @@
   <img alt="TypeScript strict" src="https://img.shields.io/badge/TypeScript-strict-3178C6">
   <img alt="VS Code 1.85 or newer" src="https://img.shields.io/badge/VS%20Code-%5E1.85-23A8F2">
   <img alt="Zero third-party runtime dependencies" src="https://img.shields.io/badge/runtime%20dependencies-0-22C55E">
-  <img alt="316 automated local tests" src="https://img.shields.io/badge/test%20suite-316%20local-22C55E">
+  <img alt="422 automated local tests" src="https://img.shields.io/badge/test%20suite-422%20local-22C55E">
   <img alt="Preview status" src="https://img.shields.io/badge/status-preview-F59E0B">
 </p>
 
@@ -109,10 +109,10 @@ The installed extension uses the VS Code API and Node built-ins only. It has **z
 | Audited terminal-write paths | 2 |
 | Manifest-covered commands | 43 |
 | Manifest-covered settings | 14 |
-| Reachable runtime modules checked for cycles/dead exports | 89 |
+| Reachable runtime modules checked for cycles/dead exports | 97 |
 | Third-party runtime dependencies | 0 |
-| Automated Node/DOM/board tests | 316 |
-| Built-in runtime coverage | 88.34% lines / 79.75% branches / 90.79% functions |
+| Automated Node/DOM/board tests | 422 |
+| Built-in runtime coverage | 97.69% lines / 95.01% branches / 97.99% functions |
 
 Automated gates also cover the runtime graph, security boundary, context governance, activation surface, provider transitions, private state, credential redaction, and packaged extension contents.
 
@@ -206,7 +206,7 @@ npm run feedback:ready
 npm run publish:verify
 ```
 
-`npm test` begins with a public-surface gate that rejects tracked local-state directories, machine-specific home paths, employer identifiers, private-key material, and high-confidence token shapes. The remaining checks enforce the manifest allowlist, a reachable runtime graph restricted to local modules, Node built-ins, and the VS Code API, the explicit-launch boundary, context governance, strict TypeScript compilation, unit behavior, cross-view product contracts, provider fixtures, large synthetic scale/accessibility behavior, exact dependency-free VSIX file surface, dependency-free webviews, and Node's built-in line/function/branch coverage floors. The coverage pass derives its 27-runner inventory from the actual `npm test` graph, fails closed when a runner or report row disappears, and retains tighter per-file floors for all four provider REST clients, GitLab evidence normalization, CI snapshot persistence, exact Attention-event snapshots, Jira normalization/pruning, Work state/presentation, exact terminal insertion and Claude launch, project and provider monitoring, Context Basket, local handoff, local evidence search, date normalization, GitLab pipeline transition normalization, the monitor-event ledger and audit view, webview CSP/bootstrap security, provider-read health, Attention, Sessions, and Projects. `npm run package` repeats the public, manifest, graph, security, governance, roadmap, claim, compile, and exact-surface gates before creating a VSIX; extra or missing files fail closed. The checked [verification matrix](docs/verification-matrix.json) maps roadmap goals to named tests and keeps real VS Code, operator-terminal, Windows, multi-window, and live-provider gates explicit. README engineering metrics are derived from the manifest, source tree, dependencies, and test declarations on every run.
+`npm test` begins with a public-surface gate that rejects tracked local-state directories, machine-specific home paths, employer identifiers, private-key material, and high-confidence token shapes. The remaining checks enforce the manifest allowlist, a reachable runtime graph restricted to local modules, Node built-ins, and the VS Code API, the explicit-launch boundary, context governance, strict TypeScript compilation, unit behavior, cross-view product contracts, provider fixtures, large synthetic scale/accessibility behavior, exact dependency-free VSIX file surface, dependency-free webviews, and Node's built-in line/function/branch coverage floors. The coverage pass derives its 32-runner inventory from the actual `npm test` graph, enforces at least 95% lines, branches, and functions, fails closed when a runner or report row disappears, and retains tighter per-file regression floors for the shared bounded transport, all four provider REST clients, GitLab evidence normalization, CI snapshot persistence, exact Attention-event snapshots, Jira normalization/pruning, Work state/presentation, exact terminal insertion and Claude launch, project and provider monitoring, Context Basket, local handoff, local evidence search, date normalization, GitLab pipeline transition normalization, the monitor-event ledger and audit view, webview CSP/bootstrap security, provider-read health, Attention, Sessions, and Projects. `npm run package` repeats the public, manifest, graph, security, governance, roadmap, claim, compile, and exact-surface gates before creating a VSIX; extra or missing files fail closed. The checked [verification matrix](docs/verification-matrix.json) maps roadmap goals to named tests and keeps real VS Code, operator-terminal, Windows, multi-window, and live-provider gates explicit. README engineering metrics are derived from the manifest, source tree, dependencies, and test declarations on every run.
 
 For the interactive pass, use [HUMAN_FEEDBACK_CHECKLIST.md](HUMAN_FEEDBACK_CHECKLIST.md). Real-provider, terminal-focus, and Windows feedback remain explicit human gates; see the [completion audit](docs/terminal-first-completion-audit.md).
 
@@ -215,7 +215,9 @@ For the interactive pass, use [HUMAN_FEEDBACK_CHECKLIST.md](HUMAN_FEEDBACK_CHECK
 ```text
 src/extension.ts                         thin activation entry point
 src/terminalFirstExtension.ts            command registration and orchestration
+src/commands/                            pure command-resolution and interaction flows
 src/services/*RestClient.ts              bounded read-only provider clients
+src/services/boundedHttpTransport.ts     shared response, timeout, and protocol bounds
 src/services/*View.ts                    pure HTML builders for editor surfaces
 src/services/terminalContextInsertion.ts non-submitting terminal insertion
 src/services/promptLibrary*.ts          bounded shared prompts, cache, editor, and immutable snapshots

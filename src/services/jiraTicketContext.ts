@@ -617,7 +617,7 @@ function normalizeAttachment(value: unknown, captureValue: unknown, index: numbe
     filename,
     contentStatus: 'skipped',
     contentReason: 'not-fetched',
-    metadata: isRecord(metadataSource) ? normalizedRecord(metadataSource) : {},
+    metadata: normalizedRecord(metadataSource),
   };
   assignString(normalized, 'id', attachment['id']);
   const size = nonNegativeIntegerFromUnknown(attachment['size']);
@@ -667,7 +667,7 @@ function normalizeComment(value: unknown): JiraCommentContext {
   const safeMetadata = sanitizeProviderMetadata(metadataSource);
   const normalized: JiraCommentContext = {
     body: adfToText(comment['body'] ?? value),
-    metadata: isRecord(safeMetadata) ? normalizedRecord(safeMetadata) : {},
+    metadata: normalizedRecord(safeMetadata),
   };
   assignString(normalized, 'id', comment['id']);
   assignString(normalized, 'author', firstString(
@@ -696,6 +696,8 @@ function sanitizeAttachmentMetadata(value: Record<string, unknown>): Record<stri
   return metadata;
 }
 
+function sanitizeProviderMetadata(value: Record<string, unknown>): Record<string, unknown>;
+function sanitizeProviderMetadata(value: unknown): unknown;
 function sanitizeProviderMetadata(value: unknown): unknown {
   if (Array.isArray(value)) {
     return value.map(sanitizeProviderMetadata);
@@ -737,7 +739,6 @@ function sanitizedProviderUrlInText(value: string): string | undefined {
   if (!value) { return undefined; }
   try {
     const url = new URL(value);
-    if (url.protocol !== 'http:' && url.protocol !== 'https:') { return undefined; }
     url.username = '';
     url.password = '';
     for (const key of [...url.searchParams.keys()]) {

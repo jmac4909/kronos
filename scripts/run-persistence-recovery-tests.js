@@ -701,6 +701,36 @@ test('work-session audit renders complete local evidence and sorts supplied even
   assert.match(emptyMarkdown, /Providers: None/);
   assert.match(emptyMarkdown, /No history yet/);
   assert.doesNotMatch(emptyMarkdown, /## Saved context/);
+
+  const completeArtifactSession = {
+    ...session,
+    projectName: undefined,
+    providerBindings: [
+      ...session.providerBindings,
+      { ...session.providerBindings[0], id: 'provider-unknown', provider: 'custom' },
+    ],
+    artifacts: [{
+      ...session.artifacts[0],
+      complete: true,
+      contentSha256: undefined,
+      warnings: [],
+    }],
+  };
+  const fallbackMarkdown = buildWorkSessionAuditMarkdown(completeArtifactSession, [{
+    schemaVersion: 1,
+    id: 'event-fallback-labels',
+    at: '2026-07-15T12:00:00.000Z',
+    sessionId: session.id,
+    type: 'decision.recorded',
+    source: 'custom',
+    summary: 'Fallback labels remain readable.',
+    subject: { kind: '', id: 'fallback`id' },
+  }]);
+  assert.match(fallbackMarkdown, /^# AUDIT\\-7 Session history/m);
+  assert.match(fallbackMarkdown, /\(Complete, saved/);
+  assert.match(fallbackMarkdown, /Providers: GitLab, Custom/);
+  assert.match(fallbackMarkdown, /Unknown `fallbackˋid`/);
+  assert.doesNotMatch(fallbackMarkdown, /Content SHA-256/);
 });
 
 test('registered-project monitoring owners refresh identity, reject stale bindings, and isolate returned state', () => {

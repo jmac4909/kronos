@@ -33,7 +33,9 @@ test('one provider binding reconciliation owner feeds Work, Sessions, Projects, 
   const extension = fs.readFileSync(path.join(root, 'src/terminalFirstExtension.ts'), 'utf8');
   assert.doesNotMatch(extension, /currentMatchesTicket|mergeRequestNeedsEnrichment/);
   assert.match(extension, /discoverRegisteredProjectGitLabTarget\(project\)/);
-  assert.match(extension, /gitlabRestClient\.discoverOpenMergeRequest\(\{/);
+  assert.match(extension, /discoverRuntimeRegisteredProjectGitLabTarget\(\{/);
+  const resolutionFlow = fs.readFileSync(path.join(root, 'src/commands/runtimeResolutionFlows.ts'), 'utf8');
+  assert.match(resolutionFlow, /await input\.discover\(\{/);
   assert.doesNotMatch(extension, /latestGitLabMergeRequestUrlAcrossSessions/);
 });
 
@@ -166,7 +168,7 @@ test('reconciled provider URLs are credential-free and rejected outside the conf
     ticket,
     crossOrigin,
     'team/app',
-    { GITLAB_API_BASE_URL: 'https://gitlab.example/api/v4' },
+    { GITLAB_API_BASE_URL: 'https://gitlab.example/api/v4', GITLAB_TOKEN: 'fixture-token' },
   ), {
     iid: 88,
     projectIdOrPath: 'team/app',
@@ -185,7 +187,7 @@ test('reconciled provider URLs are credential-free and rejected outside the conf
     ticket,
     sameOrigin,
     'team/app',
-    { GITLAB_API_BASE_URL: 'https://gitlab.example/api/v4' },
+    { GITLAB_API_BASE_URL: 'https://gitlab.example/api/v4', GITLAB_TOKEN: 'fixture-token' },
   ).url, 'https://gitlab.example/team/app/-/merge_requests/88');
   assert.equal(reconciliation.reconcileKnownGitLabMergeRequestTarget(
     ticket,
@@ -232,6 +234,107 @@ test('multi-project reconciliation stays inside the explicitly linked project se
     fs.readFileSync(path.join(root, 'src/terminalFirstExtension.ts'), 'utf8'),
     /\.filter\(session => matchesLocalProject\(session, \{ name: project\.projectName, path: project\.projectPath \}\)\)/,
   );
+});
+
+test('reconciliation edge matrix preserves optional identity, routing profiles, and deterministic event ordering', () => {
+  assert.equal(reconciliation.configuredGitLabProjectIdentity(undefined), undefined);
+  assert.equal(reconciliation.configuredGitLabProjectIdentity({ gitlab_project_id: 42 }), '42');
+  assert.equal(reconciliation.reconcileKnownGitLabMergeRequestTarget(
+    jiraTicket({ mr: null }),
+    workSession({ providerBindings: [binding({ provider: 'gitlab', resource: 'merge-request', subjectId: '8' })] }),
+    undefined,
+    {},
+  ), undefined, 'a binding without any project identity cannot become a polling target');
+  assert.deepEqual(reconciliation.reconcileKnownGitLabMergeRequestTarget(
+    jiraTicket({ mr: { iid: 9, state: 'opened', review_status: 'pending_review', url: 'https://gitlab.example/team/app/-/merge_requests/9' } }),
+    workSession(),
+    undefined,
+    { GITLAB_API_BASE_URL: 'https://gitlab.example/api/v4', GITLAB_TOKEN: 'fixture-token' },
+  ), {
+    iid: 9,
+    projectIdOrPath: 'team/app',
+    source: 'catalog',
+    url: 'https://gitlab.example/team/app/-/merge_requests/9',
+  });
+
+  const bareTicket = jiraTicket({ mr: { iid: 10, state: 'opened', review_status: 'pending_review', url: '' } });
+  const bareCandidate = reconciliation.catalogGitLabBindingCandidate(bareTicket, workSession(), undefined, {});
+  assert.deepEqual(bareCandidate, {
+    provider: 'gitlab',
+    resource: 'merge-request',
+    subjectId: '10',
+  });
+  assert.equal(reconciliation.catalogGitLabBindingCandidate(
+    bareTicket,
+    workSession({ providerBindings: [binding({ provider: 'gitlab', resource: 'merge-request', subjectId: '10' })] }),
+    undefined,
+    {},
+  ), undefined, 'a complete bare identity is not rewritten');
+
+  const profileState = {
+    schemaVersion: 2,
+    refreshedAt: null,
+    projects: {
+      Application: {
+        config: {
+          branch_profiles: [{
+            branch: 'feature/profile',
+            jenkins_url: 'https://jenkins.example/job/profile',
+            sonar_project_key: 'team:profile',
+            sonar_branch: 'analysis/profile',
+          }],
+          active_branch_profile: 'feature/profile',
+        },
+      },
+    },
+    tickets: { 'JIRA-1': jiraTicket({ linked_local_project: 'Application', mr: null }) },
+  };
+  assert.deepEqual(reconciliation.configuredCiPollingTargets(
+    profileState,
+    workSession(),
+    {
+      JENKINS_URL: 'https://jenkins.example',
+      SONAR_HOST_URL: 'https://sonar.example',
+    },
+  ), {
+    jenkinsUrl: 'https://jenkins.example/job/profile',
+    jenkinsBranch: 'feature/profile',
+    sonar: {
+      projectKey: 'team:profile',
+      branch: 'analysis/profile',
+      providerUrl: 'https://sonar.example/dashboard?id=team%3Aprofile&branch=analysis%2Fprofile',
+    },
+  });
+
+  const tieSession = workSession({
+    providerBindings: [
+      binding({ id: 'binding-a', provider: 'gitlab', resource: 'merge-request', subjectId: '2', url: 'https://gitlab.example/a', attachedAt: '2026-07-15T12:00:00.000Z' }),
+      binding({ id: 'binding-b', provider: 'gitlab', resource: 'merge-request', subjectId: '10', url: 'https://gitlab.example/b', attachedAt: '2026-07-15T12:00:00.000Z' }),
+      binding({ id: 'binding-c', provider: 'gitlab', resource: 'pipeline', subjectId: '10', url: 'https://gitlab.example/c', attachedAt: '2026-07-15T12:00:00.000Z' }),
+    ],
+  });
+  assert.deepEqual(
+    reconciliation.providerBindingsForEvent(providerEvent('gitlab', 'pipeline', 'missing'), tieSession).map(item => item.id),
+    ['binding-c', 'binding-b', 'binding-a'],
+    'resource, numeric subject, and stable ID ties are deterministic',
+  );
+  assert.deepEqual(reconciliation.providerBindingsForEvent(providerEvent('local', 'build', '1'), tieSession), []);
+  assert.deepEqual(reconciliation.providerBindingsForEvent(providerEvent('gitlab', undefined, '1'), undefined), []);
+
+  const projected = reconciliation.effectiveTicketMergeRequest(
+    jiraTicket({ mr: { iid: 11, state: 'closed', review_status: 'approved', url: '' } }),
+    workSession(),
+    mergeRequestDigest(11, {
+      state: 'unknown-state',
+      changesRequested: true,
+      discussionsComplete: false,
+      blockingDiscussionsResolved: false,
+    }),
+    {},
+  );
+  assert.equal(projected.state, 'closed');
+  assert.equal(projected.review_status, 'changes_requested');
+  assert.equal(projected.discussions_resolved, false);
 });
 
 function jiraTicket(overrides = {}) {
@@ -281,8 +384,8 @@ function mergeRequestDigest(iid, overrides = {}) {
     iid,
     state: overrides.state || 'opened',
     detailedMergeStatus: 'mergeable',
-    changesRequested: false,
-    blockingDiscussionsResolved: true,
+    changesRequested: overrides.changesRequested ?? false,
+    blockingDiscussionsResolved: overrides.blockingDiscussionsResolved ?? true,
     reviewers: { count: 0, fingerprint: 'reviewers' },
     approval: {
       available: true,
@@ -294,7 +397,7 @@ function mergeRequestDigest(iid, overrides = {}) {
     },
     approvalsComplete: true,
     unresolvedDiscussions: { count: 0, fingerprint: 'discussions' },
-    discussionsComplete: true,
+    discussionsComplete: overrides.discussionsComplete ?? true,
     reviewActivity: { count: 0, fingerprint: 'activity' },
     reviewActivityComplete: true,
     updatedAt: '2026-07-15T12:00:00.000Z',

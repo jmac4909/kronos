@@ -207,8 +207,7 @@ function parseTerminalContextReference(reference: string):
 
   const ciPrefix = /^\[CI-([A-Z][A-Z0-9_]{0,127}-[1-9][0-9]*)\] Read Jenkins and SonarQube context file /.exec(reference);
   if (ciPrefix && reference.endsWith(REFERENCE_SUFFIX)) {
-    const keyValue = ciPrefix[1];
-    if (!keyValue) { throw new Error('CI terminal context reference has no ticket key.'); }
+    const keyValue = ciPrefix[1]!;
     const key = normalizeJiraIssueKey(keyValue);
     const promptPath = parsePromptPathLiteral(reference, ciPrefix[0].length);
     if (path.basename(path.dirname(promptPath)).toUpperCase() !== key) {
@@ -219,8 +218,7 @@ function parseTerminalContextReference(reference: string):
 
   const projectCiPrefix = /^\[CI-(PROJECT-[A-F0-9]{24})\] Read Jenkins and SonarQube context file /.exec(reference);
   if (projectCiPrefix && reference.endsWith(REFERENCE_SUFFIX)) {
-    const ownerDirectory = projectCiPrefix[1];
-    if (!ownerDirectory) { throw new Error('Project CI terminal context reference has no owner.'); }
+    const ownerDirectory = projectCiPrefix[1]!;
     const promptPath = parsePromptPathLiteral(reference, projectCiPrefix[0].length);
     if (path.basename(path.dirname(promptPath)) !== ownerDirectory) {
       throw new Error('Project CI terminal context reference does not point to the expected prompt artifact.');
@@ -230,8 +228,7 @@ function parseTerminalContextReference(reference: string):
 
   const gitPrefix = /^\[(GIT-[A-Za-z0-9_.-]{1,100})\] Read local Git working-tree status and diff context file /.exec(reference);
   if (gitPrefix && reference.endsWith(REFERENCE_SUFFIX)) {
-    const contextIdValue = gitPrefix[1];
-    if (!contextIdValue) { throw new Error('Git terminal context reference has no context id.'); }
+    const contextIdValue = gitPrefix[1]!;
     const contextId = normalizeGitContextId(contextIdValue);
     const promptPath = parsePromptPathLiteral(reference, gitPrefix[0].length);
     if (path.basename(path.dirname(promptPath)) !== contextId) {
@@ -242,8 +239,7 @@ function parseTerminalContextReference(reference: string):
 
   const attentionEventPrefix = /^\[(ATTENTION-(?:GITLAB|JENKINS|SONAR)-[A-F0-9]{24})\] Read exact Attention event context file /.exec(reference);
   if (attentionEventPrefix && reference.endsWith(REFERENCE_SUFFIX)) {
-    const contextIdValue = attentionEventPrefix[1];
-    if (!contextIdValue) { throw new Error('Attention event terminal reference has no context id.'); }
+    const contextIdValue = attentionEventPrefix[1]!;
     const contextId = normalizeAttentionEventContextId(contextIdValue);
     const promptPath = parsePromptPathLiteral(reference, attentionEventPrefix[0].length);
     if (path.basename(path.dirname(promptPath)) !== contextId) {
@@ -254,8 +250,7 @@ function parseTerminalContextReference(reference: string):
 
   const basketPrefix = /^\[(BASKET-[A-F0-9]{24})\] Read private context basket file /.exec(reference);
   if (basketPrefix && reference.endsWith(REFERENCE_SUFFIX)) {
-    const basketIdValue = basketPrefix[1];
-    if (!basketIdValue) { throw new Error('Context basket terminal reference has no basket id.'); }
+    const basketIdValue = basketPrefix[1]!;
     const basketId = normalizeBasketContextId(basketIdValue);
     const promptPath = parsePromptPathLiteral(reference, basketPrefix[0].length);
     if (path.basename(path.dirname(promptPath)) !== 'basket-context') {
@@ -266,8 +261,7 @@ function parseTerminalContextReference(reference: string):
 
   const promptLibraryPrefix = /^\[(PROMPT-[A-F0-9]{24})\] Read reviewed prompt library instruction file /.exec(reference);
   if (promptLibraryPrefix && reference.endsWith(REFERENCE_SUFFIX)) {
-    const promptIdValue = promptLibraryPrefix[1];
-    if (!promptIdValue) { throw new Error('Prompt library terminal reference has no prompt id.'); }
+    const promptIdValue = promptLibraryPrefix[1]!;
     const promptId = normalizePromptLibraryContextId(promptIdValue);
     const promptPath = parsePromptPathLiteral(reference, promptLibraryPrefix[0].length);
     if (path.basename(path.dirname(promptPath)) !== promptId) {
@@ -280,10 +274,7 @@ function parseTerminalContextReference(reference: string):
   if (!prefixMatch || !reference.endsWith(REFERENCE_SUFFIX)) {
     throw new Error('Terminal context reference has an invalid format.');
   }
-  const keyValue = prefixMatch[1];
-  if (!keyValue) {
-    throw new Error('Jira terminal context reference has no ticket key.');
-  }
+  const keyValue = prefixMatch[1]!;
   const key = normalizeJiraIssueKey(keyValue);
   const promptPath = parsePromptPathLiteral(reference, prefixMatch[0].length);
   if (path.basename(path.dirname(promptPath)).toUpperCase() !== key) {

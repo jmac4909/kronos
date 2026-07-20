@@ -1,13 +1,9 @@
 import type { KronosState as KronosStateSnapshot } from '../state/types';
-import {
-  gitlabRestClient,
-  type GitLabMergeRequestMonitorSnapshot,
-} from './gitlabRestClient';
+import { gitlabRestClient } from './gitlabRestClient';
 import { jenkinsRestClient, type JenkinsBuildContext } from './jenkinsRestClient';
 import { isSonarRestConfigured, sonarDashboardUrl, sonarRestClient, type SonarBranchContext } from './sonarRestClient';
 import {
   compareGitLabPipelineDigests,
-  gitLabPipelineStatusIsUnhealthy,
   mergeGitLabPipelineDigest,
   normalizeGitLabPipelineDigest,
   type GitLabPipelineDigest,
@@ -25,7 +21,6 @@ import {
   normalizeGitLabMergeRequestDigest,
   type GitLabMergeRequestDigest,
   type GitLabMergeRequestTransition,
-  type GitLabMergeRequestTransitionKind,
 } from './gitlabMergeRequestTransitions';
 import {
   advanceGitLabMergeRequestReadStatus,
@@ -112,36 +107,27 @@ import {
   sonarIncompleteReadComponents,
   type ProviderReadState,
 } from './providerReadHealth';
+import {
+  ciDigestState,
+  gitLabDigestUnhealthy,
+  gitLabIncompleteMonitorComponents,
+  mergeRequestDigestIsTerminal,
+  mergeRequestEventState,
+  mergeRequestMetadata,
+  mergeRequestReadStatusSummary,
+  mergeRequestTransitionIsWarning,
+  mergeRequestTransitionSummary,
+  transitionIsFailure,
+  transitionLabel,
+  type ManagedProviderPollResult,
+} from './providerPollingPresentation';
 
-export interface ManagedProviderPollResult {
-  polled: number;
-  transitions: number;
-  failures: number;
-  skipped: number;
-  unconfigured: number;
-  leaseUnavailable: boolean;
-  leaseReason?: string;
-}
-
-export interface ManagedProviderPollNotice {
-  kind: 'lease-unavailable' | 'missing-configuration' | 'failed' | 'complete';
-  message: string;
-  warning: boolean;
-}
-
-export function managedProviderPollNotice(result: ManagedProviderPollResult): ManagedProviderPollNotice {
-  if (result.leaseUnavailable && result.polled === 0) {
-    return {
-      kind: 'lease-unavailable',
-      message: 'Provider updates are already being checked in another VS Code window. Wait for it to finish, or close that window and choose Check Updates again.',
-      warning: false,
-    };
-  }
-  const message = `Checked ${result.polled} provider source${result.polled === 1 ? '' : 's'}: ${result.transitions} new Attention item${result.transitions === 1 ? '' : 's'}, ${result.failures} problem${result.failures === 1 ? '' : 's'}, ${result.skipped} skipped, ${result.unconfigured} project${result.unconfigured === 1 ? '' : 's'} need setup.`;
-  if (result.unconfigured > 0) { return { kind: 'missing-configuration', message, warning: true }; }
-  if (result.failures > 0 || result.leaseUnavailable) { return { kind: 'failed', message, warning: true }; }
-  return { kind: 'complete', message, warning: false };
-}
+export {
+  gitLabIncompleteMonitorComponents,
+  managedProviderPollNotice,
+  type ManagedProviderPollNotice,
+  type ManagedProviderPollResult,
+} from './providerPollingPresentation';
 
 export interface ManagedProviderNotice {
   event: MonitorEvent;
@@ -1436,102 +1422,6 @@ function appendCiTransitionOnce(
   return notice(event, session, transitionIsFailure(transition.kind) ? 'warning' : 'information', url, 'kronos.insertCiContext');
 }
 
-function gitLabDigestUnhealthy(digest: GitLabPipelineDigest): boolean {
-  return gitLabPipelineStatusIsUnhealthy(digest.status)
-    || digest.failedJobs.length > 0
-    || digest.tests.failed + digest.tests.error > 0;
-}
-
-function mergeRequestTransitionSummary(
-  ticketKey: string,
-  transition: GitLabMergeRequestTransition,
-): string {
-  const iid = transition.current.iid;
-  const prefix = `${ticketKey} MR !${iid}`;
-  switch (transition.kind) {
-    case 'merge_request_merged':
-      return `${prefix} merged.`;
-    case 'merge_request_closed':
-      return `${prefix} closed without merging.`;
-    case 'merge_request_reopened':
-      return `${prefix} reopened.`;
-    case 'merge_request_state_changed':
-      return `${prefix} state changed from ${transition.previous.state} to ${transition.current.state}.`;
-    case 'changes_requested':
-      return `${prefix} has requested changes.`;
-    case 'changes_request_cleared':
-      return `${prefix} no longer has requested changes.`;
-    case 'approval_satisfied':
-      return `${prefix} now satisfies its approval requirements.`;
-    case 'approval_required':
-      return `${prefix} no longer satisfies its approval requirements.`;
-    case 'approval_state_changed':
-      return `${prefix} approval state changed (${approvalSummary(transition.current)}).`;
-    case 'reviewers_changed':
-      return `${prefix} reviewer assignment changed (${transition.current.reviewers.count} reviewer${transition.current.reviewers.count === 1 ? '' : 's'}).`;
-    case 'unresolved_discussions_observed':
-      return `${prefix} has ${transition.current.unresolvedDiscussions.count} unresolved discussion${transition.current.unresolvedDiscussions.count === 1 ? '' : 's'} on the first complete discussion read.`;
-    case 'unresolved_discussions_increased':
-      return `${prefix} has more unresolved discussions (${transition.previous.unresolvedDiscussions.count} -> ${transition.current.unresolvedDiscussions.count}).`;
-    case 'unresolved_discussions_decreased':
-      return `${prefix} resolved discussions (${transition.previous.unresolvedDiscussions.count} -> ${transition.current.unresolvedDiscussions.count} unresolved).`;
-    case 'unresolved_discussions_changed':
-      return `${prefix} unresolved discussion set changed (${transition.current.unresolvedDiscussions.count} unresolved).`;
-    case 'review_activity_added': {
-      const added = Math.max(1, transition.current.reviewActivity.count - transition.previous.reviewActivity.count);
-      return `${prefix} has ${added} new review comment${added === 1 ? '' : 's'}.`;
-    }
-    case 'review_activity_changed':
-      return `${prefix} review activity changed (${transition.current.reviewActivity.count} comment${transition.current.reviewActivity.count === 1 ? '' : 's'}).`;
-  }
-}
-
-function mergeRequestMetadata(
-  digest: GitLabMergeRequestDigest,
-  transitionKind: GitLabMergeRequestTransitionKind | 'initial_mr_attention' | 'initial_mr_observed' | 'open_mr_reminder' | 'baseline',
-): Record<string, string | number | boolean | null> {
-  return {
-    transitionKind,
-    mergeRequestIid: digest.iid,
-    mergeRequestState: digest.state,
-    changesRequested: digest.changesRequested,
-    approvalCount: digest.approval.approvedByCount,
-    approvalsLeft: digest.approval.approvalsLeft,
-    reviewerCount: digest.reviewers.count,
-    unresolvedDiscussionCount: digest.unresolvedDiscussions.count,
-    reviewActivityCount: digest.reviewActivity.count,
-    mergeRequestUpdatedAt: digest.updatedAt || null,
-    approvalsComplete: digest.approvalsComplete,
-    discussionsComplete: digest.discussionsComplete,
-    reviewActivityComplete: digest.reviewActivityComplete,
-  };
-}
-
-function approvalSummary(digest: GitLabMergeRequestDigest): string {
-  const approvals = `${digest.approval.approvedByCount} approval${digest.approval.approvedByCount === 1 ? '' : 's'}`;
-  return digest.approval.approvalsLeft === null
-    ? approvals
-    : `${approvals}, ${digest.approval.approvalsLeft} remaining`;
-}
-
-function mergeRequestEventState(digest: GitLabMergeRequestDigest): string {
-  return digest.detailedMergeStatus === 'unknown'
-    ? digest.state
-    : `${digest.state}/${digest.detailedMergeStatus}`;
-}
-
-function mergeRequestDigestIsTerminal(digest: GitLabMergeRequestDigest): boolean {
-  return digest.state === 'merged' || digest.state === 'closed';
-}
-
-function mergeRequestTransitionIsWarning(kind: GitLabMergeRequestTransitionKind): boolean {
-  return kind === 'merge_request_closed'
-    || kind === 'changes_requested'
-    || kind === 'approval_required'
-    || kind === 'unresolved_discussions_observed'
-    || kind === 'unresolved_discussions_increased';
-}
-
 function updateGitLabMergeRequestReadStatus(
   session: ProviderMonitoringOwner,
   iid: number,
@@ -1584,25 +1474,6 @@ function updateGitLabMergeRequestReadStatus(
   }
   writeGitLabMergeRequestReadStatus(session.id, status);
   return result;
-}
-
-function mergeRequestReadStatusSummary(
-  ticketKey: string,
-  iid: number,
-  previous: GitLabMergeRequestReadStatus | null,
-  current: GitLabMergeRequestReadStatus,
-): string {
-  const prefix = `${ticketKey} MR !${iid}`;
-  if (current.state === 'complete') {
-    return `${prefix} provider reads recovered and are complete.`;
-  }
-  if (current.state === 'failed') {
-    return `${prefix} provider read failed (${readFailureLabel(current.reason)}).`;
-  }
-  const components = current.components.join(', ') || 'review data';
-  return previous?.state === 'partial'
-    ? `${prefix} partial provider-read scope changed (${components}).`
-    : `${prefix} provider reads are partial (${components}).`;
 }
 
 function appendProviderReadStatusTransition(
@@ -1684,22 +1555,6 @@ function appendProviderReadStatusTransition(
     : null;
 }
 
-function ciDigestState(digest: CiMonitorDigest): string {
-  const values = [digest.jenkins?.status, digest.sonar?.gateStatus].filter((value): value is string => Boolean(value));
-  return values.join(' / ') || 'observed';
-}
-
-function transitionIsFailure(kind: string): boolean {
-  return kind.includes('failed')
-    || kind.includes('canceled')
-    || kind.includes('increased')
-    || kind === 'initial_unhealthy';
-}
-
-function transitionLabel(kind: string): string {
-  return kind.replace(/_/g, ' ');
-}
-
 function notice(
   event: MonitorEvent,
   session: ProviderMonitoringOwner,
@@ -1719,17 +1574,4 @@ function notice(
     value.contextArgument = { projectName: session.projectName, projectPath: session.projectPath };
   }
   return value;
-}
-
-export function gitLabIncompleteMonitorComponents(
-  completeness: GitLabMergeRequestMonitorSnapshot['completeness'],
-): string[] {
-  return [
-    ...(!completeness.pipelinesComplete ? ['pipelines'] : []),
-    ...(!completeness.jobsComplete ? ['jobs'] : []),
-    ...(!completeness.testsComplete ? ['tests'] : []),
-    ...(!completeness.notesComplete ? ['notes'] : []),
-    ...(!completeness.discussionsComplete ? ['discussions'] : []),
-    ...(!completeness.approvalsComplete ? ['approvals'] : []),
-  ];
 }

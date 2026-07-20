@@ -11,7 +11,9 @@ export interface OperationsActionMessage {
 
 export type ContextComposerMessage =
   | { command: 'insertDraft'; focus: string }
-  | { command: 'openArtifact' | 'addToBasket' | 'cancel' };
+  | { command: 'openArtifact' }
+  | { command: 'addToBasket' }
+  | { command: 'cancel' };
 
 export type ContextBasketMessage =
   | { command: 'insert'; focus: string }
@@ -21,7 +23,8 @@ export type ContextBasketMessage =
 
 export type PromptLibraryComposerMessage =
   | { command: 'insertPrompt'; body: string }
-  | { command: 'openSettings' | 'cancel' };
+  | { command: 'openSettings' }
+  | { command: 'cancel' };
 
 export type ProjectIntegrationMessage =
   | { command: 'cancel' }

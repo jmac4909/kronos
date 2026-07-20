@@ -1,6 +1,5 @@
 import * as crypto from 'crypto';
-import * as http from 'http';
-import * as https from 'https';
+import { boundedHttpTransport } from './boundedHttpTransport';
 import { unknownErrorCode } from './errorUtils';
 import { parseJsonWithLabel } from './jsonFiles';
 import {
@@ -267,7 +266,7 @@ export class JiraRestClient {
           : '';
         pushUniqueWarning(
           warnings,
-          `Jira Work search page ${pageNumber} could not be fetched${reason}; ${issues.length} previously fetched issue${issues.length === 1 ? '' : 's'} were retained.`,
+          `Jira Work search page ${pageNumber} could not be fetched${reason}; ${issues.length} previously fetched issue${issues.length === 1 ? ' was' : 's were'} retained.`,
         );
         stoppedWithWarning = true;
         break;
@@ -546,7 +545,7 @@ export class JiraRestClient {
         );
       } catch (error: unknown) {
         if (isJiraRequestCancelled(error, options.signal)) { throw error; }
-        warnings.push(`Jira comment page ${pageNumber} could not be fetched; ${comments.length} previously fetched comment${comments.length === 1 ? '' : 's'} were retained.`);
+        warnings.push(`Jira comment page ${pageNumber} could not be fetched; ${comments.length} previously fetched comment${comments.length === 1 ? ' was' : 's were'} retained.`);
         stoppedWithWarning = true;
         break;
       }
@@ -669,15 +668,13 @@ export function resolveJiraRestConfig(env: NodeJS.ProcessEnv = process.env): Jir
   const baseUrl = normalizeJiraBaseUrl(env['JIRA_BASE_URL']);
   const email = env['JIRA_EMAIL']?.trim();
   const apiToken = env['JIRA_API_TOKEN']?.trim();
-  const missing: string[] = [];
-  if (!baseUrl) { missing.push('JIRA_BASE_URL'); }
-  if (!email) { missing.push('JIRA_EMAIL'); }
-  if (!apiToken) { missing.push('JIRA_API_TOKEN'); }
-  if (missing.length > 0) {
-    throw new JiraRestError(`Jira REST configuration missing ${missing.join(', ')}. Values are not displayed.`);
-  }
   if (!baseUrl || !email || !apiToken) {
-    throw new JiraRestError('Jira REST configuration is incomplete. Values are not displayed.');
+    const missing = [
+      ...(!baseUrl ? ['JIRA_BASE_URL'] : []),
+      ...(!email ? ['JIRA_EMAIL'] : []),
+      ...(!apiToken ? ['JIRA_API_TOKEN'] : []),
+    ];
+    throw new JiraRestError(`Jira REST configuration missing ${missing.join(', ')}. Values are not displayed.`);
   }
   return { baseUrl, email, apiToken };
 }
@@ -900,67 +897,17 @@ function responseBodyBuffer(body: string | Buffer): Buffer {
 }
 
 function defaultJiraTransport(request: JiraHttpRequest): Promise<JiraHttpResponse> {
-  return new Promise((resolve, reject) => {
-    let parsed: URL;
-    try {
-      parsed = new URL(request.url);
-    } catch {
-      reject(new JiraRestError('Invalid Jira REST URL.'));
-      return;
-    }
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-      reject(new JiraRestError('Invalid Jira REST URL protocol.'));
-      return;
-    }
-    const client = parsed.protocol === 'https:' ? https : http;
-    const req = client.request(parsed, {
-      method: request.method,
-      timeout: request.timeoutMs,
-      headers: request.headers,
-      ...(request.signal ? { signal: request.signal } : {}),
-    }, res => {
-      const declaredLength = firstHeaderLikeString(res.headers['content-length']);
-      if (declaredLength && /^\d+$/.test(declaredLength) && Number(declaredLength) > request.maxResponseBytes) {
-        res.destroy();
-        req.destroy();
-        reject(new JiraResponseLimitError(`Jira REST response exceeded the ${request.maxResponseBytes}-byte safety limit.`));
-        return;
-      }
-      const chunks: Buffer[] = [];
-      let receivedBytes = 0;
-      res.on('data', chunk => {
-        const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk));
-        receivedBytes += buffer.length;
-        if (receivedBytes > request.maxResponseBytes) {
-          res.destroy();
-          req.destroy();
-          reject(new JiraResponseLimitError(`Jira REST response exceeded the ${request.maxResponseBytes}-byte safety limit.`));
-          return;
-        }
-        chunks.push(buffer);
-      });
-      res.on('end', () => {
-        const body = Buffer.concat(chunks);
-        resolve({
-          statusCode: res.statusCode || 0,
-          body: request.responseType === 'buffer' ? body : body.toString('utf8'),
-          headers: res.headers,
-        });
-      });
-      res.on('error', () => {
-        reject(new JiraRestError('Jira REST response ended unexpectedly.'));
-      });
-    });
-    req.on('timeout', () => {
-      req.destroy();
-      reject(new JiraRestError(`Timed out after ${request.timeoutMs}ms reaching Jira REST API.`));
-    });
-    req.on('error', () => {
-      reject(request.signal?.aborted
-        ? new JiraRestCancelledError()
-        : new JiraRestError('Jira REST network request failed.'));
-    });
-    req.end();
+  return boundedHttpTransport(request, {
+    allowHttp: 'any',
+    invalidUrl: 'Invalid Jira REST URL.',
+    invalidProtocol: 'Invalid Jira REST URL protocol.',
+    responseLimit: max => `Jira REST response exceeded the ${max}-byte safety limit.`,
+    unexpectedResponse: 'Jira REST response ended unexpectedly.',
+    timeout: timeoutMs => `Timed out after ${timeoutMs}ms reaching Jira REST API.`,
+    network: 'Jira REST network request failed.',
+    createError: (message, kind) => kind === 'cancelled'
+      ? new JiraRestCancelledError()
+      : kind === 'limit' ? new JiraResponseLimitError(message) : new JiraRestError(message),
   });
 }
 

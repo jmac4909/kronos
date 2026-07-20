@@ -270,6 +270,116 @@ test('local and remote Git manifests merge with origin-pinned GitLab auth and la
   assert.ok(failures.warnings.some(warning => /HTTP 503/i.test(warning)));
 });
 
+test('prompt library boundary matrices cover aggregate limits, metadata pruning, home paths, and origin parsing', async () => {
+  const metadata = promptLibrary.parsePromptLibraryManifest(JSON.stringify({
+    schemaVersion: 1,
+    name: 'Boundary prompts',
+    prompts: [
+      {
+        id: 'rich', title: 'Rich prompt', description: 'Retained description', body: 'Review {{session.title}}.',
+        tags: [' review ', 7, 'x'.repeat(51), 'review'],
+        suggestedContext: ['jira', 'jira', null],
+      },
+      { id: 7, title: 'Numeric id', body: 'Ignored.' },
+      { id: 'blank-title', title: '   ', body: 'Ignored.' },
+    ],
+  }), { kind: 'remote', location: 'https://git.example/rich.kronos-prompts.json' });
+  assert.equal(metadata.prompts.length, 1);
+  assert.deepEqual(metadata.prompts[0].tags, ['review']);
+  assert.deepEqual(metadata.prompts[0].suggestedContext, ['jira']);
+  assert.ok(metadata.warnings.some(warning => /missing, unsafe, or duplicate id/i.test(warning)));
+  assert.ok(metadata.warnings.some(warning => /Unsupported suggested context null/i.test(warning)));
+
+  const rendered = promptLibrary.renderPromptTemplate(metadata.prompts[0], {
+    sessionTitle: ' \n ', projectName: ' \t ', projectPath: '', projectBranch: undefined,
+    jiraKeys: [' ', 'SAFE-1'],
+  });
+  assert.match(rendered.body, /Review Unnamed session/);
+
+  assert.equal(
+    promptLibrary.normalizePromptLibraryRemoteUrl('https://git.example/TOKEN=fixture-secret/prompts.json'),
+    undefined,
+  );
+  assert.equal(promptLibrary.normalizePromptLibraryRemoteUrl('x'.repeat(4_001)), undefined);
+  const credentialHeaders = promptLibrary.promptLibraryRequestHeaders(
+    'https://gitlab.example/prompts.json',
+    {
+      GITLAB_TOKEN: ' fixture-token ',
+      GITLAB_HOST: 'gitlab.example',
+      GITLAB_URL: 'https://user:password@gitlab.example',
+      GITLAB_BASE_URL: 'ftp://gitlab.example',
+      GITLAB_API_BASE_URL: 'https://[invalid',
+    },
+    true,
+  );
+  assert.equal(credentialHeaders['PRIVATE-TOKEN'], 'fixture-token');
+  assert.equal(
+    promptLibrary.promptLibraryRequestHeaders(
+      'http://localhost/prompts.json',
+      { GITLAB_TOKEN: 'fixture-token', GITLAB_URL: 'http://localhost' },
+      true,
+    )['PRIVATE-TOKEN'],
+    'fixture-token',
+  );
+
+  const aggregateDirectory = path.join(tempRoot, 'aggregate-prompt-library');
+  fs.mkdirSync(aggregateDirectory, { recursive: true });
+  for (let libraryIndex = 0; libraryIndex < 6; libraryIndex += 1) {
+    fs.writeFileSync(path.join(aggregateDirectory, `${libraryIndex}.kronos-prompts.json`), JSON.stringify({
+      schemaVersion: 1,
+      name: `Boundary ${libraryIndex}`,
+      prompts: Array.from({ length: 100 }, (_, promptIndex) => ({
+        id: `p-${libraryIndex}-${promptIndex}`, title: `Prompt ${promptIndex}`, body: 'Review.',
+      })),
+    }));
+  }
+  const aggregate = await promptLibrary.loadPromptLibraries({ localPaths: [aggregateDirectory] });
+  assert.equal(aggregate.prompts.length, 500);
+  assert.ok(aggregate.warnings.some(warning => /more than 500 prompts/i.test(warning)));
+
+  const homeMisses = await promptLibrary.loadPromptLibraries({
+    localPaths: ['~/kronos-prompt-library-missing-fixture', '~\\kronos-prompt-library-missing-fixture'],
+  });
+  assert.equal(homeMisses.prompts.length, 0);
+  assert.equal(homeMisses.sources.length, 2);
+  if (process.platform !== 'win32') {
+    const target = path.join(tempRoot, 'symlink-prompt-target.json');
+    const link = path.join(tempRoot, 'symlink-prompt-library.json');
+    fs.writeFileSync(target, JSON.stringify({ schemaVersion: 1, name: 'Target', prompts: [] }));
+    fs.symlinkSync(target, link);
+    const linked = await promptLibrary.loadPromptLibraries({ localPaths: [link] });
+    assert.equal(linked.prompts.length, 0);
+    assert.match(linked.warnings[0], /symbolic link/i);
+  }
+
+  const cacheRoot = path.join(tempRoot, 'rich-cache-runtime');
+  const richRemote = await promptLibrary.loadPromptLibraries({
+    remoteUrls: ['https://git.example/rich-cache.json'],
+    kronosDir: cacheRoot,
+    transport: async () => ({
+      statusCode: 200,
+      body: JSON.stringify({
+        schemaVersion: 1,
+        name: 'Rich cache',
+        prompts: [{
+          id: 'rich-cache', title: 'Rich cache', description: 'Description', body: 'Review.',
+          tags: ['cache'], suggestedContext: ['git'],
+        }],
+      }),
+    }),
+  });
+  assert.equal(richRemote.prompts.length, 1);
+  const cachedText = fs.readFileSync(path.join(
+    cacheRoot,
+    'prompt-library-cache',
+    require('node:crypto').createHash('sha256').update('https://git.example/rich-cache.json').digest('hex').slice(0, 24),
+    'manifest.json',
+  ), 'utf8');
+  assert.match(cachedText, /"description": "Description"/);
+  assert.match(cachedText, /"tags"/);
+  assert.match(cachedText, /"suggestedContext"/);
+});
+
 test('reviewed prompt snapshots are immutable, credential-redacted, and inserted without submission', () => {
   const prompt = promptLibrary.parsePromptLibraryManifest(JSON.stringify({
     schemaVersion: 1,

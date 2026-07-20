@@ -224,6 +224,400 @@ test('Jenkins and SonarQube transition matrices cover every declared CI transiti
   );
 });
 
+test('Jenkins and SonarQube digests reject malformed evidence and retain complete bounded facets', () => {
+  for (const value of [null, {}, { provider: 'gitlab', build: {} }, { provider: 'jenkins' }]) {
+    assert.equal(ci.jenkinsCiDigestFromContext(value), null);
+  }
+  assert.equal(ci.jenkinsCiDigestFromContext({
+    provider: 'jenkins',
+    jobOrBuildUrl: 'file:///tmp/job',
+    build: { number: 1 },
+  }), null);
+  assert.equal(ci.jenkinsCiDigestFromContext({
+    provider: 'jenkins',
+    jobOrBuildUrl: 'https://jenkins.example/job/app',
+    build: { number: -1 },
+  }), null);
+
+  const failedStages = Array.from({ length: 102 }, (_, index) => ({
+    name: index === 0 ? '' : index === 1 ? 'x'.repeat(300) : `Stage ${index}`,
+    status: index === 2 ? 'success' : 'failed',
+  }));
+  failedStages.push(null, { name: 'ignored', status: 'running' });
+  const jenkins = ci.jenkinsCiDigestFromContext({
+    provider: 'jenkins',
+    jobOrBuildUrl: 'https://operator:secret@jenkins.example/job/app?token=hidden#fragment',
+    build: {
+      number: 41,
+      status: 'FAILED BUILD',
+      building: true,
+      url: 'https://other.example/job/app/41?token=hidden',
+    },
+    tests: { failCount: -5, complete: false },
+    stages: failedStages,
+    completeness: { testReport: 'complete', stages: 'complete' },
+  });
+  assert.ok(jenkins);
+  assert.equal(jenkins.jobOrBuildUrl, 'https://jenkins.example/job/app');
+  assert.equal(jenkins.buildUrl, jenkins.jobOrBuildUrl, 'cross-origin build links are not retained');
+  assert.equal(jenkins.status, 'failed_build');
+  assert.equal(jenkins.testsAvailable, false);
+  assert.equal(jenkins.failedTestCount, 0);
+  assert.equal(jenkins.failedStageNames.length, 100);
+  assert.equal(jenkins.failedStageNamesTruncated, true);
+
+  const invalidJenkinsBase = { ...jenkins };
+  for (const mutate of [
+    value => { value.schemaVersion = 2; },
+    value => { value.provider = 'gitlab'; },
+    value => { value.building = 'yes'; },
+    value => { value.testsAvailable = 'yes'; },
+    value => { value.stagesAvailable = 'yes'; },
+    value => { value.failedStageNamesTruncated = 'yes'; },
+    value => { value.buildUrl = 'https://other.example/job/app/41'; },
+    value => { value.buildNumber = -1; },
+    value => { value.failedTestCount = 1.5; },
+    value => { value.failedStageNames = [' spaced ']; },
+    value => { value.failedStageNames = Array.from({ length: 101 }, () => 'stage'); },
+  ]) {
+    const value = structuredClone(invalidJenkinsBase);
+    mutate(value);
+    assert.equal(ci.normalizeJenkinsCiDigest(value), null);
+  }
+
+  for (const value of [null, {}, { provider: 'jenkins', qualityGate: {} }, { provider: 'sonarqube' }]) {
+    assert.equal(ci.sonarCiDigestFromContext(value), null);
+  }
+  const sonar = ci.sonarCiDigestFromContext({
+    provider: 'sonarqube',
+    projectKey: 'app:key',
+    branch: 'feature/quality',
+    dashboardUrl: 'https://operator:secret@sonar.example/dashboard?token=hidden#fragment',
+    qualityGate: { status: 'Warning Gate' },
+    issues: [
+      null,
+      { status: 'OPEN' },
+      { issueStatus: 'fixed' },
+      { status: 'OPEN', resolution: 'FIXED' },
+    ],
+    measures: [
+      null,
+      { metric: 'coverage', value: ' 95.0 ', periodValue: '96.0' },
+      { metric: 'coverage', value: '97.0' },
+      { metric: 'not_retained', value: '1' },
+      { metric: 'invalid metric', value: '1' },
+      { metric: 'bugs' },
+    ],
+    completeness: { qualityGateComplete: true, issuesComplete: true, measuresComplete: true },
+  });
+  assert.ok(sonar);
+  assert.equal(sonar.dashboardUrl, 'https://sonar.example/dashboard?id=app%3Akey&branch=feature%2Fquality');
+  assert.equal(sonar.unresolvedIssueCount, 1);
+  assert.deepEqual(sonar.metrics, [{ metric: 'bugs' }, { metric: 'coverage', value: '97.0' }]);
+
+  const invalidSonarBase = { ...sonar };
+  for (const mutate of [
+    value => { value.schemaVersion = 2; },
+    value => { value.provider = 'jenkins'; },
+    value => { value.gateAvailable = 'yes'; },
+    value => { value.issueCountAvailable = 'yes'; },
+    value => { value.metricsAvailable = 'yes'; },
+    value => { value.projectKey = ''; },
+    value => { value.branch = ''; },
+    value => { value.dashboardUrl = 'file:///tmp/dashboard'; },
+    value => { value.unresolvedIssueCount = -1; },
+    value => { value.metrics = null; },
+    value => { value.metrics = [{ metric: 'coverage' }, { metric: 'coverage' }]; },
+    value => { value.metrics = [{ metric: 'unknown_metric' }]; },
+    value => { value.metrics = [{ metric: 'coverage', value: ' spaced ' }]; },
+    value => { value.metrics = [{ metric: 'coverage', periodValue: '' }]; },
+    value => { value.metrics = Array.from({ length: 65 }, () => ({ metric: 'coverage' })); },
+  ]) {
+    const value = structuredClone(invalidSonarBase);
+    mutate(value);
+    assert.equal(ci.normalizeSonarCiDigest(value), null);
+  }
+
+  assert.equal(ci.buildCiMonitorDigest({}), null);
+  assert.equal(ci.normalizeCiMonitorDigest(null), null);
+  assert.equal(ci.normalizeCiMonitorDigest({ schemaVersion: 1, jenkins: {} }), null);
+  assert.equal(ci.normalizeCiMonitorDigest({ schemaVersion: 1, sonar: {} }), null);
+  const combined = ci.buildCiMonitorDigest({
+    jenkins: {
+      provider: 'jenkins', jobOrBuildUrl: 'https://jenkins.example/job/app',
+      build: { number: 41, status: 'failure', url: 'https://jenkins.example/job/app/41' },
+      stages: [], completeness: { stages: 'complete' },
+    },
+    sonar: {
+      provider: 'sonarqube', projectKey: 'app:key', branch: 'main',
+      dashboardUrl: 'https://sonar.example/dashboard', qualityGate: { status: 'ERROR' },
+      completeness: { qualityGateComplete: true, issuesTotal: 3 },
+    },
+  });
+  assert.ok(combined.jenkins && combined.sonar);
+  assert.equal(ci.normalizeCiMonitorDigest(combined).fingerprint, combined.fingerprint);
+  assert.equal(ci.mergeCiMonitorDigest(combined, null), null);
+  assert.deepEqual(ci.compareCiMonitorDigests(null, combined), []);
+  assert.equal(ci.jenkinsStatusIsFailure('failed_compile'), true);
+  assert.equal(ci.jenkinsStatusIsFailure('compile_failed'), true);
+  assert.equal(ci.jenkinsStatusIsFailure('running'), false);
+  assert.equal(ci.jenkinsStatusIsSuccess('successful'), true);
+  assert.equal(ci.sonarGateStatusIsFailure('warning'), true);
+  assert.equal(ci.sonarGateStatusIsSuccess('passed'), true);
+});
+
+test('pipeline and CI normalization cover partial retention, alternate provider shapes, and quiet comparisons', () => {
+  const direct = pipelines.normalizeGitLabPipelineDigest({
+    pipeline: { id: 81, project: { id: 12 }, status: { group: 'success' }, url: 'https://gitlab.example/pipeline/81' },
+    pipelines: [{ id: 80, sha: 'other' }, { id: 79, sha: 'older' }],
+    jobs: [],
+    testReportSummary: { total: { count: 20, success: 4, failed: 1, error: 1, skipped: 1 } },
+    fetchedAt: '2026-07-16T13:00:00.000Z',
+  });
+  assert.ok(direct);
+  assert.equal(direct.projectIdOrPath, '12');
+  assert.deepEqual(direct.tests, { available: true, total: 20, failed: 1, error: 1, skipped: 1 });
+
+  const fromNewestList = pipelines.normalizeGitLabPipelineDigest({
+    mr: { sha: 'no-match' },
+    pipelines: [
+      { id: 82, project_path: 'group/app', status: 'running' },
+      { id: 84, project_id_or_path: 'group/app', status: 'running' },
+    ],
+    jobs: [], testReport: {}, fetchedAt: '2026-07-16T13:01:00.000Z',
+  });
+  assert.ok(fromNewestList);
+  assert.equal(fromNewestList.id, 84);
+  assert.equal(fromNewestList.tests.available, false);
+
+  const malformedUrl = pipelines.normalizeGitLabPipelineDigest({
+    pipeline: { id: 85, projectId: 12, detailed_status: { label: 'not/a/status' }, web_url: 'not a URL' },
+    jobs: [{ id: 1, name: 'failed', status: 'failed', allowFailure: 'false', url: 'file:///private' }],
+    testReportSummary: { available: 'false' },
+  });
+  assert.ok(malformedUrl);
+  assert.equal(malformedUrl.status, 'unknown');
+  assert.equal(malformedUrl.url, undefined);
+  assert.equal(malformedUrl.failedJobs.length, 1);
+  assert.equal(malformedUrl.failedJobs[0].url, undefined);
+
+  const completeCurrent = pipelineDigest({ failedTests: 1, jobs: [{ id: 9, name: 'verify', status: 'failed' }] });
+  const mergedComplete = pipelines.mergeGitLabPipelineDigest(pipelineDigest(), completeCurrent);
+  assert.deepEqual(mergedComplete.failedJobs, completeCurrent.failedJobs);
+  assert.deepEqual(mergedComplete.tests, completeCurrent.tests);
+  const incompleteCurrent = pipelines.normalizeStoredGitLabPipelineDigest({
+    ...completeCurrent, jobsComplete: false, testsComplete: false,
+  });
+  assert.ok(incompleteCurrent);
+  assert.deepEqual(pipelines.compareGitLabPipelineDigests(completeCurrent, incompleteCurrent), []);
+  assert.deepEqual(pipelines.compareGitLabPipelineDigests(null, completeCurrent), []);
+  assert.deepEqual(pipelines.compareGitLabPipelineDigests(completeCurrent, null), []);
+
+  const sameFailure = pipelineDigest({ status: 'failed' });
+  const changedFailure = pipelines.normalizeStoredGitLabPipelineDigest({ ...sameFailure, fetchedAt: 'later' });
+  assert.ok(changedFailure);
+  assert.equal(
+    pipelines.compareGitLabPipelineDigests(sameFailure, changedFailure).some(item => item.kind === 'pipeline_failed'),
+    false,
+  );
+  const partialJobs = pipelines.normalizeStoredGitLabPipelineDigest({ ...completeCurrent, jobsComplete: false });
+  const unavailableTests = pipelines.normalizeStoredGitLabPipelineDigest({
+    ...completeCurrent, tests: { available: false, total: 0, failed: 0, error: 0, skipped: 0 },
+  });
+  assert.ok(partialJobs && unavailableTests);
+  assert.equal(pipelines.compareGitLabPipelineDigests(pipelineDigest(), partialJobs).some(item => item.kind.includes('jobs')), false);
+  assert.equal(pipelines.compareGitLabPipelineDigests(pipelineDigest(), unavailableTests).some(item => item.kind.startsWith('tests_')), false);
+
+  const baseJenkins = jenkinsDigest({ failedTestCount: 3, failedStageNames: ['Verify'] });
+  const partialJenkins = requiredDigest(ci.normalizeJenkinsCiDigest({
+    ...baseJenkins,
+    testsAvailable: false,
+    failedTestCount: 0,
+    stagesAvailable: false,
+    failedStageNames: [],
+    failedStageNamesTruncated: false,
+  }), 'partial Jenkins');
+  const baseSonar = sonarDigest({ gateStatus: 'ERROR', unresolvedIssueCount: 4 });
+  const partialSonar = requiredDigest(ci.normalizeSonarCiDigest({
+    ...baseSonar,
+    gateAvailable: false,
+    gateStatus: 'unknown',
+    issueCountAvailable: false,
+    unresolvedIssueCount: 0,
+    metricsAvailable: false,
+    metrics: [],
+  }), 'partial SonarQube');
+  const priorCombined = requiredDigest(ci.normalizeCiMonitorDigest({
+    schemaVersion: 1, jenkins: baseJenkins, sonar: baseSonar,
+  }), 'prior combined CI');
+  const partialCombined = requiredDigest(ci.normalizeCiMonitorDigest({
+    schemaVersion: 1, jenkins: partialJenkins, sonar: partialSonar,
+  }), 'partial combined CI');
+  const retained = ci.mergeCiMonitorDigest(priorCombined, partialCombined);
+  assert.ok(retained);
+  assert.equal(retained.jenkins.failedTestCount, 3);
+  assert.deepEqual(retained.jenkins.failedStageNames, ['Verify']);
+  assert.equal(retained.sonar.gateStatus, 'error');
+  assert.equal(retained.sonar.unresolvedIssueCount, 4);
+
+  const currentComplete = requiredDigest(ci.normalizeCiMonitorDigest({
+    schemaVersion: 1,
+    jenkins: jenkinsDigest({ failedTestCount: 1, failedStageNames: ['Package'] }),
+    sonar: sonarDigest({ gateStatus: 'WARN', unresolvedIssueCount: 2 }),
+  }), 'current complete CI');
+  const preferred = ci.mergeCiMonitorDigest(priorCombined, currentComplete);
+  assert.equal(preferred.jenkins.failedTestCount, 1);
+  assert.deepEqual(preferred.jenkins.failedStageNames, ['Package']);
+  assert.equal(preferred.sonar.gateStatus, 'warn');
+  assert.equal(preferred.sonar.unresolvedIssueCount, 2);
+
+  assert.deepEqual(ci.compareJenkinsCiDigests(null, baseJenkins), []);
+  assert.deepEqual(ci.compareJenkinsCiDigests(baseJenkins, null), []);
+  assert.deepEqual(ci.compareSonarCiDigests(baseSonar, { ...baseSonar, projectKey: 'other' }), []);
+  assert.deepEqual(ci.compareSonarCiDigests(baseSonar, { ...baseSonar, branch: 'other' }), []);
+  const newFailedBuild = jenkinsDigest({ buildNumber: 12, status: 'failure', failedTestCount: 2, failedStageNames: ['Verify'] });
+  const newBuildKinds = ci.compareJenkinsCiDigests(jenkinsDigest({ buildNumber: 11 }), newFailedBuild).map(item => item.kind);
+  assert.ok(newBuildKinds.includes('jenkins_failed'));
+  assert.ok(newBuildKinds.includes('jenkins_tests_failed'));
+  assert.ok(newBuildKinds.includes('jenkins_stages_failed'));
+  const unavailableGate = requiredDigest(ci.normalizeSonarCiDigest({ ...baseSonar, gateAvailable: false }), 'unavailable gate');
+  assert.equal(ci.compareSonarCiDigests(unavailableGate, baseSonar).some(item => item.kind === 'sonar_gate_failed'), true);
+
+  assert.equal(ci.jenkinsCiDigestFromContext({
+    provider: 'jenkins', jobOrBuildUrl: 'https://jenkins.example', build: { number: 1, status: 'success' },
+  }).stagesAvailable, false);
+  assert.equal(ci.sonarCiDigestFromContext({
+    provider: 'sonarqube', projectKey: '', branch: 'main', dashboardUrl: 'https://sonar.example', qualityGate: {},
+  }), null);
+  assert.equal(ci.sonarCiDigestFromContext({
+    provider: 'sonarqube', projectKey: 'app', branch: '', dashboardUrl: 'https://sonar.example', qualityGate: {},
+  }), null);
+  assert.equal(ci.sonarCiDigestFromContext({
+    provider: 'sonarqube', projectKey: 'app', branch: 'main', dashboardUrl: 'not a URL', qualityGate: {},
+  }), null);
+  assert.equal(ci.normalizeSonarCiDigest({ ...baseSonar, metrics: [null] }), null);
+});
+
+test('merge-request normalization bounds provider noise and partial reads without invented transitions', () => {
+  assert.equal(mergeRequests.normalizeGitLabMergeRequestDigest(null), null);
+  assert.equal(mergeRequests.normalizeGitLabMergeRequestDigest({ mr: null }), null);
+  assert.equal(mergeRequests.normalizeGitLabMergeRequestDigest({ mr: { iid: 0 } }), null);
+  assert.equal(mergeRequests.normalizeStoredGitLabMergeRequestDigest(null), null);
+  assert.equal(mergeRequests.normalizeStoredGitLabMergeRequestDigest({ schemaVersion: 1, iid: -1 }), null);
+
+  const snapshot = {
+    mr: {
+      iid: 77.9,
+      state: 'OPENED state',
+      merge_status: 'checking',
+      blocking_discussions_resolved: false,
+      updated_at: '2026-07-16T12:00:00.000Z',
+      web_url: 'https://operator:secret@gitlab.example/group/app/-/merge_requests/77?token=hidden#fragment',
+      sha: 'abc123',
+      title: 'Review bounded evidence',
+      source_branch: 'feature/review',
+      target_branch: 'main',
+      reviewers: [null, { id: 9.8 }, { username: '  REVIEWER ' }, { username: '' }],
+    },
+    approvals: {
+      approved: false,
+      approvals_required: 2.9,
+      approvals_left: -1,
+      approved_by: [
+        null,
+        { user: null },
+        { user: { username: 'Approver' } },
+        { user: { id: 4 }, approved_at: '2026-07-16T11:00:00.000Z' },
+      ],
+    },
+    discussions: [
+      null,
+      { notes: [{ resolvable: true, resolved: false, created_at: '2026-07-16T10:00:00.000Z', author: { username: 'author' } }] },
+      { id: 'resolved-thread', notes: [{ id: 2, resolvable: true, resolved: true }] },
+      { id: 'system-thread', notes: [{ id: 3, system: true }] },
+    ],
+    notes: [
+      null,
+      { id: 10, updated_at: '2026-07-16T10:01:00.000Z' },
+      { created_at: '2026-07-16T10:02:00.000Z', author: { username: 'Writer' } },
+      { id: 11, system: true },
+    ],
+    completeness: { approvalsComplete: true, discussionsComplete: true, notesComplete: true },
+    fetchedAt: '2026-07-16T12:00:01.000Z',
+  };
+  const digest = mergeRequests.normalizeGitLabMergeRequestDigest(snapshot);
+  assert.ok(digest);
+  assert.equal(digest.iid, 77);
+  assert.equal(digest.state, 'opened_state');
+  assert.equal(digest.changesRequested, null);
+  assert.equal(digest.blockingDiscussionsResolved, false);
+  assert.equal(digest.url, 'https://gitlab.example/group/app/-/merge_requests/77');
+  assert.equal(digest.reviewers.count, 2);
+  assert.equal(digest.approval.approvalsRequired, 2);
+  assert.equal(digest.approval.approvalsLeft, null);
+  assert.equal(digest.approval.approvedByCount, 2);
+  assert.equal(digest.unresolvedDiscussions.count, 1);
+  assert.equal(digest.reviewActivity.count, 4);
+
+  const noApprovals = mergeRequests.normalizeGitLabMergeRequestDigest({
+    mr: { iid: 78, detailed_merge_status: 'requested_changes' },
+    discussions: Array.from({ length: 2_001 }, () => null),
+    notes: Array.from({ length: 2_001 }, () => null),
+    completeness: { approvalsComplete: true, discussionsComplete: true, notesComplete: true },
+  });
+  assert.ok(noApprovals);
+  assert.equal(noApprovals.changesRequested, true);
+  assert.equal(noApprovals.approvalsComplete, false);
+  assert.equal(noApprovals.discussionsComplete, false);
+  assert.equal(noApprovals.reviewActivityComplete, false);
+  assert.equal(noApprovals.approval.available, false);
+
+  const stored = mergeRequests.normalizeStoredGitLabMergeRequestDigest({
+    ...digest,
+    reviewers: null,
+    approval: null,
+    unresolvedDiscussions: null,
+    reviewActivity: null,
+    changesRequested: 'yes',
+    blockingDiscussionsResolved: 'yes',
+    approvalsComplete: false,
+    discussionsComplete: false,
+    reviewActivityComplete: false,
+    url: 'file:///tmp/not-provider',
+    fetchedAt: '',
+  });
+  assert.ok(stored);
+  assert.equal(stored.changesRequested, null);
+  assert.equal(stored.blockingDiscussionsResolved, null);
+  assert.equal(stored.url, undefined);
+  assert.equal(stored.reviewers.count, 0);
+
+  const complete = mrDigest({ detailedStatus: 'requested_changes', discussions: [{
+    id: 'thread-1', notes: [{ id: 1, resolvable: true, resolved: false }],
+  }], notes: [{ id: 4 }] });
+  const partial = mergeRequests.normalizeStoredGitLabMergeRequestDigest({
+    ...complete,
+    changesRequested: null,
+    approvalsComplete: false,
+    discussionsComplete: false,
+    reviewActivityComplete: false,
+  });
+  const merged = mergeRequests.mergeGitLabMergeRequestDigest(complete, partial);
+  assert.equal(merged.changesRequested, true);
+  assert.equal(merged.approvalsComplete, true);
+  assert.equal(merged.discussionsComplete, true);
+  assert.equal(merged.reviewActivityComplete, true);
+  assert.equal(mergeRequests.mergeGitLabMergeRequestDigest(complete, null), null);
+  assert.equal(mergeRequests.mergeGitLabMergeRequestDigest(complete, { ...partial, iid: 99 }).iid, 99);
+  assert.deepEqual(mergeRequests.compareGitLabMergeRequestDigests(null, complete), []);
+  assert.deepEqual(mergeRequests.compareGitLabMergeRequestDigests(complete, { ...complete, iid: 99 }), []);
+  assert.equal(mergeRequests.gitLabMergeRequestNeedsAttention(complete), true);
+  assert.equal(mergeRequests.gitLabMergeRequestNeedsAttention({ ...complete, state: 'closed' }), false);
+  assert.equal(mergeRequests.gitLabMergeRequestNeedsAttention({
+    ...complete, changesRequested: false, discussionsComplete: false,
+  }), false);
+});
+
 test('Attention collapses provider-read health into GitLab MR, Jenkins build, and SonarQube branch truth', () => {
   const session = workSession();
   const sonarGate = resourceTransition(

@@ -1,5 +1,4 @@
-import * as http from 'http';
-import * as https from 'https';
+import { boundedHttpTransport } from './boundedHttpTransport';
 import { unknownErrorCode, unknownErrorMessage } from './errorUtils';
 import { parseJsonWithLabel } from './jsonFiles';
 import {
@@ -580,14 +579,12 @@ export function resolveGitLabRestConfig(env: NodeJS.ProcessEnv = process.env): G
     env['GITLAB_HOST'],
   ));
   const token = firstNonEmptyString(env['GITLAB_TOKEN']);
-  const missing: string[] = [];
-  if (!apiBaseUrl) { missing.push('GITLAB_BASE_URL'); }
-  if (!token) { missing.push('GITLAB_TOKEN'); }
-  if (missing.length > 0) {
-    throw new GitLabRestError(`GitLab REST configuration missing ${missing.join(', ')}. Values are not displayed.`);
-  }
   if (!apiBaseUrl || !token) {
-    throw new GitLabRestError('GitLab REST configuration is incomplete. Values are not displayed.');
+    const missing = [
+      ...(!apiBaseUrl ? ['GITLAB_BASE_URL'] : []),
+      ...(!token ? ['GITLAB_TOKEN'] : []),
+    ];
+    throw new GitLabRestError(`GitLab REST configuration missing ${missing.join(', ')}. Values are not displayed.`);
   }
   return { apiBaseUrl, token };
 }
@@ -639,12 +636,9 @@ export function configuredGitLabProjectPathFromMergeRequestUrl(
   } catch {
     return undefined;
   }
-  try {
-    const candidate = new URL(value || '');
-    return candidate.origin === configuredOrigin ? projectPath : undefined;
-  } catch {
-    return undefined;
-  }
+  // The project-path parser already proved this is an absolute HTTP(S) URL.
+  const candidate = new URL(value!);
+  return candidate.origin === configuredOrigin ? projectPath : undefined;
 }
 
 export function isGitLabRestConfigured(env: NodeJS.ProcessEnv = process.env): boolean {
@@ -744,8 +738,7 @@ function uniqueDiscoveryMatch(
   if (usable.length !== 1) {
     return { candidateCount: usable.length, ambiguous: usable.length > 1 };
   }
-  const selected = usable[0];
-  if (!selected) { return { candidateCount: 0, ambiguous: false }; }
+  const selected = usable[0]!;
   const match: GitLabDiscoveredMergeRequest = {
     iid: selected.iid,
     title: selected.title,
@@ -827,55 +820,14 @@ function isLoopbackHostname(hostname: string): boolean {
 }
 
 function defaultGitLabTransport(request: GitLabHttpRequest): Promise<GitLabHttpResponse> {
-  return new Promise((resolve, reject) => {
-    let parsed: URL;
-    try {
-      parsed = new URL(request.url);
-    } catch {
-      reject(new GitLabRestError('Invalid GitLab REST URL.'));
-      return;
-    }
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-      reject(new GitLabRestError('Invalid GitLab REST URL protocol.'));
-      return;
-    }
-    const client = parsed.protocol === 'https:' ? https : http;
-    const req = client.request(parsed, {
-      method: request.method,
-      timeout: request.timeoutMs,
-      headers: request.headers,
-    }, res => {
-      const chunks: Buffer[] = [];
-      let receivedBytes = 0;
-      res.on('data', chunk => {
-        const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk));
-        receivedBytes += buffer.length;
-        if (receivedBytes > request.maxResponseBytes) {
-          res.destroy();
-          req.destroy();
-          reject(new GitLabRestError(`GitLab REST response exceeded the ${request.maxResponseBytes}-byte safety limit.`));
-          return;
-        }
-        chunks.push(buffer);
-      });
-      res.on('end', () => {
-        resolve({
-          statusCode: res.statusCode || 0,
-          body: Buffer.concat(chunks).toString('utf8'),
-          headers: res.headers,
-        });
-      });
-      res.on('error', () => {
-        reject(new GitLabRestError('GitLab REST response ended unexpectedly.'));
-      });
-    });
-    req.on('timeout', () => {
-      req.destroy();
-      reject(new GitLabRestError(`Timed out after ${request.timeoutMs}ms reaching GitLab REST API.`));
-    });
-    req.on('error', () => {
-      reject(new GitLabRestError('GitLab REST network request failed.'));
-    });
-    req.end();
+  return boundedHttpTransport(request, {
+    allowHttp: 'any',
+    invalidUrl: 'Invalid GitLab REST URL.',
+    invalidProtocol: 'Invalid GitLab REST URL protocol.',
+    responseLimit: max => `GitLab REST response exceeded the ${max}-byte safety limit.`,
+    unexpectedResponse: 'GitLab REST response ended unexpectedly.',
+    timeout: timeoutMs => `Timed out after ${timeoutMs}ms reaching GitLab REST API.`,
+    network: 'GitLab REST network request failed.',
+    createError: message => new GitLabRestError(message),
   });
 }

@@ -296,6 +296,61 @@ test('TerminalFirstState isolates malformed load issues and cancels pending watc
   assert.equal(pending.jiraRefreshStatus.phase, 'idle', 'disposed watcher work cannot publish a late refresh');
 });
 
+test('TerminalFirstState bounds unexpected load failures and aborted refreshes without publishing false errors', async () => {
+  stateStore.writeStateFile(stateStore.emptyWorkCatalog());
+  const source = new TerminalFirstState();
+  const originalRead = stateStore.readStateFileWithIssues;
+  try {
+    stateStore.readStateFileWithIssues = () => {
+      throw new Error(`unexpected ${['glpat-', 'state-load-secret'].join('')}`);
+    };
+    source.load();
+    assert.equal(source.state, null);
+    assert.equal(source.loadIssues.length, 1);
+    assert.equal(source.loadIssues[0].filePath, stateStore.STATE_FILE);
+    assert.match(source.loadIssues[0].detail, /unexpected.*REDACTED/i);
+    assert.doesNotMatch(source.loadIssues[0].detail, /state-load-secret/);
+  } finally {
+    stateStore.readStateFileWithIssues = originalRead;
+  }
+
+  source.load();
+  const controller = new AbortController();
+  jiraSearchWorkList = async () => {
+    controller.abort();
+    return jiraSnapshot({ issues: [jiraIssue('APP-ABORT', 'Must not publish')] });
+  };
+  await assert.rejects(source.refreshTickets({ signal: controller.signal }), /superseded/i);
+  assert.equal(source.jiraRefreshStatus.phase, 'loading', 'operator cancellation does not masquerade as a provider failure');
+  assert.equal(source.state.tickets['APP-ABORT'], undefined);
+  source.dispose();
+  source.dispose();
+});
+
+test('TerminalFirstState mutation APIs recover from a temporarily unavailable catalog', () => {
+  const projectRoot = createGitProject('unavailable-catalog-project', 'main');
+  const originalRead = stateStore.readStateFileWithIssues;
+  stateStore.readStateFileWithIssues = () => { throw new Error('catalog temporarily unavailable'); };
+  const source = new TerminalFirstState();
+  try {
+    assert.equal(source.state, null);
+    source.registerLocalProject('application', projectRoot);
+    source.registerLocalProjects([{ name: 'application', path: projectRoot }]);
+    source.replaceRegisteredLocalProjects([{ name: 'application', path: projectRoot }]);
+    assert.throws(() => source.renameLocalProjectDisplayName('missing', 'Customer API'), /not registered/);
+    source.setLocalProjectIntegrations([]);
+    assert.throws(() => source.setTicketLocalProject('MISSING-1', 'application'), /not loaded/);
+    source.projectTicketProviderState('MISSING-1', { build: { number: 1, status: 'SUCCESS' } });
+    source.setLocalProjectSonarTarget('missing', 'team:application', 'main');
+    assert.equal(source.state, null);
+    assert.ok(source.loadIssues.length > 0);
+  } finally {
+    source.dispose();
+    stateStore.readStateFileWithIssues = originalRead;
+    stateStore.writeStateFile(stateStore.emptyWorkCatalog());
+  }
+});
+
 test('Work tree directly covers project-rich rows, sorting, filters, empty states, and refresh errors', () => {
   const projectRoot = createGitProject('work-tree-project', 'feature/work-tree');
   const emitter = new EventEmitter();
@@ -406,6 +461,18 @@ test('Work tree directly covers project-rich rows, sorting, filters, empty state
     subscription.dispose();
     provider.dispose();
   }
+
+  stateSource.state = {
+    schemaVersion: 2,
+    refreshedAt: '2026-07-16T10:00:00.000Z',
+    projects: {},
+    tickets: { 'APP-DEFAULT': ticket('Default preference fixture') },
+  };
+  stateSource.loadIssues = [];
+  stateSource.jiraRefreshStatus = { phase: 'complete' };
+  const defaultedProvider = new WorkTreeProvider(stateSource);
+  assert.equal(defaultedProvider.getChildren()[0].ticketKey, 'APP-DEFAULT');
+  defaultedProvider.dispose();
 
   const open = new WorkTicketTreeItem('APP-3', ticket('Open ticket'));
   const closed = new WorkTicketTreeItem('APP-4', { ...ticket('Closed ticket'), jira_status_category: 'done' });
@@ -707,6 +774,114 @@ test('Jira context publication rejects corrupted core envelopes before mutating 
     /Fallback Jira context must remain explicitly partial/,
   );
   assert.equal(fs.existsSync(fallbackRoot), false);
+});
+
+test('Jira context publication rejects serialization-time envelope substitution and unsafe aggregate values', () => {
+  const materializedMismatch = capturedJiraContextFixture();
+  let keyReads = 0;
+  Object.defineProperty(materializedMismatch.context, 'key', {
+    enumerable: true,
+    get() {
+      keyReads += 1;
+      return keyReads === 1 ? 'APP-901' : 'APP-902';
+    },
+  });
+  assert.throws(() => jiraContextStore.writeJiraContextArtifacts(materializedMismatch.context, {
+    kronosDir: path.join(tempRoot, 'jira-materialized-key-mismatch'),
+    attachmentContents: materializedMismatch.attachmentContents,
+  }), /Materialized Jira context key does not match/);
+
+  const serializedCases = [
+    ['different key', context => { context.key = 'APP-902'; }, /Serialized Jira context key does not match/],
+    ['non-object root', () => 'not-an-object', /normalized context object/],
+    ['non-string key', context => { context.key = 901; }, /key is missing or invalid/],
+    ['non-normalized key', context => { context.key = 'app-901'; }, /key must already be normalized/],
+    ['non-string required field', context => { context.title = null; }, /title is missing or invalid/],
+    ['non-object attachment', context => { context.attachments = [null]; }, /attachment entry must be an object/],
+    ['unsafe attachment byte total', context => {
+      context.attachments = [
+        { contentStatus: 'skipped', contentReason: 'bounded', contentBytes: Number.MAX_SAFE_INTEGER },
+        { contentStatus: 'skipped', contentReason: 'bounded', contentBytes: 1 },
+      ];
+    }, /response byte total is invalid/],
+    ['captured relative path', context => { context.attachments[0].localPath = 'relative.bin'; }, /file path or content hash is missing or invalid/],
+    ['skipped without reason', context => {
+      context.attachments[0].contentStatus = 'skipped';
+      delete context.attachments[0].contentReason;
+      delete context.attachments[0].localPath;
+    }, /contentReason is missing/],
+    ['non-object field', context => { context.customFields = [null]; }, /field entry must be an object/],
+  ];
+  for (const [label, mutate, expected] of serializedCases) {
+    const fixture = capturedJiraContextFixture();
+    fixture.context.toJSON = function toJSON() {
+      const serialized = { ...this };
+      delete serialized.toJSON;
+      return mutate(serialized) ?? serialized;
+    };
+    assert.throws(() => jiraContextStore.writeJiraContextArtifacts(fixture.context, {
+      kronosDir: path.join(tempRoot, `jira-serialized-${label.replace(/\s+/g, '-')}`),
+      attachmentContents: fixture.attachmentContents,
+    }), expected, label);
+  }
+
+  const undefinedSerialization = capturedJiraContextFixture();
+  undefinedSerialization.context.toJSON = () => undefined;
+  assert.throws(() => jiraContextStore.writeJiraContextArtifacts(undefinedSerialization.context, {
+    kronosDir: path.join(tempRoot, 'jira-undefined-serialization'),
+    attachmentContents: undefinedSerialization.attachmentContents,
+  }), /could not be serialized safely/);
+  const circularSerialization = capturedJiraContextFixture();
+  circularSerialization.context.toJSON = function toJSON() {
+    const serialized = { ...this };
+    delete serialized.toJSON;
+    serialized.circular = serialized;
+    return serialized;
+  };
+  assert.throws(() => jiraContextStore.writeJiraContextArtifacts(circularSerialization.context, {
+    kronosDir: path.join(tempRoot, 'jira-circular-serialization'),
+    attachmentContents: circularSerialization.attachmentContents,
+  }), /could not be serialized safely/);
+
+  const oversized = capturedJiraContextFixture();
+  oversized.context.description = 'x'.repeat(12 * 1024 * 1024);
+  assert.throws(() => jiraContextStore.writeJiraContextArtifacts(oversized.context, {
+    kronosDir: path.join(tempRoot, 'jira-oversized-serialization'),
+    attachmentContents: oversized.attachmentContents,
+  }), /Jira context JSON exceeds/);
+});
+
+test('Jira attachment artifact names and prompt boundaries remain deterministic at hostile limits', () => {
+  for (const [label, filename, suffix] of [
+    ['empty', '..', 'attachment-1'],
+    ['long extension', `${'a'.repeat(220)}.fixture`, '.fixture'],
+    ['long stem', 'a'.repeat(220), 'a'.repeat(180)],
+  ]) {
+    const fixture = capturedJiraContextFixture();
+    fixture.context.attachments[0].filename = filename;
+    const artifact = jiraContextStore.writeJiraContextArtifacts(fixture.context, {
+      kronosDir: path.join(tempRoot, `jira-filename-${label.replace(/\s+/g, '-')}`),
+      attachmentContents: fixture.attachmentContents,
+    });
+    assert.equal(path.basename(artifact.attachmentPaths[0]).endsWith(suffix), true, label);
+    assert.equal(path.basename(artifact.attachmentPaths[0]).length <= 202, true, label);
+  }
+
+  const fixture = capturedJiraContextFixture();
+  const defaultPrompt = jiraContextStore.buildJiraContextPrompt(fixture.context);
+  assert.match(defaultPrompt, /BEGIN UNTRUSTED JIRA DATA/);
+  const originalCreateHash = crypto.createHash;
+  crypto.createHash = () => ({
+    update() { return this; },
+    digest() { return 'a'.repeat(64); },
+  });
+  try {
+    const collision = `payload KRONOS_${'A'.repeat(24)} payload`;
+    const prompt = jiraContextStore.buildJiraContextPrompt(fixture.context, collision);
+    assert.match(prompt, new RegExp(`KRONOS_${'A'.repeat(24)}_X`));
+  } finally {
+    crypto.createHash = originalCreateHash;
+  }
 });
 
 test('Jira fallback and global context budget stay useful, bounded, and explicit', () => {

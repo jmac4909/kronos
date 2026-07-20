@@ -375,7 +375,7 @@ function mergeRequestAttentionReasons(event: MonitorEvent): string {
   const discussions = metadataCount(event, 'unresolvedDiscussionCount');
   const approvals = metadataCount(event, 'approvalsLeft');
   if (discussions !== undefined && discussions > 0) { reasons.push(pluralCount(discussions, 'unresolved discussion')); }
-  if (approvals !== undefined && approvals > 0) { reasons.push(pluralCount(approvals, 'approval remaining')); }
+  if (approvals !== undefined && approvals > 0) { reasons.push(`${pluralCount(approvals, 'approval')} remaining`); }
   return reasons.length > 0 ? `: ${reasons.join('; ')}` : '';
 }
 

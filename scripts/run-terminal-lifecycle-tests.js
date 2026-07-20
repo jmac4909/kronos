@@ -186,6 +186,13 @@ test('Sessions never present detached, closed, stopped, paused, or removed-proje
     'terminal closed',
     options,
   );
+  const alreadyClosed = workSessions.detachWorkSessionTerminal(
+    session.id,
+    'terminal-lifecycle-presentation',
+    'late detach is a no-op',
+    options,
+  );
+  assert.equal(alreadyClosed.terminals.at(-1).status, 'closed');
   session = workSessions.setWorkSessionProject(session.id, {}, options);
   session = workSessions.closeWorkSession(session.id, options);
   const stopped = sessionInventory.sessionInventoryPresentation(session, 0, 300_000);
@@ -354,6 +361,10 @@ test('Claude layout validation and terminal placement stay presentation-only', (
     () => claudeTerminalLauncher.normalizeClaudeTerminalLayout('floating'),
     /editorSplit, editorTabs, panel/,
   );
+  assert.throws(
+    () => claudeTerminalLauncher.normalizeClaudeTerminalLayout(null),
+    /editorSplit, editorTabs, panel/,
+  );
   const editor = { creationOptions: { name: 'Editor Claude', location: 2 } };
   const splitEditor = { creationOptions: { name: 'Split Claude', location: { parentTerminal: editor } } };
   const panel = { creationOptions: { name: 'Panel Claude', location: 1 } };
@@ -363,6 +374,10 @@ test('Claude layout validation and terminal placement stay presentation-only', (
   assert.equal(claudeTerminalLauncher.claudeTerminalPlacement(panel), 'panel');
   assert.equal(claudeTerminalLauncher.claudeTerminalPlacement(editorColumn), 'editor');
   assert.equal(claudeTerminalLauncher.claudeTerminalPlacement({ creationOptions: {} }), 'unknown');
+  assert.equal(claudeTerminalLauncher.claudeTerminalPlacement({ creationOptions: { location: {} } }), 'unknown');
+  const cyclic = { creationOptions: {} };
+  cyclic.creationOptions.location = { parentTerminal: cyclic };
+  assert.equal(claudeTerminalLauncher.claudeTerminalPlacement(cyclic), 'unknown');
 
   const exitedEditor = { creationOptions: { location: 2 }, exitStatus: { code: 0 } };
   editor.exitStatus = undefined;
@@ -546,6 +561,20 @@ test('all terminal context reference classes enforce their own private artifact 
     () => terminalContextInsertion.buildProjectGitContextReference('not-a-git-context', path.join(tempRoot, 'prompt.md')),
     /Git context id is missing or invalid/i,
   );
+  assert.throws(
+    () => terminalContextInsertion.buildAttentionEventContextReference('ATTENTION-GITHUB-bad', path.join(tempRoot, 'prompt.md')),
+    /Attention event context id is missing or invalid/i,
+  );
+  assert.throws(
+    () => terminalContextInsertion.buildContextBasketTerminalReference('BASKET-bad', path.join(tempRoot, 'prompt.md')),
+    /Context basket id is missing or invalid/i,
+  );
+  assert.throws(
+    () => terminalContextInsertion.buildPromptLibraryTerminalReference('PROMPT-bad', path.join(tempRoot, 'prompt.md')),
+    /Prompt library context id is missing or invalid/i,
+  );
+  assert.equal(terminalContextInsertion.buildEditableTerminalContextReference(cases[0], undefined), cases[0]);
+  assert.equal(terminalContextInsertion.buildEditableTerminalContextReference(cases[0], null), cases[0]);
   assert.throws(
     () => terminalContextInsertion.buildEditableTerminalContextReference(cases[0], { focus: 'not text' }),
     /focus must be text/i,

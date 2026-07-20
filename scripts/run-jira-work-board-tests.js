@@ -187,6 +187,42 @@ test('completed status detection supports common names and explicit team statuse
   assert.equal(isCompletedJiraStatus('QA Done'), false);
   assert.equal(isCompletedJiraStatus('In Progress'), false);
   assert.equal(isCompletedJiraStatus('Shipped to Customer', new Set(['shipped to customer'])), true);
+  assert.equal(isCompletedJiraStatus(null), false);
+});
+
+test('board presentation covers unavailable projects, duplicate nicknames, and uncommon workflow ranks', () => {
+  const fixtureState = state({
+    'EDGE-1': ticket('Backlog', { linked_local_project: 'First', labels: [7, '', 'triage'], updated: 'invalid' }),
+    'EDGE-2': ticket('Blocked', { linked_local_project: 'Second', updated: undefined }),
+    'EDGE-3': ticket('Awaiting vendor', { priority: '', type: 'Defect', build: { number: 2, status: '' } }),
+  });
+  delete fixtureState.refreshedAt;
+  fixtureState.projects = {
+    First: { path: '/definitely-missing/kronos-board-first', display_name: 'Shared service', config: {} },
+    Second: { path: '/definitely-missing/kronos-board-second', display_name: 'Shared service', config: {} },
+  };
+  const html = buildJiraWorkBoardHtml({
+    state: fixtureState,
+    nonce: 'board-edge-nonce',
+    scriptUri: 'vscode-resource://kronos/media/kronos-jira-work-board.js',
+  });
+  assert.match(html, /2 local projects/);
+  assert.equal((html.match(/folder unavailable/g) || []).length, 2);
+  assert.match(html, /Shared service \(First\)/);
+  assert.match(html, /Shared service \(Second\)/);
+  assert.ok(html.indexOf('aria-label="Jira status: Backlog"') < html.indexOf('aria-label="Jira status: Blocked"'));
+  assert.ok(html.indexOf('aria-label="Jira status: Blocked"') < html.indexOf('aria-label="Jira status: Awaiting vendor"'));
+  assert.match(html, /data-ticket-type="bug"/);
+  assert.match(html, /Build #2 · unknown/);
+  assert.doesNotMatch(html, /Updated /);
+
+  const unavailable = buildJiraWorkBoardHtml({
+    state: null,
+    nonce: 'board-unavailable-nonce',
+    scriptUri: 'vscode-resource://kronos/media/kronos-jira-work-board.js',
+  });
+  assert.match(unavailable, /data-work-data-state="error"|data-work-data-state="empty"/);
+  assert.match(unavailable, />0 tickets<\/div>/);
 });
 
 test('board settings map custom completed statuses and the initial visibility default', () => {

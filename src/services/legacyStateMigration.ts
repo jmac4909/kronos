@@ -114,8 +114,7 @@ function copyLegacyDirectory(sourceRoot: string, targetRoot: string): void {
   let entries = 0;
   let totalBytes = 0;
   while (work.length > 0) {
-    const current = work.pop();
-    if (!current) { break; }
+    const current = work.pop()!;
     const stat = fs.lstatSync(current.source);
     if (stat.isSymbolicLink()) { throw new Error('Legacy Kronos state contains a symbolic link.'); }
     if (stat.isDirectory()) {
@@ -147,8 +146,7 @@ function makePrivateTree(targetPath: string): void {
   let entries = 0;
   let totalBytes = 0;
   while (work.length > 0) {
-    const current = work.pop();
-    if (!current) { break; }
+    const current = work.pop()!;
     const stat = fs.lstatSync(current);
     entries += 1;
     if (entries > MAX_ENTRIES || stat.isSymbolicLink()) {

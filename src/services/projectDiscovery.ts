@@ -77,8 +77,7 @@ export function discoverLocalProjects(options: ProjectDiscoveryOptions): Project
   let visitedDirectories = 0;
   let truncated = false;
   while (queue.length > 0 && projects.size < limit && visitedDirectories < MAX_VISITED_DIRECTORIES) {
-    const current = queue.shift();
-    if (!current) { break; }
+    const current = queue.shift()!;
     visitedDirectories += 1;
     const git = readProjectGitBranch(current.directory);
     if (git) {

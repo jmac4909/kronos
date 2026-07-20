@@ -80,6 +80,27 @@ test('provider readiness is shared, secret-free, and distinguishes missing from 
   assert.doesNotMatch(JSON.stringify(invalid), new RegExp(secret));
 });
 
+test('provider readiness explains every partial credential and invalid URL shape', () => {
+  const secret = 'partial-fixture-secret';
+  const cases = [
+    [{ JIRA_API_TOKEN: secret }, 'jira', 'missing', 'present', /JIRA_BASE_URL, JIRA_EMAIL/],
+    [{ JIRA_BASE_URL: 'https://jira.example', JIRA_EMAIL: 'operator@example.test' }, 'jira', 'missing', 'missing', /JIRA_API_TOKEN/],
+    [{ GITLAB_TOKEN: secret }, 'gitlab', 'missing', 'present', /GitLab URL/],
+    [{ GITLAB_URL: 'ftp://gitlab.invalid', GITLAB_TOKEN: secret }, 'gitlab', 'invalid-needs-test', 'invalid-needs-test', /URL or credential shape is invalid/],
+    [{ JENKINS_USER: 'operator' }, 'jenkins', 'missing', 'invalid-needs-test', /Missing JENKINS_URL/],
+    [{ JENKINS_URL: 'ftp://jenkins.invalid' }, 'jenkins', 'invalid-needs-test', 'invalid-needs-test', /URL is invalid/],
+    [{ SONAR_TOKEN: secret }, 'sonar', 'missing', 'present', /SonarQube URL/],
+    [{ SONAR_HOST_URL: 'ftp://sonar.invalid', SONAR_TOKEN: secret }, 'sonar', 'invalid-needs-test', 'invalid-needs-test', /URL or credential shape is invalid/],
+  ];
+  for (const [env, provider, state, credentialPresence, detail] of cases) {
+    const row = providerReadiness.providerReadiness(env)[provider];
+    assert.equal(row.state, state);
+    assert.equal(row.credentialPresence, credentialPresence);
+    assert.match(row.detail, detail);
+    assert.doesNotMatch(JSON.stringify(row), new RegExp(secret));
+  }
+});
+
 test('one readiness snapshot feeds Setup and Doctor and gives every non-ready row an action', () => {
   const providers = Object.values(providerReadiness.providerReadiness({}));
   const snapshot = operationsReadiness.buildOperationsReadiness({

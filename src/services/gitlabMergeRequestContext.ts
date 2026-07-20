@@ -322,7 +322,7 @@ export function normalizeGitLabProjectMergeRequestContext(
 
 export function normalizeGitLabContextProjectName(value: string): string {
   const normalized = value.replace(/\s+/g, ' ').trim();
-  if (!normalized || normalized.length > 200 || /[\u0000-\u001f\u007f\u2028\u2029]/.test(normalized)) {
+  if (!normalized || normalized.length > 200 || /[\u0000-\u001f\u007f\u2028\u2029]/.test(value)) {
     throw new Error('GitLab context project name is missing or invalid.');
   }
   return normalized;
@@ -589,8 +589,7 @@ function normalizeDiscussion(value: unknown, tracker: NormalizationTracker): Git
   return context;
 }
 
-function normalizeApprovals(value: unknown, tracker: NormalizationTracker): GitLabApprovalsContext {
-  const approvals = isRecord(value) ? value : {};
+function normalizeApprovals(approvals: Record<string, unknown>, tracker: NormalizationTracker): GitLabApprovalsContext {
   const context: GitLabApprovalsContext = {
     approvedBy: boundedArray(arrayFromUnknown(approvals['approved_by']), MAX_ACTORS, 'GitLab approvers', tracker)
       .map(normalizeActor)
@@ -711,12 +710,11 @@ function normalizeJob(value: unknown, tracker: NormalizationTracker): GitLabJobC
 }
 
 function normalizeTestReport(
-  value: unknown,
+  report: Record<string, unknown>,
   tracker: NormalizationTracker,
   outputBudget: CharacterBudget,
   label: string,
 ): GitLabTestReportContext {
-  const report = isRecord(value) ? value : {};
   const context: GitLabTestReportContext = {
     suites: boundedArray(
       arrayFromUnknown(report['test_suites']),
@@ -1108,9 +1106,9 @@ function boundedArray(
   values: unknown[],
   limit: number,
   label: string,
-  tracker?: NormalizationTracker,
+  tracker: NormalizationTracker,
 ): unknown[] {
-  if (values.length > limit && tracker) {
+  if (values.length > limit) {
     tracker.warnings.push(`${label} were truncated from ${values.length} to the ${limit}-item safety limit.`);
   }
   return values.slice(0, limit);
@@ -1166,7 +1164,7 @@ function sanitizedHttpUrl(value: unknown): string | undefined {
     url.password = '';
     url.search = '';
     url.hash = '';
-    return safeText(url.toString(), 4_096) || undefined;
+    return safeText(url.toString(), 4_096);
   } catch {
     return undefined;
   }

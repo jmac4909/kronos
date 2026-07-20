@@ -170,7 +170,7 @@ export function normalizeCiTicketKey(value: string): string {
 
 export function normalizeCiProjectName(value: string): string {
   const normalized = value.replace(/\s+/g, ' ').trim();
-  if (!normalized || normalized.length > 200 || /[\u0000-\u001f\u007f\u2028\u2029]/.test(normalized)) {
+  if (!normalized || normalized.length > 200 || /[\u0000-\u001f\u007f\u2028\u2029]/.test(value)) {
     throw new Error('CI context project name is missing or invalid.');
   }
   return normalized;

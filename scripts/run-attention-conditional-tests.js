@@ -182,8 +182,26 @@ test('Attention event context normalizes owner metadata and rejects oversized sn
   });
   assert.equal(Object.hasOwn(invalidOwner, 'projectName'), false);
   assert.equal(Object.hasOwn(invalidOwner, 'ticketKey'), false);
+  const emptyOwner = attentionEventContexts.buildAttentionEventPromptContext(event, {
+    projectName: ' \n ',
+    ticketKey: null,
+  });
+  assert.equal(Object.hasOwn(emptyOwner, 'projectName'), false);
+  assert.equal(Object.hasOwn(emptyOwner, 'ticketKey'), false);
+  assert.match(
+    attentionEventContexts.renderAttentionEventPrompt(normalizedOwner),
+    /BEGIN UNTRUSTED ATTENTION EVENT/,
+    'direct rendering serializes its own exact context when no retained serialization is supplied',
+  );
 
   const artifactRoot = path.join(tempRoot, 'event-context-bounds-artifacts');
+  assert.throws(
+    () => attentionEventContexts.writeAttentionEventContextArtifacts({
+      ...normalizedOwner,
+      event: { ...normalizedOwner.event, source: 'operator' },
+    }, { kronosDir: artifactRoot }),
+    /unsupported or mismatched provider source/,
+  );
   assert.throws(
     () => attentionEventContexts.writeAttentionEventContextArtifacts({
       ...normalizedOwner,
