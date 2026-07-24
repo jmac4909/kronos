@@ -124,23 +124,14 @@ export function claudeTerminalPlacement(
   return 'unknown';
 }
 
-/**
- * Chooses only a live Kronos-launched editor terminal as a split anchor.
- * Terminal split locations inherit their parent's area, so a panel terminal
- * must never anchor an editorSplit launch after the operator changes layouts.
- */
-export function selectClaudeEditorSplitParent(
-  activeTerminal: vscode.Terminal | undefined,
-  terminals: readonly vscode.Terminal[],
+/** Reports whether a live Kronos-launched terminal already occupies an editor group. */
+export function hasLiveClaudeEditorTerminal(
   launchedTerminals: ReadonlySet<vscode.Terminal>,
-): vscode.Terminal | undefined {
-  const isEligible = (terminal: vscode.Terminal): boolean => (
-    launchedTerminals.has(terminal)
-    && terminal.exitStatus === undefined
+): boolean {
+  return [...launchedTerminals].some(terminal =>
+    terminal.exitStatus === undefined
     && claudeTerminalPlacement(terminal) === 'editor'
   );
-  if (activeTerminal && isEligible(activeTerminal)) { return activeTerminal; }
-  return [...terminals].reverse().find(isEligible);
 }
 
 export function normalizeClaudeTerminalLaunch(

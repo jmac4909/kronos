@@ -29,6 +29,7 @@ export interface TerminalFirstCommandHandlers {
     openWorkSessionAudit: TerminalFirstCommandHandler;
     focusWorkSessionTerminal: TerminalFirstCommandHandler;
     toggleWorkSessionTerminalSize: TerminalFirstCommandHandler;
+    configureClaudeTerminalLayout: TerminalFirstCommandHandler;
     reattachWorkSessionTerminal: TerminalFirstCommandHandler;
     detachWorkSessionTerminal: TerminalFirstCommandHandler;
     closeWorkSession: TerminalFirstCommandHandler;
@@ -99,6 +100,7 @@ const COMMAND_ROUTES = Object.freeze([
   route('kronos.openWorkSessionAudit', 'sessions', 'openWorkSessionAudit'),
   route('kronos.focusWorkSessionTerminal', 'sessions', 'focusWorkSessionTerminal'),
   route('kronos.toggleWorkSessionTerminalSize', 'sessions', 'toggleWorkSessionTerminalSize'),
+  route('kronos.configureClaudeTerminalLayout', 'sessions', 'configureClaudeTerminalLayout'),
   route('kronos.reattachWorkSessionTerminal', 'sessions', 'reattachWorkSessionTerminal'),
   route('kronos.detachWorkSessionTerminal', 'sessions', 'detachWorkSessionTerminal'),
   route('kronos.closeWorkSession', 'sessions', 'closeWorkSession'),

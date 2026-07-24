@@ -5068,7 +5068,7 @@ test('extension activation registers the bounded surface and explicit launch com
     TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
     ConfigurationTarget: { Global: 1 },
     ProgressLocation: { Notification: 15 },
-    ViewColumn: { One: 1 },
+    ViewColumn: { One: 1, Beside: -2 },
     TerminalLocation: { Panel: 1, Editor: 2 },
     window: {
       activeTerminal: undefined,
@@ -5386,6 +5386,58 @@ test('extension activation registers the bounded surface and explicit launch com
       assert.equal(runtime.claudeTerminalLaunchLocation('panel'), vscode.TerminalLocation.Panel);
       assert.equal(runtime.claudeTerminalLaunchLocation('editorTabs'), vscode.TerminalLocation.Editor);
       assert.equal(runtime.claudeTerminalLaunchLocation('editorSplit'), vscode.TerminalLocation.Editor);
+      const existingEditorTerminal = {
+        creationOptions: { location: vscode.TerminalLocation.Editor },
+        exitStatus: undefined,
+      };
+      runtime.launchedClaudeTerminals.add(existingEditorTerminal);
+      assert.deepEqual(runtime.claudeTerminalLaunchLocation('editorSplit'), {
+        viewColumn: vscode.ViewColumn.Beside,
+        preserveFocus: false,
+      });
+      runtime.launchedClaudeTerminals.delete(existingEditorTerminal);
+
+      singlePickHandler = items => items.find(item => item.layout === 'editorTabs');
+      await commandHandlers.get('kronos.configureClaudeTerminalLayout')();
+      assert.equal(lastSinglePickOptions.title, 'Claude Terminal Layout');
+      assert.equal(configurationValues.get('claudeTerminalLayout'), 'editorTabs');
+      assert.deepEqual(configurationUpdates.at(-1), {
+        key: 'claudeTerminalLayout',
+        value: 'editorTabs',
+        target: vscode.ConfigurationTarget.Global,
+      });
+      singlePickHandler = items => items.find(item => item.action === 'balance');
+      await commandHandlers.get('kronos.configureClaudeTerminalLayout')();
+      assert.deepEqual(executedCommands.at(-1), ['workbench.action.evenEditorWidths']);
+
+      configurationUpdateError = new Error('Synthetic layout setting failure.');
+      singlePickHandler = items => items.find(item => item.layout === 'panel');
+      await commandHandlers.get('kronos.configureClaudeTerminalLayout')();
+      assert.match(warningMessages.at(-1), /layout setting failure/i);
+      executeCommandHandler = async command => {
+        if (command === 'workbench.action.evenEditorWidths') {
+          throw new Error('Synthetic column balance failure.');
+        }
+      };
+      singlePickHandler = items => items.find(item => item.action === 'balance');
+      await commandHandlers.get('kronos.configureClaudeTerminalLayout')();
+      assert.match(warningMessages.at(-1), /column balance failure/i);
+      executeCommandHandler = undefined;
+
+      singlePickHandler = items => items.find(item => item.layout === 'panel');
+      await commandHandlers.get('kronos.configureClaudeTerminalLayout')();
+      assert.equal(configurationValues.get('claudeTerminalLayout'), 'panel');
+      assert.match(informationMessages.at(-1), /terminal panel/i);
+      singlePickHandler = items => items.find(item => item.layout === 'editorSplit');
+      await commandHandlers.get('kronos.configureClaudeTerminalLayout')();
+      assert.equal(configurationValues.get('claudeTerminalLayout'), 'editorSplit');
+      assert.match(informationMessages.at(-1), /separate main editor columns/i);
+      singlePickHandler = () => undefined;
+      await commandHandlers.get('kronos.configureClaudeTerminalLayout')();
+      singlePickHandler = () => ({ label: 'Unknown layout fixture' });
+      await commandHandlers.get('kronos.configureClaudeTerminalLayout')();
+      singlePickHandler = () => undefined;
+      configurationValues.delete('claudeTerminalLayout');
 
       assert.equal(await runtime.confirmClaudePermissionMode('manual'), true);
       warningMessageResult = undefined;
@@ -6415,6 +6467,9 @@ test('extension activation registers the bounded surface and explicit launch com
         runtime.claudeLaunchCooldownUntil.delete('standalone');
         vscode.window.activeTerminal = originalActiveTerminal;
         vscode.window.terminals = originalOpenTerminals;
+        for (const record of createdTerminals.slice(createdTerminalCount)) {
+          runtime.launchedClaudeTerminals.delete(record.terminal);
+        }
         createdTerminals.splice(createdTerminalCount);
         for (const terminal of fixtureTerminals) { runtime.operatorTerminals.detachTerminal(terminal); }
         for (const sessionId of createdSessionIds) {
@@ -7510,8 +7565,10 @@ test('extension activation registers the bounded surface and explicit launch com
     assert.equal(ticketSession.ticketKey, 'JIRA-123');
     assert.equal(createdTerminals[1].options.name, 'Claude · JIRA-123 @ feature/runtime-project');
     assert.equal(createdTerminals[1].options.cwd, tempRoot);
-    assert.equal(createdTerminals[1].options.location.parentTerminal, createdTerminals[0].terminal,
-      'later Kronos Claude terminals split beside the live Claude workspace');
+    assert.deepEqual(createdTerminals[1].options.location, {
+      viewColumn: vscode.ViewColumn.Beside,
+      preserveFocus: false,
+    }, 'later Kronos Claude terminals open in separate main editor columns');
     assert.equal(ticketSession.projectName, 'fixture');
     assert.equal(ticketSession.projectPath, tempRoot);
     assert.deepEqual(createdTerminals[1].actions, [

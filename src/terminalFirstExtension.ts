@@ -150,11 +150,11 @@ import {
   buildClaudeTerminalTitle,
   claudePermissionModeLabel,
   claudeTerminalPlacement,
+  hasLiveClaudeEditorTerminal,
   launchClaudeTerminal,
   normalizeClaudeTerminalLaunch,
   normalizeClaudeTerminalLayout,
   probeClaudeExecutableAvailability,
-  selectClaudeEditorSplitParent,
   type ClaudePermissionMode,
   type ClaudeTerminalLayout,
   type ClaudeTerminalLaunchInput,
@@ -574,6 +574,7 @@ class TerminalFirstRuntime implements vscode.Disposable {
         openWorkSessionAudit: async argument => this.openWorkSessionAudit(argument),
         focusWorkSessionTerminal: async argument => this.focusWorkSessionTerminal(argument),
         toggleWorkSessionTerminalSize: async argument => this.toggleWorkSessionTerminalSize(argument),
+        configureClaudeTerminalLayout: async () => this.configureClaudeTerminalLayout(),
         reattachWorkSessionTerminal: async argument => this.reattachFocusedTerminal(argument),
         detachWorkSessionTerminal: async argument => this.detachManagedTerminal(argument),
         closeWorkSession: async argument => this.stopManagingSession(argument),
@@ -1467,12 +1468,9 @@ class TerminalFirstRuntime implements vscode.Disposable {
   private claudeTerminalLaunchLocation(layout: ClaudeTerminalLayout): vscode.TerminalOptions['location'] {
     if (layout === 'panel') { return vscode.TerminalLocation.Panel; }
     if (layout === 'editorTabs') { return vscode.TerminalLocation.Editor; }
-    const parent = selectClaudeEditorSplitParent(
-      vscode.window.activeTerminal,
-      vscode.window.terminals,
-      this.launchedClaudeTerminals,
-    );
-    return parent ? { parentTerminal: parent } : vscode.TerminalLocation.Editor;
+    return hasLiveClaudeEditorTerminal(this.launchedClaudeTerminals)
+      ? { viewColumn: vscode.ViewColumn.Beside, preserveFocus: false }
+      : vscode.TerminalLocation.Editor;
   }
 
   private standaloneProjectDetails(cwd?: string): { projectName?: string; projectPath?: string } {
@@ -3083,6 +3081,74 @@ class TerminalFirstRuntime implements vscode.Disposable {
     } catch (error: unknown) {
       const detail = boundedOperationFailure(error, 'VS Code could not toggle the terminal size.').display;
       this.log('Could not toggle the managed terminal size.', detail);
+      void vscode.window.showWarningMessage(detail);
+    }
+  }
+
+  private async configureClaudeTerminalLayout(): Promise<void> {
+    const current = this.claudeTerminalLayout();
+    const options: Array<vscode.QuickPickItem & {
+      layout?: ClaudeTerminalLayout;
+      action?: 'balance';
+    }> = [
+      {
+        label: 'Side-by-side editor columns',
+        ...(current === 'editorSplit' ? { description: 'Current' } : {}),
+        detail: 'Open each new Claude terminal in its own main editor column.',
+        layout: 'editorSplit',
+      },
+      {
+        label: 'Editor tabs',
+        ...(current === 'editorTabs' ? { description: 'Current' } : {}),
+        detail: 'Open new Claude terminals as tabs in the active editor group.',
+        layout: 'editorTabs',
+      },
+      {
+        label: 'Terminal panel',
+        ...(current === 'panel' ? { description: 'Current' } : {}),
+        detail: 'Open new Claude terminals in the bottom terminal panel.',
+        layout: 'panel',
+      },
+      {
+        label: 'Show all editor columns evenly',
+        detail: 'Balance the widths of the editor groups that are visible now.',
+        action: 'balance',
+      },
+    ];
+    const selected = await vscode.window.showQuickPick(options, {
+      title: 'Claude Terminal Layout',
+      placeHolder: 'Choose where new terminals open or balance the visible editor columns.',
+      matchOnDescription: true,
+      matchOnDetail: true,
+    });
+    if (!selected) { return; }
+    if (selected.action === 'balance') {
+      try {
+        await vscode.commands.executeCommand('workbench.action.evenEditorWidths');
+      } catch (error: unknown) {
+        const detail = boundedOperationFailure(error, 'VS Code could not balance the editor columns.').display;
+        this.log('Could not balance the editor columns.', detail);
+        void vscode.window.showWarningMessage(detail);
+      }
+      return;
+    }
+    if (!selected.layout) { return; }
+    try {
+      await vscode.workspace.getConfiguration('kronos').update(
+        'claudeTerminalLayout',
+        selected.layout,
+        vscode.ConfigurationTarget.Global,
+      );
+      void vscode.window.showInformationMessage(
+        selected.layout === 'editorSplit'
+          ? 'New Claude terminals will open in separate main editor columns.'
+          : selected.layout === 'editorTabs'
+            ? 'New Claude terminals will open as editor tabs.'
+            : 'New Claude terminals will open in the terminal panel.',
+      );
+    } catch (error: unknown) {
+      const detail = boundedOperationFailure(error, 'VS Code could not save the Claude terminal layout.').display;
+      this.log('Could not save the Claude terminal layout.', detail);
       void vscode.window.showWarningMessage(detail);
     }
   }

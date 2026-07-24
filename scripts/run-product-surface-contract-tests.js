@@ -38,7 +38,11 @@ test('primary button hierarchy keeps Work, Sessions, Projects, and Attention foc
   ]);
   const expected = {
     kronosWork: ['kronos.refreshTickets', 'kronos.openJiraBoard', 'kronos.filterWork'],
-    kronosSessions: ['kronos.newClaudeSession', 'kronos.manageActiveTerminal'],
+    kronosSessions: [
+      'kronos.newClaudeSession',
+      'kronos.manageActiveTerminal',
+      'kronos.configureClaudeTerminalLayout',
+    ],
     kronosProjects: ['kronos.refreshProjects', 'kronos.registerWorkspaceProject'],
     kronosAttention: ['kronos.pollManagedWorkSessions'],
   };
@@ -140,6 +144,7 @@ test('row context menus contain only actions scoped to the selected row', () => 
   }
   assert.equal(commandsById.get('kronos.reattachWorkSessionTerminal').shortTitle, 'Connect Focused Terminal');
   assert.equal(commandsById.get('kronos.toggleWorkSessionTerminalSize').shortTitle, 'Toggle Full Size');
+  assert.equal(commandsById.get('kronos.configureClaudeTerminalLayout').shortTitle, 'Terminal Layout');
   assert.equal(commandsById.get('kronos.detachWorkSessionTerminal').shortTitle, 'Disconnect Terminal');
   assert.equal(commandsById.get('kronos.acknowledgeAttention').shortTitle, 'Clear from Attention');
   assert.equal(commandsById.get('kronos.insertAttentionEventContext').shortTitle, 'Use Event in Prompt');

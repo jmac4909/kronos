@@ -40,7 +40,7 @@ const allowedDevDependencies = new Set(['@types/node', '@types/vscode', 'typescr
 for (const name of Object.keys(manifest.devDependencies || {})) {
   if (!allowedDevDependencies.has(name)) { fail(`unexpected development dependency: ${name}`); }
 }
-if (manifest.contributes.commands.length !== 43) { fail('expected exactly 43 terminal-first commands'); }
+if (manifest.contributes.commands.length !== 44) { fail('expected exactly 44 terminal-first commands'); }
 if (manifest.contributes.views.kronos.length !== 4) { fail('expected exactly Work, Sessions, Projects, and Attention'); }
 if (Object.keys(manifest.contributes.configuration.properties || {}).length !== 14) { fail('expected exactly fourteen mapped terminal-first settings'); }
 

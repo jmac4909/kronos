@@ -382,21 +382,20 @@ test('Claude layout validation and terminal placement stay presentation-only', (
   const exitedEditor = { creationOptions: { location: 2 }, exitStatus: { code: 0 } };
   editor.exitStatus = undefined;
   panel.exitStatus = undefined;
-  const launched = new Set([editor, panel, exitedEditor]);
   assert.equal(
-    claudeTerminalLauncher.selectClaudeEditorSplitParent(panel, [editor, panel], launched),
-    editor,
-    'changing from panel to editorSplit must not inherit the panel location',
+    claudeTerminalLauncher.hasLiveClaudeEditorTerminal(new Set([panel, exitedEditor])),
+    false,
+    'panel and closed terminals do not count as a live editor column',
   );
   assert.equal(
-    claudeTerminalLauncher.selectClaudeEditorSplitParent(undefined, [editor, exitedEditor], launched),
-    editor,
-    'closed terminals cannot become split anchors',
+    claudeTerminalLauncher.hasLiveClaudeEditorTerminal(new Set([editor, panel, exitedEditor])),
+    true,
+    'a live Kronos-launched editor terminal enables a separate beside column',
   );
   assert.equal(
-    claudeTerminalLauncher.selectClaudeEditorSplitParent(editor, [panel, editor], launched),
-    editor,
-    'the active live editor terminal remains the preferred split anchor',
+    claudeTerminalLauncher.hasLiveClaudeEditorTerminal(new Set()),
+    false,
+    'the first editor launch does not create an unnecessary beside group',
   );
 });
 

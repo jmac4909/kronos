@@ -27,7 +27,7 @@ Kronos solves a narrow enterprise-development problem: the evidence needed for a
 | Surface | Outcome |
 | --- | --- |
 | **Work** | Search and filter Jira work, see current/empty/loading/partial/stale/error refresh state without losing the last good result, explicitly link the right local project and branch, then open a focused ticket workspace. Shared Jira keys never infer a repository. |
-| **Sessions** | Organize operator-owned Claude terminals by local project, launch them as main-editor tabs or automatic splits, maximize or restore one explicitly, attach multiple Jira contexts when useful, and never read terminal contents. |
+| **Sessions** | Organize operator-owned Claude terminals by local project, launch them as main-editor tabs or separate side-by-side editor columns, balance visible columns, maximize or restore one explicitly, attach multiple Jira contexts when useful, and never read terminal contents. |
 | **Projects** | Track each registered repository's current branch and clean/dirty status, open a read-only dashboard for local/remote branches, upstream drift, changed paths, and bounded diff, then hand branch switching to VS Code Source Control for operator confirmation. Project-owned GitLab/Jenkins/SonarQube polling remains independent of tickets and Sessions. |
 | **Attention** | Show one newest meaningful row per provider result by project, fold read health into its MR/build/quality result, distinguish GitLab MR, Jenkins, and SonarQube with separate icons, use shared green/yellow/red state colors, and let a right-click use only that retained MR, Jenkins, or SonarQube event in a prompt. Broader fresh MR/CI context remains a separate action; still-open MRs resurface after the next poll and full history stays in the private audit. |
 | **Context composer** | Review fetched evidence, edit the focus, and place one shell-inert line in the chosen terminal with submission disabled. |
@@ -73,7 +73,7 @@ Kronos reads, organizes, inserts, monitors, and audits. It does **not**:
 
 The complete normative boundary is in the [terminal-first product contract](docs/terminal-first-product-contract.md).
 
-Claude launch settings expose Manual/default, Accept Edits, Plan, Auto, Don't Ask, and experimental Bypass Permissions as an enum. Raw permission flags are rejected from the command setting, so the selected mode has one visible authority. Bypass is translated to `--dangerously-skip-permissions` only after the operator chooses that setting and confirms the blocking warning for that individual launch; canceling or opening Claude Settings creates no terminal or session. New Claude terminals default to the main editor area: the first opens as an editor tab and later Kronos-launched editor terminals split beside it. The layout setting can instead keep each terminal in its own editor tab or use the terminal panel. Existing terminals are never rearranged, and **Toggle Full Size** only asks VS Code to maximize or restore the explicitly selected terminal area.
+Claude launch settings expose Manual/default, Accept Edits, Plan, Auto, Don't Ask, and experimental Bypass Permissions as an enum. Raw permission flags are rejected from the command setting, so the selected mode has one visible authority. Bypass is translated to `--dangerously-skip-permissions` only after the operator chooses that setting and confirms the blocking warning for that individual launch; canceling or opening Claude Settings creates no terminal or session. New Claude terminals default to the main editor area: the first opens as an editor tab and each later Kronos-launched editor terminal opens in its own editor column beside the active group instead of becoming a terminal-internal split. **Terminal Layout** in Sessions switches future launches between side-by-side columns, editor tabs, and the terminal panel, and can balance the visible editor columns. Existing terminals are never moved automatically, and **Toggle Full Size** only asks VS Code to maximize or restore the explicitly selected terminal area.
 
 ## Architecture
 
@@ -107,7 +107,7 @@ The installed extension uses the VS Code API and Node built-ins only. It has **z
 | Enterprise provider integrations | 4 |
 | Focused VS Code views | 4 |
 | Audited terminal-write paths | 2 |
-| Manifest-covered commands | 43 |
+| Manifest-covered commands | 44 |
 | Manifest-covered settings | 14 |
 | Reachable runtime modules checked for cycles/dead exports | 97 |
 | Third-party runtime dependencies | 0 |

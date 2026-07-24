@@ -224,6 +224,12 @@
         "icon": "$(layout)"
       },
       {
+        "command": "kronos.configureClaudeTerminalLayout",
+        "title": "Kronos: Claude Terminal Layout",
+        "shortTitle": "Terminal Layout",
+        "icon": "$(layout)"
+      },
+      {
         "command": "kronos.reattachWorkSessionTerminal",
         "title": "Kronos: Connect Focused Terminal to Session",
         "shortTitle": "Connect Focused Terminal",
@@ -375,6 +381,11 @@
           "command": "kronos.manageActiveTerminal",
           "when": "view == kronosSessions",
           "group": "navigation@2"
+        },
+        {
+          "command": "kronos.configureClaudeTerminalLayout",
+          "when": "view == kronosSessions",
+          "group": "navigation@3"
         },
         {
           "command": "kronos.refreshProjects",
@@ -751,12 +762,12 @@
             "panel"
           ],
           "enumDescriptions": [
-            "Open the first Claude terminal in the main editor area and split later Kronos-launched Claude terminals beside it.",
+            "Open the first Claude terminal in the main editor area and each later Kronos-launched Claude terminal in a separate editor column beside it.",
             "Open each Claude terminal as a tab in the main editor area without automatically splitting it.",
             "Open Claude terminals in the bottom terminal panel."
           ],
           "default": "editorSplit",
-          "description": "Layout used for newly launched Claude terminals. Existing terminals are never moved."
+          "description": "Layout used for newly launched Claude terminals. Use Terminal Layout in Sessions to change this setting or balance visible editor columns. Existing terminals are never moved automatically."
         },
         "kronos.claudeLaunchCwd": {
           "type": "string",
